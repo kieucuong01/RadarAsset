@@ -1,26 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { SmartInsights } from "@/components/SmartInsights";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "Smart Insights — RadarAsset" },
+      { name: "description", content: "AI-curated financial briefings, market pulse, and expert signals across crypto, equities, and macro." },
+      { property: "og:title", content: "Smart Insights — RadarAsset" },
+      { property: "og:description", content: "AI-curated briefings and expert signals." },
+    ],
+  }),
+  component: SmartInsights,
 });
-
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
-}
