@@ -114,7 +114,7 @@ export function MockPortfolio() {
                     </td>
                     <td className="text-right tabular-nums px-5 py-4">{h.qty}</td>
                     <td className="text-right tabular-nums px-5 py-4">
-                      <div>${h.price.toLocaleString()}</div>
+                      <div>${h.price.toLocaleString("en-US")}</div>
                       <div className="text-xs text-muted-foreground">{fmt(value)}</div>
                     </td>
                     <td className="px-5 py-4">
