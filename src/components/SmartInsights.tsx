@@ -1,11 +1,5 @@
+import { useEffect, useState } from "react";
 import { Play, TrendingUp, TrendingDown, Minus, ArrowRight, Sparkles, Brain, ShieldAlert, Target, CheckCircle2 } from "lucide-react";
-
-const today = new Date().toLocaleDateString("en-US", {
-  weekday: "long",
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
 
 const tickers = [
   { sym: "BTC", price: "67,420", chg: 2.5 },
