@@ -1,4 +1,4 @@
-import { Play, TrendingUp, TrendingDown, Minus, ArrowRight, Sparkles } from "lucide-react";
+import { Play, TrendingUp, TrendingDown, Minus, ArrowRight, Sparkles, Brain, ShieldAlert, Target, CheckCircle2 } from "lucide-react";
 
 const today = new Date().toLocaleDateString("en-US", {
   weekday: "long",
