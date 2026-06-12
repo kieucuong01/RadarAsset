@@ -7,9 +7,14 @@ import {
   Cell,
   XAxis,
   YAxis,
+  ZAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ScatterChart,
+  Scatter,
+  ReferenceDot,
+  Label,
 } from "recharts";
 import {
   Play,
