@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Radar, Search, Sun, Moon, Newspaper, FlaskConical, Wallet } from "lucide-react";
+import { Radar, Bell, Sun, Moon, Newspaper, FlaskConical, Wallet } from "lucide-react";
 import { useTheme } from "@/lib/theme";
+import { CommandPaletteTrigger } from "@/components/CommandPalette";
 
 const nav = [
   { to: "/", label: "Smart Insights", icon: Newspaper },
@@ -44,13 +45,14 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 bg-muted/60 rounded-full px-3 py-1.5 w-56">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <input
-              placeholder="Search assets, news..."
-              className="bg-transparent outline-none text-sm w-full placeholder:text-muted-foreground"
-            />
-          </div>
+          <CommandPaletteTrigger />
+          <button
+            aria-label="Notifications"
+            className="relative w-9 h-9 grid place-items-center rounded-full bg-muted/60 hover:bg-muted transition-colors"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-bear ring-2 ring-background" />
+          </button>
           <button
             onClick={toggle}
             aria-label="Toggle theme"
