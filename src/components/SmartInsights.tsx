@@ -155,6 +155,128 @@ export function SmartInsights() {
         </div>
       </section>
 
+      {/* AI Digest — Decision Summary */}
+      <section className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-3">
+            <span className="grid place-items-center w-10 h-10 rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+              <Brain className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="font-semibold flex items-center gap-2">
+                AI Digest
+                <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
+                  Decision Summary
+                </span>
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Synthesized from 124 sources · macro, on-chain &amp; sentiment · refreshed 5m ago
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-mono uppercase tracking-wider text-muted-foreground">Confidence</span>
+            <div className="w-28 h-2 rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-gradient-primary" style={{ width: "78%" }} />
+            </div>
+            <span className="font-bold tabular-nums text-primary">78%</span>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-0 divide-y lg:divide-y-0 lg:divide-x divide-border">
+          {/* Narrative summary */}
+          <div className="p-6 space-y-5">
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Market Thesis
+              </div>
+              <p className="text-base leading-relaxed">
+                Risk assets retain a <span className="text-bull font-semibold">constructive bias</span> as ETF flows
+                accelerate and BTC reclaims $67K, but hawkish FOMC minutes and rising real yields cap upside in
+                long-duration equities. Rotate toward <span className="font-semibold">quality cyclicals, gold and
+                large-cap crypto</span>; trim speculative growth and high-beta altcoins into strength.
+              </p>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Key Drivers
+              </div>
+              <ul className="space-y-2 text-sm">
+                <li className="flex gap-2.5">
+                  <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
+                  Spot BTC ETF net inflows +$842M (3-week high); long-term holder supply at ATH.
+                </li>
+                <li className="flex gap-2.5">
+                  <TrendingDown className="w-4 h-4 text-bear shrink-0 mt-0.5" />
+                  Fed minutes hawkish — 10Y yield 4.32%; reduces multiple-expansion runway.
+                </li>
+                <li className="flex gap-2.5">
+                  <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
+                  VN30 banking leadership; credit growth recovery supports Q3 EPS beats.
+                </li>
+                <li className="flex gap-2.5">
+                  <Minus className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                  Oil drifting lower on OPEC+ supply unwind — neutral for headline CPI.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Decision panel */}
+          <div className="p-6 space-y-5 bg-muted/20">
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+                Recommended Stance
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full bg-bull/10 text-bull border border-bull/20">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Risk-On · Moderate
+                </span>
+                <span className="text-xs text-muted-foreground">7 / 10 conviction</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Target className="w-3 h-3" /> Action Items
+              </div>
+              <ul className="space-y-2 text-sm">
+                {[
+                  { c: "bull" as const, t: "Increase BTC/ETH core allocation to 18-22%" },
+                  { c: "bull" as const, t: "Add VN30 banking basket on pullbacks below 1,310" },
+                  { c: "bear" as const, t: "Trim unprofitable small-cap tech; raise cash 5%" },
+                  { c: "bull" as const, t: "Hold gold 8-10% as macro hedge against sticky CPI" },
+                ].map((a, i) => (
+                  <li key={i} className="flex gap-2.5 items-start">
+                    <CheckCircle2
+                      className={`w-4 h-4 shrink-0 mt-0.5 ${a.c === "bull" ? "text-bull" : "text-bear"}`}
+                    />
+                    <span>{a.t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-bear/20 bg-bear/5 p-3 text-xs flex gap-2.5">
+              <ShieldAlert className="w-4 h-4 text-bear shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-bear mb-0.5">Risk Watch</div>
+                <span className="text-muted-foreground">
+                  Surprise CPI print Thu 8:30 ET. Tighten stops on rate-sensitive longs; reduce leverage into the event.
+                </span>
+              </div>
+            </div>
+
+            <button className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-elegant hover:opacity-95 text-sm">
+              <Sparkles className="w-4 h-4" />
+              Apply to My Portfolio
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Market Pulse */}
       <section className="grid lg:grid-cols-[320px_1fr] gap-6">
         <div className="rounded-2xl border border-border bg-card p-6">
