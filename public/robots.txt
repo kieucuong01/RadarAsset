@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://quant-insight-radar.lovable.app/sitemap.xml

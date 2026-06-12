@@ -1,0 +1,11 @@
+# RadarAsset
+
+> AI-powered financial insights and quantitative backtesting platform covering crypto, equities, gold and macro markets.
+
+RadarAsset synthesizes news, on-chain data and market sentiment into actionable daily briefings, and gives traders a quantitative lab to optimize portfolios, run AI price predictions and backtest multi-asset strategies.
+
+## Pages
+
+- [Smart Insights](/): AI daily briefing, decision summary, fear & greed index, expert signals from top research desks.
+- [Mock Portfolio](/portfolio): Wealth-management dashboard with allocation donut, performance vs benchmark, and holdings table with AI sentiment.
+- [Quant Lab](/quant-lab): Portfolio optimizer, historical correlation matrix, risk/return frontier, AI price prediction and multi-leg backtest engine.
