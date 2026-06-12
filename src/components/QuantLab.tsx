@@ -7,9 +7,14 @@ import {
   Cell,
   XAxis,
   YAxis,
+  ZAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ScatterChart,
+  Scatter,
+  ReferenceDot,
+  Label,
 } from "recharts";
 import {
   Play,
@@ -487,7 +492,144 @@ function OptimizerTab() {
             Lower / negative ρ between holdings increases diversification benefit and reduces portfolio variance.
           </p>
         </div>
+
+        {/* Risk / Return scatter — Efficient Frontier */}
+        <RiskReturnChart allocation={allocation} portfolioReturn={+expectedReturn} portfolioVol={+expectedVol} />
       </section>
+    </div>
+  );
+}
+
+/* ---- Risk/Return scatter (Expected Return vs Volatility) ---- */
+const ASSET_RR: Record<string, { ret: number; vol: number }> = {
+  "US Equities": { ret: 10.5, vol: 16 },
+  "EU Equities": { ret: 8.2, vol: 17 },
+  "Emerging Markets": { ret: 11.4, vol: 22 },
+  "Crypto": { ret: 28, vol: 65 },
+  "Commodities": { ret: 6.5, vol: 19 },
+  "Bonds": { ret: 4.2, vol: 6 },
+  "Real Estate": { ret: 7.8, vol: 14 },
+  "FX": { ret: 3.1, vol: 9 },
+};
+
+function RiskReturnChart({
+  allocation,
+  portfolioReturn,
+  portfolioVol,
+}: {
+  allocation: { name: string; value: number }[];
+  portfolioReturn: number;
+  portfolioVol: number;
+}) {
+  const points = allocation.map((a, i) => {
+    const rr = ASSET_RR[a.name] ?? { ret: 6, vol: 12 };
+    return { name: a.name, weight: a.value, x: rr.vol, y: rr.ret, color: PIE_COLORS[i % PIE_COLORS.length] };
+  });
+
+  // Efficient frontier curve (illustrative parabola)
+  const frontier = Array.from({ length: 40 }, (_, i) => {
+    const x = 4 + i * 1.8;
+    const y = 3 + Math.sqrt(Math.max(x - 4, 0)) * 3.6;
+    return { x, y };
+  });
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2">
+            <Target className="w-4 h-4 text-primary" />
+            Risk / Return — Expected Return vs Volatility
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Asset bubbles sized by portfolio weight · efficient frontier (dashed) · ★ = current portfolio
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-primary" /> Portfolio
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-muted-foreground" /> Frontier
+          </span>
+        </div>
+      </div>
+
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
+            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" opacity={0.5} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              name="Volatility"
+              domain={[0, 70]}
+              tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+              stroke="var(--color-border)"
+            >
+              <Label value="Volatility σ (%)" position="bottom" offset={10} style={{ fill: "var(--color-muted-foreground)", fontSize: 11 }} />
+            </XAxis>
+            <YAxis
+              type="number"
+              dataKey="y"
+              name="Return"
+              domain={[0, 32]}
+              tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+              stroke="var(--color-border)"
+            >
+              <Label value="Expected Return E[R] (%)" angle={-90} position="insideLeft" style={{ fill: "var(--color-muted-foreground)", fontSize: 11, textAnchor: "middle" }} />
+            </YAxis>
+            <ZAxis type="number" dataKey="weight" range={[80, 600]} />
+            <Tooltip
+              cursor={{ strokeDasharray: "3 3" }}
+              contentStyle={{
+                background: "var(--color-card)",
+                border: "1px solid var(--color-border)",
+                borderRadius: 12,
+                fontSize: 12,
+              }}
+              formatter={(v: number, n: string) => {
+                if (n === "x") return [`${v}%`, "Volatility"];
+                if (n === "y") return [`${v}%`, "Expected Return"];
+                if (n === "weight") return [`${v}%`, "Weight"];
+                return [v, n];
+              }}
+              labelFormatter={() => ""}
+            />
+            {/* Frontier as a faint dashed line via Scatter+Line trick */}
+            <Scatter data={frontier} fill="transparent" line={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "4 4", strokeWidth: 1.5 }} shape={() => <g />} />
+            <Scatter data={points} shape={(props: { cx?: number; cy?: number; payload?: { color: string } }) => {
+              const { cx, cy, payload } = props;
+              if (cx == null || cy == null || !payload) return <g />;
+              return <circle cx={cx} cy={cy} r={10} fill={payload.color} fillOpacity={0.75} stroke={payload.color} strokeWidth={2} />;
+            }} />
+            <ReferenceDot
+              x={portfolioVol}
+              y={portfolioReturn}
+              r={9}
+              fill="var(--color-primary)"
+              stroke="var(--color-background)"
+              strokeWidth={3}
+              isFront
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-3 mt-4">
+        <div className="rounded-lg bg-muted/60 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Portfolio E[R]</div>
+          <div className="text-xl font-bold text-bull tabular-nums">{portfolioReturn.toFixed(2)}%</div>
+        </div>
+        <div className="rounded-lg bg-muted/60 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Portfolio σ</div>
+          <div className="text-xl font-bold tabular-nums">{portfolioVol.toFixed(2)}%</div>
+        </div>
+        <div className="rounded-lg bg-muted/60 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Return / Risk</div>
+          <div className="text-xl font-bold text-primary tabular-nums">{(portfolioReturn / portfolioVol).toFixed(2)}</div>
+        </div>
+      </div>
     </div>
   );
 }
