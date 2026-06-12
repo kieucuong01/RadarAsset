@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  AreaChart,
-  Area,
   LineChart,
   Line,
   PieChart,
@@ -12,11 +10,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Legend,
 } from "recharts";
 import {
   Play,
-  FileText,
   Sparkles,
   Sliders,
   FlaskConical,
@@ -29,13 +25,18 @@ import {
   Target,
   BarChart3,
   Zap,
+  Brain,
+  Plus,
+  Trash2,
+  Coins,
+  LineChart as LineChartIcon,
 } from "lucide-react";
 
-type TabKey = "optimizer" | "alpha" | "backtest";
+type TabKey = "optimizer" | "predict" | "backtest";
 
 const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "optimizer", label: "Portfolio Optimizer", icon: Sliders },
-  { key: "alpha", label: "Alpha Strategies & AI Predict", icon: Sparkles },
+  { key: "predict", label: "AI Prediction", icon: Brain },
   { key: "backtest", label: "Backtest & Risk Engine", icon: FlaskConical },
 ];
 
@@ -52,7 +53,7 @@ export function QuantLab() {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">Quant Lab</h1>
           <p className="text-sm text-muted-foreground">
-            Optimize allocations, research alpha factors, and stress-test strategies on historical data.
+            Optimize allocations, predict prices with AI models, and stress-test multi-asset strategies.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -92,7 +93,7 @@ export function QuantLab() {
       </div>
 
       {tab === "optimizer" && <OptimizerTab />}
-      {tab === "alpha" && <AlphaTab />}
+      {tab === "predict" && <PredictTab />}
       {tab === "backtest" && <BacktestTab />}
     </main>
   );
@@ -118,7 +119,55 @@ const PIE_COLORS = [
   "oklch(0.66 0.18 18)",
   "oklch(0.65 0.16 280)",
   "oklch(0.7 0.14 200)",
+  "oklch(0.68 0.13 100)",
+  "oklch(0.6 0.16 320)",
 ];
+
+// Deterministic pseudo-random correlation between two asset class names
+function corrBetween(a: string, b: string): number {
+  if (a === b) return 1;
+  // Hand-tuned realistic-ish correlations
+  const pairs: Record<string, number> = {
+    "US Equities|EU Equities": 0.82,
+    "US Equities|Emerging Markets": 0.71,
+    "US Equities|Crypto": 0.42,
+    "US Equities|Commodities": 0.21,
+    "US Equities|Bonds": -0.18,
+    "US Equities|Real Estate": 0.63,
+    "US Equities|FX": -0.12,
+    "EU Equities|Emerging Markets": 0.74,
+    "EU Equities|Crypto": 0.38,
+    "EU Equities|Commodities": 0.26,
+    "EU Equities|Bonds": -0.14,
+    "EU Equities|Real Estate": 0.58,
+    "EU Equities|FX": -0.22,
+    "Emerging Markets|Crypto": 0.54,
+    "Emerging Markets|Commodities": 0.46,
+    "Emerging Markets|Bonds": -0.08,
+    "Emerging Markets|Real Estate": 0.49,
+    "Emerging Markets|FX": -0.31,
+    "Crypto|Commodities": 0.19,
+    "Crypto|Bonds": -0.05,
+    "Crypto|Real Estate": 0.22,
+    "Crypto|FX": -0.09,
+    "Commodities|Bonds": -0.21,
+    "Commodities|Real Estate": 0.34,
+    "Commodities|FX": -0.41,
+    "Bonds|Real Estate": 0.12,
+    "Bonds|FX": 0.28,
+    "Real Estate|FX": -0.16,
+  };
+  return pairs[`${a}|${b}`] ?? pairs[`${b}|${a}`] ?? 0;
+}
+
+function corrColor(v: number): string {
+  // -1 → bear, 0 → muted, +1 → bull
+  const intensity = Math.min(Math.abs(v), 1);
+  if (v >= 0) {
+    return `oklch(from var(--color-bull) l c h / ${0.08 + intensity * 0.55})`;
+  }
+  return `oklch(from var(--color-bear) l c h / ${0.08 + intensity * 0.55})`;
+}
 
 function OptimizerTab() {
   const [riskA, setRiskA] = useState(4);
@@ -130,10 +179,8 @@ function OptimizerTab() {
     "Bonds",
   ]);
 
-  // Deterministic "optimal" allocation based on riskA + selection
   const allocation = useMemo(() => {
     const base = selected.length ? selected : ASSET_CLASSES.slice(0, 4);
-    // Higher risk aversion → tilt to bonds/commodities; lower → tilt to crypto/equities
     const weights = base.map((name, i) => {
       const defensive = /Bonds|Commodities|Real Estate/.test(name) ? 1 : 0;
       const aggressive = /Crypto|Emerging|Equities/.test(name) ? 1 : 0;
@@ -156,6 +203,8 @@ function OptimizerTab() {
 
   const toggle = (name: string) =>
     setSelected((s) => (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]));
+
+  const corrAssets = selected.length >= 2 ? selected : ASSET_CLASSES.slice(0, 4);
 
   return (
     <div className="grid lg:grid-cols-[380px_1fr] gap-6">
@@ -359,173 +408,311 @@ function OptimizerTab() {
             </div>
           </div>
         </div>
+
+        {/* Historical Correlation Matrix */}
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                Historical Correlation Matrix
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Pearson ρ · rolling 5Y daily returns · diversification heatmap
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm" style={{ background: corrColor(-0.8) }} />
+                −1.0
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-muted" />
+                0
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm" style={{ background: corrColor(0.8) }} />
+                +1.0
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="text-xs border-separate border-spacing-1">
+              <thead>
+                <tr>
+                  <th className="p-2" />
+                  {corrAssets.map((a) => (
+                    <th
+                      key={a}
+                      className="p-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground text-center min-w-[72px]"
+                    >
+                      {a.split(" ").map((w) => w.slice(0, 3)).join(".")}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {corrAssets.map((row) => (
+                  <tr key={row}>
+                    <th className="p-2 text-left text-[10px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                      {row}
+                    </th>
+                    {corrAssets.map((col) => {
+                      const v = corrBetween(row, col);
+                      const isDiag = row === col;
+                      return (
+                        <td
+                          key={col}
+                          className="text-center rounded-md font-mono tabular-nums font-semibold p-0"
+                          style={{
+                            background: isDiag ? "var(--color-muted)" : corrColor(v),
+                            color:
+                              Math.abs(v) > 0.5
+                                ? "var(--color-foreground)"
+                                : "var(--color-muted-foreground)",
+                          }}
+                        >
+                          <div className="px-2 py-3">{v.toFixed(2)}</div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground mt-3">
+            Lower / negative ρ between holdings increases diversification benefit and reduces portfolio variance.
+          </p>
+        </div>
       </section>
     </div>
   );
 }
 
-/* --------------------------- TAB 2: ALPHA + AI --------------------------- */
+/* --------------------------- TAB 2: AI PREDICTION --------------------------- */
 
-type Strategy = {
+type AssetOption = { ticker: string; name: string; class: "Crypto" | "VN Stock" | "Gold"; base: number };
+
+const PREDICT_ASSETS: AssetOption[] = [
+  { ticker: "BTC", name: "Bitcoin", class: "Crypto", base: 67000 },
+  { ticker: "ETH", name: "Ethereum", class: "Crypto", base: 3400 },
+  { ticker: "SOL", name: "Solana", class: "Crypto", base: 178 },
+  { ticker: "VNM", name: "Vinamilk", class: "VN Stock", base: 68 },
+  { ticker: "FPT", name: "FPT Corp", class: "VN Stock", base: 142 },
+  { ticker: "VIC", name: "Vingroup", class: "VN Stock", base: 45 },
+  { ticker: "HPG", name: "Hoa Phat Group", class: "VN Stock", base: 27 },
+  { ticker: "XAU", name: "Gold Spot (USD/oz)", class: "Gold", base: 2380 },
+  { ticker: "SJC", name: "Gold SJC (VND/tael)", class: "Gold", base: 84000 },
+];
+
+type ModelOption = {
+  id: string;
   name: string;
-  family: "Crypto" | "Equities" | "FX" | "Multi-Asset";
-  timeframe: string;
-  indicators: string[];
-  edge: string;
+  family: string;
+  accuracy: string;
   desc: string;
+  bias: number; // forecast drift bias
+  vol: number; // noise scale
 };
 
-const STRATEGIES: Strategy[] = [
+const MODELS: ModelOption[] = [
   {
-    name: "Skewness Lottery Crypto",
-    family: "Crypto",
-    timeframe: "1D",
-    indicators: ["Skewness", "Volume", "RSI"],
-    edge: "+24.6% CAGR",
-    desc: "Long positively-skewed altcoins, exploiting retail lottery preference.",
+    id: "lstm",
+    name: "LSTM Ensemble",
+    family: "Deep Learning",
+    accuracy: "87.4%",
+    desc: "Long Short-Term Memory recurrent net trained on OHLCV + on-chain features.",
+    bias: 1.0,
+    vol: 1.0,
   },
   {
-    name: "Smart Money Concept (SMC)",
-    family: "FX",
-    timeframe: "4H",
-    indicators: ["SMC", "Order Block", "FVG"],
-    edge: "+18.2% CAGR",
-    desc: "Institutional liquidity grabs at premium/discount zones with FVG entries.",
+    id: "transformer",
+    name: "Temporal Transformer",
+    family: "Deep Learning",
+    accuracy: "89.1%",
+    desc: "Attention-based time-series transformer with multi-horizon decoding.",
+    bias: 1.2,
+    vol: 0.85,
   },
   {
-    name: "Cross-Sectional Momentum",
-    family: "Equities",
-    timeframe: "1M",
-    indicators: ["Momentum", "Sharpe"],
-    edge: "+12.8% CAGR",
-    desc: "Long top decile / short bottom decile of 12-1 month returns universe.",
+    id: "prophet",
+    name: "Prophet (Bayesian)",
+    family: "Statistical",
+    accuracy: "78.6%",
+    desc: "Decomposable trend + seasonality model with changepoint detection.",
+    bias: 0.6,
+    vol: 0.7,
   },
   {
-    name: "Volatility Risk Premium",
-    family: "Multi-Asset",
-    timeframe: "1W",
-    indicators: ["IV/RV", "VIX"],
-    edge: "+9.4% CAGR",
-    desc: "Systematically short implied vol when IV-RV spread exceeds threshold.",
+    id: "arima",
+    name: "ARIMA-GARCH",
+    family: "Statistical",
+    accuracy: "74.2%",
+    desc: "Autoregressive integrated moving average with GARCH volatility clustering.",
+    bias: 0.3,
+    vol: 1.1,
   },
   {
-    name: "Mean-Reversion Z-Score",
-    family: "Equities",
-    timeframe: "1H",
-    indicators: ["Z-Score", "Bollinger", "RSI"],
-    edge: "+15.1% CAGR",
-    desc: "Pairs trade cointegrated equities reverting to spread mean.",
-  },
-  {
-    name: "Funding Rate Carry",
-    family: "Crypto",
-    timeframe: "8H",
-    indicators: ["Funding", "Basis"],
-    edge: "+11.7% CAGR",
-    desc: "Delta-neutral carry harvesting positive perpetual funding rates.",
+    id: "xgb",
+    name: "XGBoost Gradient Boost",
+    family: "Machine Learning",
+    accuracy: "82.9%",
+    desc: "Gradient boosted trees on engineered technical & macro features.",
+    bias: 0.8,
+    vol: 0.95,
   },
 ];
 
-function genPredictionData() {
+function genPredictionData(asset: AssetOption, model: ModelOption) {
+  // seeded pseudo-random based on asset ticker so re-renders are deterministic
+  let seed = 0;
+  for (const ch of asset.ticker + model.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return (seed & 0xffff) / 0xffff;
+  };
+
   const data: { t: string; price: number | null; predicted: number | null }[] = [];
-  let p = 67000;
-  // 30 historical points
+  const driftScale = asset.base * 0.005;
+  let p = asset.base * 0.94;
   for (let i = 0; i < 30; i++) {
-    p += (Math.sin(i / 3) * 600) + (Math.random() - 0.45) * 800;
-    data.push({
-      t: `D-${30 - i}`,
-      price: +p.toFixed(0),
-      predicted: null,
-    });
+    p += Math.sin(i / 3) * driftScale * 1.2 + (rand() - 0.45) * driftScale * 2;
+    data.push({ t: `D-${30 - i}`, price: +p.toFixed(2), predicted: null });
   }
-  // bridge point
   data[data.length - 1].predicted = data[data.length - 1].price;
-  // 14 forecast points
+
   let f = p;
+  const forecastDrift = driftScale * 0.6 * model.bias;
+  const forecastNoise = driftScale * 1.4 * model.vol;
   for (let i = 1; i <= 14; i++) {
-    f += 320 + Math.sin(i / 2) * 180 + (Math.random() - 0.4) * 250;
-    data.push({
-      t: `D+${i}`,
-      price: null,
-      predicted: +f.toFixed(0),
-    });
+    f += forecastDrift + Math.sin(i / 2) * driftScale * 0.7 + (rand() - 0.4) * forecastNoise;
+    data.push({ t: `D+${i}`, price: null, predicted: +f.toFixed(2) });
   }
   return data;
 }
 
-function AlphaTab() {
-  const predData = useMemo(genPredictionData, []);
+function PredictTab() {
+  const [assetTicker, setAssetTicker] = useState(PREDICT_ASSETS[0].ticker);
+  const [modelId, setModelId] = useState(MODELS[0].id);
+  const [run, setRun] = useState({ ticker: PREDICT_ASSETS[0].ticker, modelId: MODELS[0].id, nonce: 0 });
+
+  const asset = PREDICT_ASSETS.find((a) => a.ticker === assetTicker)!;
+  const model = MODELS.find((m) => m.id === modelId)!;
+
+  const ranAsset = PREDICT_ASSETS.find((a) => a.ticker === run.ticker)!;
+  const ranModel = MODELS.find((m) => m.id === run.modelId)!;
+  const predData = useMemo(
+    () => genPredictionData(ranAsset, ranModel),
+    [ranAsset, ranModel, run.nonce],
+  );
+
+  const lastHistorical = [...predData].reverse().find((d) => d.price !== null)?.price ?? 0;
+  const lastForecast = predData[predData.length - 1].predicted ?? 0;
+  const upsidePct = ((lastForecast - lastHistorical) / lastHistorical) * 100;
+  const currency = ranAsset.class === "VN Stock" ? "" : ranAsset.class === "Gold" && ranAsset.ticker === "SJC" ? "₫" : "$";
+
+  const fmt = (v: number) =>
+    `${currency}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-6">
-      {/* Strategy Library */}
-      <section>
-        <div className="flex items-end justify-between mb-4">
-          <div>
-            <h2 className="font-semibold">Strategy Library</h2>
-            <p className="text-xs text-muted-foreground">
-              Peer-reviewed quant factors — click to view rules &amp; whitepapers.
-            </p>
-          </div>
-          <span className="text-xs text-muted-foreground font-mono">
-            {STRATEGIES.length} strategies
-          </span>
+    <div className="grid lg:grid-cols-[380px_1fr] gap-6">
+      {/* Controls */}
+      <aside className="rounded-2xl border border-border bg-card p-6 space-y-6 lg:sticky lg:top-20 lg:self-start">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2">
+            <Brain className="w-4 h-4 text-primary" />
+            Prediction Setup
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pick an asset & model — forecast 14-day horizon.
+          </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {STRATEGIES.map((s) => (
-            <article
-              key={s.name}
-              className="group rounded-2xl border border-border bg-card p-5 hover:border-primary/50 hover:shadow-elegant transition-all"
+        {/* Asset picker */}
+        <div>
+          <label className="text-sm font-medium block mb-1.5">Asset</label>
+          <div className="relative">
+            <select
+              value={assetTicker}
+              onChange={(e) => setAssetTicker(e.target.value)}
+              className="w-full appearance-none bg-muted/60 rounded-lg px-3 py-2.5 text-sm outline-none pr-9 focus:ring-2 focus:ring-primary/50"
             >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                    {s.family}
-                  </div>
-                  <h3 className="font-semibold leading-tight mt-0.5 group-hover:text-primary transition-colors">
-                    {s.name}
-                  </h3>
-                </div>
-                <span className="text-[11px] font-mono font-bold text-bull bg-bull/10 px-2 py-1 rounded">
-                  {s.edge}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground line-clamp-2 mb-4">{s.desc}</p>
-
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary">
-                  ⏱ {s.timeframe}
-                </span>
-                {s.indicators.map((ind) => (
-                  <span
-                    key={ind}
-                    className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground"
-                  >
-                    {ind}
-                  </span>
-                ))}
-              </div>
-
-              <button className="w-full inline-flex items-center justify-center gap-2 text-sm font-medium border border-border rounded-lg py-2 hover:bg-muted transition-colors">
-                <FileText className="w-3.5 h-3.5" />
-                Read Paper / Rules
-              </button>
-            </article>
-          ))}
+              {(["Crypto", "VN Stock", "Gold"] as const).map((cls) => (
+                <optgroup key={cls} label={cls}>
+                  {PREDICT_ASSETS.filter((a) => a.class === cls).map((a) => (
+                    <option key={a.ticker} value={a.ticker}>
+                      {a.ticker} — {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+          </div>
+          <div className="mt-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary/10 text-primary">
+              <Coins className="w-3 h-3" />
+              {asset.class}
+            </span>
+          </div>
         </div>
-      </section>
 
-      {/* AI Price Prediction */}
+        {/* Model picker */}
+        <div>
+          <label className="text-sm font-medium block mb-2">Prediction Model</label>
+          <div className="space-y-2">
+            {MODELS.map((m) => {
+              const sel = modelId === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setModelId(m.id)}
+                  className={`w-full text-left rounded-lg border p-3 transition-all ${
+                    sel
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-muted/30 hover:bg-muted/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">{m.name}</div>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bull/10 text-bull">
+                      {m.accuracy}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mt-0.5">
+                    {m.family}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{m.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <button
+          onClick={() =>
+            setRun({ ticker: assetTicker, modelId, nonce: run.nonce + 1 })
+          }
+          className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold py-3.5 rounded-xl shadow-elegant hover:opacity-95"
+        >
+          <Sparkles className="w-4 h-4" />
+          Run Prediction
+        </button>
+      </aside>
+
+      {/* Chart */}
       <section className="rounded-2xl border border-border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-semibold flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              AI Price Prediction
+              <LineChartIcon className="w-4 h-4 text-primary" />
+              {ranAsset.ticker} · {ranAsset.name}
             </h2>
             <p className="text-xs text-muted-foreground">
-              BTC/USD · LSTM ensemble · 14-day horizon · 87.4% directional accuracy
+              {ranModel.name} · 14-day horizon · {ranModel.accuracy} directional accuracy
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs">
@@ -548,8 +735,8 @@ function AlphaTab() {
               <YAxis
                 stroke="var(--color-muted-foreground)"
                 fontSize={11}
-                domain={["dataMin - 1000", "dataMax + 1000"]}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={(v) => `${currency}${(v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0))}`}
               />
               <Tooltip
                 contentStyle={{
@@ -558,7 +745,7 @@ function AlphaTab() {
                   borderRadius: 12,
                   fontSize: 12,
                 }}
-                formatter={(v: number) => `$${v.toLocaleString("en-US")}`}
+                formatter={(v: number) => fmt(v)}
               />
               <Line
                 type="monotone"
@@ -585,10 +772,15 @@ function AlphaTab() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-5 border-t border-border">
           {[
-            { l: "Target (14d)", v: "$72,840", t: "bull", icon: Target },
-            { l: "Confidence", v: "87.4%", t: "primary", icon: Sparkles },
-            { l: "Upside", v: "+8.2%", t: "bull", icon: TrendingUp },
-            { l: "Downside Risk", v: "-3.6%", t: "bear", icon: TrendingDown },
+            { l: "Spot", v: fmt(lastHistorical), t: "primary", icon: Activity },
+            { l: "Target (14d)", v: fmt(lastForecast), t: upsidePct >= 0 ? "bull" : "bear", icon: Target },
+            {
+              l: upsidePct >= 0 ? "Upside" : "Downside",
+              v: `${upsidePct >= 0 ? "+" : ""}${upsidePct.toFixed(2)}%`,
+              t: upsidePct >= 0 ? "bull" : "bear",
+              icon: upsidePct >= 0 ? TrendingUp : TrendingDown,
+            },
+            { l: "Confidence", v: ranModel.accuracy, t: "primary", icon: Sparkles },
           ].map((k) => {
             const Icon = k.icon;
             return (
@@ -619,43 +811,67 @@ function AlphaTab() {
 
 /* --------------------------- TAB 3: BACKTEST --------------------------- */
 
+const BACKTEST_ASSETS: AssetOption[] = PREDICT_ASSETS;
+
+const STRATEGY_NAMES = [
+  "Trend Following (MA Cross)",
+  "Mean-Reversion Z-Score",
+  "Breakout Donchian-20",
+  "Momentum 12-1",
+  "RSI Divergence",
+  "Bollinger Squeeze",
+  "Smart Money Concept (SMC)",
+  "Volatility Risk Premium",
+];
+
+type Leg = {
+  id: number;
+  assetTicker: string;
+  strategy: string;
+  riskMode: "fixed" | "kelly";
+  fixedRisk: number;
+};
+
+let legCounter = 4;
+
 function BacktestTab() {
-  const [strategy, setStrategy] = useState(STRATEGIES[0].name);
   const [from, setFrom] = useState("2023-01-01");
   const [to, setTo] = useState("2025-12-31");
-  const [riskMode, setRiskMode] = useState<"fixed" | "kelly">("fixed");
-  const [fixedRisk, setFixedRisk] = useState(2);
+  const [legs, setLegs] = useState<Leg[]>([
+    { id: 1, assetTicker: "BTC", strategy: STRATEGY_NAMES[0], riskMode: "fixed", fixedRisk: 2 },
+    { id: 2, assetTicker: "FPT", strategy: STRATEGY_NAMES[3], riskMode: "fixed", fixedRisk: 1.5 },
+    { id: 3, assetTicker: "XAU", strategy: STRATEGY_NAMES[2], riskMode: "kelly", fixedRisk: 2 },
+  ]);
+
+  const addLeg = () =>
+    setLegs((ls) => [
+      ...ls,
+      {
+        id: ++legCounter,
+        assetTicker: BACKTEST_ASSETS[0].ticker,
+        strategy: STRATEGY_NAMES[0],
+        riskMode: "fixed",
+        fixedRisk: 2,
+      },
+    ]);
+
+  const removeLeg = (id: number) => setLegs((ls) => ls.filter((l) => l.id !== id));
+
+  const update = (id: number, patch: Partial<Leg>) =>
+    setLegs((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
   return (
-    <div className="grid lg:grid-cols-[400px_1fr] gap-6">
+    <div className="grid lg:grid-cols-[480px_1fr] gap-6">
       {/* Left: Inputs */}
-      <aside className="rounded-2xl border border-border bg-card p-6 space-y-6 lg:sticky lg:top-20 lg:self-start">
+      <aside className="rounded-2xl border border-border bg-card p-6 space-y-6 lg:sticky lg:top-20 lg:self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
             <FlaskConical className="w-4 h-4 text-primary" />
-            Backtest Configuration
+            Multi-Asset Backtest
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Vectorized engine · slippage &amp; fees included
+            Combine equity, crypto &amp; gold legs into a single portfolio test.
           </p>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium block mb-1.5">Select Strategy</label>
-          <div className="relative">
-            <select
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              className="w-full appearance-none bg-muted/60 rounded-lg px-3 py-2.5 text-sm outline-none pr-9 focus:ring-2 focus:ring-primary/50"
-            >
-              {STRATEGIES.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name} · {s.family}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-          </div>
         </div>
 
         <div>
@@ -686,78 +902,180 @@ function BacktestTab() {
           </div>
         </div>
 
-        {/* Risk Management */}
-        <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-primary" />
-            <h4 className="font-semibold text-sm">Risk Management</h4>
+        {/* Legs */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Portfolio Legs</label>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              {legs.length} leg{legs.length !== 1 ? "s" : ""}
+            </span>
           </div>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="risk"
-              checked={riskMode === "fixed"}
-              onChange={() => setRiskMode("fixed")}
-              className="mt-1 accent-primary"
-            />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Fixed Risk %</div>
-              <div className="text-xs text-muted-foreground">
-                Risk a constant % of equity per trade.
-              </div>
-              {riskMode === "fixed" && (
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0.1}
-                    max={20}
-                    step={0.1}
-                    value={fixedRisk}
-                    onChange={(e) => setFixedRisk(+e.target.value)}
-                    className="w-24 bg-background border border-border rounded-md px-2.5 py-1.5 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  <span className="text-sm text-muted-foreground">% per trade</span>
-                </div>
-              )}
-            </div>
-          </label>
-
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="risk"
-              checked={riskMode === "kelly"}
-              onChange={() => setRiskMode("kelly")}
-              className="mt-1 accent-primary"
-            />
-            <div className="flex-1">
-              <div className="text-sm font-medium flex items-center gap-2">
-                Kelly Criterion
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                  DYNAMIC
+          {legs.map((leg, idx) => (
+            <div
+              key={leg.id}
+              className="rounded-xl border border-border bg-muted/30 p-4 space-y-3 relative"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-primary font-bold">
+                  Leg #{idx + 1}
                 </span>
+                {legs.length > 1 && (
+                  <button
+                    onClick={() => removeLeg(leg.id)}
+                    className="text-muted-foreground hover:text-bear transition-colors"
+                    aria-label="Remove leg"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                f* = (bp − q) / b — sized from edge &amp; payoff.
-              </div>
-              {riskMode === "kelly" && (
-                <div className="mt-2 text-[11px] font-mono text-muted-foreground">
-                  Suggested fractional Kelly: <span className="text-primary">0.25 ×</span>
+
+              {/* Asset */}
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                  Asset
+                </span>
+                <div className="relative mt-1">
+                  <select
+                    value={leg.assetTicker}
+                    onChange={(e) => update(leg.id, { assetTicker: e.target.value })}
+                    className="w-full appearance-none bg-background border border-border rounded-lg px-3 py-2 text-sm outline-none pr-9"
+                  >
+                    {(["Crypto", "VN Stock", "Gold"] as const).map((cls) => (
+                      <optgroup key={cls} label={cls}>
+                        {BACKTEST_ASSETS.filter((a) => a.class === cls).map((a) => (
+                          <option key={a.ticker} value={a.ticker}>
+                            {a.ticker} — {a.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
                 </div>
-              )}
+              </div>
+
+              {/* Strategy */}
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                  Strategy
+                </span>
+                <div className="relative mt-1">
+                  <select
+                    value={leg.strategy}
+                    onChange={(e) => update(leg.id, { strategy: e.target.value })}
+                    className="w-full appearance-none bg-background border border-border rounded-lg px-3 py-2 text-sm outline-none pr-9"
+                  >
+                    {STRATEGY_NAMES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+                </div>
+              </div>
+
+              {/* Risk Management */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <AlertTriangle className="w-3 h-3 text-primary" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                    Risk Management
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => update(leg.id, { riskMode: "fixed" })}
+                    className={`text-xs py-2 rounded-md border transition-colors ${
+                      leg.riskMode === "fixed"
+                        ? "border-primary bg-primary/10 text-primary font-semibold"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Fixed %
+                  </button>
+                  <button
+                    onClick={() => update(leg.id, { riskMode: "kelly" })}
+                    className={`text-xs py-2 rounded-md border transition-colors ${
+                      leg.riskMode === "kelly"
+                        ? "border-primary bg-primary/10 text-primary font-semibold"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Kelly
+                  </button>
+                </div>
+                {leg.riskMode === "fixed" ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0.1}
+                      max={20}
+                      step={0.1}
+                      value={leg.fixedRisk}
+                      onChange={(e) => update(leg.id, { fixedRisk: +e.target.value })}
+                      className="w-24 bg-background border border-border rounded-md px-2.5 py-1.5 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <span className="text-xs text-muted-foreground">% per trade</span>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[11px] font-mono text-muted-foreground">
+                    Fractional Kelly: <span className="text-primary">0.25 ×</span> dynamic
+                  </div>
+                )}
+              </div>
             </div>
-          </label>
+          ))}
+
+          <button
+            onClick={addLeg}
+            className="w-full inline-flex items-center justify-center gap-2 border border-dashed border-border rounded-xl py-3 text-sm font-medium text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Portfolio Leg
+          </button>
         </div>
 
         <button className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold text-base py-4 rounded-xl shadow-elegant hover:opacity-95 transition-opacity">
           <Play className="w-5 h-5 fill-current" />
-          RUN BACKTEST
+          RUN PORTFOLIO BACKTEST
         </button>
       </aside>
 
       {/* Right: Output */}
       <section className="space-y-6">
+        {/* Active legs summary */}
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm">Active Portfolio</h3>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              {legs.length} legs · {from} → {to}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {legs.map((leg, idx) => {
+              const a = BACKTEST_ASSETS.find((x) => x.ticker === leg.assetTicker)!;
+              return (
+                <div
+                  key={leg.id}
+                  className="text-xs font-mono px-3 py-1.5 rounded-md bg-muted border border-border flex items-center gap-2"
+                >
+                  <span className="text-primary font-bold">#{idx + 1}</span>
+                  <span className="font-semibold">{a.ticker}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground">{leg.strategy.split(" ")[0]}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-primary">
+                    {leg.riskMode === "fixed" ? `${leg.fixedRisk}%` : "Kelly"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* TradingView placeholder */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -765,7 +1083,7 @@ function BacktestTab() {
               <BarChart3 className="w-4 h-4 text-primary" />
               <h3 className="font-semibold text-sm">Trade Visualization</h3>
               <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                {strategy}
+                Portfolio · {legs.length} legs
               </span>
             </div>
             <div className="flex gap-1">
@@ -780,7 +1098,6 @@ function BacktestTab() {
             </div>
           </div>
           <div className="relative h-[420px] bg-[radial-gradient(circle_at_50%_50%,oklch(from_var(--color-primary)_l_c_h/0.08),transparent_70%)]">
-            {/* Faux grid */}
             <div
               className="absolute inset-0 opacity-40"
               style={{
