@@ -95,8 +95,18 @@ export function MockPortfolio() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <header className="space-y-1">
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+          Mock Portfolio — Asset Analytics
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Simulated multi-asset portfolio with live PnL, allocation, performance vs benchmark and AI sentiment.
+        </p>
+      </header>
+
       {/* Top Overview */}
-      <section className="grid lg:grid-cols-2 gap-6">
+      <section className="grid lg:grid-cols-2 gap-6" aria-labelledby="overview-heading">
+        <h2 id="overview-heading" className="sr-only">Portfolio overview</h2>
         {/* Left: Balance + Donut */}
         <div className="space-y-6">
           <div className="rounded-3xl p-7 border border-border bg-card shadow-elegant">
@@ -130,7 +140,7 @@ export function MockPortfolio() {
 
           <div className="rounded-3xl p-6 border border-border bg-card">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Asset Allocation</h3>
+              <h2 className="font-semibold">Asset Allocation</h2>
               <span className="text-xs text-muted-foreground">By category</span>
             </div>
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] items-center gap-4">
@@ -183,7 +193,7 @@ export function MockPortfolio() {
         <div className="rounded-3xl p-6 border border-border bg-card flex flex-col">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h3 className="font-semibold">Performance vs Benchmark</h3>
+              <h2 className="font-semibold">Performance vs Benchmark</h2>
               <p className="text-xs text-muted-foreground mt-1">Portfolio compared to S&amp;P 500</p>
             </div>
             <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-1">
