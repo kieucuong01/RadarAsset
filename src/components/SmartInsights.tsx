@@ -1,11 +1,5 @@
+import { useEffect, useState } from "react";
 import { Play, TrendingUp, TrendingDown, Minus, ArrowRight, Sparkles, Brain, ShieldAlert, Target, CheckCircle2 } from "lucide-react";
-
-const today = new Date().toLocaleDateString("en-US", {
-  weekday: "long",
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
 
 const tickers = [
   { sym: "BTC", price: "67,420", chg: 2.5 },
@@ -117,6 +111,17 @@ function FearGreedGauge({ value }: { value: number }) {
 }
 
 export function SmartInsights() {
+  const [today, setToday] = useState("");
+  useEffect(() => {
+    setToday(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+    );
+  }, []);
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
       {/* Hero / Daily Briefing */}
@@ -341,10 +346,10 @@ export function SmartInsights() {
               </div>
               <h3 className="font-semibold text-lg leading-snug line-clamp-2 mb-2">{a.title}</h3>
               <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{a.summary}</p>
-              <div className="mt-4 flex items-center gap-1.5 text-sm font-medium text-primary">
-                Read more
+              <a href="#" className="mt-4 flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+                Read full expert signal
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </div>
+              </a>
             </article>
           ))}
         </div>
