@@ -342,7 +342,284 @@ export function MockPortfolio() {
           </table>
         </div>
       </section>
+
+      <RiskMetrics />
+      <TransactionLog />
     </main>
+  );
+}
+
+/* ------------------------------ Risk Metrics ------------------------------ */
+
+const RISK_METRICS = [
+  { l: "Beta (vs SPY)", v: "1.18", sub: "Slightly aggressive", tone: "primary", icon: Activity },
+  { l: "Sharpe Ratio", v: "1.62", sub: "Rf = 4.0%", tone: "bull", icon: Target },
+  { l: "Volatility (σ, ann.)", v: "18.4%", sub: "Rolling 90D", tone: "primary", icon: Sigma },
+  { l: "Max Drawdown", v: "-14.2%", sub: "Apr 2024 · 38d recovery", tone: "bear", icon: TrendingDown },
+  { l: "VaR 95% (1D)", v: "-$3,820", sub: "Historical method", tone: "bear", icon: AlertTriangle },
+  { l: "Diversification", v: "B+", sub: "Concentration HHI 0.21", tone: "bull", icon: Shield },
+] as const;
+
+function RiskMetrics() {
+  return (
+    <section className="space-y-3" aria-labelledby="risk-metrics-heading">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 id="risk-metrics-heading" className="font-semibold">Risk Metrics</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Quantitative measures of portfolio risk profile.
+          </p>
+        </div>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          Updated 2 min ago
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {RISK_METRICS.map((m) => {
+          const Icon = m.icon;
+          return (
+            <div key={m.l} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                  {m.l}
+                </div>
+                <Icon
+                  className={`w-3.5 h-3.5 ${
+                    m.tone === "bull" ? "text-bull" : m.tone === "bear" ? "text-bear" : "text-primary"
+                  }`}
+                />
+              </div>
+              <div
+                className={`mt-1.5 text-xl font-bold tabular-nums ${
+                  m.tone === "bull" ? "text-bull" : m.tone === "bear" ? "text-bear" : "text-foreground"
+                }`}
+              >
+                {m.v}
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">{m.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------- Transaction Log ---------------------------- */
+
+type Tx = {
+  id: number;
+  date: string;
+  ticker: string;
+  side: "Buy" | "Sell";
+  qty: number;
+  price: number;
+  fee: number;
+};
+
+const SEED_TXS: Tx[] = [
+  { id: 7, date: "2026-06-11", ticker: "BTC", side: "Buy", qty: 0.15, price: 66890, fee: 12.4 },
+  { id: 6, date: "2026-06-09", ticker: "NVDA", side: "Buy", qty: 8, price: 1118.2, fee: 2.0 },
+  { id: 5, date: "2026-06-05", ticker: "TSLA", side: "Sell", qty: 10, price: 184.6, fee: 1.8 },
+  { id: 4, date: "2026-05-28", ticker: "ETH", side: "Buy", qty: 4.2, price: 3410, fee: 4.6 },
+  { id: 3, date: "2026-05-20", ticker: "SPY", side: "Buy", qty: 15, price: 521.8, fee: 1.5 },
+  { id: 2, date: "2026-05-12", ticker: "USDC", side: "Buy", qty: 5000, price: 1, fee: 0 },
+  { id: 1, date: "2026-05-02", ticker: "BTC", side: "Buy", qty: 0.4, price: 58200, fee: 18.9 },
+];
+
+let txCounter = 8;
+
+function TransactionLog() {
+  const [txs, setTxs] = useState<Tx[]>(SEED_TXS);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    ticker: "BTC",
+    side: "Buy" as "Buy" | "Sell",
+    qty: "",
+    price: "",
+    fee: "0",
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+  const submit = () => {
+    const qty = parseFloat(form.qty);
+    const price = parseFloat(form.price);
+    const fee = parseFloat(form.fee) || 0;
+    if (!form.ticker || !qty || !price) {
+      toast.error("Vui lòng nhập đầy đủ ticker, quantity và price.");
+      return;
+    }
+    setTxs((prev) => [
+      {
+        id: ++txCounter,
+        date: form.date,
+        ticker: form.ticker.toUpperCase(),
+        side: form.side,
+        qty,
+        price,
+        fee,
+      },
+      ...prev,
+    ]);
+    toast.success(`${form.side} ${qty} ${form.ticker.toUpperCase()} @ ${fmt(price)} recorded.`);
+    setOpen(false);
+    setForm({ ...form, qty: "", price: "", fee: "0" });
+  };
+
+  return (
+    <section className="rounded-2xl border border-border bg-card overflow-hidden" aria-labelledby="txlog-heading">
+      <div className="p-5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 id="txlog-heading" className="font-semibold">Transaction History</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Trade log with execution price, quantity and fees.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{txs.length} trades</span>
+          <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            Add Transaction
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+            <tr className="border-b border-border">
+              <th className="text-left font-medium px-5 py-3">Date</th>
+              <th className="text-left font-medium px-5 py-3">Asset</th>
+              <th className="text-center font-medium px-5 py-3">Side</th>
+              <th className="text-right font-medium px-5 py-3">Quantity</th>
+              <th className="text-right font-medium px-5 py-3">Price</th>
+              <th className="text-right font-medium px-5 py-3">Fee</th>
+              <th className="text-right font-medium px-5 py-3">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {txs.map((t) => {
+              const total = t.qty * t.price + (t.side === "Buy" ? t.fee : -t.fee);
+              const isBuy = t.side === "Buy";
+              return (
+                <tr key={t.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{t.date}</td>
+                  <td className="px-5 py-3 font-semibold">{t.ticker}</td>
+                  <td className="px-5 py-3 text-center">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                        isBuy ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"
+                      }`}
+                    >
+                      {isBuy ? "Buy" : "Sell"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right tabular-nums">{t.qty.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{fmt(t.price)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">
+                    {t.fee ? fmt(t.fee) : "—"}
+                  </td>
+                  <td className="px-5 py-3 text-right tabular-nums font-semibold">
+                    {fmt(total)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Transaction</DialogTitle>
+            <DialogDescription>
+              Record a new buy or sell trade in your mock portfolio.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="col-span-2 grid grid-cols-2 gap-2">
+              {(["Buy", "Sell"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setForm({ ...form, side: s })}
+                  className={`py-2.5 rounded-lg text-sm font-semibold border transition-colors ${
+                    form.side === s
+                      ? s === "Buy"
+                        ? "bg-bull/15 text-bull border-bull/30"
+                        : "bg-bear/15 text-bear border-bear/30"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-ticker">Ticker</Label>
+              <Input
+                id="tx-ticker"
+                value={form.ticker}
+                onChange={(e) => setForm({ ...form, ticker: e.target.value })}
+                placeholder="BTC"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-date">Date</Label>
+              <Input
+                id="tx-date"
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-qty">Quantity</Label>
+              <Input
+                id="tx-qty"
+                type="number"
+                step="any"
+                value={form.qty}
+                onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                placeholder="0.25"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-price">Price (USD)</Label>
+              <Input
+                id="tx-price"
+                type="number"
+                step="any"
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                placeholder="67000"
+              />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <Label htmlFor="tx-fee">Fee (USD)</Label>
+              <Input
+                id="tx-fee"
+                type="number"
+                step="any"
+                value={form.fee}
+                onChange={(e) => setForm({ ...form, fee: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={submit}>Save Transaction</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
 
