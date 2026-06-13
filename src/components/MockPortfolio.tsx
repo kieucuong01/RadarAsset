@@ -1,5 +1,17 @@
-import { TrendingUp, TrendingDown, Eye, EyeOff, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Eye, EyeOff, Minus, Plus, Activity, Shield, AlertTriangle, Target, Sigma } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   PieChart,
   Pie,
