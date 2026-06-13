@@ -1290,7 +1290,373 @@ function BacktestTab() {
             );
           })}
         </div>
+
+        <TradeList />
+        <MonteCarlo />
       </section>
     </div>
   );
 }
+
+/* ------------------------------ Equity Curve ------------------------------ */
+
+function genEquity(n: number, seed: number, drift: number, vol: number) {
+  let s = seed;
+  let v = 10000;
+  const out: { i: number; equity: number; bench: number; dd: number }[] = [];
+  let peak = v;
+  let b = 10000;
+  for (let i = 0; i < n; i++) {
+    s = (s * 9301 + 49297) % 233280;
+    const r = (s / 233280 - 0.5) * vol + drift;
+    v = Math.max(500, v * (1 + r));
+    s = (s * 9301 + 49297) % 233280;
+    const rb = (s / 233280 - 0.5) * 0.012 + 0.0004;
+    b = Math.max(500, b * (1 + rb));
+    peak = Math.max(peak, v);
+    out.push({
+      i,
+      equity: +v.toFixed(2),
+      bench: +b.toFixed(2),
+      dd: +(((v - peak) / peak) * 100).toFixed(2),
+    });
+  }
+  return out;
+}
+
+function EquityCurve({ legCount }: { legCount: number }) {
+  const data = useMemo(() => genEquity(180, 11, 0.0026, 0.022), []);
+  const final = data[data.length - 1];
+  const totalReturn = ((final.equity - 10000) / 10000) * 100;
+  const benchReturn = ((final.bench - 10000) / 10000) * 100;
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <Activity className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold text-sm">Equity Curve & Drawdown</h3>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Portfolio · {legCount} legs · vs SPY
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-primary" /> Strategy{" "}
+            <span className="text-bull font-mono">+{totalReturn.toFixed(1)}%</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 border-t-2 border-dashed border-muted-foreground" /> Benchmark{" "}
+            <span className="text-muted-foreground font-mono">+{benchReturn.toFixed(1)}%</span>
+          </span>
+        </div>
+      </div>
+      <div className="grid lg:grid-cols-[1fr_280px]">
+        <div className="h-[320px] p-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="i" stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `D${v}`} interval={20} />
+              <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--color-card)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 12,
+                  fontSize: 12,
+                }}
+              />
+              <Line type="monotone" dataKey="equity" name="Strategy" stroke="var(--color-primary)" strokeWidth={2.4} dot={false} />
+              <Line type="monotone" dataKey="bench" name="Benchmark" stroke="var(--color-muted-foreground)" strokeWidth={1.6} strokeDasharray="5 4" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="border-l border-border p-4 space-y-3 bg-muted/20">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Drawdown
+          </div>
+          <div className="h-[140px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis dataKey="i" hide />
+                <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(v) => `${v}%`} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number) => `${v.toFixed(2)}%`}
+                />
+                <Line type="monotone" dataKey="dd" stroke="var(--color-bear)" strokeWidth={1.8} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-md bg-card border border-border p-2">
+              <div className="text-[10px] uppercase font-mono text-muted-foreground">CAGR</div>
+              <div className="font-bold text-bull">+24.6%</div>
+            </div>
+            <div className="rounded-md bg-card border border-border p-2">
+              <div className="text-[10px] uppercase font-mono text-muted-foreground">Max DD</div>
+              <div className="font-bold text-bear">-12.6%</div>
+            </div>
+            <div className="rounded-md bg-card border border-border p-2">
+              <div className="text-[10px] uppercase font-mono text-muted-foreground">Calmar</div>
+              <div className="font-bold">1.95</div>
+            </div>
+            <div className="rounded-md bg-card border border-border p-2">
+              <div className="text-[10px] uppercase font-mono text-muted-foreground">Sortino</div>
+              <div className="font-bold">2.31</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------- Trade List ------------------------------ */
+
+type Trade = {
+  id: number;
+  date: string;
+  asset: string;
+  side: "Long" | "Short";
+  entry: number;
+  exit: number;
+  pnlPct: number;
+  bars: number;
+};
+
+const TRADES: Trade[] = [
+  { id: 28, date: "2025-11-18", asset: "BTC", side: "Long", entry: 64210, exit: 71840, pnlPct: 11.88, bars: 14 },
+  { id: 27, date: "2025-10-30", asset: "FPT", side: "Long", entry: 142.5, exit: 138.2, pnlPct: -3.02, bars: 8 },
+  { id: 26, date: "2025-10-12", asset: "XAU", side: "Long", entry: 2641, exit: 2820, pnlPct: 6.78, bars: 22 },
+  { id: 25, date: "2025-09-28", asset: "BTC", side: "Short", entry: 68450, exit: 64980, pnlPct: 5.07, bars: 11 },
+  { id: 24, date: "2025-09-10", asset: "FPT", side: "Long", entry: 128.0, exit: 142.4, pnlPct: 11.25, bars: 18 },
+  { id: 23, date: "2025-08-22", asset: "XAU", side: "Short", entry: 2510, exit: 2548, pnlPct: -1.51, bars: 6 },
+  { id: 22, date: "2025-08-04", asset: "BTC", side: "Long", entry: 58200, exit: 63110, pnlPct: 8.44, bars: 13 },
+  { id: 21, date: "2025-07-19", asset: "FPT", side: "Short", entry: 134.2, exit: 130.1, pnlPct: 3.05, bars: 9 },
+];
+
+function TradeList() {
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="p-5 border-b border-border flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            Trade List
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Most recent executed trades from the backtest engine.
+          </p>
+        </div>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          Showing {TRADES.length} of 298
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+            <tr className="border-b border-border">
+              <th className="text-left px-5 py-2.5">#</th>
+              <th className="text-left px-5 py-2.5">Date</th>
+              <th className="text-left px-5 py-2.5">Asset</th>
+              <th className="text-center px-5 py-2.5">Side</th>
+              <th className="text-right px-5 py-2.5">Entry</th>
+              <th className="text-right px-5 py-2.5">Exit</th>
+              <th className="text-right px-5 py-2.5">Bars</th>
+              <th className="text-right px-5 py-2.5">PnL %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {TRADES.map((t) => {
+              const win = t.pnlPct >= 0;
+              return (
+                <tr key={t.id} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-5 py-2.5 font-mono text-xs text-muted-foreground">{t.id}</td>
+                  <td className="px-5 py-2.5 font-mono text-xs">{t.date}</td>
+                  <td className="px-5 py-2.5 font-semibold">{t.asset}</td>
+                  <td className="px-5 py-2.5 text-center">
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                        t.side === "Long" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"
+                      }`}
+                    >
+                      {t.side}
+                    </span>
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">{t.entry.toLocaleString()}</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">{t.exit.toLocaleString()}</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">{t.bars}</td>
+                  <td
+                    className={`px-5 py-2.5 text-right tabular-nums font-bold ${
+                      win ? "text-bull" : "text-bear"
+                    }`}
+                  >
+                    {win ? "+" : ""}
+                    {t.pnlPct.toFixed(2)}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------- Monte Carlo ------------------------------ */
+
+function mcPath(n: number, seed: number, mu: number, sigma: number) {
+  let s = seed;
+  let v = 10000;
+  const out: number[] = [v];
+  for (let i = 1; i < n; i++) {
+    s = (s * 9301 + 49297) % 233280;
+    const u1 = (s + 1) / 233281;
+    s = (s * 9301 + 49297) % 233280;
+    const u2 = (s + 1) / 233281;
+    // Box-Muller
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    v = Math.max(100, v * (1 + mu + sigma * z));
+    out.push(+v.toFixed(2));
+  }
+  return out;
+}
+
+function MonteCarlo() {
+  const [sims, setSims] = useState(50);
+  const [horizon, setHorizon] = useState(120);
+  const [nonce, setNonce] = useState(0);
+
+  const { rows, finals } = useMemo(() => {
+    const paths = Array.from({ length: sims }, (_, k) =>
+      mcPath(horizon, 17 + k * 13 + nonce * 7, 0.0022, 0.018),
+    );
+    const finals = paths.map((p) => p[p.length - 1]).sort((a, b) => a - b);
+    const rows = Array.from({ length: horizon }, (_, i) => {
+      const r: Record<string, number> = { i };
+      paths.forEach((p, k) => (r[`p${k}`] = p[i]));
+      return r;
+    });
+    return { rows, finals };
+  }, [sims, horizon, nonce]);
+
+  const p5 = finals[Math.floor(finals.length * 0.05)];
+  const p50 = finals[Math.floor(finals.length * 0.5)];
+  const p95 = finals[Math.floor(finals.length * 0.95)];
+  const winRate = (finals.filter((f) => f > 10000).length / finals.length) * 100;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="p-5 border-b border-border flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            Monte Carlo Simulation
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {sims} stochastic paths · {horizon}-day horizon · GBM with strategy μ/σ.
+          </p>
+        </div>
+        <button
+          onClick={() => setNonce((n) => n + 1)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-primary text-primary-foreground hover:opacity-95"
+        >
+          <Zap className="w-3.5 h-3.5" />
+          Re-Run
+        </button>
+      </div>
+      <div className="grid lg:grid-cols-[1fr_260px]">
+        <div className="p-3 h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={rows} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="i" stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `D${v}`} interval={Math.floor(horizon / 6)} />
+              <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--color-card)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 12,
+                  fontSize: 11,
+                }}
+                formatter={(v: number) => `$${v.toLocaleString()}`}
+                labelFormatter={(l) => `Day ${l}`}
+              />
+              {Array.from({ length: sims }).map((_, k) => (
+                <Line
+                  key={k}
+                  type="monotone"
+                  dataKey={`p${k}`}
+                  stroke="var(--color-primary)"
+                  strokeWidth={1}
+                  strokeOpacity={0.18}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="border-l border-border p-4 space-y-4 bg-muted/20">
+          <div className="space-y-2">
+            <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex justify-between">
+              Paths <span className="text-primary font-bold">{sims}</span>
+            </label>
+            <input
+              type="range"
+              min={10}
+              max={200}
+              step={10}
+              value={sims}
+              onChange={(e) => setSims(+e.target.value)}
+              className="w-full accent-primary"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex justify-between">
+              Horizon (days) <span className="text-primary font-bold">{horizon}</span>
+            </label>
+            <input
+              type="range"
+              min={30}
+              max={365}
+              step={5}
+              value={horizon}
+              onChange={(e) => setHorizon(+e.target.value)}
+              className="w-full accent-primary"
+            />
+          </div>
+          <div className="pt-3 border-t border-border space-y-2">
+            <Stat label="P5 (worst)" value={`$${p5.toLocaleString()}`} tone="bear" />
+            <Stat label="P50 (median)" value={`$${p50.toLocaleString()}`} tone="primary" />
+            <Stat label="P95 (best)" value={`$${p95.toLocaleString()}`} tone="bull" />
+            <Stat label="Profitable" value={`${winRate.toFixed(0)}%`} tone={winRate >= 50 ? "bull" : "bear"} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone: "bull" | "bear" | "primary" }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">{label}</span>
+      <span
+        className={`font-bold tabular-nums ${
+          tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-primary"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
