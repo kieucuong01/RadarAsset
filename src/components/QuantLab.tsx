@@ -1218,58 +1218,9 @@ function BacktestTab() {
           </div>
         </div>
 
-        {/* TradingView placeholder */}
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-            <div className="flex items-center gap-3">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-sm">Trade Visualization</h3>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                Portfolio · {legs.length} legs
-              </span>
-            </div>
-            <div className="flex gap-1">
-              {["1H", "4H", "1D", "1W"].map((tf) => (
-                <button
-                  key={tf}
-                  className="text-[11px] font-mono px-2 py-1 rounded hover:bg-muted text-muted-foreground"
-                >
-                  {tf}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="relative h-[420px] bg-[radial-gradient(circle_at_50%_50%,oklch(from_var(--color-primary)_l_c_h/0.08),transparent_70%)]">
-            <div
-              className="absolute inset-0 opacity-40"
-              style={{
-                backgroundImage:
-                  "linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)",
-                backgroundSize: "48px 48px",
-              }}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-primary text-primary-foreground grid place-items-center shadow-elegant mb-4">
-                <BarChart3 className="w-7 h-7" />
-              </div>
-              <h4 className="font-semibold">TradingView Advanced Chart Widget</h4>
-              <p className="text-sm text-muted-foreground max-w-md mt-1">
-                Embed entry / exit markers, indicator overlays, and trade replays once the backtest engine completes.
-              </p>
-              <div className="flex gap-2 mt-4">
-                <span className="text-[10px] font-mono uppercase px-2 py-1 rounded bg-bull/10 text-bull">
-                  ▲ 142 LONG
-                </span>
-                <span className="text-[10px] font-mono uppercase px-2 py-1 rounded bg-bear/10 text-bear">
-                  ▼ 118 SHORT
-                </span>
-                <span className="text-[10px] font-mono uppercase px-2 py-1 rounded bg-muted text-muted-foreground">
-                  ⊘ 23 SKIPPED
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Equity Curve */}
+        <EquityCurve legCount={legs.length} />
+
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
