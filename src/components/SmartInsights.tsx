@@ -1,4 +1,7 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
+import type { MarketTickerResponse } from "@/lib/backend/types";
 import {
   Play,
   TrendingUp,
@@ -23,7 +26,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const tickers = [
+type TrendTicker = { sym: string; price: string; chg: number };
+
+const tickers: TrendTicker[] = [
   { sym: "BTC", price: "67,420", chg: 2.5 },
   { sym: "ETH", price: "3,512", chg: 1.8 },
   { sym: "SPY", price: "528.10", chg: -0.4 },
@@ -35,8 +40,8 @@ const tickers = [
 ];
 
 type NewsSentiment = "bull" | "bear" | "neutral";
-type NewsSource = "Bloomberg" | "Reuters" | "CryptoQuant" | "SSI Research" | "Glassnode" | "Goldman Sachs";
-type NewsAsset = "BTC" | "ETH" | "VN30" | "SPY" | "GOLD" | "OIL" | "Macro";
+type NewsSource = string;
+type NewsAsset = string;
 
 type News = {
   id: string;
@@ -49,33 +54,92 @@ type News = {
 };
 
 const NEWS: News[] = [
-  { id: "n1", src: "CryptoQuant", asset: "BTC", sentiment: "bull", ago: "4m",
+  {
+    id: "n1",
+    src: "CryptoQuant",
+    asset: "BTC",
+    sentiment: "bull",
+    ago: "4m",
     title: "BTC Spot ETF inflows hit 3-week high as whales reload positions",
-    summary: "Accumulation addresses gained 18,400 BTC — historically a precursor to upward continuation." },
-  { id: "n2", src: "SSI Research", asset: "VN30", sentiment: "bull", ago: "22m",
+    summary:
+      "Accumulation addresses gained 18,400 BTC — historically a precursor to upward continuation.",
+  },
+  {
+    id: "n2",
+    src: "SSI Research",
+    asset: "VN30",
+    sentiment: "bull",
+    ago: "22m",
     title: "VN30 banking sector projected to lead Q3 earnings rebound",
-    summary: "Credit growth recovery and stable NIM support double-digit profit growth for top lenders." },
-  { id: "n3", src: "Bloomberg", asset: "OIL", sentiment: "bear", ago: "38m",
+    summary:
+      "Credit growth recovery and stable NIM support double-digit profit growth for top lenders.",
+  },
+  {
+    id: "n3",
+    src: "Bloomberg",
+    asset: "OIL",
+    sentiment: "bear",
+    ago: "38m",
     title: "Oil slides as OPEC+ signals gradual unwind of voluntary cuts",
-    summary: "WTI tests $77 support; energy equities underperform as Q4 EPS estimates get trimmed." },
-  { id: "n4", src: "Goldman Sachs", asset: "SPY", sentiment: "neutral", ago: "1h",
+    summary: "WTI tests $77 support; energy equities underperform as Q4 EPS estimates get trimmed.",
+  },
+  {
+    id: "n4",
+    src: "Goldman Sachs",
+    asset: "SPY",
+    sentiment: "neutral",
+    ago: "1h",
     title: "Equities range-bound as earnings season delivers mixed signals",
-    summary: "GS keeps year-end S&P target at 5,600 with balanced sector positioning." },
-  { id: "n5", src: "Glassnode", asset: "BTC", sentiment: "bull", ago: "1h",
+    summary: "GS keeps year-end S&P target at 5,600 with balanced sector positioning.",
+  },
+  {
+    id: "n5",
+    src: "Glassnode",
+    asset: "BTC",
+    sentiment: "bull",
+    ago: "1h",
     title: "Long-term holders supply hits all-time high — supply squeeze ahead?",
-    summary: "76% of BTC supply has not moved in over a year. Diminishing sell-side liquidity." },
-  { id: "n6", src: "Reuters", asset: "Macro", sentiment: "bear", ago: "2h",
+    summary: "76% of BTC supply has not moved in over a year. Diminishing sell-side liquidity.",
+  },
+  {
+    id: "n6",
+    src: "Reuters",
+    asset: "Macro",
+    sentiment: "bear",
+    ago: "2h",
     title: "Hawkish FOMC minutes lift 10Y yields above 4.30%",
-    summary: "Stickier core services inflation pushes the dot plot higher, raising real-yield risk." },
-  { id: "n7", src: "Bloomberg", asset: "GOLD", sentiment: "bull", ago: "3h",
+    summary:
+      "Stickier core services inflation pushes the dot plot higher, raising real-yield risk.",
+  },
+  {
+    id: "n7",
+    src: "Bloomberg",
+    asset: "GOLD",
+    sentiment: "bull",
+    ago: "3h",
     title: "Central banks add 38 tonnes of gold in May — accelerating diversification",
-    summary: "PBoC and RBI lead inflows; gold breaks out of 6-week consolidation above $2,400." },
-  { id: "n8", src: "Reuters", asset: "ETH", sentiment: "neutral", ago: "4h",
+    summary: "PBoC and RBI lead inflows; gold breaks out of 6-week consolidation above $2,400.",
+  },
+  {
+    id: "n8",
+    src: "Reuters",
+    asset: "ETH",
+    sentiment: "neutral",
+    ago: "4h",
     title: "Ethereum L2 fees collapse 60% after Dencun fee market normalization",
-    summary: "User cost down sharply but validator revenue and burn rate weaken short-term narrative." },
-  { id: "n9", src: "Goldman Sachs", asset: "Macro", sentiment: "bull", ago: "5h",
+    summary:
+      "User cost down sharply but validator revenue and burn rate weaken short-term narrative.",
+  },
+  {
+    id: "n9",
+    src: "Goldman Sachs",
+    asset: "Macro",
+    sentiment: "bull",
+    ago: "5h",
     title: "Soft-landing odds nudged back to 70% on resilient labor data",
-    summary: "Initial jobless claims undershoot; wage growth cools without breaking consumer spend." },
+    summary:
+      "Initial jobless claims undershoot; wage growth cools without breaking consumer spend.",
+  },
 ];
 
 type CalendarEvent = {
@@ -89,14 +153,78 @@ type CalendarEvent = {
 };
 
 const CALENDAR: CalendarEvent[] = [
-  { time: "08:30", date: "Today", country: "US", event: "Core CPI m/m", impact: "high", forecast: "0.3%", previous: "0.3%" },
-  { time: "10:00", date: "Today", country: "US", event: "Crude Oil Inventories", impact: "mid", forecast: "-1.2M", previous: "0.8M" },
-  { time: "14:00", date: "Today", country: "US", event: "FOMC Meeting Minutes", impact: "high", forecast: "—", previous: "—" },
-  { time: "07:45", date: "Tomorrow", country: "EU", event: "ECB Rate Decision", impact: "high", forecast: "4.25%", previous: "4.25%" },
-  { time: "08:30", date: "Tomorrow", country: "US", event: "Initial Jobless Claims", impact: "mid", forecast: "230K", previous: "227K" },
-  { time: "09:00", date: "Fri", country: "VN", event: "VN CPI y/y", impact: "high", forecast: "4.2%", previous: "4.4%" },
-  { time: "08:30", date: "Fri", country: "US", event: "Non-Farm Payrolls", impact: "high", forecast: "185K", previous: "175K" },
-  { time: "21:00", date: "Mon", country: "CN", event: "China Trade Balance", impact: "mid", forecast: "$76B", previous: "$72.4B" },
+  {
+    time: "08:30",
+    date: "Today",
+    country: "US",
+    event: "Core CPI m/m",
+    impact: "high",
+    forecast: "0.3%",
+    previous: "0.3%",
+  },
+  {
+    time: "10:00",
+    date: "Today",
+    country: "US",
+    event: "Crude Oil Inventories",
+    impact: "mid",
+    forecast: "-1.2M",
+    previous: "0.8M",
+  },
+  {
+    time: "14:00",
+    date: "Today",
+    country: "US",
+    event: "FOMC Meeting Minutes",
+    impact: "high",
+    forecast: "—",
+    previous: "—",
+  },
+  {
+    time: "07:45",
+    date: "Tomorrow",
+    country: "EU",
+    event: "ECB Rate Decision",
+    impact: "high",
+    forecast: "4.25%",
+    previous: "4.25%",
+  },
+  {
+    time: "08:30",
+    date: "Tomorrow",
+    country: "US",
+    event: "Initial Jobless Claims",
+    impact: "mid",
+    forecast: "230K",
+    previous: "227K",
+  },
+  {
+    time: "09:00",
+    date: "Fri",
+    country: "VN",
+    event: "VN CPI y/y",
+    impact: "high",
+    forecast: "4.2%",
+    previous: "4.4%",
+  },
+  {
+    time: "08:30",
+    date: "Fri",
+    country: "US",
+    event: "Non-Farm Payrolls",
+    impact: "high",
+    forecast: "185K",
+    previous: "175K",
+  },
+  {
+    time: "21:00",
+    date: "Mon",
+    country: "CN",
+    event: "China Trade Balance",
+    impact: "mid",
+    forecast: "$76B",
+    previous: "$72.4B",
+  },
 ];
 
 type WatchItem = {
@@ -121,11 +249,17 @@ function SentimentBadge({ s }: { s: NewsSentiment }) {
   const map = {
     bull: { label: "Bullish", color: "text-bull bg-bull/10 border-bull/20", Icon: TrendingUp },
     bear: { label: "Bearish", color: "text-bear bg-bear/10 border-bear/20", Icon: TrendingDown },
-    neutral: { label: "Neutral", color: "text-muted-foreground bg-muted border-border", Icon: Minus },
+    neutral: {
+      label: "Neutral",
+      color: "text-muted-foreground bg-muted border-border",
+      Icon: Minus,
+    },
   } as const;
   const { label, color, Icon } = map[s];
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${color}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${color}`}
+    >
       <Icon className="w-3 h-3" />
       {label}
     </span>
@@ -157,7 +291,15 @@ function FearGreedGauge({ value }: { value: number }) {
           strokeWidth="14"
           strokeLinecap="round"
         />
-        <line x1={cx} y1={cy} x2={x} y2={y} stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <line
+          x1={cx}
+          y1={cy}
+          x2={x}
+          y2={y}
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
         <circle cx={cx} cy={cy} r="6" fill="currentColor" />
       </svg>
       <div className="text-center -mt-2">
@@ -170,6 +312,7 @@ function FearGreedGauge({ value }: { value: number }) {
 
 export function SmartInsights() {
   const [today, setToday] = useState("");
+  const [marketTicks, setMarketTicks] = useState<TrendTicker[]>(tickers);
   useEffect(() => {
     setToday(
       new Date().toLocaleDateString("en-US", {
@@ -179,6 +322,26 @@ export function SmartInsights() {
         day: "numeric",
       }),
     );
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/market/ticker")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Ticker API unavailable"))))
+      .then((rows: MarketTickerResponse[]) => {
+        if (!alive || rows.length === 0) return;
+        setMarketTicks(
+          rows.slice(0, 8).map((row) => ({
+            sym: row.symbol,
+            price: row.price.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+            chg: row.changePercent,
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -204,9 +367,18 @@ export function SmartInsights() {
               Risk-on returns as BTC reclaims $67K, but Fed minutes cap upside in equities.
             </h1>
             <ul className="space-y-2 text-white/90 max-w-2xl">
-              <li className="flex gap-3"><span className="text-bull">▲</span> Crypto: ETF inflows accelerate; BTC dominance climbs to 56.4%.</li>
-              <li className="flex gap-3"><span className="text-bear">▼</span> Macro: Hawkish FOMC minutes lift 10Y yields to 4.32%.</li>
-              <li className="flex gap-3"><span className="text-bull">▲</span> Equities: VN30 +1.2% led by banking; SPY drifts on rate concerns.</li>
+              <li className="flex gap-3">
+                <span className="text-bull">▲</span> Crypto: ETF inflows accelerate; BTC dominance
+                climbs to 56.4%.
+              </li>
+              <li className="flex gap-3">
+                <span className="text-bear">▼</span> Macro: Hawkish FOMC minutes lift 10Y yields to
+                4.32%.
+              </li>
+              <li className="flex gap-3">
+                <span className="text-bull">▲</span> Equities: VN30 +1.2% led by banking; SPY drifts
+                on rate concerns.
+              </li>
             </ul>
           </div>
           <button className="group flex items-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur rounded-2xl px-5 py-4 transition-all border border-white/20">
@@ -241,7 +413,9 @@ export function SmartInsights() {
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-mono uppercase tracking-wider text-muted-foreground">Confidence</span>
+            <span className="font-mono uppercase tracking-wider text-muted-foreground">
+              Confidence
+            </span>
             <div className="w-28 h-2 rounded-full bg-muted overflow-hidden">
               <div className="h-full bg-gradient-primary" style={{ width: "78%" }} />
             </div>
@@ -252,28 +426,48 @@ export function SmartInsights() {
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-0 divide-y lg:divide-y-0 lg:divide-x divide-border">
           <div className="p-6 space-y-5">
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">Market Thesis</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Market Thesis
+              </div>
               <p className="text-base leading-relaxed">
-                Risk assets retain a <span className="text-bull font-semibold">constructive bias</span> as ETF flows
-                accelerate and BTC reclaims $67K, but hawkish FOMC minutes and rising real yields cap upside in
-                long-duration equities. Rotate toward <span className="font-semibold">quality cyclicals, gold and
-                large-cap crypto</span>; trim speculative growth and high-beta altcoins into strength.
+                Risk assets retain a{" "}
+                <span className="text-bull font-semibold">constructive bias</span> as ETF flows
+                accelerate and BTC reclaims $67K, but hawkish FOMC minutes and rising real yields
+                cap upside in long-duration equities. Rotate toward{" "}
+                <span className="font-semibold">quality cyclicals, gold and large-cap crypto</span>;
+                trim speculative growth and high-beta altcoins into strength.
               </p>
             </div>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">Key Drivers</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Key Drivers
+              </div>
               <ul className="space-y-2 text-sm">
-                <li className="flex gap-2.5"><TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />Spot BTC ETF net inflows +$842M (3-week high); long-term holder supply at ATH.</li>
-                <li className="flex gap-2.5"><TrendingDown className="w-4 h-4 text-bear shrink-0 mt-0.5" />Fed minutes hawkish — 10Y yield 4.32%; reduces multiple-expansion runway.</li>
-                <li className="flex gap-2.5"><TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />VN30 banking leadership; credit growth recovery supports Q3 EPS beats.</li>
-                <li className="flex gap-2.5"><Minus className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />Oil drifting lower on OPEC+ supply unwind — neutral for headline CPI.</li>
+                <li className="flex gap-2.5">
+                  <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
+                  Spot BTC ETF net inflows +$842M (3-week high); long-term holder supply at ATH.
+                </li>
+                <li className="flex gap-2.5">
+                  <TrendingDown className="w-4 h-4 text-bear shrink-0 mt-0.5" />
+                  Fed minutes hawkish — 10Y yield 4.32%; reduces multiple-expansion runway.
+                </li>
+                <li className="flex gap-2.5">
+                  <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
+                  VN30 banking leadership; credit growth recovery supports Q3 EPS beats.
+                </li>
+                <li className="flex gap-2.5">
+                  <Minus className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                  Oil drifting lower on OPEC+ supply unwind — neutral for headline CPI.
+                </li>
               </ul>
             </div>
           </div>
 
           <div className="p-6 space-y-5 bg-muted/20">
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Recommended Stance</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+                Recommended Stance
+              </div>
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full bg-bull/10 text-bull border border-bull/20">
                   <TrendingUp className="w-3.5 h-3.5" /> Risk-On · Moderate
@@ -282,7 +476,9 @@ export function SmartInsights() {
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5"><Target className="w-3 h-3" /> Action Items</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Target className="w-3 h-3" /> Action Items
+              </div>
               <ul className="space-y-2 text-sm">
                 {[
                   { c: "bull" as const, t: "Increase BTC/ETH core allocation to 18-22%" },
@@ -291,7 +487,9 @@ export function SmartInsights() {
                   { c: "bull" as const, t: "Hold gold 8-10% as macro hedge against sticky CPI" },
                 ].map((a, i) => (
                   <li key={i} className="flex gap-2.5 items-start">
-                    <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${a.c === "bull" ? "text-bull" : "text-bear"}`} />
+                    <CheckCircle2
+                      className={`w-4 h-4 shrink-0 mt-0.5 ${a.c === "bull" ? "text-bull" : "text-bear"}`}
+                    />
                     <span>{a.t}</span>
                   </li>
                 ))}
@@ -302,7 +500,8 @@ export function SmartInsights() {
               <div>
                 <div className="font-semibold text-bear mb-0.5">Risk Watch</div>
                 <span className="text-muted-foreground">
-                  Surprise CPI print Thu 8:30 ET. Tighten stops on rate-sensitive longs; reduce leverage into the event.
+                  Surprise CPI print Thu 8:30 ET. Tighten stops on rate-sensitive longs; reduce
+                  leverage into the event.
                 </span>
               </div>
             </div>
@@ -365,14 +564,18 @@ export function SmartInsights() {
             </span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-            {tickers.map((t) => {
+            {marketTicks.map((t) => {
               const up = t.chg >= 0;
               return (
-                <div key={t.sym} className="shrink-0 min-w-[140px] rounded-xl border border-border bg-background/50 p-3">
+                <div
+                  key={t.sym}
+                  className="shrink-0 min-w-[140px] rounded-xl border border-border bg-background/50 p-3"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm">{t.sym}</span>
                     <span className={`text-xs font-semibold ${up ? "text-bull" : "text-bear"}`}>
-                      {up ? "+" : ""}{t.chg}%
+                      {up ? "+" : ""}
+                      {t.chg}%
                     </span>
                   </div>
                   <div className="mt-1 text-lg font-semibold tabular-nums">{t.price}</div>
@@ -399,6 +602,20 @@ export function SmartInsights() {
 
 function Watchlist() {
   const [items, setItems] = useState<WatchItem[]>(WATCHLIST);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/watchlist")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Watchlist API unavailable"))))
+      .then((rows: WatchItem[]) => {
+        if (alive && rows.length > 0) setItems(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
@@ -448,13 +665,17 @@ function Watchlist() {
                   <td className="text-right tabular-nums font-medium px-3 py-3">
                     {it.price.toLocaleString()}
                   </td>
-                  <td className={`text-right tabular-nums px-3 py-3 font-semibold ${up ? "text-bull" : "text-bear"}`}>
-                    {up ? "+" : ""}{it.chg}%
+                  <td
+                    className={`text-right tabular-nums px-3 py-3 font-semibold ${up ? "text-bull" : "text-bear"}`}
+                  >
+                    {up ? "+" : ""}
+                    {it.chg}%
                   </td>
                   <td className="text-right tabular-nums px-3 py-3">
                     <div className="font-medium">{it.alert.toLocaleString()}</div>
                     <div className="text-[10px] text-muted-foreground">
-                      {dist >= 0 ? "+" : ""}{dist.toFixed(1)}%
+                      {dist >= 0 ? "+" : ""}
+                      {dist.toFixed(1)}%
                     </div>
                   </td>
                   <td className="text-center px-3 py-3">
@@ -502,7 +723,8 @@ const FLAGS: Record<CalendarEvent["country"], string> = {
 
 function ImpactDots({ impact }: { impact: CalendarEvent["impact"] }) {
   const n = impact === "high" ? 3 : impact === "mid" ? 2 : 1;
-  const color = impact === "high" ? "bg-bear" : impact === "mid" ? "bg-chart-4" : "bg-muted-foreground";
+  const color =
+    impact === "high" ? "bg-bear" : impact === "mid" ? "bg-chart-4" : "bg-muted-foreground";
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3].map((i) => (
@@ -514,7 +736,22 @@ function ImpactDots({ impact }: { impact: CalendarEvent["impact"] }) {
 
 function EconomicCalendar() {
   const [impact, setImpact] = useState<"all" | "high" | "mid">("all");
-  const filtered = CALENDAR.filter((e) =>
+  const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/events")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Events API unavailable"))))
+      .then((rows: CalendarEvent[]) => {
+        if (alive && rows.length > 0) setEvents(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const filtered = events.filter((e) =>
     impact === "all" ? true : impact === "high" ? e.impact === "high" : e.impact !== "low",
   );
 
@@ -531,7 +768,9 @@ function EconomicCalendar() {
               key={k}
               onClick={() => setImpact(k)}
               className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                impact === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                impact === k
+                  ? "bg-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {k === "all" ? "All" : k === "mid" ? "≥ Mid" : "High only"}
@@ -553,8 +792,17 @@ function EconomicCalendar() {
               <div className="text-sm font-medium leading-tight truncate">{e.event}</div>
               <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
                 <ImpactDots impact={e.impact} />
-                {e.forecast && <span>Forecast: <span className="text-foreground font-medium tabular-nums">{e.forecast}</span></span>}
-                {e.previous && <span>Prev: <span className="tabular-nums">{e.previous}</span></span>}
+                {e.forecast && (
+                  <span>
+                    Forecast:{" "}
+                    <span className="text-foreground font-medium tabular-nums">{e.forecast}</span>
+                  </span>
+                )}
+                {e.previous && (
+                  <span>
+                    Prev: <span className="tabular-nums">{e.previous}</span>
+                  </span>
+                )}
               </div>
             </div>
             {e.impact === "high" && (
@@ -569,8 +817,6 @@ function EconomicCalendar() {
 
 /* ---------------- News Feed with filters ---------------- */
 
-const SOURCES: NewsSource[] = ["Bloomberg", "Reuters", "CryptoQuant", "SSI Research", "Glassnode", "Goldman Sachs"];
-const ASSETS: NewsAsset[] = ["BTC", "ETH", "VN30", "SPY", "GOLD", "OIL", "Macro"];
 const SENTIMENTS: { k: NewsSentiment | "all"; label: string }[] = [
   { k: "all", label: "All" },
   { k: "bull", label: "Bullish" },
@@ -583,26 +829,57 @@ function NewsFeed() {
   const [asset, setAsset] = useState<NewsAsset | "all">("all");
   const [src, setSrc] = useState<NewsSource | "all">("all");
   const [sent, setSent] = useState<NewsSentiment | "all">("all");
+  const [news, setNews] = useState<News[]>(NEWS);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/insights")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Insights API unavailable"))))
+      .then((rows: Array<Omit<News, "src"> & { source?: string; src?: string }>) => {
+        if (!alive || rows.length === 0) return;
+        setNews(
+          rows.map((row) => ({
+            id: row.id,
+            src: row.src ?? row.source ?? "Research",
+            asset: row.asset,
+            sentiment: row.sentiment,
+            title: row.title,
+            summary: row.summary,
+            ago: row.ago,
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const sources = useMemo(() => Array.from(new Set(news.map((item) => item.src))).sort(), [news]);
+  const assets = useMemo(() => Array.from(new Set(news.map((item) => item.asset))).sort(), [news]);
 
   const filtered = useMemo(() => {
-    return NEWS.filter((n) => {
+    return news.filter((n) => {
       if (asset !== "all" && n.asset !== asset) return false;
       if (src !== "all" && n.src !== src) return false;
       if (sent !== "all" && n.sentiment !== sent) return false;
-      if (q.trim() && !(n.title + " " + n.summary).toLowerCase().includes(q.toLowerCase())) return false;
+      if (q.trim() && !(n.title + " " + n.summary).toLowerCase().includes(q.toLowerCase()))
+        return false;
       return true;
     });
-  }, [q, asset, src, sent]);
+  }, [q, asset, src, sent, news]);
 
   return (
     <section>
       <div className="flex items-end justify-between mb-5 gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Expert Signals</h2>
-          <p className="text-sm text-muted-foreground">AI-curated insights from top research desks worldwide.</p>
+          <p className="text-sm text-muted-foreground">
+            AI-curated insights from top research desks worldwide.
+          </p>
         </div>
         <span className="text-xs text-muted-foreground font-mono">
-          {filtered.length} / {NEWS.length} stories
+          {filtered.length} / {news.length} stories
         </span>
       </div>
 
@@ -623,13 +900,13 @@ function NewsFeed() {
           label="Asset"
           value={asset}
           onChange={(v) => setAsset(v as NewsAsset | "all")}
-          options={[{ v: "all", l: "All assets" }, ...ASSETS.map((a) => ({ v: a, l: a }))]}
+          options={[{ v: "all", l: "All assets" }, ...assets.map((a) => ({ v: a, l: a }))]}
         />
         <Select
           label="Source"
           value={src}
           onChange={(v) => setSrc(v as NewsSource | "all")}
-          options={[{ v: "all", l: "All sources" }, ...SOURCES.map((s) => ({ v: s, l: s }))]}
+          options={[{ v: "all", l: "All sources" }, ...sources.map((s) => ({ v: s, l: s }))]}
         />
         <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
           {SENTIMENTS.map((s) => (
@@ -637,7 +914,9 @@ function NewsFeed() {
               key={s.k}
               onClick={() => setSent(s.k)}
               className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-colors ${
-                sent === s.k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                sent === s.k
+                  ? "bg-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {s.label}
@@ -660,7 +939,9 @@ function NewsFeed() {
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">{a.src}</span>
+                  <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+                    {a.src}
+                  </span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                     {a.asset}
                   </span>
@@ -673,7 +954,10 @@ function NewsFeed() {
                 <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                   <Clock className="w-3 h-3" /> {a.ago} ago
                 </span>
-                <a href="#" className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+                <a
+                  href="#"
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
                   Read full expert signal
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </a>

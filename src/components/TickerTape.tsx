@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { MarketTickerResponse } from "@/lib/backend/types";
 
 type Tick = { sym: string; price: number; chg: number };
 
@@ -33,6 +34,26 @@ export function TickerTape() {
   const [ticks, setTicks] = useState<Tick[]>(SEED);
 
   useEffect(() => {
+    let alive = true;
+    fetch("/api/market/ticker")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Ticker API unavailable"))))
+      .then((rows: MarketTickerResponse[]) => {
+        if (!alive || rows.length === 0) return;
+        setTicks(
+          rows.map((row) => ({
+            sym: row.symbol,
+            price: row.price,
+            chg: row.changePercent,
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let step = 0;
     const id = window.setInterval(() => {
       step += 1;
@@ -56,11 +77,7 @@ export function TickerTape() {
                 <span className="tabular-nums text-muted-foreground">
                   {t.price.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                 </span>
-                <span
-                  className={`tabular-nums font-semibold ${
-                    up ? "text-bull" : "text-bear"
-                  }`}
-                >
+                <span className={`tabular-nums font-semibold ${up ? "text-bull" : "text-bear"}`}>
                   {up ? "▲" : "▼"} {Math.abs(t.chg).toFixed(2)}%
                 </span>
                 <span className="text-border">|</span>

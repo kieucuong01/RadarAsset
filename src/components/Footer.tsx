@@ -1,12 +1,12 @@
+import Link from "next/link";
 import { Radar, Github, Twitter, ShieldAlert } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 
 export function Footer() {
   return (
     <footer className="mt-16 border-t border-border bg-card/40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
-          <Link to="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-gradient-primary grid place-items-center shadow-glow">
               <Radar className="w-5 h-5 text-primary-foreground" />
             </div>
@@ -78,13 +78,7 @@ export function Footer() {
   );
 }
 
-function FooterCol({
-  title,
-  links,
-}: {
-  title: string;
-  links: { to: string; label: string }[];
-}) {
+function FooterCol({ title, links }: { title: string; links: { to: string; label: string }[] }) {
   return (
     <div>
       <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">

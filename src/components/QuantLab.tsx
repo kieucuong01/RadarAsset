@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import {
   LineChart,
@@ -36,6 +38,7 @@ import {
   Coins,
   LineChart as LineChartIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 type TabKey = "optimizer" | "predict" | "backtest";
 
@@ -44,6 +47,21 @@ const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "predict", label: "AI Prediction", icon: Brain },
   { key: "backtest", label: "Backtest & Risk Engine", icon: FlaskConical },
 ];
+
+async function queueQuantRun(strategyName: string, parameters: Record<string, unknown>) {
+  try {
+    const res = await fetch("/api/quant/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ strategyName, parameters }),
+    });
+    if (!res.ok) throw new Error("Quant API unavailable");
+    const run = (await res.json()) as { id: string; status: string };
+    toast.success(`${strategyName} queued (${run.status})`);
+  } catch {
+    toast.warning("Quant run simulated locally; PostgreSQL queue is unavailable.");
+  }
+}
 
 export function QuantLab() {
   const [tab, setTab] = useState<TabKey>("optimizer");
@@ -58,7 +76,8 @@ export function QuantLab() {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">Quant Lab</h1>
           <p className="text-sm text-muted-foreground">
-            Optimize allocations, predict prices with AI models, and stress-test multi-asset strategies.
+            Optimize allocations, predict prices with AI models, and stress-test multi-asset
+            strategies.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -190,10 +209,7 @@ function OptimizerTab() {
       const defensive = /Bonds|Commodities|Real Estate/.test(name) ? 1 : 0;
       const aggressive = /Crypto|Emerging|Equities/.test(name) ? 1 : 0;
       const score =
-        10 +
-        defensive * (riskA * 1.6) +
-        aggressive * ((11 - riskA) * 1.4) +
-        (i % 3) * 1.2;
+        10 + defensive * (riskA * 1.6) + aggressive * ((11 - riskA) * 1.4) + (i % 3) * 1.2;
       return { name, score };
     });
     const sum = weights.reduce((s, w) => s + w.score, 0);
@@ -257,9 +273,7 @@ function OptimizerTab() {
               onClick={() => setOpen(!open)}
               className="w-full flex items-center justify-between bg-muted/60 rounded-lg px-3 py-2.5 text-sm hover:bg-muted transition-colors"
             >
-              <span className="truncate text-left">
-                {selected.length} selected
-              </span>
+              <span className="truncate text-left">{selected.length} selected</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
@@ -319,7 +333,15 @@ function OptimizerTab() {
           ))}
         </div>
 
-        <button className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-elegant hover:opacity-95">
+        <button
+          onClick={() =>
+            void queueQuantRun("Mean-Variance Optimizer", {
+              riskAversion: riskA,
+              selectedAssets: selected,
+            })
+          }
+          className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-elegant hover:opacity-95"
+        >
           <Zap className="w-4 h-4" />
           Solve Optimal Allocation
         </button>
@@ -332,7 +354,7 @@ function OptimizerTab() {
             <div>
               <h3 className="font-semibold">Mathematically Optimal Allocation</h3>
               <p className="text-xs text-muted-foreground">
-                Max U = E[R] − ½ · A · σ²  ·  A = {riskA.toFixed(1)}
+                Max U = E[R] − ½ · A · σ² · A = {riskA.toFixed(1)}
               </p>
             </div>
             <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded bg-bull/10 text-bull">
@@ -392,9 +414,7 @@ function OptimizerTab() {
                           {row.name}
                         </div>
                       </td>
-                      <td className="text-right tabular-nums font-semibold py-2.5">
-                        {row.value}%
-                      </td>
+                      <td className="text-right tabular-nums font-semibold py-2.5">{row.value}%</td>
                       <td className="py-2.5 w-32">
                         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                           <div
@@ -432,8 +452,7 @@ function OptimizerTab() {
                 −1.0
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-muted" />
-                0
+                <span className="w-3 h-3 rounded-sm bg-muted" />0
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-sm" style={{ background: corrColor(0.8) }} />
@@ -452,7 +471,10 @@ function OptimizerTab() {
                       key={a}
                       className="p-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground text-center min-w-[72px]"
                     >
-                      {a.split(" ").map((w) => w.slice(0, 3)).join(".")}
+                      {a
+                        .split(" ")
+                        .map((w) => w.slice(0, 3))
+                        .join(".")}
                     </th>
                   ))}
                 </tr>
@@ -489,12 +511,17 @@ function OptimizerTab() {
           </div>
 
           <p className="text-[11px] text-muted-foreground mt-3">
-            Lower / negative ρ between holdings increases diversification benefit and reduces portfolio variance.
+            Lower / negative ρ between holdings increases diversification benefit and reduces
+            portfolio variance.
           </p>
         </div>
 
         {/* Risk / Return scatter — Efficient Frontier */}
-        <RiskReturnChart allocation={allocation} portfolioReturn={+expectedReturn} portfolioVol={+expectedVol} />
+        <RiskReturnChart
+          allocation={allocation}
+          portfolioReturn={+expectedReturn}
+          portfolioVol={+expectedVol}
+        />
       </section>
     </div>
   );
@@ -505,11 +532,11 @@ const ASSET_RR: Record<string, { ret: number; vol: number }> = {
   "US Equities": { ret: 10.5, vol: 16 },
   "EU Equities": { ret: 8.2, vol: 17 },
   "Emerging Markets": { ret: 11.4, vol: 22 },
-  "Crypto": { ret: 28, vol: 65 },
-  "Commodities": { ret: 6.5, vol: 19 },
-  "Bonds": { ret: 4.2, vol: 6 },
+  Crypto: { ret: 28, vol: 65 },
+  Commodities: { ret: 6.5, vol: 19 },
+  Bonds: { ret: 4.2, vol: 6 },
   "Real Estate": { ret: 7.8, vol: 14 },
-  "FX": { ret: 3.1, vol: 9 },
+  FX: { ret: 3.1, vol: 9 },
 };
 
 function RiskReturnChart({
@@ -523,7 +550,13 @@ function RiskReturnChart({
 }) {
   const points = allocation.map((a, i) => {
     const rr = ASSET_RR[a.name] ?? { ret: 6, vol: 12 };
-    return { name: a.name, weight: a.value, x: rr.vol, y: rr.ret, color: PIE_COLORS[i % PIE_COLORS.length] };
+    return {
+      name: a.name,
+      weight: a.value,
+      x: rr.vol,
+      y: rr.ret,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+    };
   });
 
   // Efficient frontier curve (illustrative parabola)
@@ -542,7 +575,8 @@ function RiskReturnChart({
             Risk / Return — Expected Return vs Volatility
           </h3>
           <p className="text-xs text-muted-foreground">
-            Asset bubbles sized by portfolio weight · efficient frontier (dashed) · ★ = current portfolio
+            Asset bubbles sized by portfolio weight · efficient frontier (dashed) · ★ = current
+            portfolio
           </p>
         </div>
         <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -567,7 +601,12 @@ function RiskReturnChart({
               tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
               stroke="var(--color-border)"
             >
-              <Label value="Volatility σ (%)" position="bottom" offset={10} style={{ fill: "var(--color-muted-foreground)", fontSize: 11 }} />
+              <Label
+                value="Volatility σ (%)"
+                position="bottom"
+                offset={10}
+                style={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+              />
             </XAxis>
             <YAxis
               type="number"
@@ -577,7 +616,16 @@ function RiskReturnChart({
               tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
               stroke="var(--color-border)"
             >
-              <Label value="Expected Return E[R] (%)" angle={-90} position="insideLeft" style={{ fill: "var(--color-muted-foreground)", fontSize: 11, textAnchor: "middle" }} />
+              <Label
+                value="Expected Return E[R] (%)"
+                angle={-90}
+                position="insideLeft"
+                style={{
+                  fill: "var(--color-muted-foreground)",
+                  fontSize: 11,
+                  textAnchor: "middle",
+                }}
+              />
             </YAxis>
             <ZAxis type="number" dataKey="weight" range={[80, 600]} />
             <Tooltip
@@ -597,12 +645,34 @@ function RiskReturnChart({
               labelFormatter={() => ""}
             />
             {/* Frontier as a faint dashed line via Scatter+Line trick */}
-            <Scatter data={frontier} fill="transparent" line={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "4 4", strokeWidth: 1.5 }} shape={() => <g />} />
-            <Scatter data={points} shape={(props: { cx?: number; cy?: number; payload?: { color: string } }) => {
-              const { cx, cy, payload } = props;
-              if (cx == null || cy == null || !payload) return <g />;
-              return <circle cx={cx} cy={cy} r={10} fill={payload.color} fillOpacity={0.75} stroke={payload.color} strokeWidth={2} />;
-            }} />
+            <Scatter
+              data={frontier}
+              fill="transparent"
+              line={{
+                stroke: "var(--color-muted-foreground)",
+                strokeDasharray: "4 4",
+                strokeWidth: 1.5,
+              }}
+              shape={() => <g />}
+            />
+            <Scatter
+              data={points}
+              shape={(props: { cx?: number; cy?: number; payload?: { color: string } }) => {
+                const { cx, cy, payload } = props;
+                if (cx == null || cy == null || !payload) return <g />;
+                return (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={10}
+                    fill={payload.color}
+                    fillOpacity={0.75}
+                    stroke={payload.color}
+                    strokeWidth={2}
+                  />
+                );
+              }}
+            />
             <ReferenceDot
               x={portfolioVol}
               y={portfolioReturn}
@@ -618,16 +688,26 @@ function RiskReturnChart({
 
       <div className="grid sm:grid-cols-3 gap-3 mt-4">
         <div className="rounded-lg bg-muted/60 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Portfolio E[R]</div>
-          <div className="text-xl font-bold text-bull tabular-nums">{portfolioReturn.toFixed(2)}%</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+            Portfolio E[R]
+          </div>
+          <div className="text-xl font-bold text-bull tabular-nums">
+            {portfolioReturn.toFixed(2)}%
+          </div>
         </div>
         <div className="rounded-lg bg-muted/60 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Portfolio σ</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+            Portfolio σ
+          </div>
           <div className="text-xl font-bold tabular-nums">{portfolioVol.toFixed(2)}%</div>
         </div>
         <div className="rounded-lg bg-muted/60 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Return / Risk</div>
-          <div className="text-xl font-bold text-primary tabular-nums">{(portfolioReturn / portfolioVol).toFixed(2)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+            Return / Risk
+          </div>
+          <div className="text-xl font-bold text-primary tabular-nums">
+            {(portfolioReturn / portfolioVol).toFixed(2)}
+          </div>
         </div>
       </div>
     </div>
@@ -636,7 +716,12 @@ function RiskReturnChart({
 
 /* --------------------------- TAB 2: AI PREDICTION --------------------------- */
 
-type AssetOption = { ticker: string; name: string; class: "Crypto" | "VN Stock" | "Gold"; base: number };
+type AssetOption = {
+  ticker: string;
+  name: string;
+  class: "Crypto" | "VN Stock" | "Gold";
+  base: number;
+};
 
 const PREDICT_ASSETS: AssetOption[] = [
   { ticker: "BTC", name: "Bitcoin", class: "Crypto", base: 67000 },
@@ -708,10 +793,12 @@ const MODELS: ModelOption[] = [
   },
 ];
 
-function genPredictionData(asset: AssetOption, model: ModelOption) {
+function genPredictionData(asset: AssetOption, model: ModelOption, nonce: number) {
   // seeded pseudo-random based on asset ticker so re-renders are deterministic
   let seed = 0;
-  for (const ch of asset.ticker + model.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of `${asset.ticker}${model.id}${nonce}`) {
+    seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  }
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return (seed & 0xffff) / 0xffff;
@@ -739,7 +826,11 @@ function genPredictionData(asset: AssetOption, model: ModelOption) {
 function PredictTab() {
   const [assetTicker, setAssetTicker] = useState(PREDICT_ASSETS[0].ticker);
   const [modelId, setModelId] = useState(MODELS[0].id);
-  const [run, setRun] = useState({ ticker: PREDICT_ASSETS[0].ticker, modelId: MODELS[0].id, nonce: 0 });
+  const [run, setRun] = useState({
+    ticker: PREDICT_ASSETS[0].ticker,
+    modelId: MODELS[0].id,
+    nonce: 0,
+  });
 
   const asset = PREDICT_ASSETS.find((a) => a.ticker === assetTicker)!;
   const model = MODELS.find((m) => m.id === modelId)!;
@@ -747,14 +838,19 @@ function PredictTab() {
   const ranAsset = PREDICT_ASSETS.find((a) => a.ticker === run.ticker)!;
   const ranModel = MODELS.find((m) => m.id === run.modelId)!;
   const predData = useMemo(
-    () => genPredictionData(ranAsset, ranModel),
+    () => genPredictionData(ranAsset, ranModel, run.nonce),
     [ranAsset, ranModel, run.nonce],
   );
 
   const lastHistorical = [...predData].reverse().find((d) => d.price !== null)?.price ?? 0;
   const lastForecast = predData[predData.length - 1].predicted ?? 0;
   const upsidePct = ((lastForecast - lastHistorical) / lastHistorical) * 100;
-  const currency = ranAsset.class === "VN Stock" ? "" : ranAsset.class === "Gold" && ranAsset.ticker === "SJC" ? "₫" : "$";
+  const currency =
+    ranAsset.class === "VN Stock"
+      ? ""
+      : ranAsset.class === "Gold" && ranAsset.ticker === "SJC"
+        ? "₫"
+        : "$";
 
   const fmt = (v: number) =>
     `${currency}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -835,9 +931,14 @@ function PredictTab() {
         </div>
 
         <button
-          onClick={() =>
-            setRun({ ticker: assetTicker, modelId, nonce: run.nonce + 1 })
-          }
+          onClick={() => {
+            setRun({ ticker: assetTicker, modelId, nonce: run.nonce + 1 });
+            void queueQuantRun("AI Prediction", {
+              assetTicker,
+              modelId,
+              horizonDays: 14,
+            });
+          }}
           className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold py-3.5 rounded-xl shadow-elegant hover:opacity-95"
         >
           <Sparkles className="w-4 h-4" />
@@ -873,12 +974,19 @@ function PredictTab() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={predData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} interval={4} />
+              <XAxis
+                dataKey="t"
+                stroke="var(--color-muted-foreground)"
+                fontSize={11}
+                interval={4}
+              />
               <YAxis
                 stroke="var(--color-muted-foreground)"
                 fontSize={11}
                 domain={["dataMin", "dataMax"]}
-                tickFormatter={(v) => `${currency}${(v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0))}`}
+                tickFormatter={(v) =>
+                  `${currency}${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`
+                }
               />
               <Tooltip
                 contentStyle={{
@@ -915,7 +1023,12 @@ function PredictTab() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-5 border-t border-border">
           {[
             { l: "Spot", v: fmt(lastHistorical), t: "primary", icon: Activity },
-            { l: "Target (14d)", v: fmt(lastForecast), t: upsidePct >= 0 ? "bull" : "bear", icon: Target },
+            {
+              l: "Target (14d)",
+              v: fmt(lastForecast),
+              t: upsidePct >= 0 ? "bull" : "bear",
+              icon: Target,
+            },
             {
               l: upsidePct >= 0 ? "Upside" : "Downside",
               v: `${upsidePct >= 0 ? "+" : ""}${upsidePct.toFixed(2)}%`,
@@ -933,11 +1046,7 @@ function PredictTab() {
                 </div>
                 <div
                   className={`mt-1 text-lg font-bold tabular-nums ${
-                    k.t === "bull"
-                      ? "text-bull"
-                      : k.t === "bear"
-                        ? "text-bear"
-                        : "text-primary"
+                    k.t === "bull" ? "text-bull" : k.t === "bear" ? "text-bear" : "text-primary"
                   }`}
                 >
                   {k.v}
@@ -1180,7 +1289,16 @@ function BacktestTab() {
           </button>
         </div>
 
-        <button className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold text-base py-4 rounded-xl shadow-elegant hover:opacity-95 transition-opacity">
+        <button
+          onClick={() =>
+            void queueQuantRun("Multi-Asset Backtest", {
+              from,
+              to,
+              legs,
+            })
+          }
+          className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold text-base py-4 rounded-xl shadow-elegant hover:opacity-95 transition-opacity"
+        >
           <Play className="w-5 h-5 fill-current" />
           RUN PORTFOLIO BACKTEST
         </button>
@@ -1220,7 +1338,6 @@ function BacktestTab() {
 
         {/* Equity Curve */}
         <EquityCurve legCount={legs.length} />
-
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1355,8 +1472,18 @@ function EquityCurve({ legCount }: { legCount: number }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="i" stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `D${v}`} interval={20} />
-              <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
+              <XAxis
+                dataKey="i"
+                stroke="var(--color-muted-foreground)"
+                fontSize={11}
+                tickFormatter={(v) => `D${v}`}
+                interval={20}
+              />
+              <YAxis
+                stroke="var(--color-muted-foreground)"
+                fontSize={11}
+                tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--color-card)",
@@ -1365,8 +1492,23 @@ function EquityCurve({ legCount }: { legCount: number }) {
                   fontSize: 12,
                 }}
               />
-              <Line type="monotone" dataKey="equity" name="Strategy" stroke="var(--color-primary)" strokeWidth={2.4} dot={false} />
-              <Line type="monotone" dataKey="bench" name="Benchmark" stroke="var(--color-muted-foreground)" strokeWidth={1.6} strokeDasharray="5 4" dot={false} />
+              <Line
+                type="monotone"
+                dataKey="equity"
+                name="Strategy"
+                stroke="var(--color-primary)"
+                strokeWidth={2.4}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="bench"
+                name="Benchmark"
+                stroke="var(--color-muted-foreground)"
+                strokeWidth={1.6}
+                strokeDasharray="5 4"
+                dot={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1377,9 +1519,17 @@ function EquityCurve({ legCount }: { legCount: number }) {
           <div className="h-[140px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
                 <XAxis dataKey="i" hide />
-                <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(v) => `${v}%`} />
+                <YAxis
+                  stroke="var(--color-muted-foreground)"
+                  fontSize={10}
+                  tickFormatter={(v) => `${v}%`}
+                />
                 <Tooltip
                   contentStyle={{
                     background: "var(--color-card)",
@@ -1389,7 +1539,13 @@ function EquityCurve({ legCount }: { legCount: number }) {
                   }}
                   formatter={(v: number) => `${v.toFixed(2)}%`}
                 />
-                <Line type="monotone" dataKey="dd" stroke="var(--color-bear)" strokeWidth={1.8} dot={false} />
+                <Line
+                  type="monotone"
+                  dataKey="dd"
+                  stroke="var(--color-bear)"
+                  strokeWidth={1.8}
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -1431,14 +1587,86 @@ type Trade = {
 };
 
 const TRADES: Trade[] = [
-  { id: 28, date: "2025-11-18", asset: "BTC", side: "Long", entry: 64210, exit: 71840, pnlPct: 11.88, bars: 14 },
-  { id: 27, date: "2025-10-30", asset: "FPT", side: "Long", entry: 142.5, exit: 138.2, pnlPct: -3.02, bars: 8 },
-  { id: 26, date: "2025-10-12", asset: "XAU", side: "Long", entry: 2641, exit: 2820, pnlPct: 6.78, bars: 22 },
-  { id: 25, date: "2025-09-28", asset: "BTC", side: "Short", entry: 68450, exit: 64980, pnlPct: 5.07, bars: 11 },
-  { id: 24, date: "2025-09-10", asset: "FPT", side: "Long", entry: 128.0, exit: 142.4, pnlPct: 11.25, bars: 18 },
-  { id: 23, date: "2025-08-22", asset: "XAU", side: "Short", entry: 2510, exit: 2548, pnlPct: -1.51, bars: 6 },
-  { id: 22, date: "2025-08-04", asset: "BTC", side: "Long", entry: 58200, exit: 63110, pnlPct: 8.44, bars: 13 },
-  { id: 21, date: "2025-07-19", asset: "FPT", side: "Short", entry: 134.2, exit: 130.1, pnlPct: 3.05, bars: 9 },
+  {
+    id: 28,
+    date: "2025-11-18",
+    asset: "BTC",
+    side: "Long",
+    entry: 64210,
+    exit: 71840,
+    pnlPct: 11.88,
+    bars: 14,
+  },
+  {
+    id: 27,
+    date: "2025-10-30",
+    asset: "FPT",
+    side: "Long",
+    entry: 142.5,
+    exit: 138.2,
+    pnlPct: -3.02,
+    bars: 8,
+  },
+  {
+    id: 26,
+    date: "2025-10-12",
+    asset: "XAU",
+    side: "Long",
+    entry: 2641,
+    exit: 2820,
+    pnlPct: 6.78,
+    bars: 22,
+  },
+  {
+    id: 25,
+    date: "2025-09-28",
+    asset: "BTC",
+    side: "Short",
+    entry: 68450,
+    exit: 64980,
+    pnlPct: 5.07,
+    bars: 11,
+  },
+  {
+    id: 24,
+    date: "2025-09-10",
+    asset: "FPT",
+    side: "Long",
+    entry: 128.0,
+    exit: 142.4,
+    pnlPct: 11.25,
+    bars: 18,
+  },
+  {
+    id: 23,
+    date: "2025-08-22",
+    asset: "XAU",
+    side: "Short",
+    entry: 2510,
+    exit: 2548,
+    pnlPct: -1.51,
+    bars: 6,
+  },
+  {
+    id: 22,
+    date: "2025-08-04",
+    asset: "BTC",
+    side: "Long",
+    entry: 58200,
+    exit: 63110,
+    pnlPct: 8.44,
+    bars: 13,
+  },
+  {
+    id: 21,
+    date: "2025-07-19",
+    asset: "FPT",
+    side: "Short",
+    entry: 134.2,
+    exit: 130.1,
+    pnlPct: 3.05,
+    bars: 9,
+  },
 ];
 
 function TradeList() {
@@ -1489,9 +1717,13 @@ function TradeList() {
                       {t.side}
                     </span>
                   </td>
-                  <td className="px-5 py-2.5 text-right tabular-nums">{t.entry.toLocaleString()}</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">
+                    {t.entry.toLocaleString()}
+                  </td>
                   <td className="px-5 py-2.5 text-right tabular-nums">{t.exit.toLocaleString()}</td>
-                  <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">{t.bars}</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">
+                    {t.bars}
+                  </td>
                   <td
                     className={`px-5 py-2.5 text-right tabular-nums font-bold ${
                       win ? "text-bull" : "text-bear"
@@ -1577,8 +1809,18 @@ function MonteCarlo() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rows} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="i" stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `D${v}`} interval={Math.floor(horizon / 6)} />
-              <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
+              <XAxis
+                dataKey="i"
+                stroke="var(--color-muted-foreground)"
+                fontSize={11}
+                tickFormatter={(v) => `D${v}`}
+                interval={Math.floor(horizon / 6)}
+              />
+              <YAxis
+                stroke="var(--color-muted-foreground)"
+                fontSize={11}
+                tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--color-card)",
@@ -1637,7 +1879,11 @@ function MonteCarlo() {
             <Stat label="P5 (worst)" value={`$${p5.toLocaleString()}`} tone="bear" />
             <Stat label="P50 (median)" value={`$${p50.toLocaleString()}`} tone="primary" />
             <Stat label="P95 (best)" value={`$${p95.toLocaleString()}`} tone="bull" />
-            <Stat label="Profitable" value={`${winRate.toFixed(0)}%`} tone={winRate >= 50 ? "bull" : "bear"} />
+            <Stat
+              label="Profitable"
+              value={`${winRate.toFixed(0)}%`}
+              tone={winRate >= 50 ? "bull" : "bear"}
+            />
           </div>
         </div>
       </div>
@@ -1645,10 +1891,20 @@ function MonteCarlo() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: "bull" | "bear" | "primary" }) {
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "bull" | "bear" | "primary";
+}) {
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">{label}</span>
+      <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
+        {label}
+      </span>
       <span
         className={`font-bold tabular-nums ${
           tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-primary"
@@ -1659,4 +1915,3 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "bul
     </div>
   );
 }
-

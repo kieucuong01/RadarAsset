@@ -1,3 +1,5 @@
+"use client";
+
 import { ThemeProvider } from "@/lib/theme";
 import { Header } from "@/components/Header";
 import { TickerTape } from "@/components/TickerTape";

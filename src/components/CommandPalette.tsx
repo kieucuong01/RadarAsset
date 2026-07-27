@@ -1,5 +1,7 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import {
   CommandDialog,
   CommandEmpty,
@@ -50,7 +52,7 @@ export function CommandPaletteTrigger() {
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
+  const router = useRouter();
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export function CommandPalette() {
 
   const go = (to: string) => {
     setOpen(false);
-    navigate({ to });
+    router.push(to);
   };
 
   const run = (label: string) => {

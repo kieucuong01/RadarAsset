@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AppUser {
+  id             String          @id @default(uuid()) @db.Uuid
+  email          String          @unique
+  name           String
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  portfolios     Portfolio[]
+  watchlistItems WatchlistItem[]
+  quantRuns      QuantRun[]
+
+  @@map("app_users")
+}
+
+model Asset {
+  id             String                 @id @default(uuid()) @db.Uuid
+  symbol         String                 @unique
+  name           String
+  assetClass     String                 @map("asset_class")
+  currency       String                 @default("USD")
+  provider       String?
+  providerSymbol String?                @map("provider_symbol")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  bars           MarketBar[]
+  positions      PortfolioPosition[]
+  transactions   PortfolioTransaction[]
+  watchlistItems WatchlistItem[]
+  insights       AiInsight[]
+
+  @@index([assetClass])
+  @@map("assets")
+}
+
+model MarketBar {
+  id        String   @id @default(uuid()) @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  timeframe String   @default("1d")
+  ts        DateTime
+  open      Decimal  @db.Decimal(20, 8)
+  high      Decimal  @db.Decimal(20, 8)
+  low       Decimal  @db.Decimal(20, 8)
+  close     Decimal  @db.Decimal(20, 8)
+  volume    Decimal? @db.Decimal(24, 4)
+  source    String
+  createdAt DateTime @default(now()) @map("created_at")
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, timeframe, ts])
+  @@index([assetId, timeframe, ts(sort: Desc)])
+  @@map("market_bars")
+}
+
+model Portfolio {
+  id           String                 @id @default(uuid()) @db.Uuid
+  userId       String                 @map("user_id") @db.Uuid
+  name         String
+  baseCurrency String                 @default("USD") @map("base_currency")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  user         AppUser                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  positions    PortfolioPosition[]
+  transactions PortfolioTransaction[]
+
+  @@index([userId])
+  @@map("portfolios")
+}
+
+model PortfolioPosition {
+  id          String    @id @default(uuid()) @db.Uuid
+  portfolioId String    @map("portfolio_id") @db.Uuid
+  assetId     String    @map("asset_id") @db.Uuid
+  quantity    Decimal   @db.Decimal(28, 10)
+  averageCost Decimal   @map("average_cost") @db.Decimal(20, 8)
+  openedAt    DateTime  @default(now()) @map("opened_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([portfolioId, assetId])
+  @@index([assetId])
+  @@map("portfolio_positions")
+}
+
+model PortfolioTransaction {
+  id          String    @id @default(uuid()) @db.Uuid
+  portfolioId String    @map("portfolio_id") @db.Uuid
+  assetId     String    @map("asset_id") @db.Uuid
+  type        String
+  quantity    Decimal   @db.Decimal(28, 10)
+  price       Decimal   @db.Decimal(20, 8)
+  fee         Decimal   @default(0) @db.Decimal(20, 8)
+  note        String?
+  executedAt  DateTime  @map("executed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([portfolioId, executedAt(sort: Desc)])
+  @@index([assetId])
+  @@map("portfolio_transactions")
+}
+
+model WatchlistItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  alert     Decimal? @db.Decimal(20, 8)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, assetId])
+  @@index([assetId])
+  @@map("watchlist_items")
+}
+
+model AiInsight {
+  id          String   @id @default(uuid()) @db.Uuid
+  assetId     String?  @map("asset_id") @db.Uuid
+  source      String
+  title       String
+  summary     String
+  sentiment   String
+  publishedAt DateTime @default(now()) @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, publishedAt(sort: Desc)])
+  @@map("ai_insights")
+}
+
+model EconomicEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  event     String
+  country   String
+  impact    String
+  forecast  String?
+  previous  String?
+  eventAt   DateTime @map("event_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([eventAt])
+  @@map("economic_events")
+}
+
+model QuantRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String?   @map("user_id") @db.Uuid
+  strategyName String    @map("strategy_name")
+  status       String    @default("queued")
+  parameters   Json      @default("{}")
+  metrics      Json?
+  errorMessage String?   @map("error_message")
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  user         AppUser?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("quant_runs")
+}

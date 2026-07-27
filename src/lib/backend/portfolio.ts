@@ -1,0 +1,294 @@
+import type {
+  PortfolioHoldingResponse,
+  PortfolioPerformancePoint,
+  PortfolioPositionInput,
+  PortfolioResponse,
+  PortfolioRiskMetricResponse,
+  PortfolioTransactionInput,
+} from "./types";
+
+function round(value: number, digits = 2) {
+  const scale = 10 ** digits;
+  return Math.round((value + Number.EPSILON) * scale) / scale;
+}
+
+function categoryFor(
+  assetClass: PortfolioPositionInput["assetClass"],
+): PortfolioHoldingResponse["category"] {
+  if (assetClass === "crypto") return "Crypto";
+  if (assetClass === "cash") return "Cash";
+  return "Stocks";
+}
+
+function sentimentFor(pnlPct: number): PortfolioHoldingResponse["sentiment"] {
+  if (pnlPct > 3) return "Bullish";
+  if (pnlPct < -3) return "Bearish";
+  return "Neutral";
+}
+
+export function buildPortfolioResponse(input: {
+  portfolioId: string;
+  portfolioName: string;
+  baseCurrency: string;
+  positions: PortfolioPositionInput[];
+  transactions: PortfolioTransactionInput[];
+  performance: PortfolioPerformancePoint[];
+  dataAsOf?: string | null;
+  dataSource?: string;
+}): PortfolioResponse {
+  const totalValue = input.positions.reduce((sum, position) => {
+    return sum + position.quantity * position.latestPrice;
+  }, 0);
+  const totalCost = input.positions.reduce((sum, position) => {
+    return sum + position.quantity * position.averageCost;
+  }, 0);
+  const totalPnL = totalValue - totalCost;
+  const totalPnLPct = totalCost === 0 ? 0 : (totalPnL / totalCost) * 100;
+
+  const holdings = input.positions.map((position) => {
+    const value = position.quantity * position.latestPrice;
+    const costBasis = position.quantity * position.averageCost;
+    const pnl = value - costBasis;
+    const pnlPct = costBasis === 0 ? 0 : (pnl / costBasis) * 100;
+
+    return {
+      assetId: position.assetId,
+      ticker: position.symbol,
+      name: position.name,
+      qty: position.quantity,
+      price: position.latestPrice,
+      cost: position.averageCost,
+      value: round(value),
+      pnl: round(pnl),
+      pnlPct: round(pnlPct, 4),
+      alloc: totalValue === 0 ? 0 : round((value / totalValue) * 100),
+      sentiment: sentimentFor(pnlPct),
+      category: categoryFor(position.assetClass),
+    };
+  });
+
+  const allocationMap = new Map<PortfolioHoldingResponse["category"], number>();
+  for (const holding of holdings) {
+    allocationMap.set(holding.category, (allocationMap.get(holding.category) ?? 0) + holding.value);
+  }
+
+  const allocation = Array.from(allocationMap.entries()).map(([category, value]) => ({
+    category,
+    value: totalValue === 0 ? 0 : round((value / totalValue) * 100),
+  }));
+  const previousPerformance = input.performance[input.performance.length - 2]?.Portfolio ?? null;
+  const latestPerformance = input.performance[input.performance.length - 1]?.Portfolio ?? null;
+  const dayChangePct =
+    previousPerformance && latestPerformance
+      ? ((latestPerformance - previousPerformance) / previousPerformance) * 100
+      : 0;
+
+  return {
+    portfolioId: input.portfolioId,
+    portfolioName: input.portfolioName,
+    baseCurrency: input.baseCurrency,
+    totalValue: round(totalValue),
+    totalCost: round(totalCost),
+    totalPnL: round(totalPnL),
+    totalPnLPct: round(totalPnLPct, 4),
+    dayChangePct: round(dayChangePct, 4),
+    allocation,
+    holdings,
+    transactions: input.transactions,
+    performance: input.performance,
+    riskMetrics: calculateRiskMetrics({
+      totalValue: round(totalValue),
+      allocation,
+      performance: input.performance,
+    }),
+    dataAsOf: input.dataAsOf ?? null,
+    dataSource: input.dataSource ?? "local",
+  };
+}
+
+export function applyPortfolioTransaction(
+  current: PortfolioPositionInput | null,
+  transaction: PortfolioTransactionInput,
+): PortfolioPositionInput {
+  if (!current && transaction.type === "sell") {
+    throw new Error("Cannot sell an asset that is not in the portfolio.");
+  }
+
+  if (!current) {
+    const totalCost = transaction.quantity * transaction.price + transaction.fee;
+    return {
+      assetId: transaction.assetId,
+      symbol: "",
+      name: "",
+      assetClass: "equity",
+      quantity: transaction.quantity,
+      averageCost: transaction.quantity === 0 ? 0 : totalCost / transaction.quantity,
+      latestPrice: transaction.price,
+    };
+  }
+
+  if (transaction.type === "buy") {
+    const nextQuantity = current.quantity + transaction.quantity;
+    const nextCost =
+      current.quantity * current.averageCost +
+      transaction.quantity * transaction.price +
+      transaction.fee;
+
+    return {
+      ...current,
+      quantity: round(nextQuantity, 8),
+      averageCost: nextQuantity === 0 ? 0 : nextCost / nextQuantity,
+    };
+  }
+
+  if (transaction.quantity > current.quantity) {
+    throw new Error("Cannot sell more than the current position quantity.");
+  }
+
+  const nextQuantity = current.quantity - transaction.quantity;
+
+  return {
+    ...current,
+    quantity: round(nextQuantity, 8),
+    averageCost: nextQuantity === 0 ? 0 : current.averageCost,
+  };
+}
+
+function returns(values: number[]) {
+  const out: number[] = [];
+  for (let index = 1; index < values.length; index += 1) {
+    const previous = values[index - 1];
+    if (previous !== 0) out.push(values[index] / previous - 1);
+  }
+  return out;
+}
+
+function mean(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function sampleStdev(values: number[]) {
+  if (values.length < 2) return 0;
+  const avg = mean(values);
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance);
+}
+
+function covariance(a: number[], b: number[]) {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return 0;
+  const left = a.slice(0, n);
+  const right = b.slice(0, n);
+  const avgLeft = mean(left);
+  const avgRight = mean(right);
+  return (
+    left.reduce((sum, value, index) => sum + (value - avgLeft) * (right[index] - avgRight), 0) /
+    (n - 1)
+  );
+}
+
+function maxDrawdown(values: number[]) {
+  let peak = values[0] ?? 0;
+  let worst = 0;
+  for (const value of values) {
+    peak = Math.max(peak, value);
+    if (peak > 0) worst = Math.min(worst, value / peak - 1);
+  }
+  return worst;
+}
+
+function percentile(values: number[], p: number) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p)));
+  return sorted[index];
+}
+
+function diversificationGrade(hhi: number) {
+  if (hhi <= 0.22) return "A";
+  if (hhi <= 0.35) return "B";
+  if (hhi <= 0.5) return "C";
+  if (hhi <= 0.7) return "D";
+  return "F";
+}
+
+export function calculateRiskMetrics(input: {
+  totalValue: number;
+  allocation: { category: PortfolioHoldingResponse["category"]; value: number }[];
+  performance: PortfolioPerformancePoint[];
+}): PortfolioRiskMetricResponse[] {
+  const portfolioValues = input.performance.map((point) => point.Portfolio);
+  const benchmarkValues = input.performance.map((point) => point.Benchmark);
+  const portfolioReturns = returns(portfolioValues);
+  const benchmarkReturns = returns(benchmarkValues);
+  const annualVol = sampleStdev(portfolioReturns) * Math.sqrt(252);
+  const annualReturn = mean(portfolioReturns) * 252;
+  const riskFree = 0.04;
+  const sharpe = annualVol === 0 ? 0 : (annualReturn - riskFree) / annualVol;
+  const benchmarkVariance = sampleStdev(benchmarkReturns) ** 2;
+  const beta =
+    benchmarkVariance === 0
+      ? 0
+      : covariance(portfolioReturns, benchmarkReturns) / benchmarkVariance;
+  const drawdown = maxDrawdown(portfolioValues);
+  const var95Return = percentile(portfolioReturns, 0.05);
+  const var95 = input.totalValue * var95Return;
+  const hhi = input.allocation.reduce((sum, item) => sum + (item.value / 100) ** 2, 0);
+  const grade = diversificationGrade(hhi);
+
+  return [
+    {
+      key: "beta",
+      label: "Beta (vs SPY)",
+      value: beta.toFixed(2),
+      rawValue: round(beta, 4),
+      sub: beta > 1.1 ? "Slightly aggressive" : beta < 0.8 ? "Defensive tilt" : "Market-like",
+      tone: beta > 1.2 ? "bear" : "primary",
+    },
+    {
+      key: "sharpe",
+      label: "Sharpe Ratio",
+      value: sharpe.toFixed(2),
+      rawValue: round(sharpe, 4),
+      sub: "Rf = 4.0%",
+      tone: sharpe >= 1 ? "bull" : sharpe < 0 ? "bear" : "primary",
+    },
+    {
+      key: "volatility",
+      label: "Volatility (ann.)",
+      value: `${(annualVol * 100).toFixed(1)}%`,
+      rawValue: round(annualVol * 100, 4),
+      sub: `${Math.max(input.performance.length - 1, 0)} daily returns`,
+      tone: annualVol > 0.35 ? "bear" : "primary",
+    },
+    {
+      key: "maxDrawdown",
+      label: "Max Drawdown",
+      value: `${(drawdown * 100).toFixed(1)}%`,
+      rawValue: round(drawdown * 100, 4),
+      sub: "Peak-to-trough",
+      tone: drawdown < -0.15 ? "bear" : "primary",
+    },
+    {
+      key: "var95",
+      label: "VaR 95% (1D)",
+      value: var95.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }),
+      rawValue: round(var95, 2),
+      sub: "Historical method",
+      tone: "bear",
+    },
+    {
+      key: "diversification",
+      label: "Diversification",
+      value: grade,
+      rawValue: round(hhi, 4),
+      sub: `HHI ${hhi.toFixed(2)}`,
+      tone: grade === "A" || grade === "B" ? "bull" : grade === "F" ? "bear" : "primary",
+    },
+  ];
+}
