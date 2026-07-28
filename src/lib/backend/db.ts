@@ -1,9 +1,15 @@
 import type { Prisma } from "@prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { buildAssetIntelligence } from "./investor-intelligence";
 import { buildTickerResponse } from "./market";
 import { applyPortfolioTransaction, buildPortfolioResponse } from "./portfolio";
 import type {
+  AssetIntelligenceResponse,
   AssetClass,
+  ForecastPointInput,
+  InsightEvidenceInput,
+  InvestmentThesisInput,
+  InvestorInsightInput,
   MarketBarInput,
   MarketTickerResponse,
   PortfolioPerformancePoint,
@@ -12,6 +18,7 @@ import type {
   PortfolioTransactionInput,
   QuantRunResponse,
   QuantRunStatus,
+  ResearchRunResponse,
   TransactionType,
 } from "./types";
 
@@ -49,11 +56,34 @@ function assertQuantRunStatus(value: string): QuantRunStatus {
   return "queued";
 }
 
+function assertInsightSentiment(value: string): InvestorInsightInput["sentiment"] {
+  if (value === "bull" || value === "bear") return value;
+  return "neutral";
+}
+
+function assertThesisStance(value: string): InvestmentThesisInput["stance"] {
+  if (
+    value === "accumulate" ||
+    value === "hold" ||
+    value === "trim" ||
+    value === "avoid" ||
+    value === "watch"
+  ) {
+    return value;
+  }
+  return "watch";
+}
+
 function objectJson(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function stringArrayJson(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
 }
 
 function formatDateLabel(date: Date): string {
@@ -399,7 +429,7 @@ export async function loadMarketBars(symbol: string, timeframe = "1d") {
 export async function loadInsights() {
   const prisma = getPrisma();
   const insights = await prisma.aiInsight.findMany({
-    include: { asset: true },
+    include: { asset: true, evidenceItems: { select: { id: true } } },
     orderBy: { publishedAt: "desc" },
     take: 50,
   });
@@ -408,12 +438,63 @@ export async function loadInsights() {
     id: insight.id,
     source: insight.source,
     asset: insight.asset?.symbol ?? "Macro",
-    sentiment: insight.sentiment,
+    sentiment: assertInsightSentiment(insight.sentiment),
     title: insight.title,
     summary: insight.summary,
+    confidence: insight.confidence ?? 50,
+    catalyst: insight.catalyst,
+    risk: insight.risk,
+    evidenceCount: insight.evidenceItems.length,
     publishedAt: insight.publishedAt.toISOString(),
     ago: relativeAge(insight.publishedAt),
   }));
+}
+
+export async function loadAssetIntelligence(symbol: string): Promise<AssetIntelligenceResponse> {
+  const prisma = getPrisma();
+  const normalized = symbol.trim().toUpperCase();
+  const asset = await prisma.asset.findUnique({
+    where: { symbol: normalized },
+    select: { id: true, symbol: true, name: true },
+  });
+  if (!asset) throw new Error(`Asset ${normalized} not found.`);
+
+  const [latestBar, insights, evidence, thesis, forecasts] = await Promise.all([
+    prisma.marketBar.findFirst({
+      where: { assetId: asset.id, timeframe: "1d" },
+      orderBy: { ts: "desc" },
+      select: { close: true },
+    }),
+    prisma.aiInsight.findMany({
+      where: { assetId: asset.id },
+      orderBy: { publishedAt: "desc" },
+      take: 12,
+    }),
+    prisma.evidenceItem.findMany({
+      where: { assetId: asset.id },
+      orderBy: { observedAt: "desc" },
+      take: 20,
+    }),
+    prisma.investmentThesis.findFirst({
+      where: { assetId: asset.id },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.forecastPoint.findMany({
+      where: { assetId: asset.id },
+      orderBy: [{ generatedAt: "desc" }, { horizon: "asc" }],
+      take: 8,
+    }),
+  ]);
+
+  return buildAssetIntelligence({
+    symbol: asset.symbol,
+    name: asset.name,
+    latestPrice: latestBar ? numberFromDecimal(latestBar.close) : 0,
+    insights: insights.map((insight) => insightToInvestorInput({ ...insight, asset })),
+    evidence: evidence.map(evidenceToInput),
+    thesis: thesis ? thesisToInput(thesis, asset.symbol) : null,
+    forecasts: forecasts.map(forecastToInput),
+  });
 }
 
 export async function loadEvents() {
@@ -477,6 +558,191 @@ export async function loadWatchlist() {
       sentiment: sentimentBySymbol.get(item.asset.symbol) ?? "neutral",
     };
   });
+}
+
+export async function loadResearchRuns(): Promise<ResearchRunResponse[]> {
+  const prisma = getPrisma();
+  const runs = await prisma.researchRun.findMany({
+    include: { asset: { select: { symbol: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  return runs.map(researchRunToResponse);
+}
+
+export async function importResearchRun(input: {
+  source: string;
+  kind: string;
+  symbol?: string | null;
+  status?: QuantRunStatus;
+  summary?: string | null;
+  parameters?: Record<string, unknown>;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  insights?: Array<{
+    source?: string;
+    title: string;
+    summary: string;
+    sentiment: InvestorInsightInput["sentiment"];
+    confidence?: number;
+    catalyst?: string | null;
+    risk?: string | null;
+    publishedAt?: string;
+  }>;
+  evidence?: Array<{
+    sourceType: string;
+    sourceName: string;
+    url?: string | null;
+    title: string;
+    excerpt: string;
+    engagement?: number;
+    observedAt?: string;
+  }>;
+  thesis?: {
+    stance: InvestmentThesisInput["stance"];
+    conviction: number;
+    thesis: string;
+    bullCase: string;
+    bearCase: string;
+    actionItems: string[];
+  } | null;
+  forecasts?: Array<{
+    horizon: string;
+    targetPrice: number;
+    lowerBound: number;
+    upperBound: number;
+    confidence: number;
+    model: string;
+    generatedAt?: string;
+  }>;
+  providerRuns?: Array<{
+    provider: string;
+    status: QuantRunStatus;
+    recordsFetched?: number;
+    errorMessage?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  }>;
+}): Promise<ResearchRunResponse> {
+  const prisma = getPrisma();
+  const user = await getDemoUser();
+  const asset = input.symbol
+    ? await prisma.asset.findUnique({
+        where: { symbol: input.symbol.trim().toUpperCase() },
+        select: { id: true, symbol: true },
+      })
+    : null;
+  if (input.symbol && !asset) throw new Error(`Asset ${input.symbol} not found.`);
+
+  const run = await prisma.$transaction(async (tx) => {
+    const createdRun = await tx.researchRun.create({
+      data: {
+        userId: user.id,
+        assetId: asset?.id,
+        source: input.source,
+        kind: input.kind,
+        status: input.status ?? "succeeded",
+        summary: input.summary ?? null,
+        parameters: (input.parameters ?? {}) as Prisma.InputJsonValue,
+        startedAt: input.startedAt ? new Date(input.startedAt) : null,
+        finishedAt: input.finishedAt ? new Date(input.finishedAt) : null,
+      },
+    });
+
+    for (const provider of input.providerRuns ?? []) {
+      await tx.providerRun.create({
+        data: {
+          researchRunId: createdRun.id,
+          provider: provider.provider,
+          status: provider.status,
+          recordsFetched: provider.recordsFetched ?? 0,
+          errorMessage: provider.errorMessage ?? null,
+          startedAt: provider.startedAt ? new Date(provider.startedAt) : null,
+          finishedAt: provider.finishedAt ? new Date(provider.finishedAt) : null,
+        },
+      });
+    }
+
+    const createdInsights: { id: string }[] = [];
+    for (const insight of input.insights ?? []) {
+      createdInsights.push(
+        await tx.aiInsight.create({
+          data: {
+            assetId: asset?.id,
+            researchRunId: createdRun.id,
+            source: insight.source ?? input.source,
+            title: insight.title,
+            summary: insight.summary,
+            sentiment: insight.sentiment,
+            confidence: insight.confidence ?? 50,
+            catalyst: insight.catalyst ?? null,
+            risk: insight.risk ?? null,
+            publishedAt: insight.publishedAt ? new Date(insight.publishedAt) : new Date(),
+          },
+          select: { id: true },
+        }),
+      );
+    }
+
+    for (const evidence of input.evidence ?? []) {
+      await tx.evidenceItem.create({
+        data: {
+          researchRunId: createdRun.id,
+          assetId: asset?.id,
+          insightId: createdInsights[0]?.id,
+          sourceType: evidence.sourceType,
+          sourceName: evidence.sourceName,
+          url: evidence.url ?? null,
+          title: evidence.title,
+          excerpt: evidence.excerpt,
+          engagement: evidence.engagement ?? 0,
+          observedAt: evidence.observedAt ? new Date(evidence.observedAt) : new Date(),
+        },
+      });
+    }
+
+    if (input.thesis && asset) {
+      await tx.investmentThesis.create({
+        data: {
+          assetId: asset.id,
+          researchRunId: createdRun.id,
+          source: input.source,
+          stance: input.thesis.stance,
+          conviction: input.thesis.conviction,
+          thesis: input.thesis.thesis,
+          bullCase: input.thesis.bullCase,
+          bearCase: input.thesis.bearCase,
+          actionItems: input.thesis.actionItems as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    if (asset) {
+      for (const forecast of input.forecasts ?? []) {
+        await tx.forecastPoint.create({
+          data: {
+            assetId: asset.id,
+            researchRunId: createdRun.id,
+            horizon: forecast.horizon,
+            targetPrice: forecast.targetPrice,
+            lowerBound: forecast.lowerBound,
+            upperBound: forecast.upperBound,
+            confidence: forecast.confidence,
+            model: forecast.model,
+            generatedAt: forecast.generatedAt ? new Date(forecast.generatedAt) : new Date(),
+          },
+        });
+      }
+    }
+
+    return tx.researchRun.findUniqueOrThrow({
+      where: { id: createdRun.id },
+      include: { asset: { select: { symbol: true } } },
+    });
+  });
+
+  return researchRunToResponse(run);
 }
 
 export async function upsertWatchlistItem(input: { symbol: string; alert?: number | null }) {
@@ -550,6 +816,129 @@ function quantRunToResponse(run: {
     parameters: objectJson(run.parameters),
     metrics: run.metrics === null ? null : objectJson(run.metrics),
     errorMessage: run.errorMessage,
+  };
+}
+
+function insightToInvestorInput(insight: {
+  id: string;
+  source: string;
+  assetId: string | null;
+  sentiment: string;
+  title: string;
+  summary: string;
+  confidence: number | null;
+  catalyst: string | null;
+  risk: string | null;
+  publishedAt: Date;
+  asset?: { symbol: string } | null;
+}): InvestorInsightInput {
+  return {
+    id: insight.id,
+    source: insight.source,
+    asset: insight.asset?.symbol ?? "Asset",
+    sentiment: assertInsightSentiment(insight.sentiment),
+    title: insight.title,
+    summary: insight.summary,
+    publishedAt: insight.publishedAt.toISOString(),
+    confidence: insight.confidence ?? 50,
+    catalyst: insight.catalyst,
+    risk: insight.risk,
+  };
+}
+
+function evidenceToInput(evidence: {
+  id: string;
+  insightId: string | null;
+  sourceType: string;
+  sourceName: string;
+  url: string | null;
+  title: string;
+  excerpt: string;
+  engagement: number;
+  observedAt: Date;
+}): InsightEvidenceInput {
+  return {
+    id: evidence.id,
+    insightId: evidence.insightId,
+    sourceType: evidence.sourceType,
+    sourceName: evidence.sourceName,
+    url: evidence.url,
+    title: evidence.title,
+    excerpt: evidence.excerpt,
+    engagement: evidence.engagement,
+    observedAt: evidence.observedAt.toISOString(),
+  };
+}
+
+function thesisToInput(
+  thesis: {
+    id: string;
+    stance: string;
+    conviction: number;
+    thesis: string;
+    bullCase: string;
+    bearCase: string;
+    actionItems: unknown;
+    updatedAt: Date;
+  },
+  symbol: string,
+): InvestmentThesisInput {
+  return {
+    id: thesis.id,
+    symbol,
+    stance: assertThesisStance(thesis.stance),
+    conviction: thesis.conviction,
+    thesis: thesis.thesis,
+    bullCase: thesis.bullCase,
+    bearCase: thesis.bearCase,
+    actionItems: stringArrayJson(thesis.actionItems),
+    updatedAt: thesis.updatedAt.toISOString(),
+  };
+}
+
+function forecastToInput(forecast: {
+  horizon: string;
+  targetPrice: unknown;
+  lowerBound: unknown;
+  upperBound: unknown;
+  confidence: number;
+  model: string;
+  generatedAt: Date;
+}): ForecastPointInput {
+  return {
+    horizon: forecast.horizon,
+    targetPrice: numberFromDecimal(forecast.targetPrice),
+    lowerBound: numberFromDecimal(forecast.lowerBound),
+    upperBound: numberFromDecimal(forecast.upperBound),
+    confidence: forecast.confidence,
+    model: forecast.model,
+    generatedAt: forecast.generatedAt.toISOString(),
+  };
+}
+
+function researchRunToResponse(run: {
+  id: string;
+  source: string;
+  kind: string;
+  status: string;
+  summary: string | null;
+  parameters: unknown;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+  asset: { symbol: string } | null;
+}): ResearchRunResponse {
+  return {
+    id: run.id,
+    source: run.source,
+    kind: run.kind,
+    symbol: run.asset?.symbol ?? null,
+    status: assertQuantRunStatus(run.status),
+    summary: run.summary,
+    parameters: objectJson(run.parameters),
+    startedAt: run.startedAt?.toISOString() ?? null,
+    finishedAt: run.finishedAt?.toISOString() ?? null,
+    createdAt: run.createdAt.toISOString(),
   };
 }
 

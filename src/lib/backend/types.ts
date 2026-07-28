@@ -101,3 +101,80 @@ export type QuantRunResponse = {
   metrics: Record<string, unknown> | null;
   errorMessage: string | null;
 };
+
+export type InvestorInsightInput = {
+  id: string;
+  source: string;
+  asset: string;
+  sentiment: "bull" | "bear" | "neutral";
+  title: string;
+  summary: string;
+  publishedAt: string;
+  confidence: number;
+  catalyst: string | null;
+  risk: string | null;
+};
+
+export type InsightEvidenceInput = {
+  id: string;
+  insightId: string | null;
+  sourceType: string;
+  sourceName: string;
+  url: string | null;
+  title: string;
+  excerpt: string;
+  engagement: number;
+  observedAt: string;
+};
+
+export type InvestmentThesisInput = {
+  id: string;
+  symbol: string;
+  stance: "accumulate" | "hold" | "trim" | "avoid" | "watch";
+  conviction: number;
+  thesis: string;
+  bullCase: string;
+  bearCase: string;
+  actionItems: string[];
+  updatedAt: string;
+};
+
+export type ForecastPointInput = {
+  horizon: string;
+  targetPrice: number;
+  lowerBound: number;
+  upperBound: number;
+  confidence: number;
+  model: string;
+  generatedAt: string;
+};
+
+export type AssetIntelligenceResponse = {
+  symbol: string;
+  name: string;
+  latestPrice: number;
+  score: number;
+  stance: InvestmentThesisInput["stance"];
+  summary: string;
+  sentimentBreakdown: { bull: number; bear: number; neutral: number };
+  topCatalysts: string[];
+  topRisks: string[];
+  evidenceCount: number;
+  thesis: InvestmentThesisInput | null;
+  forecasts: (ForecastPointInput & { expectedReturnPct: number })[];
+  recentInsights: InvestorInsightInput[];
+  evidence: InsightEvidenceInput[];
+};
+
+export type ResearchRunResponse = {
+  id: string;
+  source: string;
+  kind: string;
+  symbol: string | null;
+  status: QuantRunStatus;
+  summary: string | null;
+  parameters: Record<string, unknown>;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+};

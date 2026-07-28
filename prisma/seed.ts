@@ -36,6 +36,9 @@ const insightSeed = [
     source: "CryptoQuant",
     symbol: "BTC",
     sentiment: "bull",
+    confidence: 82,
+    catalyst: "ETF inflows",
+    risk: "Fed repricing",
     title: "BTC Spot ETF inflows hit 3-week high as whales reload positions",
     summary:
       "Accumulation addresses gained 18,400 BTC, historically a precursor to upward continuation.",
@@ -44,6 +47,9 @@ const insightSeed = [
     source: "SSI Research",
     symbol: "VN30",
     sentiment: "bull",
+    confidence: 76,
+    catalyst: "Bank earnings rebound",
+    risk: "Credit growth disappointment",
     title: "VN30 banking sector projected to lead Q3 earnings rebound",
     summary:
       "Credit growth recovery and stable NIM support double-digit profit growth for top lenders.",
@@ -52,6 +58,9 @@ const insightSeed = [
     source: "Bloomberg",
     symbol: "GOLD",
     sentiment: "bull",
+    confidence: 72,
+    catalyst: "Central bank demand",
+    risk: "Real yield spike",
     title: "Central banks add 38 tonnes of gold in May",
     summary: "PBoC and RBI lead inflows; gold breaks out of 6-week consolidation above $2,400.",
   },
@@ -59,6 +68,9 @@ const insightSeed = [
     source: "Reuters",
     symbol: null,
     sentiment: "bear",
+    confidence: 68,
+    catalyst: null,
+    risk: "Higher real yields",
     title: "Hawkish FOMC minutes lift 10Y yields above 4.30%",
     summary: "Stickier core services inflation raises real-yield risk for long-duration assets.",
   },
@@ -140,9 +152,15 @@ async function main() {
   await prisma.portfolioPosition.deleteMany();
   await prisma.marketBar.deleteMany();
   await prisma.watchlistItem.deleteMany();
+  await prisma.evidenceItem.deleteMany();
+  await prisma.forecastPoint.deleteMany();
+  await prisma.investmentThesis.deleteMany();
+  await prisma.modelEvaluation.deleteMany();
+  await prisma.providerRun.deleteMany();
   await prisma.aiInsight.deleteMany();
   await prisma.economicEvent.deleteMany();
   await prisma.quantRun.deleteMany();
+  await prisma.researchRun.deleteMany();
   await prisma.portfolio.deleteMany();
   await prisma.asset.deleteMany();
   await prisma.appUser.deleteMany({ where: { email: demoEmail } });
@@ -228,15 +246,247 @@ async function main() {
     });
   }
 
+  const btcAssetId = assetBySymbol.get("BTC")?.id;
+  const vn30AssetId = assetBySymbol.get("VN30")?.id;
+  const goldAssetId = assetBySymbol.get("GOLD")?.id;
+
+  const last30daysRun = await prisma.researchRun.create({
+    data: {
+      userId: user.id,
+      assetId: btcAssetId,
+      source: "last30days",
+      kind: "sentiment",
+      status: "succeeded",
+      parameters: {
+        topic: "Bitcoin BTC investment sentiment catalysts risks",
+        lookbackDays: 30,
+        sources: ["reddit", "x", "youtube", "hackernews", "web"],
+      },
+      summary:
+        "Retail and expert conversations remain constructive on BTC, driven by ETF flows and supply tightness, with macro rate risk as the main counterweight.",
+      startedAt: new Date("2026-07-27T01:00:00.000Z"),
+      finishedAt: new Date("2026-07-27T01:02:30.000Z"),
+      providerRuns: {
+        create: [
+          {
+            provider: "reddit",
+            status: "succeeded",
+            recordsFetched: 42,
+            startedAt: new Date("2026-07-27T01:00:05.000Z"),
+            finishedAt: new Date("2026-07-27T01:00:45.000Z"),
+          },
+          {
+            provider: "web",
+            status: "succeeded",
+            recordsFetched: 18,
+            startedAt: new Date("2026-07-27T01:00:45.000Z"),
+            finishedAt: new Date("2026-07-27T01:01:25.000Z"),
+          },
+        ],
+      },
+    },
+  });
+
+  const berkshireRun = await prisma.researchRun.create({
+    data: {
+      userId: user.id,
+      assetId: btcAssetId,
+      source: "ai-berkshire",
+      kind: "investment_thesis",
+      status: "succeeded",
+      parameters: {
+        method: "two-source thesis audit",
+        arithmetic: "exact",
+        output: "investor memo",
+      },
+      summary:
+        "BTC thesis is accumulate on pullbacks: strong structural demand, but position sizing should respect inflation-event volatility.",
+      startedAt: new Date("2026-07-27T01:03:00.000Z"),
+      finishedAt: new Date("2026-07-27T01:05:00.000Z"),
+    },
+  });
+
+  const kronosRun = await prisma.researchRun.create({
+    data: {
+      userId: user.id,
+      assetId: btcAssetId,
+      source: "kronos",
+      kind: "forecast",
+      status: "succeeded",
+      parameters: {
+        model: "kronos-small",
+        contextBars: 512,
+        horizons: ["7d", "30d"],
+      },
+      summary:
+        "Forecast path is mildly positive, but confidence is medium because seeded local history is shallow.",
+      startedAt: new Date("2026-07-27T01:05:10.000Z"),
+      finishedAt: new Date("2026-07-27T01:05:50.000Z"),
+    },
+  });
+
+  await prisma.researchRun.create({
+    data: {
+      userId: user.id,
+      source: "daily_stock_analysis",
+      kind: "provider_health",
+      status: "succeeded",
+      parameters: {
+        providers: ["seed", "csv", "future-live-provider"],
+        mode: "failover-template",
+      },
+      summary:
+        "Provider manager template is ready for retries, failover diagnostics, and stale data detection.",
+      startedAt: new Date("2026-07-27T01:06:00.000Z"),
+      finishedAt: new Date("2026-07-27T01:06:20.000Z"),
+      providerRuns: {
+        create: {
+          provider: "seed",
+          status: "succeeded",
+          recordsFetched: 270,
+          startedAt: new Date("2026-07-27T01:06:01.000Z"),
+          finishedAt: new Date("2026-07-27T01:06:18.000Z"),
+        },
+      },
+    },
+  });
+
+  const insightBySymbol = new Map<string, string>();
   for (const insight of insightSeed) {
-    await prisma.aiInsight.create({
+    const createdInsight = await prisma.aiInsight.create({
       data: {
         assetId: insight.symbol ? assetBySymbol.get(insight.symbol)?.id : undefined,
+        researchRunId: insight.symbol === "BTC" ? last30daysRun.id : undefined,
         source: insight.source,
         sentiment: insight.sentiment,
+        confidence: insight.confidence,
+        catalyst: insight.catalyst,
+        risk: insight.risk,
         title: insight.title,
         summary: insight.summary,
-        publishedAt: new Date("2026-06-13T04:00:00.000Z"),
+        publishedAt: new Date("2026-07-27T01:10:00.000Z"),
+      },
+      select: { id: true },
+    });
+    if (insight.symbol) insightBySymbol.set(insight.symbol, createdInsight.id);
+  }
+
+  if (btcAssetId) {
+    await prisma.evidenceItem.createMany({
+      data: [
+        {
+          researchRunId: last30daysRun.id,
+          assetId: btcAssetId,
+          insightId: insightBySymbol.get("BTC"),
+          sourceType: "reddit",
+          sourceName: "r/Bitcoin",
+          url: "https://example.com/reddit-btc-etf",
+          title: "ETF flow discussion clusters around persistent bid",
+          excerpt:
+            "Investor conversations emphasize ETF demand, exchange outflows, and reluctance to sell core BTC exposure.",
+          engagement: 420,
+          observedAt: new Date("2026-07-26T22:00:00.000Z"),
+        },
+        {
+          researchRunId: last30daysRun.id,
+          assetId: btcAssetId,
+          insightId: insightBySymbol.get("BTC"),
+          sourceType: "web",
+          sourceName: "issuer flow table",
+          url: "https://example.com/btc-etf-flow-table",
+          title: "Issuer flow tables show broad net inflows",
+          excerpt:
+            "Multiple issuer flow tables point to net accumulation rather than single-fund concentration.",
+          engagement: 0,
+          observedAt: new Date("2026-07-26T23:30:00.000Z"),
+        },
+      ],
+    });
+
+    await prisma.investmentThesis.create({
+      data: {
+        assetId: btcAssetId,
+        researchRunId: berkshireRun.id,
+        source: "ai-berkshire",
+        stance: "accumulate",
+        conviction: 78,
+        thesis:
+          "BTC remains a constructive core allocation while ETF demand absorbs available float; size positions conservatively around CPI and FOMC events.",
+        bullCase:
+          "Sustained ETF inflows, falling exchange balances, and improved liquidity can push BTC above recent resistance.",
+        bearCase:
+          "A hot inflation print or liquidity shock can unwind leverage and pull BTC back toward support.",
+        actionItems: ["Keep core exposure", "Add on pullbacks", "Avoid leverage into CPI"],
+      },
+    });
+
+    await prisma.forecastPoint.createMany({
+      data: [
+        {
+          assetId: btcAssetId,
+          researchRunId: kronosRun.id,
+          horizon: "7d",
+          targetPrice: 70400,
+          lowerBound: 66000,
+          upperBound: 72800,
+          confidence: 61,
+          model: "kronos-small",
+          generatedAt: new Date("2026-07-27T01:05:50.000Z"),
+        },
+        {
+          assetId: btcAssetId,
+          researchRunId: kronosRun.id,
+          horizon: "30d",
+          targetPrice: 73500,
+          lowerBound: 61200,
+          upperBound: 78800,
+          confidence: 54,
+          model: "kronos-small",
+          generatedAt: new Date("2026-07-27T01:05:50.000Z"),
+        },
+      ],
+    });
+
+    await prisma.modelEvaluation.create({
+      data: {
+        assetId: btcAssetId,
+        model: "kronos-small",
+        task: "directional_forecast",
+        windowStart: new Date("2026-05-15T00:00:00.000Z"),
+        windowEnd: new Date("2026-07-26T00:00:00.000Z"),
+        metrics: { hitRate: 0.57, maePct: 4.8, sampleSize: 30 },
+      },
+    });
+  }
+
+  if (vn30AssetId) {
+    await prisma.investmentThesis.create({
+      data: {
+        assetId: vn30AssetId,
+        source: "ai-berkshire",
+        stance: "hold",
+        conviction: 64,
+        thesis:
+          "VN30 exposure is supported by banking earnings recovery, but liquidity and policy timing argue for measured adds only on pullbacks.",
+        bullCase: "Credit growth and stable NIM can drive earnings revisions higher.",
+        bearCase: "Foreign outflows or weak macro prints can cap index multiple expansion.",
+        actionItems: ["Hold core VN30", "Prefer bank leaders", "Wait for pullbacks below 1,310"],
+      },
+    });
+  }
+
+  if (goldAssetId) {
+    await prisma.investmentThesis.create({
+      data: {
+        assetId: goldAssetId,
+        source: "ai-berkshire",
+        stance: "hold",
+        conviction: 69,
+        thesis:
+          "Gold remains a useful hedge while central bank demand offsets periods of dollar strength.",
+        bullCase: "Central bank accumulation and geopolitical hedging can keep a bid under gold.",
+        bearCase: "A real-yield spike can pressure non-yielding assets.",
+        actionItems: ["Keep hedge allocation", "Rebalance after sharp rallies"],
       },
     });
   }

@@ -15,6 +15,7 @@ model AppUser {
   portfolios     Portfolio[]
   watchlistItems WatchlistItem[]
   quantRuns      QuantRun[]
+  researchRuns   ResearchRun[]
 
   @@map("app_users")
 }
@@ -34,6 +35,11 @@ model Asset {
   transactions   PortfolioTransaction[]
   watchlistItems WatchlistItem[]
   insights       AiInsight[]
+  researchRuns   ResearchRun[]
+  evidenceItems  EvidenceItem[]
+  theses         InvestmentThesis[]
+  forecasts      ForecastPoint[]
+  evaluations    ModelEvaluation[]
 
   @@index([assetClass])
   @@map("assets")
@@ -123,18 +129,147 @@ model WatchlistItem {
 }
 
 model AiInsight {
-  id          String   @id @default(uuid()) @db.Uuid
-  assetId     String?  @map("asset_id") @db.Uuid
-  source      String
-  title       String
-  summary     String
-  sentiment   String
-  publishedAt DateTime @default(now()) @map("published_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  id            String         @id @default(uuid()) @db.Uuid
+  assetId       String?        @map("asset_id") @db.Uuid
+  researchRunId String?        @map("research_run_id") @db.Uuid
+  source        String
+  title         String
+  summary       String
+  sentiment     String
+  confidence    Int?
+  catalyst      String?
+  risk          String?
+  publishedAt   DateTime       @default(now()) @map("published_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  asset         Asset?         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  researchRun   ResearchRun?   @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  evidenceItems EvidenceItem[]
 
   @@index([assetId, publishedAt(sort: Desc)])
+  @@index([researchRunId])
   @@map("ai_insights")
+}
+
+model ResearchRun {
+  id           String             @id @default(uuid()) @db.Uuid
+  userId       String?            @map("user_id") @db.Uuid
+  assetId      String?            @map("asset_id") @db.Uuid
+  source       String
+  kind         String
+  status       String             @default("queued")
+  parameters   Json               @default("{}")
+  summary      String?
+  startedAt    DateTime?          @map("started_at")
+  finishedAt   DateTime?          @map("finished_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  user         AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  asset        Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  insights     AiInsight[]
+  evidence     EvidenceItem[]
+  theses       InvestmentThesis[]
+  forecasts    ForecastPoint[]
+  providerRuns ProviderRun[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([assetId, createdAt(sort: Desc)])
+  @@index([source, kind, status])
+  @@map("research_runs")
+}
+
+model EvidenceItem {
+  id            String       @id @default(uuid()) @db.Uuid
+  researchRunId String?      @map("research_run_id") @db.Uuid
+  assetId       String?      @map("asset_id") @db.Uuid
+  insightId     String?      @map("insight_id") @db.Uuid
+  sourceType    String       @map("source_type")
+  sourceName    String       @map("source_name")
+  url           String?
+  title         String
+  excerpt       String       @db.Text
+  engagement    Int          @default(0)
+  observedAt    DateTime     @map("observed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  researchRun   ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  asset         Asset?       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  insight       AiInsight?   @relation(fields: [insightId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, observedAt(sort: Desc)])
+  @@index([insightId])
+  @@index([researchRunId])
+  @@map("evidence_items")
+}
+
+model InvestmentThesis {
+  id            String       @id @default(uuid()) @db.Uuid
+  assetId       String       @map("asset_id") @db.Uuid
+  researchRunId String?      @map("research_run_id") @db.Uuid
+  source        String
+  stance        String
+  conviction    Int
+  thesis        String       @db.Text
+  bullCase      String       @map("bull_case") @db.Text
+  bearCase      String       @map("bear_case") @db.Text
+  actionItems   Json         @default("[]") @map("action_items")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  asset         Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  researchRun   ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, updatedAt(sort: Desc)])
+  @@index([researchRunId])
+  @@map("investment_theses")
+}
+
+model ForecastPoint {
+  id            String       @id @default(uuid()) @db.Uuid
+  assetId       String       @map("asset_id") @db.Uuid
+  researchRunId String?      @map("research_run_id") @db.Uuid
+  horizon       String
+  targetPrice   Decimal      @map("target_price") @db.Decimal(20, 8)
+  lowerBound    Decimal      @map("lower_bound") @db.Decimal(20, 8)
+  upperBound    Decimal      @map("upper_bound") @db.Decimal(20, 8)
+  confidence    Int
+  model         String
+  generatedAt   DateTime     @map("generated_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  asset         Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  researchRun   ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, generatedAt(sort: Desc)])
+  @@index([researchRunId])
+  @@map("forecast_points")
+}
+
+model ModelEvaluation {
+  id          String   @id @default(uuid()) @db.Uuid
+  assetId     String?  @map("asset_id") @db.Uuid
+  model       String
+  task        String
+  windowStart DateTime @map("window_start")
+  windowEnd   DateTime @map("window_end")
+  metrics     Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, model, createdAt(sort: Desc)])
+  @@map("model_evaluations")
+}
+
+model ProviderRun {
+  id             String       @id @default(uuid()) @db.Uuid
+  researchRunId  String?      @map("research_run_id") @db.Uuid
+  provider       String
+  status         String
+  recordsFetched Int          @default(0) @map("records_fetched")
+  errorMessage   String?      @map("error_message")
+  startedAt      DateTime?    @map("started_at")
+  finishedAt     DateTime?    @map("finished_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  researchRun    ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+
+  @@index([provider, status, createdAt(sort: Desc)])
+  @@index([researchRunId])
+  @@map("provider_runs")
 }
 
 model EconomicEvent {

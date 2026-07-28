@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { MarketTickerResponse } from "@/lib/backend/types";
+import type {
+  AssetIntelligenceResponse,
+  MarketTickerResponse,
+  ResearchRunResponse,
+} from "@/lib/backend/types";
 import {
   Play,
   TrendingUp,
@@ -38,6 +42,8 @@ const tickers: TrendTicker[] = [
   { sym: "DXY", price: "104.21", chg: -0.2 },
   { sym: "WTI", price: "78.45", chg: 1.1 },
 ];
+
+const INTELLIGENCE_SYMBOLS = ["BTC", "ETH", "SPY", "QQQ", "NVDA", "TSLA", "GOLD", "VN30"];
 
 type NewsSentiment = "bull" | "bear" | "neutral";
 type NewsSource = string;
@@ -313,6 +319,11 @@ function FearGreedGauge({ value }: { value: number }) {
 export function SmartInsights() {
   const [today, setToday] = useState("");
   const [marketTicks, setMarketTicks] = useState<TrendTicker[]>(tickers);
+  const [selectedIntelligenceSymbol, setSelectedIntelligenceSymbol] = useState("BTC");
+  const [assetIntelligence, setAssetIntelligence] = useState<AssetIntelligenceResponse | null>(
+    null,
+  );
+  const [researchRuns, setResearchRuns] = useState<ResearchRunResponse[]>([]);
   useEffect(() => {
     setToday(
       new Date().toLocaleDateString("en-US", {
@@ -337,6 +348,35 @@ export function SmartInsights() {
             chg: row.changePercent,
           })),
         );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/assets/${encodeURIComponent(selectedIntelligenceSymbol)}/intelligence`)
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject(new Error("Asset intelligence unavailable")),
+      )
+      .then((intelligence: AssetIntelligenceResponse) => {
+        if (!alive) return;
+        setAssetIntelligence(intelligence);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [selectedIntelligenceSymbol]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/research/runs")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Research runs unavailable"))))
+      .then((runs: ResearchRunResponse[]) => {
+        if (alive) setResearchRuns(runs);
       })
       .catch(() => {});
     return () => {
@@ -516,6 +556,14 @@ export function SmartInsights() {
         </div>
       </section>
 
+      <InvestorIntelligencePanel
+        assetOptions={INTELLIGENCE_SYMBOLS}
+        intelligence={assetIntelligence}
+        runs={researchRuns}
+        selectedSymbol={selectedIntelligenceSymbol}
+        onSymbolChange={setSelectedIntelligenceSymbol}
+      />
+
       {/* Market Pulse */}
       <section className="grid lg:grid-cols-[320px_1fr] gap-6">
         <div className="rounded-2xl border border-border bg-card p-6">
@@ -595,6 +643,230 @@ export function SmartInsights() {
       {/* News Feed with filters */}
       <NewsFeed />
     </main>
+  );
+}
+
+function InvestorIntelligencePanel({
+  assetOptions,
+  intelligence,
+  onSymbolChange,
+  runs,
+  selectedSymbol,
+}: {
+  assetOptions: string[];
+  intelligence: AssetIntelligenceResponse | null;
+  onSymbolChange: (symbol: string) => void;
+  runs: ResearchRunResponse[];
+  selectedSymbol: string;
+}) {
+  const score = intelligence?.score ?? 50;
+  const stance = intelligence?.stance ?? "watch";
+  const stanceTone =
+    stance === "accumulate" || stance === "hold"
+      ? "text-bull bg-bull/10 border-bull/20"
+      : stance === "trim" || stance === "avoid"
+        ? "text-bear bg-bear/10 border-bear/20"
+        : "text-muted-foreground bg-muted border-border";
+  const forecast = intelligence?.forecasts[0];
+
+  return (
+    <section className="grid xl:grid-cols-[1.35fr_0.9fr] gap-6">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-border bg-muted/30">
+          <div>
+            <h2 className="font-semibold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Investor Intelligence
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              DB-backed thesis, social evidence, and model forecast for the selected asset.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedSymbol}
+              onChange={(event) => onSymbolChange(event.target.value)}
+              className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold outline-none"
+            >
+              {Array.from(new Set(["BTC", ...assetOptions])).map((symbol) => (
+                <option key={symbol} value={symbol}>
+                  {symbol}
+                </option>
+              ))}
+            </select>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${stanceTone}`}
+            >
+              {stance.toUpperCase()} / {score}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-6 grid lg:grid-cols-[1fr_260px] gap-6">
+          <div className="space-y-5">
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Active Thesis
+              </div>
+              <p className="text-sm leading-relaxed">
+                {intelligence?.summary ??
+                  "Run the local research seed or worker to load investor intelligence."}
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <SignalList
+                title="Catalysts"
+                tone="bull"
+                items={intelligence?.topCatalysts ?? ["No catalyst data"]}
+              />
+              <SignalList
+                title="Risks"
+                tone="bear"
+                items={intelligence?.topRisks ?? ["No risk data"]}
+              />
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+                Evidence Trail
+              </div>
+              <div className="space-y-3">
+                {(intelligence?.evidence ?? []).slice(0, 3).map((item) => (
+                  <div key={item.id} className="text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium line-clamp-1">{item.title}</span>
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">
+                        {item.sourceType}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                      {item.excerpt}
+                    </p>
+                  </div>
+                ))}
+                {(!intelligence || intelligence.evidence.length === 0) && (
+                  <p className="text-xs text-muted-foreground">
+                    Evidence will appear after last30days or provider imports write to PostgreSQL.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                Sentiment Mix
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                {(["bull", "bear", "neutral"] as const).map((key) => (
+                  <div key={key} className="rounded-lg bg-muted/50 p-2">
+                    <div className="text-xl font-bold tabular-nums">
+                      {intelligence?.sentimentBreakdown[key] ?? 0}
+                    </div>
+                    <div className="text-[10px] uppercase text-muted-foreground">{key}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                Kronos Forecast
+              </div>
+              {forecast ? (
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{forecast.horizon} target</span>
+                    <span className="font-bold tabular-nums">
+                      ${forecast.targetPrice.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Expected return</span>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        forecast.expectedReturnPct >= 0 ? "text-bull" : "text-bear"
+                      }`}
+                    >
+                      {forecast.expectedReturnPct >= 0 ? "+" : ""}
+                      {forecast.expectedReturnPct.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Confidence</span>
+                    <span className="font-bold tabular-nums">{forecast.confidence}%</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">No forecast stored yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            Research Runs
+          </h2>
+        </div>
+        <div className="divide-y divide-border max-h-[430px] overflow-y-auto">
+          {runs.slice(0, 6).map((run) => (
+            <div key={run.id} className="p-4 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold">{run.source}</div>
+                <span className="text-[10px] font-mono uppercase text-muted-foreground">
+                  {run.status}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {run.kind}
+                {run.symbol ? ` / ${run.symbol}` : ""}
+              </div>
+              {run.summary && <p className="mt-2 text-xs line-clamp-2">{run.summary}</p>}
+            </div>
+          ))}
+          {runs.length === 0 && (
+            <div className="p-5 text-xs text-muted-foreground">
+              No research runs loaded. Run `npm run db:seed` after migrations.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SignalList({
+  title,
+  tone,
+  items,
+}: {
+  title: string;
+  tone: "bull" | "bear";
+  items: string[];
+}) {
+  const Icon = tone === "bull" ? TrendingUp : ShieldAlert;
+  return (
+    <div className="rounded-xl border border-border bg-background/60 p-4">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+        {title}
+      </div>
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2 text-sm">
+            <Icon
+              className={`w-4 h-4 shrink-0 mt-0.5 ${tone === "bull" ? "text-bull" : "text-bear"}`}
+            />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

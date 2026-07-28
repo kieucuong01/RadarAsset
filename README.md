@@ -8,7 +8,7 @@ Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadc
 - Tailwind CSS and shadcn/ui components
 - Recharts for the existing portfolio and quant charts, with ECharts available for heavier financial visuals
 - Local PostgreSQL with Prisma migrations and seed data
-- Python worker for market-data ingestion, portfolio analytics, and backtests
+- Python worker for quant runs and investor-intelligence imports
 
 ## Local Setup
 
@@ -28,6 +28,31 @@ quant_insight_radar
 ```
 
 If `psql` is not on PATH, create the database with pgAdmin or your PostgreSQL installer tools, then run the Prisma commands above.
+
+## Investor Intelligence
+
+The local v1 backend stores research in PostgreSQL:
+
+- `research_runs`: each last30days, ai-berkshire, Kronos, or provider-health refresh
+- `evidence_items`: source snippets and engagement metadata
+- `investment_theses`: investor-ready stance, conviction, bull case, bear case, and action items
+- `forecast_points`: model forecasts by horizon
+
+Useful local endpoints:
+
+```text
+GET  /api/assets/BTC/intelligence
+GET  /api/research/runs
+POST /api/research/runs/import
+```
+
+For automation imports, run Next locally and post normalized JSON:
+
+```powershell
+python quant-worker\research_import.py --symbol BTC
+```
+
+Set `QUANT_WORKER_API_TOKEN` in `.env.local` to require the same token in the `x-worker-token` header. Leave it empty for local-only development.
 
 ## Notes
 

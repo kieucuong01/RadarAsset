@@ -2,7 +2,9 @@
 logs
 *.log
 dev-server.err
+dev-server.out
 prod-server.err
+prod-server.out
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
