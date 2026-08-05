@@ -39,6 +39,7 @@ import {
   LineChart as LineChartIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DataStatusBadge } from "@/components/DataStatusBadge";
 
 type TabKey = "optimizer" | "predict" | "backtest";
 
@@ -57,9 +58,9 @@ async function queueQuantRun(strategyName: string, parameters: Record<string, un
     });
     if (!res.ok) throw new Error("Quant API unavailable");
     const run = (await res.json()) as { id: string; status: string };
-    toast.success(`${strategyName} queued (${run.status})`);
+    toast.success(`Đã lưu yêu cầu mô phỏng ${strategyName} (${run.status}).`);
   } catch {
-    toast.warning("Quant run simulated locally; PostgreSQL queue is unavailable.");
+    toast.warning("Kết quả vẫn là mô phỏng cục bộ; không lưu được bản ghi Quant Run.");
   }
 }
 
@@ -67,28 +68,23 @@ export function QuantLab() {
   const [tab, setTab] = useState<TabKey>("optimizer");
 
   return (
-    <main className="max-w-[1500px] mx-auto px-4 sm:px-6 py-6">
+    <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
             <Activity className="w-3.5 h-3.5 text-primary" />
-            Quantitative Workbench
+            Quantitative Simulation Workbench
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">Quant Lab</h1>
-          <p className="text-sm text-muted-foreground">
-            Optimize allocations, predict prices with AI models, and stress-test multi-asset
-            strategies.
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            Các biểu đồ và chỉ số bên dưới được tạo từ mô hình cục bộ với dữ liệu tổng hợp. Đây là
+            công cụ minh họa, không phải tín hiệu giao dịch trực tiếp hay kết quả đã kiểm chứng.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bull/10 text-bull font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
-            ENGINE LIVE
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-mono">
-            v2.4.1 · 1.2M backtests
-          </span>
-        </div>
+        <DataStatusBadge
+          status="SIMULATED"
+          detail="Kết quả được tính trong trình duyệt; API chỉ lưu yêu cầu chạy khi khả dụng."
+        />
       </div>
 
       {/* Top Tabs */}
@@ -228,9 +224,9 @@ function OptimizerTab() {
   const corrAssets = selected.length >= 2 ? selected : ASSET_CLASSES.slice(0, 4);
 
   return (
-    <div className="grid lg:grid-cols-[380px_1fr] gap-6">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
       {/* Settings */}
-      <aside className="rounded-2xl border border-border bg-card p-6 space-y-7 lg:sticky lg:top-20 lg:self-start">
+      <aside className="min-w-0 space-y-7 rounded-2xl border border-border bg-card p-6 lg:sticky lg:top-20 lg:self-start">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
             <Sliders className="w-4 h-4 text-primary" />
@@ -348,7 +344,7 @@ function OptimizerTab() {
       </aside>
 
       {/* Output */}
-      <section className="space-y-6">
+      <section className="min-w-0 space-y-6">
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -357,9 +353,7 @@ function OptimizerTab() {
                 Max U = E[R] − ½ · A · σ² · A = {riskA.toFixed(1)}
               </p>
             </div>
-            <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded bg-bull/10 text-bull">
-              Converged · 142 iter
-            </span>
+            <DataStatusBadge status="SIMULATED" detail="Phân bổ được tính từ đầu vào hiện tại." />
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 items-center">
@@ -739,7 +733,7 @@ type ModelOption = {
   id: string;
   name: string;
   family: string;
-  accuracy: string;
+  profileLabel: string;
   desc: string;
   bias: number; // forecast drift bias
   vol: number; // noise scale
@@ -750,8 +744,8 @@ const MODELS: ModelOption[] = [
     id: "lstm",
     name: "LSTM Ensemble",
     family: "Deep Learning",
-    accuracy: "87.4%",
-    desc: "Long Short-Term Memory recurrent net trained on OHLCV + on-chain features.",
+    profileLabel: "Kịch bản tổng hợp",
+    desc: "Synthetic preset using recurrent smoothing and generated market features.",
     bias: 1.0,
     vol: 1.0,
   },
@@ -759,8 +753,8 @@ const MODELS: ModelOption[] = [
     id: "transformer",
     name: "Temporal Transformer",
     family: "Deep Learning",
-    accuracy: "89.1%",
-    desc: "Attention-based time-series transformer with multi-horizon decoding.",
+    profileLabel: "Kịch bản tổng hợp",
+    desc: "Synthetic preset using attention-style weighting across a generated time series.",
     bias: 1.2,
     vol: 0.85,
   },
@@ -768,8 +762,8 @@ const MODELS: ModelOption[] = [
     id: "prophet",
     name: "Prophet (Bayesian)",
     family: "Statistical",
-    accuracy: "78.6%",
-    desc: "Decomposable trend + seasonality model with changepoint detection.",
+    profileLabel: "Kịch bản tổng hợp",
+    desc: "Synthetic preset combining generated trend, seasonality, and change points.",
     bias: 0.6,
     vol: 0.7,
   },
@@ -777,8 +771,8 @@ const MODELS: ModelOption[] = [
     id: "arima",
     name: "ARIMA-GARCH",
     family: "Statistical",
-    accuracy: "74.2%",
-    desc: "Autoregressive integrated moving average with GARCH volatility clustering.",
+    profileLabel: "Kịch bản tổng hợp",
+    desc: "Synthetic preset combining autoregression and generated volatility regimes.",
     bias: 0.3,
     vol: 1.1,
   },
@@ -786,8 +780,8 @@ const MODELS: ModelOption[] = [
     id: "xgb",
     name: "XGBoost Gradient Boost",
     family: "Machine Learning",
-    accuracy: "82.9%",
-    desc: "Gradient boosted trees on engineered technical & macro features.",
+    profileLabel: "Kịch bản tổng hợp",
+    desc: "Synthetic preset using generated technical and macro-style features.",
     bias: 0.8,
     vol: 0.95,
   },
@@ -856,9 +850,9 @@ function PredictTab() {
     `${currency}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="grid lg:grid-cols-[380px_1fr] gap-6">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
       {/* Controls */}
-      <aside className="rounded-2xl border border-border bg-card p-6 space-y-6 lg:sticky lg:top-20 lg:self-start">
+      <aside className="min-w-0 space-y-6 rounded-2xl border border-border bg-card p-6 lg:sticky lg:top-20 lg:self-start">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
             <Brain className="w-4 h-4 text-primary" />
@@ -917,7 +911,7 @@ function PredictTab() {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">{m.name}</div>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bull/10 text-bull">
-                      {m.accuracy}
+                      {m.profileLabel}
                     </span>
                   </div>
                   <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mt-0.5">
@@ -947,7 +941,7 @@ function PredictTab() {
       </aside>
 
       {/* Chart */}
-      <section className="rounded-2xl border border-border bg-card p-6">
+      <section className="min-w-0 rounded-2xl border border-border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-semibold flex items-center gap-2">
@@ -955,10 +949,11 @@ function PredictTab() {
               {ranAsset.ticker} · {ranAsset.name}
             </h2>
             <p className="text-xs text-muted-foreground">
-              {ranModel.name} · 14-day horizon · {ranModel.accuracy} directional accuracy
+              {ranModel.name} · 14-day synthetic scenario
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <DataStatusBadge status="SIMULATED" detail="Đường dự báo dùng dữ liệu tổng hợp." />
             <span className="inline-flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-foreground" />
               Historical
@@ -1035,7 +1030,7 @@ function PredictTab() {
               t: upsidePct >= 0 ? "bull" : "bear",
               icon: upsidePct >= 0 ? TrendingUp : TrendingDown,
             },
-            { l: "Confidence", v: ranModel.accuracy, t: "primary", icon: Sparkles },
+            { l: "Scenario", v: "Synthetic", t: "primary", icon: Sparkles },
           ].map((k) => {
             const Icon = k.icon;
             return (
@@ -1112,9 +1107,9 @@ function BacktestTab() {
     setLegs((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
   return (
-    <div className="grid lg:grid-cols-[480px_1fr] gap-6">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[480px_minmax(0,1fr)]">
       {/* Left: Inputs */}
-      <aside className="rounded-2xl border border-border bg-card p-6 space-y-6 lg:sticky lg:top-20 lg:self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+      <aside className="min-w-0 space-y-6 overflow-y-auto rounded-2xl border border-border bg-card p-6 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
             <FlaskConical className="w-4 h-4 text-primary" />
@@ -1305,14 +1300,20 @@ function BacktestTab() {
       </aside>
 
       {/* Right: Output */}
-      <section className="space-y-6">
+      <section className="min-w-0 space-y-6">
         {/* Active legs summary */}
         <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-sm">Active Portfolio</h3>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-              {legs.length} legs · {from} → {to}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <DataStatusBadge
+                status="SIMULATED"
+                detail="Các kết quả backtest là dữ liệu tạo cục bộ."
+              />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                {legs.length} legs · {from} → {to}
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {legs.map((leg, idx) => {
@@ -1467,8 +1468,8 @@ function EquityCurve({ legCount }: { legCount: number }) {
           </span>
         </div>
       </div>
-      <div className="grid lg:grid-cols-[1fr_280px]">
-        <div className="h-[320px] p-3">
+      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="h-[320px] min-w-0 p-3">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -1804,8 +1805,8 @@ function MonteCarlo() {
           Re-Run
         </button>
       </div>
-      <div className="grid lg:grid-cols-[1fr_260px]">
-        <div className="p-3 h-[320px]">
+      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="h-[320px] min-w-0 p-3">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rows} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
