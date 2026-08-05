@@ -51,7 +51,7 @@ export function Header() {
 
         <nav
           aria-label="Điều hướng chính"
-          className="hidden items-center gap-1 rounded-full bg-muted/60 p-1 md:flex"
+          className="hidden items-center gap-1 rounded-full bg-muted/60 p-1 lg:flex"
         >
           {APP_ROUTES.map((route) => {
             const active = path === route.href;
@@ -95,7 +95,7 @@ export function Header() {
                 variant="ghost"
                 size="icon"
                 aria-label="Mở menu chính"
-                className="size-11 rounded-full bg-muted/60 hover:bg-muted md:hidden"
+                className="size-11 rounded-full bg-muted/60 hover:bg-muted lg:hidden"
               >
                 <Menu />
               </Button>

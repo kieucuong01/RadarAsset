@@ -428,16 +428,16 @@ function OptimizerTab() {
           </div>
         </div>
 
-        {/* Historical Correlation Matrix */}
+        {/* Synthetic Correlation Matrix */}
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="font-semibold flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
-                Historical Correlation Matrix
+                Synthetic Correlation Matrix
               </h3>
               <p className="text-xs text-muted-foreground">
-                Pearson ρ · rolling 5Y daily returns · diversification heatmap
+                Pearson ρ · generated scenario · diversification heatmap
               </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -956,7 +956,7 @@ function PredictTab() {
             <DataStatusBadge status="SIMULATED" detail="Đường dự báo dùng dữ liệu tổng hợp." />
             <span className="inline-flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-foreground" />
-              Historical
+              Generated history
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-3 border-t-2 border-dashed border-primary" />
@@ -995,7 +995,7 @@ function PredictTab() {
               <Line
                 type="monotone"
                 dataKey="price"
-                name="Historical"
+                name="Generated history"
                 stroke="var(--color-foreground)"
                 strokeWidth={2}
                 dot={false}
@@ -1017,7 +1017,7 @@ function PredictTab() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-5 border-t border-border">
           {[
-            { l: "Spot", v: fmt(lastHistorical), t: "primary", icon: Activity },
+            { l: "Scenario start", v: fmt(lastHistorical), t: "primary", icon: Activity },
             {
               l: "Target (14d)",
               v: fmt(lastForecast),
