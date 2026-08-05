@@ -1,70 +1,44 @@
 import Link from "next/link";
-import { Radar, Github, Twitter, ShieldAlert } from "lucide-react";
+import { Radar, ShieldAlert } from "lucide-react";
+
+import { APP_ROUTES } from "@/lib/navigation";
 
 export function Footer() {
   return (
     <footer className="mt-16 border-t border-border bg-card/40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div>
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-primary grid place-items-center shadow-glow">
-              <Radar className="w-5 h-5 text-primary-foreground" />
+            <div className="grid size-9 place-items-center rounded-xl bg-gradient-primary shadow-glow">
+              <Radar className="size-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg tracking-tight">RadarAsset</span>
+            <span className="text-lg font-bold tracking-tight">RadarAsset</span>
           </Link>
-          <p className="mt-3 text-sm text-muted-foreground max-w-sm">
+          <p className="mt-3 max-w-sm text-sm text-muted-foreground">
             AI-powered insights and quantitative tools for crypto, equities, gold and macro markets.
           </p>
-          <div className="mt-4 flex gap-2">
-            <a
-              href="#"
-              aria-label="Twitter"
-              className="w-9 h-9 grid place-items-center rounded-full border border-border hover:bg-muted transition-colors"
-            >
-              <Twitter className="w-4 h-4" />
-            </a>
-            <a
-              href="#"
-              aria-label="GitHub"
-              className="w-9 h-9 grid place-items-center rounded-full border border-border hover:bg-muted transition-colors"
-            >
-              <Github className="w-4 h-4" />
-            </a>
-          </div>
         </div>
 
-        <FooterCol
-          title="Product"
-          links={[
-            { to: "/", label: "Smart Insights" },
-            { to: "/quant-lab", label: "Quant Lab" },
-            { to: "/portfolio", label: "Mock Portfolio" },
-          ]}
-        />
-        <FooterCol
-          title="Resources"
-          links={[
-            { to: "/", label: "Documentation" },
-            { to: "/", label: "API Reference" },
-            { to: "/", label: "Changelog" },
-            { to: "/", label: "Status" },
-          ]}
-        />
-        <FooterCol
-          title="Company"
-          links={[
-            { to: "/", label: "About" },
-            { to: "/", label: "Careers" },
-            { to: "/", label: "Privacy" },
-            { to: "/", label: "Terms" },
-          ]}
-        />
+        <div className="min-w-0 md:justify-self-end">
+          <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Product
+          </h3>
+          <ul className="flex flex-col gap-2 text-sm">
+            {APP_ROUTES.map((route) => (
+              <li key={route.id}>
+                <Link href={route.href} className="transition-colors hover:text-primary">
+                  {route.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="border-t border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-muted-foreground">
-          <div className="flex items-start gap-2 max-w-3xl">
-            <ShieldAlert className="w-4 h-4 text-bear shrink-0 mt-0.5" />
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-xs text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex max-w-3xl items-start gap-2">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-bear" />
             <p>
               <span className="font-semibold text-foreground">Not financial advice.</span>{" "}
               RadarAsset is for informational and educational purposes only. Markets carry risk;
@@ -75,24 +49,5 @@ export function Footer() {
         </div>
       </div>
     </footer>
-  );
-}
-
-function FooterCol({ title, links }: { title: string; links: { to: string; label: string }[] }) {
-  return (
-    <div>
-      <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
-        {title}
-      </h3>
-      <ul className="space-y-2 text-sm">
-        {links.map((l) => (
-          <li key={l.label}>
-            <a href={l.to} className="hover:text-primary transition-colors">
-              {l.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
