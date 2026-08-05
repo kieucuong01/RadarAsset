@@ -93,6 +93,16 @@ export type MarketTickerResponse = {
   ts: string;
 };
 
+export type WatchlistItemResponse = {
+  id: string;
+  sym: string;
+  name: string;
+  price: number;
+  chg: number;
+  alert: number;
+  sentiment: "bull" | "bear" | "neutral";
+};
+
 export type QuantRunResponse = {
   id: string;
   strategyName: string;

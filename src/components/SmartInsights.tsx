@@ -5,13 +5,13 @@ import type {
   AssetIntelligenceResponse,
   MarketTickerResponse,
   ResearchRunResponse,
+  WatchlistItemResponse,
 } from "@/lib/backend/types";
 import {
   Play,
   TrendingUp,
   TrendingDown,
   Minus,
-  ArrowRight,
   Sparkles,
   Brain,
   ShieldAlert,
@@ -25,10 +25,12 @@ import {
   Filter,
   Clock,
   AlertCircle,
-  Flame,
   Activity,
 } from "lucide-react";
-import { toast } from "sonner";
+import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { WatchlistAddDialog } from "@/components/WatchlistAddDialog";
+import { Button } from "@/components/ui/button";
+import { isFeatureAvailable, type DataStatus } from "@/lib/mvp-ui";
 
 type TrendTicker = { sym: string; price: string; chg: number };
 
@@ -233,22 +235,61 @@ const CALENDAR: CalendarEvent[] = [
   },
 ];
 
-type WatchItem = {
-  sym: string;
-  name: string;
-  price: number;
-  chg: number;
-  alert: number;
-  sentiment: NewsSentiment;
-};
-
-const WATCHLIST: WatchItem[] = [
-  { sym: "BTC", name: "Bitcoin", price: 67420, chg: 2.5, alert: 70000, sentiment: "bull" },
-  { sym: "ETH", name: "Ethereum", price: 3512, chg: 1.8, alert: 3800, sentiment: "bull" },
-  { sym: "NVDA", name: "NVIDIA", price: 1142.5, chg: 3.4, alert: 1200, sentiment: "bull" },
-  { sym: "TSLA", name: "Tesla", price: 178.4, chg: -1.8, alert: 165, sentiment: "bear" },
-  { sym: "GOLD", name: "Gold Spot", price: 2402, chg: 0.7, alert: 2450, sentiment: "bull" },
-  { sym: "VN30", name: "VN30 Index", price: 1328, chg: 1.2, alert: 1350, sentiment: "neutral" },
+const WATCHLIST: WatchlistItemResponse[] = [
+  {
+    id: "sample-btc",
+    sym: "BTC",
+    name: "Bitcoin",
+    price: 67420,
+    chg: 2.5,
+    alert: 70000,
+    sentiment: "bull",
+  },
+  {
+    id: "sample-eth",
+    sym: "ETH",
+    name: "Ethereum",
+    price: 3512,
+    chg: 1.8,
+    alert: 3800,
+    sentiment: "bull",
+  },
+  {
+    id: "sample-nvda",
+    sym: "NVDA",
+    name: "NVIDIA",
+    price: 1142.5,
+    chg: 3.4,
+    alert: 1200,
+    sentiment: "bull",
+  },
+  {
+    id: "sample-tsla",
+    sym: "TSLA",
+    name: "Tesla",
+    price: 178.4,
+    chg: -1.8,
+    alert: 165,
+    sentiment: "bear",
+  },
+  {
+    id: "sample-gold",
+    sym: "GOLD",
+    name: "Gold Spot",
+    price: 2402,
+    chg: 0.7,
+    alert: 2450,
+    sentiment: "bull",
+  },
+  {
+    id: "sample-vn30",
+    sym: "VN30",
+    name: "VN30 Index",
+    price: 1328,
+    chg: 1.2,
+    alert: 1350,
+    sentiment: "neutral",
+  },
 ];
 
 function SentimentBadge({ s }: { s: NewsSentiment }) {
@@ -319,11 +360,16 @@ function FearGreedGauge({ value }: { value: number }) {
 export function SmartInsights() {
   const [today, setToday] = useState("");
   const [marketTicks, setMarketTicks] = useState<TrendTicker[]>(tickers);
+  const [marketStatus, setMarketStatus] = useState<DataStatus>("SAMPLE");
+  const [marketError, setMarketError] = useState<string | null>(null);
   const [selectedIntelligenceSymbol, setSelectedIntelligenceSymbol] = useState("BTC");
   const [assetIntelligence, setAssetIntelligence] = useState<AssetIntelligenceResponse | null>(
     null,
   );
+  const [intelligenceStatus, setIntelligenceStatus] = useState<DataStatus>("UNAVAILABLE");
+  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
   const [researchRuns, setResearchRuns] = useState<ResearchRunResponse[]>([]);
+  const [researchError, setResearchError] = useState<string | null>(null);
   useEffect(() => {
     setToday(
       new Date().toLocaleDateString("en-US", {
@@ -340,7 +386,7 @@ export function SmartInsights() {
     fetch("/api/market/ticker")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Ticker API unavailable"))))
       .then((rows: MarketTickerResponse[]) => {
-        if (!alive || rows.length === 0) return;
+        if (!alive) return;
         setMarketTicks(
           rows.slice(0, 8).map((row) => ({
             sym: row.symbol,
@@ -348,8 +394,14 @@ export function SmartInsights() {
             chg: row.changePercent,
           })),
         );
+        setMarketStatus("SYSTEM");
+        setMarketError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setMarketStatus("SAMPLE");
+        setMarketError("Ticker API không khả dụng; đang hiển thị dữ liệu mẫu.");
+      });
     return () => {
       alive = false;
     };
@@ -364,8 +416,15 @@ export function SmartInsights() {
       .then((intelligence: AssetIntelligenceResponse) => {
         if (!alive) return;
         setAssetIntelligence(intelligence);
+        setIntelligenceStatus("SYSTEM");
+        setIntelligenceError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setAssetIntelligence(null);
+        setIntelligenceStatus("UNAVAILABLE");
+        setIntelligenceError("Không tải được Investor Intelligence cho tài sản đã chọn.");
+      });
     return () => {
       alive = false;
     };
@@ -376,16 +435,21 @@ export function SmartInsights() {
     fetch("/api/research/runs")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Research runs unavailable"))))
       .then((runs: ResearchRunResponse[]) => {
-        if (alive) setResearchRuns(runs);
+        if (!alive) return;
+        setResearchRuns(runs);
+        setResearchError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setResearchError("Không tải được lịch sử research run.");
+      });
     return () => {
       alive = false;
     };
   }, []);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
+    <main className="mx-auto min-w-0 max-w-7xl space-y-10 px-4 py-8 sm:px-6">
       {/* Hero / Daily Briefing */}
       <section
         className="relative overflow-hidden rounded-3xl p-8 md:p-12 text-primary-foreground shadow-elegant"
@@ -395,12 +459,13 @@ export function SmartInsights() {
           className="absolute inset-0 opacity-30 mix-blend-overlay pointer-events-none"
           style={{ backgroundImage: "radial-gradient(circle at 80% 20%, white, transparent 40%)" }}
         />
-        <div className="relative grid md:grid-cols-[1fr_auto] gap-8 items-center">
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
+        <div className="relative grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0 space-y-5">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1.5 text-xs font-bold tracking-widest px-3 py-1 rounded-full bg-white/15 backdrop-blur">
                 <Sparkles className="w-3.5 h-3.5" /> DAILY BRIEFING
               </span>
+              <DataStatusBadge status="SAMPLE" className="border-white/30 bg-white/10 text-white" />
               <span className="text-sm text-white/80">{today}</span>
             </div>
             <h1 className="text-3xl md:text-5xl font-bold leading-tight tracking-tight max-w-2xl">
@@ -421,13 +486,19 @@ export function SmartInsights() {
               </li>
             </ul>
           </div>
-          <button className="group flex items-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur rounded-2xl px-5 py-4 transition-all border border-white/20">
+          <button
+            type="button"
+            disabled={!isFeatureAvailable("listenBriefing")}
+            aria-disabled={!isFeatureAvailable("listenBriefing")}
+            title="Chưa khả dụng trong MVP"
+            className="group flex items-center gap-4 rounded-2xl border border-white/20 bg-white/10 px-5 py-4 backdrop-blur transition-all disabled:cursor-not-allowed disabled:opacity-60"
+          >
             <span className="w-14 h-14 rounded-full bg-white text-primary grid place-items-center shadow-glow group-hover:scale-105 transition-transform">
               <Play className="w-6 h-6 fill-current ml-0.5" />
             </span>
             <span className="text-left">
               <span className="block text-sm font-semibold">Listen to AI Briefing</span>
-              <span className="block text-xs text-white/70">3 min · Premium voice</span>
+              <span className="block text-xs text-white/70">Chưa khả dụng trong MVP</span>
             </span>
           </button>
         </div>
@@ -446,9 +517,10 @@ export function SmartInsights() {
                 <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
                   Decision Summary
                 </span>
+                <DataStatusBadge status="SAMPLE" />
               </h2>
               <p className="text-xs text-muted-foreground">
-                Synthesized from 124 sources · macro, on-chain &amp; sentiment · refreshed 5m ago
+                Nội dung minh họa; không tổng hợp theo thời gian thực.
               </p>
             </div>
           </div>
@@ -463,8 +535,8 @@ export function SmartInsights() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-0 divide-y lg:divide-y-0 lg:divide-x divide-border">
-          <div className="p-6 space-y-5">
+        <div className="grid gap-0 divide-y divide-border lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:divide-x lg:divide-y-0">
+          <div className="min-w-0 space-y-5 p-6">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
                 Market Thesis
@@ -503,7 +575,7 @@ export function SmartInsights() {
             </div>
           </div>
 
-          <div className="p-6 space-y-5 bg-muted/20">
+          <div className="min-w-0 space-y-5 bg-muted/20 p-6">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
                 Recommended Stance
@@ -546,11 +618,14 @@ export function SmartInsights() {
               </div>
             </div>
             <button
-              onClick={() => toast.success("AI thesis applied to your portfolio")}
-              className="w-full inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-elegant hover:opacity-95 text-sm"
+              type="button"
+              disabled={!isFeatureAvailable("applyPortfolio")}
+              aria-disabled={!isFeatureAvailable("applyPortfolio")}
+              title="Chưa khả dụng trong MVP"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-elegant disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              Apply to My Portfolio
+              Apply to My Portfolio · Chưa khả dụng trong MVP
             </button>
           </div>
         </div>
@@ -558,18 +633,20 @@ export function SmartInsights() {
 
       <InvestorIntelligencePanel
         assetOptions={INTELLIGENCE_SYMBOLS}
+        error={intelligenceError ?? researchError}
         intelligence={assetIntelligence}
         runs={researchRuns}
         selectedSymbol={selectedIntelligenceSymbol}
+        status={intelligenceStatus}
         onSymbolChange={setSelectedIntelligenceSymbol}
       />
 
       {/* Market Pulse */}
-      <section className="grid lg:grid-cols-[320px_1fr] gap-6">
-        <div className="rounded-2xl border border-border bg-card p-6">
+      <section className="grid min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="min-w-0 rounded-2xl border border-border bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Fear &amp; Greed Index</h2>
-            <span className="text-xs text-muted-foreground">Updated 5m ago</span>
+            <DataStatusBadge status="SAMPLE" />
           </div>
           <FearGreedGauge value={75} />
           <p className="text-xs text-muted-foreground text-center mt-3">
@@ -604,12 +681,10 @@ export function SmartInsights() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Trending Assets</h2>
-            <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 text-bear" /> Live
-            </span>
+            <DataStatusBadge status={marketStatus} detail={marketError ?? undefined} />
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
             {marketTicks.map((t) => {
@@ -635,9 +710,13 @@ export function SmartInsights() {
       </section>
 
       {/* Watchlist + Economic Calendar */}
-      <section className="grid lg:grid-cols-[1.1fr_1fr] gap-6">
-        <Watchlist />
-        <EconomicCalendar />
+      <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <Watchlist />
+        </div>
+        <div className="min-w-0">
+          <EconomicCalendar />
+        </div>
       </section>
 
       {/* News Feed with filters */}
@@ -648,18 +727,22 @@ export function SmartInsights() {
 
 function InvestorIntelligencePanel({
   assetOptions,
+  error,
   intelligence,
   onSymbolChange,
   runs,
   selectedSymbol,
+  status,
 }: {
   assetOptions: string[];
+  error: string | null;
   intelligence: AssetIntelligenceResponse | null;
   onSymbolChange: (symbol: string) => void;
   runs: ResearchRunResponse[];
   selectedSymbol: string;
+  status: DataStatus;
 }) {
-  const score = intelligence?.score ?? 50;
+  const score = intelligence?.score ?? null;
   const stance = intelligence?.stance ?? "watch";
   const stanceTone =
     stance === "accumulate" || stance === "hold"
@@ -670,8 +753,8 @@ function InvestorIntelligencePanel({
   const forecast = intelligence?.forecasts[0];
 
   return (
-    <section className="grid xl:grid-cols-[1.35fr_0.9fr] gap-6">
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+    <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
+      <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-border bg-muted/30">
           <div>
             <h2 className="font-semibold flex items-center gap-2">
@@ -683,6 +766,7 @@ function InvestorIntelligencePanel({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <DataStatusBadge status={status} detail={error ?? undefined} />
             <select
               value={selectedSymbol}
               onChange={(event) => onSymbolChange(event.target.value)}
@@ -694,16 +778,27 @@ function InvestorIntelligencePanel({
                 </option>
               ))}
             </select>
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${stanceTone}`}
-            >
-              {stance.toUpperCase()} / {score}
-            </span>
+            {score !== null ? (
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${stanceTone}`}
+              >
+                {stance.toUpperCase()} / {score}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <div className="p-6 grid lg:grid-cols-[1fr_260px] gap-6">
-          <div className="space-y-5">
+        {error ? (
+          <div
+            role="status"
+            className="border-b border-bear/20 bg-bear/5 px-6 py-3 text-sm text-bear"
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="min-w-0 space-y-5">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
                 Active Thesis
@@ -807,7 +902,7 @@ function InvestorIntelligencePanel({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card">
         <div className="px-5 py-4 border-b border-border">
           <h2 className="font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4 text-primary" />
@@ -873,113 +968,143 @@ function SignalList({
 /* ---------------- Watchlist ---------------- */
 
 function Watchlist() {
-  const [items, setItems] = useState<WatchItem[]>(WATCHLIST);
+  const [items, setItems] = useState<WatchlistItemResponse[]>(WATCHLIST);
+  const [status, setStatus] = useState<DataStatus>("SAMPLE");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
     fetch("/api/watchlist")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Watchlist API unavailable"))))
-      .then((rows: WatchItem[]) => {
-        if (alive && rows.length > 0) setItems(rows);
+      .then((rows: WatchlistItemResponse[]) => {
+        if (!alive) return;
+        setItems(rows);
+        setStatus("SYSTEM");
+        setLoadError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setStatus("SAMPLE");
+        setLoadError("Watchlist API không khả dụng; đang hiển thị dữ liệu mẫu.");
+      });
     return () => {
       alive = false;
     };
   }, []);
 
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Star className="w-4 h-4 text-chart-4 fill-chart-4" />
-          <h2 className="font-semibold">My Watchlist</h2>
-          <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
-            {items.length}
-          </span>
+    <>
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
+          <div className="flex flex-wrap items-center gap-2">
+            <Star className="w-4 h-4 text-chart-4 fill-chart-4" />
+            <h2 className="font-semibold">My Watchlist</h2>
+            <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
+              {items.length}
+            </span>
+            <DataStatusBadge status={status} detail={loadError ?? undefined} />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!isFeatureAvailable("watchlistAdd")}
+            onClick={() => setAddOpen(true)}
+            className="h-11 sm:h-8"
+          >
+            <Plus data-icon="inline-start" /> Add asset
+          </Button>
         </div>
-        <button
-          onClick={() => toast("Search assets via ⌘K to add to watchlist")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add asset
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            <tr className="border-b border-border">
-              <th className="text-left font-medium px-5 py-2.5">Asset</th>
-              <th className="text-right font-medium px-3 py-2.5">Price</th>
-              <th className="text-right font-medium px-3 py-2.5">24h</th>
-              <th className="text-right font-medium px-3 py-2.5">Alert</th>
-              <th className="text-center font-medium px-3 py-2.5">AI</th>
-              <th className="text-right font-medium px-5 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it) => {
-              const up = it.chg >= 0;
-              const dist = ((it.alert - it.price) / it.price) * 100;
-              return (
-                <tr key={it.sym} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-[10px] font-bold">
-                        {it.sym.slice(0, 2)}
-                      </div>
-                      <div>
-                        <div className="font-semibold leading-tight">{it.sym}</div>
-                        <div className="text-xs text-muted-foreground">{it.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="text-right tabular-nums font-medium px-3 py-3">
-                    {it.price.toLocaleString()}
-                  </td>
-                  <td
-                    className={`text-right tabular-nums px-3 py-3 font-semibold ${up ? "text-bull" : "text-bear"}`}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border">
+                <th className="text-left font-medium px-5 py-2.5">Asset</th>
+                <th className="text-right font-medium px-3 py-2.5">Price</th>
+                <th className="text-right font-medium px-3 py-2.5">24h</th>
+                <th className="text-right font-medium px-3 py-2.5">Alert</th>
+                <th className="text-center font-medium px-3 py-2.5">AI</th>
+                <th className="text-right font-medium px-5 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => {
+                const up = it.chg >= 0;
+                const dist = ((it.alert - it.price) / it.price) * 100;
+                return (
+                  <tr
+                    key={it.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/40"
                   >
-                    {up ? "+" : ""}
-                    {it.chg}%
-                  </td>
-                  <td className="text-right tabular-nums px-3 py-3">
-                    <div className="font-medium">{it.alert.toLocaleString()}</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {dist >= 0 ? "+" : ""}
-                      {dist.toFixed(1)}%
-                    </div>
-                  </td>
-                  <td className="text-center px-3 py-3">
-                    <SentimentBadge s={it.sentiment} />
-                  </td>
-                  <td className="text-right px-5 py-3">
-                    <button
-                      onClick={() => {
-                        toast.success(`Alert set for ${it.sym} at ${it.alert.toLocaleString()}`);
-                      }}
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                      aria-label={`Edit alert for ${it.sym}`}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-[10px] font-bold">
+                          {it.sym.slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-semibold leading-tight">{it.sym}</div>
+                          <div className="text-xs text-muted-foreground">{it.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="text-right tabular-nums font-medium px-3 py-3">
+                      {it.price.toLocaleString()}
+                    </td>
+                    <td
+                      className={`text-right tabular-nums px-3 py-3 font-semibold ${up ? "text-bull" : "text-bear"}`}
                     >
-                      <Bell className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      {up ? "+" : ""}
+                      {it.chg}%
+                    </td>
+                    <td className="text-right tabular-nums px-3 py-3">
+                      <div className="font-medium">{it.alert.toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {dist >= 0 ? "+" : ""}
+                        {dist.toFixed(1)}%
+                      </div>
+                    </td>
+                    <td className="text-center px-3 py-3">
+                      <SentimentBadge s={it.sentiment} />
+                    </td>
+                    <td className="text-right px-5 py-3">
+                      <button
+                        type="button"
+                        disabled={!isFeatureAvailable("alertEdit")}
+                        aria-disabled={!isFeatureAvailable("alertEdit")}
+                        title="Chưa khả dụng trong MVP"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 text-xs text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Edit alert for ${it.sym}`}
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-border bg-muted/20 text-xs text-muted-foreground flex justify-between">
+          <span>Sentiment auto-synced from Smart Insights</span>
+          <button
+            onClick={() => setItems([...items].sort((a, b) => b.chg - a.chg))}
+            className="font-medium text-primary hover:underline"
+          >
+            Sort by 24h ↕
+          </button>
+        </div>
       </div>
-      <div className="px-5 py-3 border-t border-border bg-muted/20 text-xs text-muted-foreground flex justify-between">
-        <span>Sentiment auto-synced from Smart Insights</span>
-        <button
-          onClick={() => setItems([...items].sort((a, b) => b.chg - a.chg))}
-          className="font-medium text-primary hover:underline"
-        >
-          Sort by 24h ↕
-        </button>
-      </div>
-    </div>
+      <WatchlistAddDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onSaved={(nextItems) => {
+          setItems(nextItems);
+          setStatus("SYSTEM");
+          setLoadError(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -1009,15 +1134,24 @@ function ImpactDots({ impact }: { impact: CalendarEvent["impact"] }) {
 function EconomicCalendar() {
   const [impact, setImpact] = useState<"all" | "high" | "mid">("all");
   const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR);
+  const [status, setStatus] = useState<DataStatus>("SAMPLE");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     fetch("/api/events")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Events API unavailable"))))
       .then((rows: CalendarEvent[]) => {
-        if (alive && rows.length > 0) setEvents(rows);
+        if (!alive) return;
+        setEvents(rows);
+        setStatus("SYSTEM");
+        setLoadError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setStatus("SAMPLE");
+        setLoadError("Events API không khả dụng; đang hiển thị dữ liệu mẫu.");
+      });
     return () => {
       alive = false;
     };
@@ -1030,9 +1164,10 @@ function EconomicCalendar() {
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
           <h2 className="font-semibold">Economic Calendar</h2>
+          <DataStatusBadge status={status} detail={loadError ?? undefined} />
         </div>
         <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
           {(["all", "mid", "high"] as const).map((k) => (
@@ -1102,13 +1237,15 @@ function NewsFeed() {
   const [src, setSrc] = useState<NewsSource | "all">("all");
   const [sent, setSent] = useState<NewsSentiment | "all">("all");
   const [news, setNews] = useState<News[]>(NEWS);
+  const [status, setStatus] = useState<DataStatus>("SAMPLE");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     fetch("/api/insights")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Insights API unavailable"))))
       .then((rows: Array<Omit<News, "src"> & { source?: string; src?: string }>) => {
-        if (!alive || rows.length === 0) return;
+        if (!alive) return;
         setNews(
           rows.map((row) => ({
             id: row.id,
@@ -1120,8 +1257,14 @@ function NewsFeed() {
             ago: row.ago,
           })),
         );
+        setStatus("SYSTEM");
+        setLoadError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setStatus("SAMPLE");
+        setLoadError("Insights API không khả dụng; đang hiển thị dữ liệu mẫu.");
+      });
     return () => {
       alive = false;
     };
@@ -1145,7 +1288,10 @@ function NewsFeed() {
     <section>
       <div className="flex items-end justify-between mb-5 gap-3 flex-wrap">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Expert Signals</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold tracking-tight">Expert Signals</h2>
+            <DataStatusBadge status={status} detail={loadError ?? undefined} />
+          </div>
           <p className="text-sm text-muted-foreground">
             AI-curated insights from top research desks worldwide.
           </p>
@@ -1156,7 +1302,7 @@ function NewsFeed() {
       </div>
 
       {/* Filter bar */}
-      <div className="rounded-2xl border border-border bg-card p-3 mb-5 grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+      <div className="mb-5 grid gap-3 rounded-2xl border border-border bg-card p-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3">
           <Search className="w-4 h-4 text-muted-foreground" />
           <input
@@ -1226,13 +1372,7 @@ function NewsFeed() {
                 <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                   <Clock className="w-3 h-3" /> {a.ago} ago
                 </span>
-                <a
-                  href="#"
-                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                >
-                  Read full expert signal
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </a>
+                <span className="text-xs font-medium text-muted-foreground">Tóm tắt trong MVP</span>
               </div>
             </article>
           ))}
