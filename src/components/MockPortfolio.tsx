@@ -29,6 +29,7 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -361,17 +362,23 @@ function PortfolioHeader({ portfolio }: { portfolio: PortfolioResponse | null })
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Portfolio - Asset Analytics
+            Danh mục mô phỏng – Phân tích tài sản
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             DB-backed multi-asset analytics with PnL, allocation, risk, transaction accounting and
             benchmark performance.
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-          <div className="font-mono uppercase tracking-wider">Data source</div>
-          <div className="mt-1 text-foreground">
-            {portfolio?.dataSource ?? "local"} - {asOf}
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <DataStatusBadge
+            status="SIMULATED"
+            detail="Danh mục demo được lưu trong PostgreSQL; không phải tài khoản môi giới thực."
+          />
+          <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+            <div className="font-mono uppercase tracking-wider">Data source</div>
+            <div className="mt-1 text-foreground">
+              {portfolio?.dataSource ?? "local"} - {asOf}
+            </div>
           </div>
         </div>
       </div>
