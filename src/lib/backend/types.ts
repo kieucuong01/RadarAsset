@@ -26,6 +26,35 @@ export type PortfolioTransactionInput = {
   note?: string | null;
 };
 
+export type PortfolioLedgerAsset = {
+  assetId: string;
+  symbol: string;
+  name: string;
+  assetClass: AssetClass;
+  latestPrice: number;
+};
+
+export type PortfolioLedgerTransaction = PortfolioTransactionInput & {
+  id: string;
+  createdAt: string;
+};
+
+export type PortfolioTransactionResponse = PortfolioTransactionInput & {
+  createdAt?: string;
+  grossAmount?: number;
+  netAmount?: number;
+  releasedCostBasis?: number;
+  realizedPnL?: number;
+  remainingQuantity?: number;
+};
+
+export type PortfolioLedgerReplayResult = {
+  positions: PortfolioPositionInput[];
+  transactions: (PortfolioTransactionResponse & { id: string; createdAt: string })[];
+  realizedPnL: number;
+  cumulativeBuyCapital: number;
+};
+
 export type PortfolioPerformancePoint = {
   label: string;
   Portfolio: number;
@@ -53,12 +82,15 @@ export type PortfolioResponse = {
   baseCurrency: string;
   totalValue: number;
   totalCost: number;
+  unrealizedPnL: number;
+  realizedPnL: number;
   totalPnL: number;
   totalPnLPct: number;
+  cumulativeBuyCapital: number;
   dayChangePct: number;
   allocation: { category: PortfolioHoldingResponse["category"]; value: number }[];
   holdings: PortfolioHoldingResponse[];
-  transactions: PortfolioTransactionInput[];
+  transactions: PortfolioTransactionResponse[];
   performance: PortfolioPerformancePoint[];
   riskMetrics: PortfolioRiskMetricResponse[];
   dataAsOf: string | null;

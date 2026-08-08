@@ -1,10 +1,14 @@
 import type {
   PortfolioHoldingResponse,
+  PortfolioLedgerAsset,
+  PortfolioLedgerReplayResult,
+  PortfolioLedgerTransaction,
   PortfolioPerformancePoint,
   PortfolioPositionInput,
   PortfolioResponse,
   PortfolioRiskMetricResponse,
   PortfolioTransactionInput,
+  PortfolioTransactionResponse,
 } from "./types";
 
 function round(value: number, digits = 2) {
@@ -31,8 +35,10 @@ export function buildPortfolioResponse(input: {
   portfolioName: string;
   baseCurrency: string;
   positions: PortfolioPositionInput[];
-  transactions: PortfolioTransactionInput[];
+  transactions: PortfolioTransactionResponse[];
   performance: PortfolioPerformancePoint[];
+  realizedPnL?: number;
+  cumulativeBuyCapital?: number;
   dataAsOf?: string | null;
   dataSource?: string;
 }): PortfolioResponse {
@@ -42,8 +48,12 @@ export function buildPortfolioResponse(input: {
   const totalCost = input.positions.reduce((sum, position) => {
     return sum + position.quantity * position.averageCost;
   }, 0);
-  const totalPnL = totalValue - totalCost;
-  const totalPnLPct = totalCost === 0 ? 0 : (totalPnL / totalCost) * 100;
+  const unrealizedPnL = totalValue - totalCost;
+  const realizedPnL = input.realizedPnL ?? 0;
+  const totalPnL = unrealizedPnL + realizedPnL;
+  const cumulativeBuyCapital = input.cumulativeBuyCapital ?? totalCost;
+  const totalPnLPct =
+    cumulativeBuyCapital === 0 ? 0 : (totalPnL / cumulativeBuyCapital) * 100;
 
   const holdings = input.positions.map((position) => {
     const value = position.quantity * position.latestPrice;
@@ -89,8 +99,11 @@ export function buildPortfolioResponse(input: {
     baseCurrency: input.baseCurrency,
     totalValue: round(totalValue),
     totalCost: round(totalCost),
+    unrealizedPnL: round(unrealizedPnL),
+    realizedPnL: round(realizedPnL),
     totalPnL: round(totalPnL),
     totalPnLPct: round(totalPnLPct, 4),
+    cumulativeBuyCapital: round(cumulativeBuyCapital),
     dayChangePct: round(dayChangePct, 4),
     allocation,
     holdings,
@@ -103,6 +116,108 @@ export function buildPortfolioResponse(input: {
     }),
     dataAsOf: input.dataAsOf ?? null,
     dataSource: input.dataSource ?? "local",
+  };
+}
+
+export class PortfolioDomainError extends Error {
+  constructor(
+    message: string,
+    readonly code: "POSITION_NOT_FOUND" | "INSUFFICIENT_QUANTITY",
+  ) {
+    super(message);
+    this.name = "PortfolioDomainError";
+  }
+}
+
+function compareLedgerTransactions(left: PortfolioLedgerTransaction, right: PortfolioLedgerTransaction) {
+  return (
+    left.executedAt.localeCompare(right.executedAt) ||
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+export function replayPortfolioLedger(input: {
+  assets: PortfolioLedgerAsset[];
+  transactions: PortfolioLedgerTransaction[];
+}): PortfolioLedgerReplayResult {
+  const assets = new Map(input.assets.map((asset) => [asset.assetId, asset]));
+  const positions = new Map<string, PortfolioPositionInput>();
+  const transactions: PortfolioLedgerReplayResult["transactions"] = [];
+  let realizedPnL = 0;
+  let cumulativeBuyCapital = 0;
+
+  for (const transaction of [...input.transactions].sort(compareLedgerTransactions)) {
+    const asset = assets.get(transaction.assetId);
+    if (!asset) {
+      throw new Error(`Asset metadata not found for ${transaction.assetId}.`);
+    }
+
+    const current = positions.get(transaction.assetId) ?? null;
+    if (transaction.type === "sell" && !current) {
+      throw new PortfolioDomainError(
+        `Cannot sell ${asset.symbol} because no position is available at this transaction time.`,
+        "POSITION_NOT_FOUND",
+      );
+    }
+    if (
+      transaction.type === "sell" &&
+      current &&
+      transaction.quantity > current.quantity
+    ) {
+      throw new PortfolioDomainError(
+        `Cannot sell ${transaction.quantity} ${asset.symbol}; only ${current.quantity} is available at this transaction time.`,
+        "INSUFFICIENT_QUANTITY",
+      );
+    }
+
+    const grossAmount = transaction.quantity * transaction.price;
+    const releasedCostBasis =
+      transaction.type === "sell" && current
+        ? transaction.quantity * current.averageCost
+        : 0;
+    const netAmount =
+      transaction.type === "buy"
+        ? -(grossAmount + transaction.fee)
+        : grossAmount - transaction.fee;
+    const transactionRealizedPnL =
+      transaction.type === "sell" ? netAmount - releasedCostBasis : 0;
+
+    const next = applyPortfolioTransaction(current, transaction);
+    const enrichedNext: PortfolioPositionInput = {
+      ...next,
+      symbol: asset.symbol,
+      name: asset.name,
+      assetClass: asset.assetClass,
+      latestPrice: asset.latestPrice,
+    };
+
+    if (enrichedNext.quantity <= 0) {
+      positions.delete(transaction.assetId);
+    } else {
+      positions.set(transaction.assetId, enrichedNext);
+    }
+
+    if (transaction.type === "buy") {
+      cumulativeBuyCapital += grossAmount + transaction.fee;
+    }
+    realizedPnL += transactionRealizedPnL;
+
+    transactions.push({
+      ...transaction,
+      grossAmount: round(grossAmount, 8),
+      netAmount: round(netAmount, 8),
+      releasedCostBasis: round(releasedCostBasis, 8),
+      realizedPnL: round(transactionRealizedPnL, 8),
+      remainingQuantity: round(enrichedNext.quantity, 8),
+    });
+  }
+
+  return {
+    positions: Array.from(positions.values()),
+    transactions,
+    realizedPnL: round(realizedPnL, 8),
+    cumulativeBuyCapital: round(cumulativeBuyCapital, 8),
   };
 }
 

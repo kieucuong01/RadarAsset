@@ -4,8 +4,14 @@ import {
   applyPortfolioTransaction,
   buildPortfolioResponse,
   calculateRiskMetrics,
+  replayPortfolioLedger,
 } from "./portfolio";
-import type { PortfolioPositionInput, PortfolioTransactionInput } from "./types";
+import type {
+  PortfolioLedgerAsset,
+  PortfolioLedgerTransaction,
+  PortfolioPositionInput,
+  PortfolioTransactionInput,
+} from "./types";
 
 describe("portfolio backend domain", () => {
   const positions: PortfolioPositionInput[] = [
@@ -61,6 +67,39 @@ describe("portfolio backend domain", () => {
       { category: "Stocks", value: 29.31 },
     ]);
     expect(response.dayChangePct).toBe(2);
+  });
+
+  it("combines realized and unrealized PnL against cumulative buy capital", () => {
+    const response = buildPortfolioResponse({
+      portfolioId: "portfolio-demo",
+      portfolioName: "Demo Portfolio",
+      baseCurrency: "USD",
+      positions: [
+        {
+          assetId: "asset-btc",
+          symbol: "BTC",
+          name: "Bitcoin",
+          assetClass: "crypto",
+          quantity: 1,
+          averageCost: 100,
+          latestPrice: 120,
+        },
+      ],
+      transactions: [],
+      performance: [],
+      realizedPnL: 10,
+      cumulativeBuyCapital: 200,
+    });
+
+    expect(response).toMatchObject({
+      totalValue: 120,
+      totalCost: 100,
+      unrealizedPnL: 20,
+      realizedPnL: 10,
+      totalPnL: 30,
+      totalPnLPct: 15,
+      cumulativeBuyCapital: 200,
+    });
   });
 
   it("applies buy transactions with weighted average cost", () => {
@@ -160,5 +199,184 @@ describe("portfolio backend domain", () => {
       value: "C",
     });
     expect(metrics.find((metric) => metric.key === "var95")?.rawValue).toBeLessThan(0);
+  });
+
+  describe("transaction ledger accounting", () => {
+    const assets: PortfolioLedgerAsset[] = [
+      {
+        assetId: "asset-btc",
+        symbol: "BTC",
+        name: "Bitcoin",
+        assetClass: "crypto",
+        latestPrice: 62000,
+      },
+    ];
+
+    const transaction = (
+      overrides: Partial<PortfolioLedgerTransaction>,
+    ): PortfolioLedgerTransaction => ({
+      id: "tx-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      executedAt: "2026-01-01T00:00:00.000Z",
+      type: "buy",
+      assetId: "asset-btc",
+      symbol: "BTC",
+      quantity: 1,
+      price: 50000,
+      fee: 0,
+      note: null,
+      ...overrides,
+    });
+
+    it("replays buys and a partial sell with weighted cost and realized PnL", () => {
+      const result = replayPortfolioLedger({
+        assets,
+        transactions: [
+          transaction({}),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-02T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            quantity: 0.5,
+            price: 70000,
+            fee: 10,
+          }),
+          transaction({
+            id: "tx-3",
+            createdAt: "2026-01-03T00:00:00.000Z",
+            executedAt: "2026-01-03T00:00:00.000Z",
+            type: "sell",
+            quantity: 0.5,
+            price: 62000,
+            fee: 10,
+          }),
+        ],
+      });
+
+      expect(result.positions).toHaveLength(1);
+      expect(result.positions[0]).toMatchObject({
+        assetId: "asset-btc",
+        quantity: 1,
+      });
+      expect(result.positions[0].averageCost).toBeCloseTo(56673.333333333336, 8);
+      expect(result.transactions.at(-1)).toMatchObject({
+        type: "sell",
+        grossAmount: 31000,
+        netAmount: 30990,
+        remainingQuantity: 1,
+      });
+      expect(result.transactions.at(-1)?.releasedCostBasis).toBeCloseTo(
+        28336.666666666668,
+        8,
+      );
+      expect(result.transactions.at(-1)?.realizedPnL).toBeCloseTo(2653.333333333332, 8);
+      expect(result.realizedPnL).toBeCloseTo(2653.333333333332, 8);
+      expect(result.cumulativeBuyCapital).toBe(85010);
+    });
+
+    it("includes the first buy fee in cost basis and removes a fully sold position", () => {
+      const result = replayPortfolioLedger({
+        assets,
+        transactions: [
+          transaction({ quantity: 2, price: 100, fee: 4 }),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-02T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            type: "sell",
+            quantity: 2,
+            price: 120,
+            fee: 2,
+          }),
+        ],
+      });
+
+      expect(result.positions).toEqual([]);
+      expect(result.transactions[0]).toMatchObject({
+        netAmount: -204,
+        remainingQuantity: 2,
+      });
+      expect(result.transactions[1]).toMatchObject({
+        releasedCostBasis: 204,
+        netAmount: 238,
+        realizedPnL: 34,
+        remainingQuantity: 0,
+      });
+    });
+
+    it("rejects selling without a position or above the quantity available at that time", () => {
+      expect(() =>
+        replayPortfolioLedger({
+          assets,
+          transactions: [transaction({ type: "sell", quantity: 1, price: 60000 })],
+        }),
+      ).toThrow("Cannot sell BTC because no position is available at this transaction time.");
+
+      expect(() =>
+        replayPortfolioLedger({
+          assets,
+          transactions: [
+            transaction({ quantity: 1 }),
+            transaction({
+              id: "tx-2",
+              createdAt: "2026-01-02T00:00:00.000Z",
+              executedAt: "2026-01-02T00:00:00.000Z",
+              type: "sell",
+              quantity: 2,
+            }),
+          ],
+        }),
+      ).toThrow("Cannot sell 2 BTC; only 1 is available at this transaction time.");
+    });
+
+    it("reorders backdated events by execution time before calculating later sells", () => {
+      const result = replayPortfolioLedger({
+        assets,
+        transactions: [
+          transaction({
+            id: "tx-sell",
+            createdAt: "2026-01-03T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            type: "sell",
+            quantity: 1,
+            price: 130,
+          }),
+          transaction({
+            id: "tx-buy",
+            createdAt: "2026-01-04T00:00:00.000Z",
+            executedAt: "2026-01-01T00:00:00.000Z",
+            quantity: 2,
+            price: 100,
+          }),
+        ],
+      });
+
+      expect(result.positions[0]).toMatchObject({ quantity: 1, averageCost: 100 });
+      expect(result.transactions.map((item) => item.id)).toEqual(["tx-buy", "tx-sell"]);
+      expect(result.realizedPnL).toBe(30);
+    });
+
+    it("uses creation time and identifier to order equal execution timestamps deterministically", () => {
+      const result = replayPortfolioLedger({
+        assets,
+        transactions: [
+          transaction({
+            id: "tx-b",
+            createdAt: "2026-01-01T00:00:01.000Z",
+            quantity: 1,
+            price: 200,
+          }),
+          transaction({
+            id: "tx-a",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            quantity: 1,
+            price: 100,
+          }),
+        ],
+      });
+
+      expect(result.transactions.map((item) => item.id)).toEqual(["tx-a", "tx-b"]);
+      expect(result.positions[0].averageCost).toBe(150);
+    });
   });
 });
