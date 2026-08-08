@@ -39,18 +39,17 @@ export type PortfolioLedgerTransaction = PortfolioTransactionInput & {
   createdAt: string;
 };
 
-export type PortfolioTransactionResponse = PortfolioTransactionInput & {
-  createdAt?: string;
-  grossAmount?: number;
-  netAmount?: number;
-  releasedCostBasis?: number;
-  realizedPnL?: number;
-  remainingQuantity?: number;
+export type PortfolioTransactionResponse = PortfolioLedgerTransaction & {
+  grossAmount: number;
+  netAmount: number;
+  releasedCostBasis: number;
+  realizedPnL: number;
+  remainingQuantity: number;
 };
 
 export type PortfolioLedgerReplayResult = {
   positions: PortfolioPositionInput[];
-  transactions: (PortfolioTransactionResponse & { id: string; createdAt: string })[];
+  transactions: PortfolioTransactionResponse[];
   realizedPnL: number;
   cumulativeBuyCapital: number;
 };

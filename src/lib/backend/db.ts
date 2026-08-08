@@ -3,9 +3,9 @@ import { getPrisma } from "@/lib/db/prisma";
 import { buildAssetIntelligence } from "./investor-intelligence";
 import { buildTickerResponse } from "./market";
 import {
-  applyPortfolioTransaction,
   buildPortfolioResponse,
   buildTradeAwarePerformance,
+  replayPortfolioLedger,
 } from "./portfolio";
 import type {
   AssetIntelligenceResponse,
@@ -16,12 +16,10 @@ import type {
   InvestorInsightInput,
   MarketBarInput,
   MarketTickerResponse,
-  PortfolioPerformancePoint,
   PortfolioHistoricalBar,
+  PortfolioLedgerAsset,
   PortfolioLedgerTransaction,
-  PortfolioPositionInput,
   PortfolioResponse,
-  PortfolioTransactionInput,
   QuantRunResponse,
   QuantRunStatus,
   ResearchRunResponse,
@@ -155,14 +153,9 @@ export async function loadPortfolioResponse(
   const portfolio = await prisma.portfolio.findFirst({
     where: { user: { email: DEMO_USER_EMAIL } },
     include: {
-      positions: {
-        include: { asset: true },
-        orderBy: { updatedAt: "desc" },
-      },
       transactions: {
         include: { asset: true },
-        orderBy: { executedAt: "desc" },
-        take: 25,
+        orderBy: [{ executedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       },
     },
   });
@@ -171,7 +164,9 @@ export async function loadPortfolioResponse(
     throw new Error("Demo portfolio not found. Run npm run db:seed first.");
   }
 
-  const assetIds = portfolio.positions.map((position) => position.assetId);
+  const assetIds = Array.from(
+    new Set(portfolio.transactions.map((transaction) => transaction.assetId)),
+  );
   const benchmark = await prisma.asset.findUnique({
     where: { symbol: "SPY" },
     select: { id: true },
@@ -182,19 +177,6 @@ export async function loadPortfolioResponse(
     orderBy: [{ assetId: "asc" }, { ts: "asc" }],
   });
   const latestBars = latestBarsByAssetId(bars);
-
-  const positions: PortfolioPositionInput[] = portfolio.positions.map((position) => {
-    const latest = latestBars.get(position.assetId);
-    return {
-      assetId: position.assetId,
-      symbol: position.asset.symbol,
-      name: position.asset.name,
-      assetClass: assertAssetClass(position.asset.assetClass),
-      quantity: numberFromDecimal(position.quantity),
-      averageCost: numberFromDecimal(position.averageCost),
-      latestPrice: latest?.close ?? numberFromDecimal(position.averageCost),
-    };
-  });
 
   const transactions: PortfolioLedgerTransaction[] = portfolio.transactions.map((transaction) => ({
     id: transaction.id,
@@ -209,19 +191,32 @@ export async function loadPortfolioResponse(
     note: transaction.note,
   }));
 
+  const latestTransactionPrices = new Map<string, number>();
+  for (const transaction of transactions) {
+    latestTransactionPrices.set(transaction.assetId, transaction.price);
+  }
+  const assetRows = new Map(
+    portfolio.transactions.map((transaction) => [transaction.assetId, transaction.asset]),
+  );
+  const ledgerAssets: PortfolioLedgerAsset[] = Array.from(assetRows.entries()).map(
+    ([assetId, asset]) => ({
+      assetId,
+      symbol: asset.symbol,
+      name: asset.name,
+      assetClass: assertAssetClass(asset.assetClass),
+      latestPrice:
+        latestBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
+    }),
+  );
+  const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });
+
   const historicalBars: PortfolioHistoricalBar[] = bars.map((bar) => ({
     assetId: bar.assetId,
     ts: bar.ts.toISOString(),
     close: numberFromDecimal(bar.close),
   }));
   const performance = buildTradeAwarePerformance({
-    assets: positions.map((position) => ({
-      assetId: position.assetId,
-      symbol: position.symbol,
-      name: position.name,
-      assetClass: position.assetClass,
-      latestPrice: position.latestPrice,
-    })),
+    assets: ledgerAssets,
     transactions,
     bars: historicalBars,
     benchmarkAssetId: benchmark?.id ?? null,
@@ -234,9 +229,11 @@ export async function loadPortfolioResponse(
     portfolioId: portfolio.id,
     portfolioName: portfolio.name,
     baseCurrency: portfolio.baseCurrency,
-    positions,
-    transactions,
+    positions: ledger.positions,
+    transactions: [...ledger.transactions].reverse().slice(0, 100),
     performance,
+    realizedPnL: ledger.realizedPnL,
+    cumulativeBuyCapital: ledger.cumulativeBuyCapital,
     dataAsOf: latestAsOf?.ts.toISOString() ?? null,
     dataSource: latestAsOf?.source ?? "local",
   });
@@ -262,35 +259,6 @@ export async function createPortfolioTransaction(input: {
   const asset = await prisma.asset.findUnique({ where: { symbol } });
   if (!asset) throw new Error(`Asset ${symbol} not found.`);
 
-  const current = await prisma.portfolioPosition.findUnique({
-    where: { portfolioId_assetId: { portfolioId: portfolio.id, assetId: asset.id } },
-    include: { asset: true },
-  });
-
-  const next = applyPortfolioTransaction(
-    current
-      ? {
-          assetId: current.assetId,
-          symbol: current.asset.symbol,
-          name: current.asset.name,
-          assetClass: assertAssetClass(current.asset.assetClass),
-          quantity: numberFromDecimal(current.quantity),
-          averageCost: numberFromDecimal(current.averageCost),
-          latestPrice: input.price,
-        }
-      : null,
-    {
-      type: input.type,
-      assetId: asset.id,
-      symbol: asset.symbol,
-      quantity: input.quantity,
-      price: input.price,
-      fee: input.fee ?? 0,
-      executedAt: input.executedAt ?? new Date().toISOString(),
-      note: input.note,
-    },
-  );
-
   await prisma.$transaction(async (tx) => {
     await tx.portfolioTransaction.create({
       data: {
@@ -304,27 +272,54 @@ export async function createPortfolioTransaction(input: {
         executedAt: input.executedAt ? new Date(input.executedAt) : new Date(),
       },
     });
-
-    if (next.quantity <= 0) {
-      await tx.portfolioPosition.deleteMany({
-        where: { portfolioId: portfolio.id, assetId: asset.id },
-      });
-      return;
-    }
-
-    await tx.portfolioPosition.upsert({
-      where: { portfolioId_assetId: { portfolioId: portfolio.id, assetId: asset.id } },
-      create: {
-        portfolioId: portfolio.id,
-        assetId: asset.id,
-        quantity: next.quantity,
-        averageCost: next.averageCost,
-      },
-      update: {
-        quantity: next.quantity,
-        averageCost: next.averageCost,
-      },
+    const rows = await tx.portfolioTransaction.findMany({
+      where: { portfolioId: portfolio.id },
+      include: { asset: true },
+      orderBy: [{ executedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     });
+
+    const ledgerTransactions: PortfolioLedgerTransaction[] = rows.map((transaction) => ({
+      id: transaction.id,
+      createdAt: transaction.createdAt.toISOString(),
+      type: assertTransactionType(transaction.type),
+      assetId: transaction.assetId,
+      symbol: transaction.asset.symbol,
+      quantity: numberFromDecimal(transaction.quantity),
+      price: numberFromDecimal(transaction.price),
+      fee: numberFromDecimal(transaction.fee),
+      executedAt: transaction.executedAt.toISOString(),
+      note: transaction.note,
+    }));
+    const lastTransactionPrice = new Map<string, number>();
+    for (const transaction of ledgerTransactions) {
+      lastTransactionPrice.set(transaction.assetId, transaction.price);
+    }
+    const rowAssets = new Map(rows.map((transaction) => [transaction.assetId, transaction.asset]));
+    const ledgerAssets: PortfolioLedgerAsset[] = Array.from(rowAssets.entries()).map(
+      ([assetId, rowAsset]) => ({
+        assetId,
+        symbol: rowAsset.symbol,
+        name: rowAsset.name,
+        assetClass: assertAssetClass(rowAsset.assetClass),
+        latestPrice: lastTransactionPrice.get(assetId) ?? 0,
+      }),
+    );
+    const ledger = replayPortfolioLedger({
+      assets: ledgerAssets,
+      transactions: ledgerTransactions,
+    });
+
+    await tx.portfolioPosition.deleteMany({ where: { portfolioId: portfolio.id } });
+    if (ledger.positions.length) {
+      await tx.portfolioPosition.createMany({
+        data: ledger.positions.map((position) => ({
+          portfolioId: portfolio.id,
+          assetId: position.assetId,
+          quantity: position.quantity,
+          averageCost: position.averageCost,
+        })),
+      });
+    }
   });
 
   return loadPortfolioResponse();
