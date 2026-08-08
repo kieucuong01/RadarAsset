@@ -259,13 +259,13 @@ export function buildTradeAwarePerformance(input: {
   let previousValue: number | null = null;
   let portfolioIndex = 100;
   let benchmarkBase: number | null = null;
+  let pendingExternalFlow = 0;
 
   for (const key of dates) {
     for (const bar of barsByDate.get(key) ?? []) {
       latestPrices.set(bar.assetId, bar.close);
     }
 
-    let externalFlow = 0;
     while (
       transactionIndex < transactions.length &&
       dateKey(transactions[transactionIndex].executedAt) <= key
@@ -288,15 +288,12 @@ export function buildTradeAwarePerformance(input: {
         });
       }
 
-      if (dateKey(transaction.executedAt) === key) {
-        const gross = transaction.quantity * transaction.price;
-        externalFlow +=
-          transaction.type === "buy" ? gross + transaction.fee : -(gross - transaction.fee);
-      }
+      const gross = transaction.quantity * transaction.price;
+      pendingExternalFlow +=
+        transaction.type === "buy" ? gross + transaction.fee : -(gross - transaction.fee);
       transactionIndex += 1;
     }
 
-    if (!positions.size) continue;
     const missingPrice = Array.from(positions.keys()).some((assetId) => !latestPrices.has(assetId));
     if (missingPrice) continue;
 
@@ -304,18 +301,24 @@ export function buildTradeAwarePerformance(input: {
       (sum, position) => sum + position.quantity * (latestPrices.get(position.assetId) ?? 0),
       0,
     );
-    if (currentValue <= 0) continue;
+    if (positions.size && currentValue <= 0) continue;
+    if (!positions.size && (previousValue === null || pendingExternalFlow === 0)) continue;
 
     const benchmarkPrice = input.benchmarkAssetId
       ? (latestPrices.get(input.benchmarkAssetId) ?? null)
       : null;
+    if (benchmarkBase === null && benchmarkPrice !== null) {
+      benchmarkBase = benchmarkPrice;
+    }
     if (previousValue === null) {
       previousValue = currentValue;
-      benchmarkBase = benchmarkPrice;
     } else if (previousValue > 0) {
-      portfolioIndex *= (currentValue - externalFlow) / previousValue;
+      portfolioIndex *= (currentValue - pendingExternalFlow) / previousValue;
+      previousValue = currentValue;
+    } else if (currentValue > 0) {
       previousValue = currentValue;
     }
+    pendingExternalFlow = 0;
 
     const benchmarkIndex =
       benchmarkPrice !== null && benchmarkBase ? (benchmarkPrice / benchmarkBase) * 100 : 100;
