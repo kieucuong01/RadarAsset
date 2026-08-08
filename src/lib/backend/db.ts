@@ -2,7 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { buildAssetIntelligence } from "./investor-intelligence";
 import { buildTickerResponse } from "./market";
-import { applyPortfolioTransaction, buildPortfolioResponse } from "./portfolio";
+import {
+  applyPortfolioTransaction,
+  buildPortfolioResponse,
+  buildTradeAwarePerformance,
+} from "./portfolio";
 import type {
   AssetIntelligenceResponse,
   AssetClass,
@@ -13,6 +17,8 @@ import type {
   MarketBarInput,
   MarketTickerResponse,
   PortfolioPerformancePoint,
+  PortfolioHistoricalBar,
+  PortfolioLedgerTransaction,
   PortfolioPositionInput,
   PortfolioResponse,
   PortfolioTransactionInput,
@@ -86,10 +92,6 @@ function stringArrayJson(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-function formatDateLabel(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
 function relativeAge(date: Date): string {
   const minutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60000));
   if (minutes < 60) return `${minutes}m`;
@@ -135,50 +137,6 @@ function latestBarsByAssetId(
     }
   }
   return map;
-}
-
-function buildPerformance(
-  positions: PortfolioPositionInput[],
-  bars: {
-    assetId: string;
-    ts: Date;
-    close: unknown;
-  }[],
-  benchmarkAssetId: string | null,
-  timeframe: PortfolioTimeframe,
-): PortfolioPerformancePoint[] {
-  const limit = TIMEFRAME_LIMITS[timeframe];
-  const positionIds = new Set(positions.map((position) => position.assetId));
-  const rowsByDate = new Map<string, Map<string, number>>();
-
-  for (const bar of bars) {
-    const key = bar.ts.toISOString().slice(0, 10);
-    const row = rowsByDate.get(key) ?? new Map<string, number>();
-    row.set(bar.assetId, numberFromDecimal(bar.close));
-    rowsByDate.set(key, row);
-  }
-
-  const rows = Array.from(rowsByDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-limit)
-    .map(([dateKey, prices]) => {
-      const portfolioValue = positions.reduce((sum, position) => {
-        const price = prices.get(position.assetId) ?? position.latestPrice;
-        return sum + price * position.quantity;
-      }, 0);
-      const benchmark = benchmarkAssetId ? (prices.get(benchmarkAssetId) ?? null) : null;
-      return { dateKey, portfolioValue, benchmark };
-    })
-    .filter((row) => row.portfolioValue > 0);
-
-  const firstPortfolio = rows[0]?.portfolioValue ?? 1;
-  const firstBenchmark = rows.find((row) => row.benchmark !== null)?.benchmark ?? firstPortfolio;
-
-  return rows.map((row) => ({
-    label: formatDateLabel(new Date(`${row.dateKey}T00:00:00.000Z`)),
-    Portfolio: Number(((row.portfolioValue / firstPortfolio) * 100).toFixed(2)),
-    Benchmark: Number((((row.benchmark ?? firstBenchmark) / firstBenchmark) * 100).toFixed(2)),
-  }));
 }
 
 export async function getDemoUser() {
@@ -238,8 +196,9 @@ export async function loadPortfolioResponse(
     };
   });
 
-  const transactions: PortfolioTransactionInput[] = portfolio.transactions.map((transaction) => ({
+  const transactions: PortfolioLedgerTransaction[] = portfolio.transactions.map((transaction) => ({
     id: transaction.id,
+    createdAt: transaction.createdAt.toISOString(),
     type: assertTransactionType(transaction.type),
     assetId: transaction.assetId,
     symbol: transaction.asset.symbol,
@@ -250,7 +209,24 @@ export async function loadPortfolioResponse(
     note: transaction.note,
   }));
 
-  const performance = buildPerformance(positions, bars, benchmark?.id ?? null, timeframe);
+  const historicalBars: PortfolioHistoricalBar[] = bars.map((bar) => ({
+    assetId: bar.assetId,
+    ts: bar.ts.toISOString(),
+    close: numberFromDecimal(bar.close),
+  }));
+  const performance = buildTradeAwarePerformance({
+    assets: positions.map((position) => ({
+      assetId: position.assetId,
+      symbol: position.symbol,
+      name: position.name,
+      assetClass: position.assetClass,
+      latestPrice: position.latestPrice,
+    })),
+    transactions,
+    bars: historicalBars,
+    benchmarkAssetId: benchmark?.id ?? null,
+    limit: TIMEFRAME_LIMITS[timeframe],
+  });
   const latestAsOf = Array.from(latestBars.values()).sort(
     (a, b) => b.ts.getTime() - a.ts.getTime(),
   )[0];

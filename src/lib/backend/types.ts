@@ -61,6 +61,12 @@ export type PortfolioPerformancePoint = {
   Benchmark: number;
 };
 
+export type PortfolioHistoricalBar = {
+  assetId: string;
+  ts: string;
+  close: number;
+};
+
 export type PortfolioHoldingResponse = {
   assetId: string;
   ticker: string;

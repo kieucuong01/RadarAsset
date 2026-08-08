@@ -1,5 +1,6 @@
 import type {
   PortfolioHoldingResponse,
+  PortfolioHistoricalBar,
   PortfolioLedgerAsset,
   PortfolioLedgerReplayResult,
   PortfolioLedgerTransaction,
@@ -219,6 +220,135 @@ export function replayPortfolioLedger(input: {
     realizedPnL: round(realizedPnL, 8),
     cumulativeBuyCapital: round(cumulativeBuyCapital, 8),
   };
+}
+
+function dateKey(iso: string) {
+  return iso.slice(0, 10);
+}
+
+function performanceLabel(key: string) {
+  return new Date(`${key}T00:00:00.000Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function buildTradeAwarePerformance(input: {
+  assets: PortfolioLedgerAsset[];
+  transactions: PortfolioLedgerTransaction[];
+  bars: PortfolioHistoricalBar[];
+  benchmarkAssetId: string | null;
+  limit: number;
+}): PortfolioPerformancePoint[] {
+  if (input.limit <= 0) return [];
+
+  const assets = new Map(input.assets.map((asset) => [asset.assetId, asset]));
+  const portfolioAssetIds = new Set(input.transactions.map((transaction) => transaction.assetId));
+  const barsByDate = new Map<string, PortfolioHistoricalBar[]>();
+  for (const bar of input.bars) {
+    const key = dateKey(bar.ts);
+    const dayBars = barsByDate.get(key) ?? [];
+    dayBars.push(bar);
+    barsByDate.set(key, dayBars);
+  }
+
+  const dates = Array.from(barsByDate.keys())
+    .filter((key) =>
+      barsByDate.get(key)?.some((bar) => portfolioAssetIds.has(bar.assetId)),
+    )
+    .sort();
+  if (!dates.length) return [];
+
+  const transactions = [...input.transactions].sort(compareLedgerTransactions);
+  const positions = new Map<string, PortfolioPositionInput>();
+  const latestPrices = new Map<string, number>();
+  const points: PortfolioPerformancePoint[] = [];
+  let transactionIndex = 0;
+  let previousValue: number | null = null;
+  let portfolioIndex = 100;
+  let benchmarkBase: number | null = null;
+
+  for (const key of dates) {
+    for (const bar of barsByDate.get(key) ?? []) {
+      latestPrices.set(bar.assetId, bar.close);
+    }
+
+    let externalFlow = 0;
+    while (
+      transactionIndex < transactions.length &&
+      dateKey(transactions[transactionIndex].executedAt) <= key
+    ) {
+      const transaction = transactions[transactionIndex];
+      const asset = assets.get(transaction.assetId);
+      if (!asset) throw new Error(`Asset metadata not found for ${transaction.assetId}.`);
+
+      const current = positions.get(transaction.assetId) ?? null;
+      const next = applyPortfolioTransaction(current, transaction);
+      if (next.quantity <= 0) {
+        positions.delete(transaction.assetId);
+      } else {
+        positions.set(transaction.assetId, {
+          ...next,
+          symbol: asset.symbol,
+          name: asset.name,
+          assetClass: asset.assetClass,
+          latestPrice: asset.latestPrice,
+        });
+      }
+
+      if (dateKey(transaction.executedAt) === key) {
+        const gross = transaction.quantity * transaction.price;
+        externalFlow +=
+          transaction.type === "buy"
+            ? gross + transaction.fee
+            : -(gross - transaction.fee);
+      }
+      transactionIndex += 1;
+    }
+
+    if (!positions.size) continue;
+    const missingPrice = Array.from(positions.keys()).some(
+      (assetId) => !latestPrices.has(assetId),
+    );
+    if (missingPrice) continue;
+
+    const currentValue = Array.from(positions.values()).reduce(
+      (sum, position) => sum + position.quantity * (latestPrices.get(position.assetId) ?? 0),
+      0,
+    );
+    if (currentValue <= 0) continue;
+
+    const benchmarkPrice = input.benchmarkAssetId
+      ? (latestPrices.get(input.benchmarkAssetId) ?? null)
+      : null;
+    if (previousValue === null) {
+      previousValue = currentValue;
+      benchmarkBase = benchmarkPrice;
+    } else if (previousValue > 0) {
+      portfolioIndex *= (currentValue - externalFlow) / previousValue;
+      previousValue = currentValue;
+    }
+
+    const benchmarkIndex =
+      benchmarkPrice !== null && benchmarkBase
+        ? (benchmarkPrice / benchmarkBase) * 100
+        : 100;
+    points.push({
+      label: performanceLabel(key),
+      Portfolio: round(portfolioIndex, 2),
+      Benchmark: round(benchmarkIndex, 2),
+    });
+  }
+
+  const visible = points.slice(-input.limit);
+  const portfolioBase = visible[0]?.Portfolio ?? 100;
+  const benchmarkVisibleBase = visible[0]?.Benchmark ?? 100;
+  return visible.map((point) => ({
+    label: point.label,
+    Portfolio: round((point.Portfolio / portfolioBase) * 100, 2),
+    Benchmark: round((point.Benchmark / benchmarkVisibleBase) * 100, 2),
+  }));
 }
 
 export function applyPortfolioTransaction(

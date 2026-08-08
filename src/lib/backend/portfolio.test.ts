@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyPortfolioTransaction,
   buildPortfolioResponse,
+  buildTradeAwarePerformance,
   calculateRiskMetrics,
   replayPortfolioLedger,
 } from "./portfolio";
 import type {
   PortfolioLedgerAsset,
   PortfolioLedgerTransaction,
+  PortfolioHistoricalBar,
   PortfolioPositionInput,
   PortfolioTransactionInput,
 } from "./types";
@@ -377,6 +379,129 @@ describe("portfolio backend domain", () => {
 
       expect(result.transactions.map((item) => item.id)).toEqual(["tx-a", "tx-b"]);
       expect(result.positions[0].averageCost).toBe(150);
+    });
+  });
+
+  describe("trade-aware performance", () => {
+    const assets: PortfolioLedgerAsset[] = [
+      {
+        assetId: "asset-btc",
+        symbol: "BTC",
+        name: "Bitcoin",
+        assetClass: "crypto",
+        latestPrice: 121,
+      },
+      {
+        assetId: "asset-spy",
+        symbol: "SPY",
+        name: "S&P 500 ETF",
+        assetClass: "etf",
+        latestPrice: 102.01,
+      },
+    ];
+    const bars: PortfolioHistoricalBar[] = [
+      { assetId: "asset-btc", ts: "2026-01-01T00:00:00.000Z", close: 100 },
+      { assetId: "asset-btc", ts: "2026-01-02T00:00:00.000Z", close: 110 },
+      { assetId: "asset-btc", ts: "2026-01-03T00:00:00.000Z", close: 121 },
+      { assetId: "asset-spy", ts: "2026-01-01T00:00:00.000Z", close: 100 },
+      { assetId: "asset-spy", ts: "2026-01-02T00:00:00.000Z", close: 101 },
+      { assetId: "asset-spy", ts: "2026-01-03T00:00:00.000Z", close: 102.01 },
+    ];
+    const transaction = (
+      overrides: Partial<PortfolioLedgerTransaction>,
+    ): PortfolioLedgerTransaction => ({
+      id: "tx-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      executedAt: "2026-01-01T00:00:00.000Z",
+      type: "buy",
+      assetId: "asset-btc",
+      symbol: "BTC",
+      quantity: 1,
+      price: 100,
+      fee: 0,
+      note: null,
+      ...overrides,
+    });
+
+    it("removes external Buy flows without backcasting the new quantity", () => {
+      const points = buildTradeAwarePerformance({
+        assets,
+        transactions: [
+          transaction({}),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-02T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            quantity: 1,
+            price: 110,
+          }),
+        ],
+        bars,
+        benchmarkAssetId: "asset-spy",
+        limit: 30,
+      });
+
+      expect(points).toEqual([
+        { label: "Jan 1", Portfolio: 100, Benchmark: 100 },
+        { label: "Jan 2", Portfolio: 110, Benchmark: 101 },
+        { label: "Jan 3", Portfolio: 121, Benchmark: 102.01 },
+      ]);
+    });
+
+    it("treats Buy fees as a performance cost", () => {
+      const points = buildTradeAwarePerformance({
+        assets,
+        transactions: [
+          transaction({}),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-02T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            quantity: 1,
+            price: 110,
+            fee: 10,
+          }),
+        ],
+        bars,
+        benchmarkAssetId: "asset-spy",
+        limit: 30,
+      });
+
+      expect(points.map((point) => point.Portfolio)).toEqual([100, 100, 110]);
+    });
+
+    it("removes Sell withdrawals while keeping the return on the held quantity", () => {
+      const points = buildTradeAwarePerformance({
+        assets,
+        transactions: [
+          transaction({ quantity: 2 }),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-03T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            type: "sell",
+            quantity: 1,
+            price: 110,
+          }),
+        ],
+        bars,
+        benchmarkAssetId: "asset-spy",
+        limit: 30,
+      });
+
+      expect(points.map((point) => point.Portfolio)).toEqual([100, 110, 121]);
+    });
+
+    it("returns no fabricated performance when no held asset has price history", () => {
+      const points = buildTradeAwarePerformance({
+        assets,
+        transactions: [transaction({})],
+        bars: bars.filter((bar) => bar.assetId === "asset-spy"),
+        benchmarkAssetId: "asset-spy",
+        limit: 30,
+      });
+
+      expect(points).toEqual([]);
     });
   });
 });
