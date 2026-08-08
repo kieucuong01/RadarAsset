@@ -267,10 +267,7 @@ describe("portfolio backend domain", () => {
         netAmount: 30990,
         remainingQuantity: 1,
       });
-      expect(result.transactions.at(-1)?.releasedCostBasis).toBeCloseTo(
-        28336.666666666668,
-        8,
-      );
+      expect(result.transactions.at(-1)?.releasedCostBasis).toBeCloseTo(28336.666666666668, 8);
       expect(result.transactions.at(-1)?.realizedPnL).toBeCloseTo(2653.333333333332, 8);
       expect(result.realizedPnL).toBeCloseTo(2653.333333333332, 8);
       expect(result.cumulativeBuyCapital).toBe(85010);

@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   Minus,
-  Plus,
   Shield,
   Sigma,
   Target,
@@ -28,20 +27,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { toast } from "sonner";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import type { PortfolioResponse, PortfolioRiskMetricResponse } from "@/lib/backend/types";
+import type {
+  PortfolioHoldingResponse,
+  PortfolioResponse,
+  PortfolioRiskMetricResponse,
+} from "@/lib/backend/types";
 
 const TIMEFRAMES = ["1W", "1M", "YTD", "1Y"] as const;
 type Timeframe = (typeof TIMEFRAMES)[number];
@@ -69,6 +62,8 @@ type Tx = {
   qty: number;
   price: number;
   fee: number;
+  netAmount: number;
+  realizedPnL: number;
 };
 
 export function MockPortfolio() {
@@ -106,6 +101,9 @@ export function MockPortfolio() {
   );
 
   const totalValue = portfolio?.totalValue ?? 0;
+  const totalCost = portfolio?.totalCost ?? 0;
+  const unrealizedPnL = portfolio?.unrealizedPnL ?? 0;
+  const realizedPnL = portfolio?.realizedPnL ?? 0;
   const totalPnL = portfolio?.totalPnL ?? 0;
   const totalPnLPct = portfolio?.totalPnLPct ?? 0;
   const day = portfolio?.dayChangePct ?? 0;
@@ -193,6 +191,40 @@ export function MockPortfolio() {
                   {fmt0(totalPnL)} ({totalPnLPct.toFixed(2)}%)
                 </span>
               </span>
+            </div>
+            <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  Open cost basis
+                </div>
+                <div className="mt-1 font-semibold tabular-nums">
+                  {hide ? "******" : fmt0(totalCost)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  Unrealized PnL
+                </div>
+                <div
+                  className={`mt-1 font-semibold tabular-nums ${
+                    unrealizedPnL >= 0 ? "text-bull" : "text-bear"
+                  }`}
+                >
+                  {hide ? "******" : `${unrealizedPnL >= 0 ? "+" : ""}${fmt0(unrealizedPnL)}`}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  Realized PnL
+                </div>
+                <div
+                  className={`mt-1 font-semibold tabular-nums ${
+                    realizedPnL >= 0 ? "text-bull" : "text-bear"
+                  }`}
+                >
+                  {hide ? "******" : `${realizedPnL >= 0 ? "+" : ""}${fmt0(realizedPnL)}`}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -335,10 +367,11 @@ export function MockPortfolio() {
         </div>
       </section>
 
-      <HoldingsTable holdings={holdings} fmt0={fmt0} />
+      <HoldingsTable holdings={holdings} fmt0={fmt0} fmt2={fmt2} />
       <RiskMetrics metrics={portfolio?.riskMetrics ?? []} />
       <TransactionLog
         transactions={portfolio?.transactions ?? []}
+        holdings={holdings}
         disabled={!portfolio}
         fmt2={fmt2}
         onRecorded={setPortfolio}
@@ -410,9 +443,11 @@ function StatusPanel({
 function HoldingsTable({
   holdings,
   fmt0,
+  fmt2,
 }: {
   holdings: NonNullable<PortfolioResponse["holdings"]>;
   fmt0: (n: number) => string;
+  fmt2: (n: number) => string;
 }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -431,6 +466,8 @@ function HoldingsTable({
           <thead className="text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
               <th className="text-left font-medium px-5 py-3">Asset</th>
+              <th className="text-right font-medium px-5 py-3">Quantity</th>
+              <th className="text-right font-medium px-5 py-3">Average Cost</th>
               <th className="text-right font-medium px-5 py-3">Current Price</th>
               <th className="text-right font-medium px-5 py-3">Total Value</th>
               <th className="text-left font-medium px-5 py-3 min-w-[200px]">Allocation</th>
@@ -441,7 +478,7 @@ function HoldingsTable({
           <tbody>
             {holdings.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                <td colSpan={8} className="px-5 py-10 text-center text-muted-foreground">
                   No portfolio positions found.
                 </td>
               </tr>
@@ -464,6 +501,10 @@ function HoldingsTable({
                       </div>
                     </div>
                   </td>
+                  <td className="text-right tabular-nums px-5 py-4">
+                    {holding.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}
+                  </td>
+                  <td className="text-right tabular-nums px-5 py-4">{fmt2(holding.cost)}</td>
                   <td className="text-right tabular-nums px-5 py-4">
                     {holding.price.toLocaleString("en-US", {
                       style: "currency",
@@ -574,26 +615,17 @@ function RiskMetrics({ metrics }: { metrics: PortfolioRiskMetricResponse[] }) {
 
 function TransactionLog({
   transactions,
+  holdings,
   disabled,
   fmt2,
   onRecorded,
 }: {
   transactions: PortfolioResponse["transactions"];
+  holdings: PortfolioHoldingResponse[];
   disabled: boolean;
   fmt2: (n: number) => string;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    ticker: "BTC",
-    side: "Buy" as "Buy" | "Sell",
-    qty: "",
-    price: "",
-    fee: "0",
-    date: new Date().toISOString().slice(0, 10),
-  });
-
   const visibleTxs = useMemo<Tx[]>(
     () =>
       transactions.map((transaction) => ({
@@ -604,48 +636,11 @@ function TransactionLog({
         qty: transaction.quantity,
         price: transaction.price,
         fee: transaction.fee,
+        netAmount: transaction.netAmount,
+        realizedPnL: transaction.realizedPnL,
       })),
     [transactions],
   );
-
-  const submit = async () => {
-    const qty = Number.parseFloat(form.qty);
-    const price = Number.parseFloat(form.price);
-    const fee = Number.parseFloat(form.fee) || 0;
-    if (!form.ticker || !qty || !price) {
-      toast.error("Please enter ticker, quantity and price.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await fetch("/api/portfolio/transactions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          symbol: form.ticker,
-          type: form.side.toLowerCase(),
-          quantity: qty,
-          price,
-          fee,
-          executedAt: `${form.date}T00:00:00.000Z`,
-          note: null,
-        }),
-      });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Unable to save transaction.");
-      }
-      onRecorded((await res.json()) as PortfolioResponse);
-      toast.success(`${form.side} ${qty} ${form.ticker.toUpperCase()} recorded.`);
-      setOpen(false);
-      setForm({ ...form, qty: "", price: "", fee: "0" });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to save transaction.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <section
@@ -663,10 +658,11 @@ function TransactionLog({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{visibleTxs.length} trades</span>
-          <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5" disabled={disabled}>
-            <Plus className="w-3.5 h-3.5" />
-            Add Transaction
-          </Button>
+          <PortfolioTransactionDialog
+            holdings={holdings}
+            disabled={disabled}
+            onRecorded={onRecorded}
+          />
         </div>
       </div>
 
@@ -680,19 +676,19 @@ function TransactionLog({
               <th className="text-right font-medium px-5 py-3">Quantity</th>
               <th className="text-right font-medium px-5 py-3">Price</th>
               <th className="text-right font-medium px-5 py-3">Fee</th>
-              <th className="text-right font-medium px-5 py-3">Total</th>
+              <th className="text-right font-medium px-5 py-3">Net Amount</th>
+              <th className="text-right font-medium px-5 py-3">Realized PnL</th>
             </tr>
           </thead>
           <tbody>
             {visibleTxs.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
+                <td colSpan={8} className="px-5 py-10 text-center text-muted-foreground">
                   No transactions found.
                 </td>
               </tr>
             )}
             {visibleTxs.map((tx) => {
-              const total = tx.qty * tx.price + (tx.side === "Buy" ? tx.fee : -tx.fee);
               const isBuy = tx.side === "Buy";
               return (
                 <tr
@@ -715,103 +711,23 @@ function TransactionLog({
                   <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">
                     {tx.fee ? fmt2(tx.fee) : "-"}
                   </td>
-                  <td className="px-5 py-3 text-right tabular-nums font-semibold">{fmt2(total)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums font-semibold">
+                    {tx.netAmount >= 0 ? "+" : ""}
+                    {fmt2(tx.netAmount)}
+                  </td>
+                  <td
+                    className={`px-5 py-3 text-right tabular-nums font-semibold ${
+                      !isBuy && tx.realizedPnL >= 0 ? "text-bull" : !isBuy ? "text-bear" : ""
+                    }`}
+                  >
+                    {isBuy ? "–" : `${tx.realizedPnL >= 0 ? "+" : ""}${fmt2(tx.realizedPnL)}`}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Transaction</DialogTitle>
-            <DialogDescription>Record a new buy or sell trade in PostgreSQL.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <div className="col-span-2 grid grid-cols-2 gap-2">
-              {(["Buy", "Sell"] as const).map((side) => (
-                <button
-                  key={side}
-                  type="button"
-                  onClick={() => setForm({ ...form, side })}
-                  className={`py-2.5 rounded-lg text-sm font-semibold border transition-colors ${
-                    form.side === side
-                      ? side === "Buy"
-                        ? "bg-bull/15 text-bull border-bull/30"
-                        : "bg-bear/15 text-bear border-bear/30"
-                      : "border-border text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {side}
-                </button>
-              ))}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tx-ticker">Ticker</Label>
-              <Input
-                id="tx-ticker"
-                value={form.ticker}
-                onChange={(event) => setForm({ ...form, ticker: event.target.value })}
-                placeholder="BTC"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tx-date">Date</Label>
-              <Input
-                id="tx-date"
-                type="date"
-                value={form.date}
-                onChange={(event) => setForm({ ...form, date: event.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tx-qty">Quantity</Label>
-              <Input
-                id="tx-qty"
-                type="number"
-                step="any"
-                value={form.qty}
-                onChange={(event) => setForm({ ...form, qty: event.target.value })}
-                placeholder="0.25"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tx-price">Price (USD)</Label>
-              <Input
-                id="tx-price"
-                type="number"
-                step="any"
-                value={form.price}
-                onChange={(event) => setForm({ ...form, price: event.target.value })}
-                placeholder="67000"
-              />
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <Label htmlFor="tx-fee">Fee (USD)</Label>
-              <Input
-                id="tx-fee"
-                type="number"
-                step="any"
-                value={form.fee}
-                onChange={(event) => setForm({ ...form, fee: event.target.value })}
-                placeholder="0"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={submit} disabled={saving}>
-              {saving ? "Saving..." : "Save Transaction"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

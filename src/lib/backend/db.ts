@@ -204,8 +204,7 @@ export async function loadPortfolioResponse(
       symbol: asset.symbol,
       name: asset.name,
       assetClass: assertAssetClass(asset.assetClass),
-      latestPrice:
-        latestBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
+      latestPrice: latestBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
     }),
   );
   const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });

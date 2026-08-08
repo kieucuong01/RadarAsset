@@ -53,8 +53,7 @@ export function buildPortfolioResponse(input: {
   const realizedPnL = input.realizedPnL ?? 0;
   const totalPnL = unrealizedPnL + realizedPnL;
   const cumulativeBuyCapital = input.cumulativeBuyCapital ?? totalCost;
-  const totalPnLPct =
-    cumulativeBuyCapital === 0 ? 0 : (totalPnL / cumulativeBuyCapital) * 100;
+  const totalPnLPct = cumulativeBuyCapital === 0 ? 0 : (totalPnL / cumulativeBuyCapital) * 100;
 
   const holdings = input.positions.map((position) => {
     const value = position.quantity * position.latestPrice;
@@ -130,7 +129,10 @@ export class PortfolioDomainError extends Error {
   }
 }
 
-function compareLedgerTransactions(left: PortfolioLedgerTransaction, right: PortfolioLedgerTransaction) {
+function compareLedgerTransactions(
+  left: PortfolioLedgerTransaction,
+  right: PortfolioLedgerTransaction,
+) {
   return (
     left.executedAt.localeCompare(right.executedAt) ||
     left.createdAt.localeCompare(right.createdAt) ||
@@ -161,11 +163,7 @@ export function replayPortfolioLedger(input: {
         "POSITION_NOT_FOUND",
       );
     }
-    if (
-      transaction.type === "sell" &&
-      current &&
-      transaction.quantity > current.quantity
-    ) {
+    if (transaction.type === "sell" && current && transaction.quantity > current.quantity) {
       throw new PortfolioDomainError(
         `Cannot sell ${transaction.quantity} ${asset.symbol}; only ${current.quantity} is available at this transaction time.`,
         "INSUFFICIENT_QUANTITY",
@@ -174,15 +172,10 @@ export function replayPortfolioLedger(input: {
 
     const grossAmount = transaction.quantity * transaction.price;
     const releasedCostBasis =
-      transaction.type === "sell" && current
-        ? transaction.quantity * current.averageCost
-        : 0;
+      transaction.type === "sell" && current ? transaction.quantity * current.averageCost : 0;
     const netAmount =
-      transaction.type === "buy"
-        ? -(grossAmount + transaction.fee)
-        : grossAmount - transaction.fee;
-    const transactionRealizedPnL =
-      transaction.type === "sell" ? netAmount - releasedCostBasis : 0;
+      transaction.type === "buy" ? -(grossAmount + transaction.fee) : grossAmount - transaction.fee;
+    const transactionRealizedPnL = transaction.type === "sell" ? netAmount - releasedCostBasis : 0;
 
     const next = applyPortfolioTransaction(current, transaction);
     const enrichedNext: PortfolioPositionInput = {
@@ -254,9 +247,7 @@ export function buildTradeAwarePerformance(input: {
   }
 
   const dates = Array.from(barsByDate.keys())
-    .filter((key) =>
-      barsByDate.get(key)?.some((bar) => portfolioAssetIds.has(bar.assetId)),
-    )
+    .filter((key) => barsByDate.get(key)?.some((bar) => portfolioAssetIds.has(bar.assetId)))
     .sort();
   if (!dates.length) return [];
 
@@ -300,17 +291,13 @@ export function buildTradeAwarePerformance(input: {
       if (dateKey(transaction.executedAt) === key) {
         const gross = transaction.quantity * transaction.price;
         externalFlow +=
-          transaction.type === "buy"
-            ? gross + transaction.fee
-            : -(gross - transaction.fee);
+          transaction.type === "buy" ? gross + transaction.fee : -(gross - transaction.fee);
       }
       transactionIndex += 1;
     }
 
     if (!positions.size) continue;
-    const missingPrice = Array.from(positions.keys()).some(
-      (assetId) => !latestPrices.has(assetId),
-    );
+    const missingPrice = Array.from(positions.keys()).some((assetId) => !latestPrices.has(assetId));
     if (missingPrice) continue;
 
     const currentValue = Array.from(positions.values()).reduce(
@@ -331,9 +318,7 @@ export function buildTradeAwarePerformance(input: {
     }
 
     const benchmarkIndex =
-      benchmarkPrice !== null && benchmarkBase
-        ? (benchmarkPrice / benchmarkBase) * 100
-        : 100;
+      benchmarkPrice !== null && benchmarkBase ? (benchmarkPrice / benchmarkBase) * 100 : 100;
     points.push({
       label: performanceLabel(key),
       Portfolio: round(portfolioIndex, 2),
