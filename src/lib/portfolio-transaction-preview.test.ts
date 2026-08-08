@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTransactionPreview } from "./portfolio-transaction-preview";
+import { buildTransactionPreview, toLocalDateInputValue } from "./portfolio-transaction-preview";
 
 describe("portfolio transaction preview", () => {
+  it("formats transaction dates in the user's local calendar day", () => {
+    expect(toLocalDateInputValue(new Date(2026, 7, 9, 5, 30))).toBe("2026-08-09");
+  });
+
   it("projects quantity, total cost, and weighted average for a Buy", () => {
     const preview = buildTransactionPreview({
       side: "buy",

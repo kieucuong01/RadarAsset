@@ -18,7 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { PortfolioHoldingResponse, PortfolioResponse } from "@/lib/backend/types";
-import { buildTransactionPreview } from "@/lib/portfolio-transaction-preview";
+import {
+  buildTransactionPreview,
+  toLocalDateInputValue,
+} from "@/lib/portfolio-transaction-preview";
 import { cn } from "@/lib/utils";
 
 type AssetOption = {
@@ -58,7 +61,7 @@ export function PortfolioTransactionDialog({
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [fee, setFee] = useState("0");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => toLocalDateInputValue(new Date()));
 
   useEffect(() => {
     if (!open || assets !== null) return;
@@ -170,7 +173,7 @@ export function PortfolioTransactionDialog({
       setQuantity("");
       setPrice("");
       setFee("0");
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(toLocalDateInputValue(new Date()));
       setOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save transaction.";
@@ -256,7 +259,7 @@ export function PortfolioTransactionDialog({
                 id="tx-date"
                 type="date"
                 value={date}
-                max={new Date().toISOString().slice(0, 10)}
+                max={toLocalDateInputValue(new Date())}
                 onChange={(event) => setDate(event.target.value)}
                 disabled={saving}
                 className="min-h-11"

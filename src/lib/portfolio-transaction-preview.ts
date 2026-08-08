@@ -16,6 +16,13 @@ export type TransactionPreview =
       realizedPnL: number;
     };
 
+export function toLocalDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function buildTransactionPreview(input: TransactionPreviewInput): TransactionPreview {
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return { valid: false, error: "Quantity must be greater than 0." };
