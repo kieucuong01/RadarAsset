@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
+import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
 import { createPortfolioTransaction } from "@/lib/backend/db";
 import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfolio";
 
@@ -71,6 +72,14 @@ const transactionSchema = z
   }));
 
 export async function POST(request: Request) {
+  let context;
+  try {
+    context = await requireTenantContext();
+    requireTenantCapability(context, "portfolio", "write");
+  } catch (error) {
+    return apiError(error);
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -80,7 +89,7 @@ export async function POST(request: Request) {
 
   try {
     const payload = transactionSchema.parse(body);
-    const portfolio = await createPortfolioTransaction(payload);
+    const portfolio = await createPortfolioTransaction(context, payload);
     return NextResponse.json(portfolio, { status: 201 });
   } catch (error) {
     const status =

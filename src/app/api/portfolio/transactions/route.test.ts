@@ -4,10 +4,17 @@ import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfol
 
 const mocks = vi.hoisted(() => ({
   createPortfolioTransaction: vi.fn(),
+  requireTenantContext: vi.fn(),
+  requireTenantCapability: vi.fn(),
 }));
 
 vi.mock("@/lib/backend/db", () => ({
   createPortfolioTransaction: mocks.createPortfolioTransaction,
+}));
+
+vi.mock("@/lib/auth/tenant-context", () => ({
+  requireTenantContext: mocks.requireTenantContext,
+  requireTenantCapability: mocks.requireTenantCapability,
 }));
 
 import { POST } from "./route";
@@ -36,10 +43,19 @@ function rawRequest(body: string) {
 }
 
 describe("POST /api/portfolio/transactions", () => {
+  const editorContext = {
+    userId: "user-a",
+    organizationId: "org-a",
+    role: "editor" as const,
+  };
+
   beforeEach(() => {
     vi.useRealTimers();
     mocks.createPortfolioTransaction.mockReset();
     mocks.createPortfolioTransaction.mockResolvedValue({ portfolioId: "portfolio-demo" });
+    mocks.requireTenantContext.mockReset();
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    mocks.requireTenantCapability.mockReset();
   });
 
   it("returns 400 and skips persistence for a future execution timestamp", async () => {
@@ -70,6 +86,7 @@ describe("POST /api/portfolio/transactions", () => {
 
     expect(response.status).toBe(201);
     expect(mocks.createPortfolioTransaction).toHaveBeenCalledWith(
+      editorContext,
       expect.objectContaining({
         executedAt: "2026-08-09T12:00:00.000Z",
         timeframe: "1Y",

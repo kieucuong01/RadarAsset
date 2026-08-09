@@ -19,6 +19,21 @@ export const DATA_STATUS_META = {
 
 export type DataStatus = keyof typeof DATA_STATUS_META;
 
+export const AUTH_PAGE_COPY = {
+  signIn: {
+    heading: "Welcome back",
+    description: "Sign in to open your portfolio and quantitative workspace.",
+  },
+  signUp: {
+    heading: "Create your account",
+    description: "Start with a private workspace for your research and portfolio.",
+  },
+  onboarding: {
+    heading: "Set up your workspace",
+    description: "Create the organization that will own your financial data.",
+  },
+} as const;
+
 export const MVP_FEATURES = {
   listenBriefing: { available: false },
   applyPortfolio: { available: false },

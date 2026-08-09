@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { CommandPaletteTrigger } from "@/components/CommandPalette";
+import { AccountMenu } from "@/components/AccountMenu";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -139,9 +140,7 @@ export function Header() {
             </SheetContent>
           </Sheet>
 
-          <div className="grid size-9 place-items-center rounded-full bg-gradient-primary text-sm font-semibold text-primary-foreground">
-            RA
-          </div>
+          <AccountMenu />
         </div>
       </div>
     </header>

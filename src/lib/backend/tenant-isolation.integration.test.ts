@@ -1,0 +1,196 @@
+import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { getPrisma } from "@/lib/db/prisma";
+import type { TenantContext } from "@/lib/auth/tenant-context";
+
+import {
+  createPortfolioTransaction,
+  getQuantRun,
+  listQuantRuns,
+  loadPortfolioResponse,
+} from "./db";
+
+const prisma = getPrisma();
+const suffix = randomUUID().slice(0, 8);
+const fixtures = {
+  userAId: randomUUID(),
+  userBId: randomUUID(),
+  organizationAId: randomUUID(),
+  organizationBId: randomUUID(),
+  assetId: randomUUID(),
+  assetSymbol: `ISO${suffix.toUpperCase()}`,
+  quantRunAId: "",
+  quantRunBId: "",
+};
+
+const contextA: TenantContext = {
+  userId: fixtures.userAId,
+  organizationId: fixtures.organizationAId,
+  role: "editor",
+};
+const contextB: TenantContext = {
+  userId: fixtures.userBId,
+  organizationId: fixtures.organizationBId,
+  role: "editor",
+};
+
+describe("database tenant isolation", () => {
+  beforeAll(async () => {
+    await prisma.appUser.createMany({
+      data: [
+        {
+          id: fixtures.userAId,
+          email: `isolation-a-${suffix}@example.test`,
+          name: "Isolation A",
+        },
+        {
+          id: fixtures.userBId,
+          email: `isolation-b-${suffix}@example.test`,
+          name: "Isolation B",
+        },
+      ],
+    });
+    await prisma.organization.createMany({
+      data: [
+        {
+          id: fixtures.organizationAId,
+          name: "Isolation A",
+          slug: `isolation-a-${suffix}`,
+        },
+        {
+          id: fixtures.organizationBId,
+          name: "Isolation B",
+          slug: `isolation-b-${suffix}`,
+        },
+      ],
+    });
+    await prisma.membership.createMany({
+      data: [
+        {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          role: "editor",
+        },
+        {
+          organizationId: fixtures.organizationBId,
+          userId: fixtures.userBId,
+          role: "editor",
+        },
+      ],
+    });
+    await prisma.portfolio.createMany({
+      data: [
+        {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          name: "Main Portfolio",
+          baseCurrency: "USD",
+        },
+        {
+          organizationId: fixtures.organizationBId,
+          userId: fixtures.userBId,
+          name: "Main Portfolio",
+          baseCurrency: "USD",
+        },
+      ],
+    });
+    await prisma.asset.create({
+      data: {
+        id: fixtures.assetId,
+        symbol: fixtures.assetSymbol,
+        name: "Isolation Asset",
+        assetClass: "equity",
+        currency: "USD",
+        provider: "integration-test",
+      },
+    });
+    const [runA, runB] = await Promise.all([
+      prisma.quantRun.create({
+        data: {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          strategyName: "Organization A strategy",
+        },
+      }),
+      prisma.quantRun.create({
+        data: {
+          organizationId: fixtures.organizationBId,
+          userId: fixtures.userBId,
+          strategyName: "Organization B strategy",
+        },
+      }),
+    ]);
+    fixtures.quantRunAId = runA.id;
+    fixtures.quantRunBId = runB.id;
+  });
+
+  afterAll(async () => {
+    await prisma.organization.deleteMany({
+      where: {
+        id: {
+          in: [fixtures.organizationAId, fixtures.organizationBId],
+        },
+      },
+    });
+    await prisma.asset.deleteMany({ where: { id: fixtures.assetId } });
+    await prisma.appUser.deleteMany({
+      where: { id: { in: [fixtures.userAId, fixtures.userBId] } },
+    });
+    await prisma.$disconnect();
+  });
+
+  it("returns only the active organization's portfolio and quant runs", async () => {
+    const [portfolioA, runsA, portfolioB, runsB] = await Promise.all([
+      loadPortfolioResponse(contextA),
+      listQuantRuns(contextA),
+      loadPortfolioResponse(contextB),
+      listQuantRuns(contextB),
+    ]);
+
+    expect(portfolioA.portfolioId).not.toBe(portfolioB.portfolioId);
+    expect(runsA.map((run) => run.id)).toEqual([fixtures.quantRunAId]);
+    expect(runsB.map((run) => run.id)).toEqual([fixtures.quantRunBId]);
+  });
+
+  it("hides another organization's quant id like a random id", async () => {
+    await expect(getQuantRun(contextA, fixtures.quantRunBId)).rejects.toThrow(
+      "Quant run not found.",
+    );
+    await expect(getQuantRun(contextA, randomUUID())).rejects.toThrow("Quant run not found.");
+  });
+
+  it("never writes an organization A transaction into organization B", async () => {
+    const portfolioB = await prisma.portfolio.findUniqueOrThrow({
+      where: {
+        organizationId_name: {
+          organizationId: fixtures.organizationBId,
+          name: "Main Portfolio",
+        },
+      },
+      select: { id: true },
+    });
+
+    await createPortfolioTransaction(contextA, {
+      symbol: fixtures.assetSymbol,
+      type: "buy",
+      quantity: 1,
+      price: 100,
+    });
+
+    const [organizationATransactions, organizationBTransactions] = await Promise.all([
+      prisma.portfolioTransaction.count({
+        where: {
+          portfolio: { organizationId: fixtures.organizationAId },
+        },
+      }),
+      prisma.portfolioTransaction.count({
+        where: { portfolioId: portfolioB.id },
+      }),
+    ]);
+
+    expect(organizationATransactions).toBe(1);
+    expect(organizationBTransactions).toBe(0);
+  });
+});

@@ -1,23 +1,10 @@
-import {
-  adminAc,
-  defaultAc,
-  memberAc,
-  ownerAc,
-} from "better-auth/plugins/organization/access";
+import { createAccessControl } from "better-auth/plugins/access";
 
 export type TenantRole = "owner" | "admin" | "editor" | "viewer";
-export type TenantResource =
-  | "portfolio"
-  | "watchlist"
-  | "research"
-  | "backtest"
-  | "membership";
+export type TenantResource = "portfolio" | "watchlist" | "research" | "backtest" | "membership";
 export type TenantAction = "read" | "write" | "create" | "cancel" | "manage";
 
-const capabilities: Record<
-  TenantRole,
-  Partial<Record<TenantResource, readonly TenantAction[]>>
-> = {
+const capabilities: Record<TenantRole, Partial<Record<TenantResource, readonly TenantAction[]>>> = {
   owner: {
     portfolio: ["read", "write"],
     watchlist: ["read", "write"],
@@ -56,11 +43,43 @@ export function hasTenantCapability(
   return capabilities[role][resource]?.includes(action) ?? false;
 }
 
-export const organizationAccessControl = defaultAc;
+const organizationStatements = {
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  team: ["create", "update", "delete"],
+  ac: ["create", "read", "update", "delete"],
+} as const;
+
+export const organizationAccessControl = createAccessControl(organizationStatements);
+
+const ownerOrganizationRole = organizationAccessControl.newRole({
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  team: ["create", "update", "delete"],
+  ac: ["create", "read", "update", "delete"],
+});
+
+const adminOrganizationRole = organizationAccessControl.newRole({
+  organization: ["update"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  team: ["create", "update", "delete"],
+  ac: ["create", "read", "update", "delete"],
+});
+
+const readOnlyOrganizationRole = organizationAccessControl.newRole({
+  organization: [],
+  member: [],
+  invitation: [],
+  team: [],
+  ac: ["read"],
+});
 
 export const organizationRoles = {
-  owner: ownerAc,
-  admin: adminAc,
-  editor: memberAc,
-  viewer: memberAc,
+  owner: ownerOrganizationRole,
+  admin: adminOrganizationRole,
+  editor: readOnlyOrganizationRole,
+  viewer: readOnlyOrganizationRole,
 };

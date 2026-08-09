@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { TenantContext } from "@/lib/auth/tenant-context";
 import { getPrisma } from "@/lib/db/prisma";
 import { buildAssetIntelligence } from "./investor-intelligence";
 import { buildTickerResponse } from "./market";
@@ -21,14 +22,17 @@ import type {
   PortfolioLedgerAsset,
   PortfolioLedgerTransaction,
   PortfolioResponse,
+  PortfolioTransactionCreateInput,
   PortfolioTimeframe,
+  QuantRunCreateInput,
   QuantRunResponse,
   QuantRunStatus,
+  ResearchRunImportInput,
   ResearchRunResponse,
   TransactionType,
+  WatchlistMutationInput,
 } from "./types";
-
-export const DEMO_USER_EMAIL = "demo@radarasset.local";
+import type { WorkerImportContext } from "./worker-context";
 
 const TIMEFRAME_LIMITS = {
   "1W": 7,
@@ -138,21 +142,13 @@ function latestBarsByAssetId(
   return map;
 }
 
-export async function getDemoUser() {
-  const prisma = getPrisma();
-  const user = await prisma.appUser.findUnique({ where: { email: DEMO_USER_EMAIL } });
-  if (!user) {
-    throw new Error("Demo user not found. Run npm run db:seed first.");
-  }
-  return user;
-}
-
 export async function loadPortfolioResponse(
+  context: TenantContext,
   timeframe: PortfolioTimeframe = "1M",
 ): Promise<PortfolioResponse> {
   const prisma = getPrisma();
   const portfolio = await prisma.portfolio.findFirst({
-    where: { user: { email: DEMO_USER_EMAIL } },
+    where: { organizationId: context.organizationId },
     include: {
       transactions: {
         include: { asset: true },
@@ -162,7 +158,7 @@ export async function loadPortfolioResponse(
   });
 
   if (!portfolio) {
-    throw new Error("Demo portfolio not found. Run npm run db:seed first.");
+    throw new Error("Portfolio not found.");
   }
 
   const assetIds = Array.from(
@@ -239,23 +235,17 @@ export async function loadPortfolioResponse(
   });
 }
 
-export async function createPortfolioTransaction(input: {
-  symbol: string;
-  type: TransactionType;
-  quantity: number;
-  price: number;
-  fee?: number;
-  executedAt?: string;
-  note?: string | null;
-  timeframe?: PortfolioTimeframe;
-}) {
+export async function createPortfolioTransaction(
+  context: TenantContext,
+  input: PortfolioTransactionCreateInput,
+) {
   const prisma = getPrisma();
   const symbol = input.symbol.trim().toUpperCase();
   const portfolio = await prisma.portfolio.findFirst({
-    where: { user: { email: DEMO_USER_EMAIL } },
-    select: { id: true },
+    where: { organizationId: context.organizationId },
+    select: { id: true, organizationId: true },
   });
-  if (!portfolio) throw new Error("Demo portfolio not found. Run npm run db:seed first.");
+  if (!portfolio) throw new Error("Portfolio not found.");
 
   const asset = await prisma.asset.findUnique({ where: { symbol } });
   if (!asset) throw new PortfolioInputError(`Asset ${symbol} not found.`, "ASSET_NOT_FOUND");
@@ -324,11 +314,14 @@ export async function createPortfolioTransaction(input: {
     }
   });
 
-  return loadPortfolioResponse(input.timeframe ?? "1M");
+  return loadPortfolioResponse(context, input.timeframe ?? "1M");
 }
 
-export async function loadPortfolioPerformance(timeframe: PortfolioTimeframe) {
-  const portfolio = await loadPortfolioResponse(timeframe);
+export async function loadPortfolioPerformance(
+  context: TenantContext,
+  timeframe: PortfolioTimeframe,
+) {
+  const portfolio = await loadPortfolioResponse(context, timeframe);
   return portfolio.performance;
 }
 
@@ -402,6 +395,7 @@ export async function loadMarketBars(symbol: string, timeframe = "1d") {
 export async function loadInsights() {
   const prisma = getPrisma();
   const insights = await prisma.aiInsight.findMany({
+    where: { researchRunId: null },
     include: { asset: true, evidenceItems: { select: { id: true } } },
     orderBy: { publishedAt: "desc" },
     take: 50,
@@ -439,21 +433,21 @@ export async function loadAssetIntelligence(symbol: string): Promise<AssetIntell
       select: { close: true },
     }),
     prisma.aiInsight.findMany({
-      where: { assetId: asset.id },
+      where: { assetId: asset.id, researchRunId: null },
       orderBy: { publishedAt: "desc" },
       take: 12,
     }),
     prisma.evidenceItem.findMany({
-      where: { assetId: asset.id },
+      where: { assetId: asset.id, researchRunId: null },
       orderBy: { observedAt: "desc" },
       take: 20,
     }),
     prisma.investmentThesis.findFirst({
-      where: { assetId: asset.id },
+      where: { assetId: asset.id, researchRunId: null },
       orderBy: { updatedAt: "desc" },
     }),
     prisma.forecastPoint.findMany({
-      where: { assetId: asset.id },
+      where: { assetId: asset.id, researchRunId: null },
       orderBy: [{ generatedAt: "desc" }, { horizon: "asc" }],
       take: 8,
     }),
@@ -495,12 +489,14 @@ export async function loadEvents() {
   }));
 }
 
-export async function loadWatchlist() {
+export async function loadWatchlist(context: TenantContext) {
   const prisma = getPrisma();
-  const user = await getDemoUser();
   const [items, tickers, insights] = await Promise.all([
     prisma.watchlistItem.findMany({
-      where: { userId: user.id },
+      where: {
+        organizationId: context.organizationId,
+        userId: context.userId,
+      },
       include: { asset: true },
       orderBy: { createdAt: "asc" },
     }),
@@ -533,9 +529,10 @@ export async function loadWatchlist() {
   });
 }
 
-export async function loadResearchRuns(): Promise<ResearchRunResponse[]> {
+export async function loadResearchRuns(context: TenantContext): Promise<ResearchRunResponse[]> {
   const prisma = getPrisma();
   const runs = await prisma.researchRun.findMany({
+    where: { organizationId: context.organizationId },
     include: { asset: { select: { symbol: true } } },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -544,62 +541,11 @@ export async function loadResearchRuns(): Promise<ResearchRunResponse[]> {
   return runs.map(researchRunToResponse);
 }
 
-export async function importResearchRun(input: {
-  source: string;
-  kind: string;
-  symbol?: string | null;
-  status?: QuantRunStatus;
-  summary?: string | null;
-  parameters?: Record<string, unknown>;
-  startedAt?: string | null;
-  finishedAt?: string | null;
-  insights?: Array<{
-    source?: string;
-    title: string;
-    summary: string;
-    sentiment: InvestorInsightInput["sentiment"];
-    confidence?: number;
-    catalyst?: string | null;
-    risk?: string | null;
-    publishedAt?: string;
-  }>;
-  evidence?: Array<{
-    sourceType: string;
-    sourceName: string;
-    url?: string | null;
-    title: string;
-    excerpt: string;
-    engagement?: number;
-    observedAt?: string;
-  }>;
-  thesis?: {
-    stance: InvestmentThesisInput["stance"];
-    conviction: number;
-    thesis: string;
-    bullCase: string;
-    bearCase: string;
-    actionItems: string[];
-  } | null;
-  forecasts?: Array<{
-    horizon: string;
-    targetPrice: number;
-    lowerBound: number;
-    upperBound: number;
-    confidence: number;
-    model: string;
-    generatedAt?: string;
-  }>;
-  providerRuns?: Array<{
-    provider: string;
-    status: QuantRunStatus;
-    recordsFetched?: number;
-    errorMessage?: string | null;
-    startedAt?: string | null;
-    finishedAt?: string | null;
-  }>;
-}): Promise<ResearchRunResponse> {
+export async function importResearchRun(
+  context: WorkerImportContext,
+  input: ResearchRunImportInput,
+): Promise<ResearchRunResponse> {
   const prisma = getPrisma();
-  const user = await getDemoUser();
   const asset = input.symbol
     ? await prisma.asset.findUnique({
         where: { symbol: input.symbol.trim().toUpperCase() },
@@ -611,7 +557,8 @@ export async function importResearchRun(input: {
   const run = await prisma.$transaction(async (tx) => {
     const createdRun = await tx.researchRun.create({
       data: {
-        userId: user.id,
+        organizationId: context.organizationId,
+        userId: context.userId,
         assetId: asset?.id,
         source: input.source,
         kind: input.kind,
@@ -718,17 +665,23 @@ export async function importResearchRun(input: {
   return researchRunToResponse(run);
 }
 
-export async function upsertWatchlistItem(input: { symbol: string; alert?: number | null }) {
+export async function upsertWatchlistItem(context: TenantContext, input: WatchlistMutationInput) {
   const prisma = getPrisma();
-  const user = await getDemoUser();
   const symbol = input.symbol.trim().toUpperCase();
   const asset = await prisma.asset.findUnique({ where: { symbol }, select: { id: true } });
   if (!asset) throw new Error(`Asset ${symbol} not found.`);
 
   await prisma.watchlistItem.upsert({
-    where: { userId_assetId: { userId: user.id, assetId: asset.id } },
+    where: {
+      organizationId_userId_assetId: {
+        organizationId: context.organizationId,
+        userId: context.userId,
+        assetId: asset.id,
+      },
+    },
     create: {
-      userId: user.id,
+      organizationId: context.organizationId,
+      userId: context.userId,
       assetId: asset.id,
       alert: input.alert ?? null,
     },
@@ -737,18 +690,15 @@ export async function upsertWatchlistItem(input: { symbol: string; alert?: numbe
     },
   });
 
-  return loadWatchlist();
+  return loadWatchlist(context);
 }
 
-export async function createQuantRun(input: {
-  strategyName: string;
-  parameters?: Record<string, unknown>;
-}) {
+export async function createQuantRun(context: TenantContext, input: QuantRunCreateInput) {
   const prisma = getPrisma();
-  const user = await getDemoUser();
   const run = await prisma.quantRun.create({
     data: {
-      userId: user.id,
+      organizationId: context.organizationId,
+      userId: context.userId,
       strategyName: input.strategyName,
       status: "queued",
       parameters: (input.parameters ?? {}) as Prisma.InputJsonValue,
@@ -757,19 +707,21 @@ export async function createQuantRun(input: {
   return quantRunToResponse(run);
 }
 
-export async function listQuantRuns() {
+export async function listQuantRuns(context: TenantContext) {
   const prisma = getPrisma();
   const runs = await prisma.quantRun.findMany({
-    where: { user: { email: DEMO_USER_EMAIL } },
+    where: { organizationId: context.organizationId },
     orderBy: { createdAt: "desc" },
     take: 25,
   });
   return runs.map(quantRunToResponse);
 }
 
-export async function getQuantRun(id: string) {
+export async function getQuantRun(context: TenantContext, id: string) {
   const prisma = getPrisma();
-  const run = await prisma.quantRun.findUnique({ where: { id } });
+  const run = await prisma.quantRun.findFirst({
+    where: { id, organizationId: context.organizationId },
+  });
   if (!run) throw new Error("Quant run not found.");
   return quantRunToResponse(run);
 }

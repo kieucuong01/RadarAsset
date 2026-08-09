@@ -5,6 +5,19 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL is required for Prisma seed.");
 }
+if (process.env.NODE_ENV === "production") {
+  throw new Error("The development seed is disabled in production.");
+}
+
+function requiredEnvironment(name: string) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required for Prisma seed.`);
+  return value;
+}
+
+requiredEnvironment("BETTER_AUTH_URL");
+requiredEnvironment("BETTER_AUTH_SECRET");
+const demoPassword = requiredEnvironment("DEV_DEMO_PASSWORD");
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
@@ -163,14 +176,33 @@ async function main() {
   await prisma.researchRun.deleteMany();
   await prisma.portfolio.deleteMany();
   await prisma.asset.deleteMany();
+  await prisma.invitation.deleteMany();
+  await prisma.membership.deleteMany();
+  await prisma.session.deleteMany();
+  await prisma.account.deleteMany();
+  await prisma.organization.deleteMany({ where: { slug: "demo-workspace" } });
   await prisma.appUser.deleteMany({ where: { email: demoEmail } });
 
-  const user = await prisma.appUser.create({
-    data: {
+  const { auth } = await import("../src/lib/auth");
+  const signUp = await auth.api.signUpEmail({
+    body: {
       email: demoEmail,
+      password: demoPassword,
       name: "Demo Investor",
     },
   });
+  const user = signUp.user;
+
+  const organization = await auth.api.createOrganization({
+    body: {
+      name: "RadarAsset Demo",
+      slug: "demo-workspace",
+      userId: user.id,
+    },
+  });
+  if (!organization) {
+    throw new Error("Failed to create the demo workspace.");
+  }
 
   const assetBySymbol = new Map<string, { id: string }>();
   for (const [index, asset] of assetSeed.entries()) {
@@ -193,11 +225,12 @@ async function main() {
     assetBySymbol.set(asset.symbol, created);
   }
 
-  const portfolio = await prisma.portfolio.create({
-    data: {
-      userId: user.id,
-      name: "Demo Multi-Asset Portfolio",
-      baseCurrency: "USD",
+  const portfolio = await prisma.portfolio.findUniqueOrThrow({
+    where: {
+      organizationId_name: {
+        organizationId: organization.id,
+        name: "Main Portfolio",
+      },
     },
   });
 
@@ -239,6 +272,7 @@ async function main() {
     if (!assetId) continue;
     await prisma.watchlistItem.create({
       data: {
+        organizationId: organization.id,
         userId: user.id,
         assetId,
         alert: item.alert,
@@ -252,6 +286,7 @@ async function main() {
 
   const last30daysRun = await prisma.researchRun.create({
     data: {
+      organizationId: organization.id,
       userId: user.id,
       assetId: btcAssetId,
       source: "last30days",
@@ -289,6 +324,7 @@ async function main() {
 
   const berkshireRun = await prisma.researchRun.create({
     data: {
+      organizationId: organization.id,
       userId: user.id,
       assetId: btcAssetId,
       source: "ai-berkshire",
@@ -308,6 +344,7 @@ async function main() {
 
   const kronosRun = await prisma.researchRun.create({
     data: {
+      organizationId: organization.id,
       userId: user.id,
       assetId: btcAssetId,
       source: "kronos",
@@ -327,6 +364,7 @@ async function main() {
 
   await prisma.researchRun.create({
     data: {
+      organizationId: organization.id,
       userId: user.id,
       source: "daily_stock_analysis",
       kind: "provider_health",
@@ -500,6 +538,7 @@ async function main() {
 
   await prisma.quantRun.create({
     data: {
+      organizationId: organization.id,
       userId: user.id,
       strategyName: "Seed Momentum Backtest",
       status: "succeeded",

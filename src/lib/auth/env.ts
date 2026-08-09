@@ -7,3 +7,13 @@ export function requireServerEnv(name: string): string {
 
   return value;
 }
+
+export function requireBetterAuthSecret(): string {
+  const secret = requireServerEnv("BETTER_AUTH_SECRET");
+
+  if (process.env.NODE_ENV !== "test" && secret.length < 32) {
+    throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");
+  }
+
+  return secret;
+}

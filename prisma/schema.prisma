@@ -7,17 +7,122 @@ datasource db {
 }
 
 model AppUser {
-  id             String          @id @default(uuid()) @db.Uuid
-  email          String          @unique
-  name           String
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  portfolios     Portfolio[]
-  watchlistItems WatchlistItem[]
-  quantRuns      QuantRun[]
-  researchRuns   ResearchRun[]
+  id              String          @id @default(uuid()) @db.Uuid
+  email           String          @unique
+  emailVerified   Boolean         @default(false) @map("email_verified")
+  name            String
+  image           String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  sessions        Session[]
+  accounts        Account[]
+  memberships     Membership[]
+  invitationsSent Invitation[]    @relation("InvitationInviter")
+  portfolios      Portfolio[]
+  watchlistItems  WatchlistItem[]
+  quantRuns       QuantRun[]
+  researchRuns    ResearchRun[]
 
   @@map("app_users")
+}
+
+model Session {
+  id                   String   @id @default(uuid()) @db.Uuid
+  token                String   @unique
+  expiresAt            DateTime @map("expires_at")
+  ipAddress            String?  @map("ip_address")
+  userAgent            String?  @map("user_agent")
+  userId               String   @map("user_id") @db.Uuid
+  activeOrganizationId String?  @map("active_organization_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  user                 AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([activeOrganizationId])
+  @@map("auth_sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid()) @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id") @db.Uuid
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  idToken               String?   @map("id_token") @db.Text
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("auth_verifications")
+}
+
+model Organization {
+  id             String          @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String          @unique
+  logo           String?
+  metadata       String?         @db.Text
+  createdAt      DateTime        @default(now()) @map("created_at")
+  memberships    Membership[]
+  invitations    Invitation[]
+  portfolios     Portfolio[]
+  watchlistItems WatchlistItem[]
+  researchRuns   ResearchRun[]
+  quantRuns      QuantRun[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  role           String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+  @@map("organization_memberships")
+}
+
+model Invitation {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  email          String
+  role           String?
+  status         String
+  expiresAt      DateTime     @map("expires_at")
+  inviterId      String       @map("inviter_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter        AppUser      @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([email])
+  @@index([inviterId])
+  @@map("organization_invitations")
 }
 
 model Asset {
@@ -65,16 +170,20 @@ model MarketBar {
 }
 
 model Portfolio {
-  id           String                 @id @default(uuid()) @db.Uuid
-  userId       String                 @map("user_id") @db.Uuid
-  name         String
-  baseCurrency String                 @default("USD") @map("base_currency")
-  createdAt    DateTime               @default(now()) @map("created_at")
-  updatedAt    DateTime               @updatedAt @map("updated_at")
-  user         AppUser                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  positions    PortfolioPosition[]
-  transactions PortfolioTransaction[]
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  name           String
+  baseCurrency   String                 @default("USD") @map("base_currency")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  positions      PortfolioPosition[]
+  transactions   PortfolioTransaction[]
 
+  @@unique([organizationId, name])
+  @@index([organizationId])
   @@index([userId])
   @@map("portfolios")
 }
@@ -115,15 +224,18 @@ model PortfolioTransaction {
 }
 
 model WatchlistItem {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  assetId   String   @map("asset_id") @db.Uuid
-  alert     Decimal? @db.Decimal(20, 8)
-  createdAt DateTime @default(now()) @map("created_at")
-  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  assetId        String       @map("asset_id") @db.Uuid
+  alert          Decimal?     @db.Decimal(20, 8)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, assetId])
+  @@unique([organizationId, userId, assetId])
+  @@index([organizationId])
   @@index([assetId])
   @@map("watchlist_items")
 }
@@ -151,25 +263,28 @@ model AiInsight {
 }
 
 model ResearchRun {
-  id           String             @id @default(uuid()) @db.Uuid
-  userId       String?            @map("user_id") @db.Uuid
-  assetId      String?            @map("asset_id") @db.Uuid
-  source       String
-  kind         String
-  status       String             @default("queued")
-  parameters   Json               @default("{}")
-  summary      String?
-  startedAt    DateTime?          @map("started_at")
-  finishedAt   DateTime?          @map("finished_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  user         AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  asset        Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  insights     AiInsight[]
-  evidence     EvidenceItem[]
-  theses       InvestmentThesis[]
-  forecasts    ForecastPoint[]
-  providerRuns ProviderRun[]
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  userId         String?            @map("user_id") @db.Uuid
+  assetId        String?            @map("asset_id") @db.Uuid
+  source         String
+  kind           String
+  status         String             @default("queued")
+  parameters     Json               @default("{}")
+  summary        String?
+  startedAt      DateTime?          @map("started_at")
+  finishedAt     DateTime?          @map("finished_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  asset          Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  insights       AiInsight[]
+  evidence       EvidenceItem[]
+  theses         InvestmentThesis[]
+  forecasts      ForecastPoint[]
+  providerRuns   ProviderRun[]
 
+  @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([assetId, createdAt(sort: Desc)])
   @@index([source, kind, status])
@@ -287,18 +402,21 @@ model EconomicEvent {
 }
 
 model QuantRun {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String?   @map("user_id") @db.Uuid
-  strategyName String    @map("strategy_name")
-  status       String    @default("queued")
-  parameters   Json      @default("{}")
-  metrics      Json?
-  errorMessage String?   @map("error_message")
-  startedAt    DateTime? @map("started_at")
-  finishedAt   DateTime? @map("finished_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  user         AppUser?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String?      @map("user_id") @db.Uuid
+  strategyName   String       @map("strategy_name")
+  status         String       @default("queued")
+  parameters     Json         @default("{}")
+  metrics        Json?
+  errorMessage   String?      @map("error_message")
+  startedAt      DateTime?    @map("started_at")
+  finishedAt     DateTime?    @map("finished_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@map("quant_runs")

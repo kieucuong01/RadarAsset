@@ -21,6 +21,11 @@ npm run dev
 
 Copy `.env.example` to `.env.local` and update `DATABASE_URL` if your local PostgreSQL user, password, port, or database name differs.
 
+Generate a local Better Auth secret with at least 32 random characters and set
+`BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, and a local-only
+`DEV_DEMO_PASSWORD` before migrating or seeding. The demo password must be at
+least 12 characters and must never be reused outside local development.
+
 The default local database is:
 
 ```text
@@ -52,8 +57,14 @@ For automation imports, run Next locally and post normalized JSON:
 python quant-worker\research_import.py --symbol BTC
 ```
 
-Set `QUANT_WORKER_API_TOKEN` in `.env.local` to require the same token in the `x-worker-token` header. Leave it empty for local-only development.
+Set `QUANT_WORKER_API_TOKEN` in `.env.local` and send the same value in the
+`x-worker-token` header. Worker imports fail closed when the server token is
+missing. `QUANT_WORKER_ORGANIZATION_SLUG` selects the service workspace on the
+server; clients cannot choose it.
 
 ## Notes
 
-The UI currently preserves the original prototype screens while removing Lovable, TanStack Start, Vite, Wrangler, and Cloudflare-specific runtime dependencies. V1 is local-only and uses a seeded `demo@radarasset.local` user instead of real authentication.
+The UI currently preserves the original prototype screens while removing
+Lovable, TanStack Start, Vite, Wrangler, and Cloudflare-specific runtime
+dependencies. Local development seeds a real email/password Better Auth login
+for `demo@radarasset.local` and a `demo-workspace` organization.

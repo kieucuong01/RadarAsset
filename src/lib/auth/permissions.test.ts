@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  hasTenantCapability,
-  organizationRoles,
-} from "./permissions";
+import { hasTenantCapability, organizationRoles } from "./permissions";
 
 describe("tenant permissions", () => {
   it("keeps viewers read-only", () => {
@@ -12,13 +9,10 @@ describe("tenant permissions", () => {
     expect(hasTenantCapability("viewer", "backtest", "create")).toBe(false);
   });
 
-  it.each(["owner", "admin", "editor"] as const)(
-    "allows %s to mutate tenant data",
-    (role) => {
-      expect(hasTenantCapability(role, "portfolio", "write")).toBe(true);
-      expect(hasTenantCapability(role, "backtest", "create")).toBe(true);
-    },
-  );
+  it.each(["owner", "admin", "editor"] as const)("allows %s to mutate tenant data", (role) => {
+    expect(hasTenantCapability(role, "portfolio", "write")).toBe(true);
+    expect(hasTenantCapability(role, "backtest", "create")).toBe(true);
+  });
 
   it("reserves membership management for owners and admins", () => {
     expect(hasTenantCapability("owner", "membership", "manage")).toBe(true);
@@ -27,14 +21,8 @@ describe("tenant permissions", () => {
   });
 
   it("keeps Better Auth organization mutations aligned with tenant roles", () => {
-    expect(
-      organizationRoles.admin.authorize({ organization: ["update"] }).success,
-    ).toBe(true);
-    expect(
-      organizationRoles.editor.authorize({ organization: ["update"] }).success,
-    ).toBe(false);
-    expect(
-      organizationRoles.viewer.authorize({ member: ["create"] }).success,
-    ).toBe(false);
+    expect(organizationRoles.admin.authorize({ organization: ["update"] }).success).toBe(true);
+    expect(organizationRoles.editor.authorize({ organization: ["update"] }).success).toBe(false);
+    expect(organizationRoles.viewer.authorize({ member: ["create"] }).success).toBe(false);
   });
 });

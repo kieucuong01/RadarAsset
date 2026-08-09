@@ -6,6 +6,82 @@ export type PortfolioTimeframe = "1W" | "1M" | "YTD" | "1Y";
 
 export type QuantRunStatus = "queued" | "running" | "succeeded" | "failed";
 
+export type PortfolioTransactionCreateInput = {
+  symbol: string;
+  type: TransactionType;
+  quantity: number;
+  price: number;
+  fee?: number;
+  executedAt?: string;
+  note?: string | null;
+  timeframe?: PortfolioTimeframe;
+};
+
+export type WatchlistMutationInput = {
+  symbol: string;
+  alert?: number | null;
+};
+
+export type QuantRunCreateInput = {
+  strategyName: string;
+  parameters?: Record<string, unknown>;
+};
+
+export type ResearchRunImportInput = {
+  source: string;
+  kind: string;
+  symbol?: string | null;
+  status?: QuantRunStatus;
+  summary?: string | null;
+  parameters?: Record<string, unknown>;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  insights?: Array<{
+    source?: string;
+    title: string;
+    summary: string;
+    sentiment: InvestorInsightInput["sentiment"];
+    confidence?: number;
+    catalyst?: string | null;
+    risk?: string | null;
+    publishedAt?: string;
+  }>;
+  evidence?: Array<{
+    sourceType: string;
+    sourceName: string;
+    url?: string | null;
+    title: string;
+    excerpt: string;
+    engagement?: number;
+    observedAt?: string;
+  }>;
+  thesis?: {
+    stance: InvestmentThesisInput["stance"];
+    conviction: number;
+    thesis: string;
+    bullCase: string;
+    bearCase: string;
+    actionItems: string[];
+  } | null;
+  forecasts?: Array<{
+    horizon: string;
+    targetPrice: number;
+    lowerBound: number;
+    upperBound: number;
+    confidence: number;
+    model: string;
+    generatedAt?: string;
+  }>;
+  providerRuns?: Array<{
+    provider: string;
+    status: QuantRunStatus;
+    recordsFetched?: number;
+    errorMessage?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  }>;
+};
+
 export type PortfolioPositionInput = {
   assetId: string;
   symbol: string;
