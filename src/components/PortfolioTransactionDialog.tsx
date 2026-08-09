@@ -17,9 +17,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { PortfolioHoldingResponse, PortfolioResponse } from "@/lib/backend/types";
+import type {
+  PortfolioHoldingResponse,
+  PortfolioResponse,
+  PortfolioTimeframe,
+} from "@/lib/backend/types";
 import {
+  buildExecutionDateRequest,
   buildTransactionPreview,
+  getTransactionValueError,
   toLocalDateInputValue,
 } from "@/lib/portfolio-transaction-preview";
 import { cn } from "@/lib/utils";
@@ -45,10 +51,12 @@ function formatCurrency(value: number) {
 export function PortfolioTransactionDialog({
   holdings,
   disabled,
+  timeframe,
   onRecorded,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
+  timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -94,6 +102,16 @@ export function PortfolioTransactionDialog({
   const numericQuantity = Number(quantity);
   const numericPrice = Number(price);
   const numericFee = Number(fee);
+  const today = toLocalDateInputValue(new Date());
+  const isBackdated = Boolean(date && date < today);
+  const valueError =
+    quantity && price
+      ? getTransactionValueError({
+          quantity: numericQuantity,
+          price: numericPrice,
+          fee: numericFee,
+        })
+      : null;
   const preview =
     quantity && price
       ? buildTransactionPreview({
@@ -114,13 +132,21 @@ export function PortfolioTransactionDialog({
     currency: "USD",
   }));
   const buyOptions: AssetOption[] = assets ?? heldOptions;
-  const options: AssetOption[] = side === "buy" ? buyOptions : heldOptions;
+  const options: AssetOption[] = side === "buy" || isBackdated ? buyOptions : heldOptions;
+  const backdatedTotal =
+    side === "buy"
+      ? numericQuantity * numericPrice + numericFee
+      : numericQuantity * numericPrice - numericFee;
+  const canSubmit = isBackdated
+    ? Boolean(quantity && price && !valueError)
+    : Boolean(preview?.valid);
+  const previewError = preview && !preview.valid ? preview.error : null;
 
   const handleSideChange = (nextSide: string) => {
     if (nextSide !== "buy" && nextSide !== "sell") return;
     setSide(nextSide);
     setFormError(null);
-    const nextOptions: AssetOption[] = nextSide === "buy" ? buyOptions : heldOptions;
+    const nextOptions: AssetOption[] = nextSide === "buy" || isBackdated ? buyOptions : heldOptions;
     const hasSelected = nextOptions.some((item) => item.symbol === symbol);
     if (!hasSelected && nextOptions[0]) {
       setSymbol(nextOptions[0].symbol);
@@ -135,8 +161,8 @@ export function PortfolioTransactionDialog({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!preview?.valid) {
-      setFormError(preview?.error ?? "Enter a valid quantity and execution price.");
+    if (!canSubmit) {
+      setFormError(valueError ?? previewError ?? "Enter a valid quantity and execution price.");
       return;
     }
     if (!symbol || !date) {
@@ -156,7 +182,8 @@ export function PortfolioTransactionDialog({
           quantity: numericQuantity,
           price: numericPrice,
           fee: numericFee,
-          executedAt: `${date}T00:00:00.000Z`,
+          ...buildExecutionDateRequest(date, new Date().getTimezoneOffset()),
+          timeframe,
           note: null,
         }),
       });
@@ -259,8 +286,20 @@ export function PortfolioTransactionDialog({
                 id="tx-date"
                 type="date"
                 value={date}
-                max={toLocalDateInputValue(new Date())}
-                onChange={(event) => setDate(event.target.value)}
+                max={today}
+                onChange={(event) => {
+                  const nextDate = event.target.value;
+                  setDate(nextDate);
+                  if (
+                    side === "sell" &&
+                    nextDate === today &&
+                    !heldOptions.some((item) => item.symbol === symbol) &&
+                    heldOptions[0]
+                  ) {
+                    setSymbol(heldOptions[0].symbol);
+                  }
+                  setFormError(null);
+                }}
                 disabled={saving}
                 className="min-h-11"
               />
@@ -314,7 +353,26 @@ export function PortfolioTransactionDialog({
             </div>
           </div>
 
-          {preview?.valid ? (
+          {isBackdated && quantity && price && !valueError ? (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
+                <PreviewRow
+                  label={side === "buy" ? "Total cost" : "Net proceeds"}
+                  value={formatCurrency(backdatedTotal)}
+                />
+              </div>
+              <Alert>
+                <AlertDescription>
+                  Backdated trade: final quantity, average cost and realized PnL will be replayed
+                  from the full ledger after saving.
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : isBackdated && valueError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{valueError}</AlertDescription>
+            </Alert>
+          ) : preview?.valid ? (
             <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm sm:grid-cols-2">
               <PreviewRow
                 label={side === "buy" ? "Total cost" : "Net proceeds"}
@@ -371,7 +429,7 @@ export function PortfolioTransactionDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !preview?.valid} className="min-h-11">
+            <Button type="submit" disabled={saving || !canSubmit} className="min-h-11">
               {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
               {saving ? "Saving…" : `Save ${side === "buy" ? "Buy" : "Sell"}`}
             </Button>

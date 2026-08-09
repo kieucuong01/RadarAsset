@@ -552,8 +552,7 @@ describe("portfolio backend domain", () => {
         assets,
         transactions: [transaction({})],
         bars: bars.filter(
-          (bar) =>
-            bar.assetId !== "asset-spy" || bar.ts !== "2026-01-01T00:00:00.000Z",
+          (bar) => bar.assetId !== "asset-spy" || bar.ts !== "2026-01-01T00:00:00.000Z",
         ),
         benchmarkAssetId: "asset-spy",
         limit: 30,

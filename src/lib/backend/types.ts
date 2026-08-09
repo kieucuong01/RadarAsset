@@ -2,6 +2,8 @@ export type AssetClass = "crypto" | "equity" | "etf" | "index" | "fx" | "commodi
 
 export type TransactionType = "buy" | "sell";
 
+export type PortfolioTimeframe = "1W" | "1M" | "YTD" | "1Y";
+
 export type QuantRunStatus = "queued" | "running" | "succeeded" | "failed";
 
 export type PortfolioPositionInput = {

@@ -34,10 +34,11 @@ import type {
   PortfolioHoldingResponse,
   PortfolioResponse,
   PortfolioRiskMetricResponse,
+  PortfolioTimeframe,
 } from "@/lib/backend/types";
 
 const TIMEFRAMES = ["1W", "1M", "YTD", "1Y"] as const;
-type Timeframe = (typeof TIMEFRAMES)[number];
+type Timeframe = PortfolioTimeframe;
 
 const allocationColors: Record<string, string> = {
   Crypto: "var(--primary)",
@@ -373,6 +374,7 @@ export function MockPortfolio() {
         transactions={portfolio?.transactions ?? []}
         holdings={holdings}
         disabled={!portfolio}
+        timeframe={timeframe}
         fmt2={fmt2}
         onRecorded={setPortfolio}
       />
@@ -617,12 +619,14 @@ function TransactionLog({
   transactions,
   holdings,
   disabled,
+  timeframe,
   fmt2,
   onRecorded,
 }: {
   transactions: PortfolioResponse["transactions"];
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
+  timeframe: PortfolioTimeframe;
   fmt2: (n: number) => string;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
@@ -661,6 +665,7 @@ function TransactionLog({
           <PortfolioTransactionDialog
             holdings={holdings}
             disabled={disabled}
+            timeframe={timeframe}
             onRecorded={onRecorded}
           />
         </div>

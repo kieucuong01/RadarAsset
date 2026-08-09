@@ -5,6 +5,7 @@ import { buildTickerResponse } from "./market";
 import {
   buildPortfolioResponse,
   buildTradeAwarePerformance,
+  PortfolioInputError,
   replayPortfolioLedger,
 } from "./portfolio";
 import type {
@@ -20,6 +21,7 @@ import type {
   PortfolioLedgerAsset,
   PortfolioLedgerTransaction,
   PortfolioResponse,
+  PortfolioTimeframe,
   QuantRunResponse,
   QuantRunStatus,
   ResearchRunResponse,
@@ -34,8 +36,6 @@ const TIMEFRAME_LIMITS = {
   YTD: 90,
   "1Y": 252,
 } as const;
-
-type PortfolioTimeframe = keyof typeof TIMEFRAME_LIMITS;
 
 function numberFromDecimal(value: unknown): number {
   if (typeof value === "number") return value;
@@ -52,7 +52,8 @@ function assertAssetClass(value: string): AssetClass {
 }
 
 function assertTransactionType(value: string): TransactionType {
-  return value === "sell" ? "sell" : "buy";
+  if (value === "buy" || value === "sell") return value;
+  throw new Error(`Unsupported portfolio transaction type: ${value}.`);
 }
 
 function assertQuantRunStatus(value: string): QuantRunStatus {
@@ -246,6 +247,7 @@ export async function createPortfolioTransaction(input: {
   fee?: number;
   executedAt?: string;
   note?: string | null;
+  timeframe?: PortfolioTimeframe;
 }) {
   const prisma = getPrisma();
   const symbol = input.symbol.trim().toUpperCase();
@@ -256,9 +258,10 @@ export async function createPortfolioTransaction(input: {
   if (!portfolio) throw new Error("Demo portfolio not found. Run npm run db:seed first.");
 
   const asset = await prisma.asset.findUnique({ where: { symbol } });
-  if (!asset) throw new Error(`Asset ${symbol} not found.`);
+  if (!asset) throw new PortfolioInputError(`Asset ${symbol} not found.`, "ASSET_NOT_FOUND");
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "portfolios" WHERE "id" = ${portfolio.id} FOR UPDATE`;
     await tx.portfolioTransaction.create({
       data: {
         portfolioId: portfolio.id,
@@ -321,7 +324,7 @@ export async function createPortfolioTransaction(input: {
     }
   });
 
-  return loadPortfolioResponse();
+  return loadPortfolioResponse(input.timeframe ?? "1M");
 }
 
 export async function loadPortfolioPerformance(timeframe: PortfolioTimeframe) {

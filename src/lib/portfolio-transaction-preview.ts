@@ -23,16 +23,26 @@ export function toLocalDateInputValue(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function buildTransactionPreview(input: TransactionPreviewInput): TransactionPreview {
+export function buildExecutionDateRequest(executionDate: string, timezoneOffsetMinutes: number) {
+  return { executionDate, timezoneOffsetMinutes };
+}
+
+export function getTransactionValueError(input: { quantity: number; price: number; fee: number }) {
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
-    return { valid: false, error: "Quantity must be greater than 0." };
+    return "Quantity must be greater than 0.";
   }
   if (!Number.isFinite(input.price) || input.price <= 0) {
-    return { valid: false, error: "Price must be greater than 0." };
+    return "Price must be greater than 0.";
   }
   if (!Number.isFinite(input.fee) || input.fee < 0) {
-    return { valid: false, error: "Fee cannot be negative." };
+    return "Fee cannot be negative.";
   }
+  return null;
+}
+
+export function buildTransactionPreview(input: TransactionPreviewInput): TransactionPreview {
+  const valueError = getTransactionValueError(input);
+  if (valueError) return { valid: false, error: valueError };
 
   const grossAmount = input.quantity * input.price;
   if (input.side === "buy") {

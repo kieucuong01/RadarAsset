@@ -129,6 +129,16 @@ export class PortfolioDomainError extends Error {
   }
 }
 
+export class PortfolioInputError extends Error {
+  constructor(
+    message: string,
+    readonly code: "ASSET_NOT_FOUND",
+  ) {
+    super(message);
+    this.name = "PortfolioInputError";
+  }
+}
+
 function compareLedgerTransactions(
   left: PortfolioLedgerTransaction,
   right: PortfolioLedgerTransaction,

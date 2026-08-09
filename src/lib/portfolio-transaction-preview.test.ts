@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTransactionPreview, toLocalDateInputValue } from "./portfolio-transaction-preview";
+import {
+  buildExecutionDateRequest,
+  buildTransactionPreview,
+  getTransactionValueError,
+  toLocalDateInputValue,
+} from "./portfolio-transaction-preview";
 
 describe("portfolio transaction preview", () => {
   it("formats transaction dates in the user's local calendar day", () => {
     expect(toLocalDateInputValue(new Date(2026, 7, 9, 5, 30))).toBe("2026-08-09");
+  });
+
+  it("submits the calendar date with the user's timezone offset", () => {
+    expect(buildExecutionDateRequest("2026-08-09", -420)).toEqual({
+      executionDate: "2026-08-09",
+      timezoneOffsetMinutes: -420,
+    });
   });
 
   it("projects quantity, total cost, and weighted average for a Buy", () => {
@@ -66,6 +78,11 @@ describe("portfolio transaction preview", () => {
   });
 
   it("rejects invalid quantity, price, and fee values", () => {
+    expect(getTransactionValueError({ quantity: 1, price: 100, fee: 0 })).toBeNull();
+    expect(getTransactionValueError({ quantity: 0, price: 100, fee: 0 })).toBe(
+      "Quantity must be greater than 0.",
+    );
+
     expect(
       buildTransactionPreview({
         side: "buy",
