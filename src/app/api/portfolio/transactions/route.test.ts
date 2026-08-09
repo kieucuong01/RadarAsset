@@ -131,6 +131,14 @@ describe("POST /api/portfolio/transactions", () => {
     expect(response.status).toBe(503);
   });
 
+  it("does not misclassify a backend SyntaxError as malformed JSON", async () => {
+    mocks.createPortfolioTransaction.mockRejectedValue(new SyntaxError("Unexpected backend data"));
+
+    const response = await POST(request({}));
+
+    expect(response.status).toBe(503);
+  });
+
   it("returns the refreshed portfolio with status 201", async () => {
     const response = await POST(request({}));
 

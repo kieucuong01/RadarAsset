@@ -71,13 +71,20 @@ const transactionSchema = z
   }));
 
 export async function POST(request: Request) {
+  let body: unknown;
   try {
-    const payload = transactionSchema.parse(await request.json());
+    body = await request.json();
+  } catch (error) {
+    return apiError(error, 400);
+  }
+
+  try {
+    const payload = transactionSchema.parse(body);
     const portfolio = await createPortfolioTransaction(payload);
     return NextResponse.json(portfolio, { status: 201 });
   } catch (error) {
     const status =
-      error instanceof z.ZodError || error instanceof SyntaxError
+      error instanceof z.ZodError
         ? 400
         : error instanceof PortfolioInputError
           ? 404

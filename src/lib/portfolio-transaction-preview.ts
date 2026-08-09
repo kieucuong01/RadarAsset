@@ -27,6 +27,10 @@ export function buildExecutionDateRequest(executionDate: string, timezoneOffsetM
   return { executionDate, timezoneOffsetMinutes };
 }
 
+export function isSellSelectionDisabled(input: { isBackdated: boolean; holdingsCount: number }) {
+  return !input.isBackdated && input.holdingsCount === 0;
+}
+
 export function getTransactionValueError(input: { quantity: number; price: number; fee: number }) {
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return "Quantity must be greater than 0.";

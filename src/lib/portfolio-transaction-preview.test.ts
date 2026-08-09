@@ -4,6 +4,7 @@ import {
   buildExecutionDateRequest,
   buildTransactionPreview,
   getTransactionValueError,
+  isSellSelectionDisabled,
   toLocalDateInputValue,
 } from "./portfolio-transaction-preview";
 
@@ -17,6 +18,11 @@ describe("portfolio transaction preview", () => {
       executionDate: "2026-08-09",
       timezoneOffsetMinutes: -420,
     });
+  });
+
+  it("allows a backdated Sell when the current portfolio is empty", () => {
+    expect(isSellSelectionDisabled({ isBackdated: true, holdingsCount: 0 })).toBe(false);
+    expect(isSellSelectionDisabled({ isBackdated: false, holdingsCount: 0 })).toBe(true);
   });
 
   it("projects quantity, total cost, and weighted average for a Buy", () => {

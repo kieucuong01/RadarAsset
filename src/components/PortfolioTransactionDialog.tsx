@@ -26,6 +26,7 @@ import {
   buildExecutionDateRequest,
   buildTransactionPreview,
   getTransactionValueError,
+  isSellSelectionDisabled,
   toLocalDateInputValue,
 } from "@/lib/portfolio-transaction-preview";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,7 @@ export function PortfolioTransactionDialog({
     ? Boolean(quantity && price && !valueError)
     : Boolean(preview?.valid);
   const previewError = preview && !preview.valid ? preview.error : null;
+  const isInputInvalid = isBackdated ? Boolean(valueError) : Boolean(preview && !preview.valid);
 
   const handleSideChange = (nextSide: string) => {
     if (nextSide !== "buy" && nextSide !== "sell") return;
@@ -243,7 +245,10 @@ export function PortfolioTransactionDialog({
             </ToggleGroupItem>
             <ToggleGroupItem
               value="sell"
-              disabled={holdings.length === 0}
+              disabled={isSellSelectionDisabled({
+                isBackdated,
+                holdingsCount: holdings.length,
+              })}
               className={cn("min-h-11", side === "sell" && "border-bear/40 text-bear")}
             >
               Sell
@@ -315,7 +320,7 @@ export function PortfolioTransactionDialog({
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value)}
                 disabled={saving}
-                aria-invalid={Boolean(preview && !preview.valid)}
+                aria-invalid={isInputInvalid}
                 placeholder="0.25"
                 className="min-h-11"
               />
@@ -331,7 +336,7 @@ export function PortfolioTransactionDialog({
                 value={price}
                 onChange={(event) => setPrice(event.target.value)}
                 disabled={saving}
-                aria-invalid={Boolean(preview && !preview.valid)}
+                aria-invalid={isInputInvalid}
                 placeholder={selectedHolding ? String(selectedHolding.price) : "67000"}
                 className="min-h-11"
               />
@@ -347,7 +352,7 @@ export function PortfolioTransactionDialog({
                 value={fee}
                 onChange={(event) => setFee(event.target.value)}
                 disabled={saving}
-                aria-invalid={Boolean(preview && !preview.valid)}
+                aria-invalid={isInputInvalid}
                 className="min-h-11"
               />
             </div>
