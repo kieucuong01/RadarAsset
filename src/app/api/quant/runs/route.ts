@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 const quantRunSchema = z.object({
   strategyName: z.string().min(1),
-  parameters: z.record(z.unknown()).optional(),
+  parameters: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function GET() {

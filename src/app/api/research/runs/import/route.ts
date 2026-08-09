@@ -17,7 +17,7 @@ const researchImportSchema = z.object({
   symbol: z.string().trim().min(1).max(24).optional().nullable(),
   status: statusSchema.optional(),
   summary: z.string().trim().max(4000).optional().nullable(),
-  parameters: z.record(z.unknown()).optional(),
+  parameters: z.record(z.string(), z.unknown()).optional(),
   startedAt: optionalDate,
   finishedAt: optionalDate,
   providerRuns: z
