@@ -500,6 +500,7 @@ model DatasetVersion {
   provider        DataProvider       @relation(fields: [providerId], references: [id], onDelete: Restrict)
   bars            DatasetBar[]
   issues          DataQualityIssue[]
+  ingestionRuns   MarketIngestionRun[]
 
   @@unique([datasetId, version])
   @@index([datasetId, isActive])
@@ -538,6 +539,29 @@ model DataQualityIssue {
 
   @@index([datasetVersionId, severity])
   @@map("data_quality_issues")
+}
+
+model MarketIngestionRun {
+  id               String          @id @default(uuid()) @db.Uuid
+  providerCode     String          @map("provider_code")
+  assetSymbol      String          @map("asset_symbol")
+  timeframe        String
+  scheduledAt      DateTime        @map("scheduled_at") @db.Timestamptz(3)
+  startedAt        DateTime        @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt       DateTime?       @map("finished_at") @db.Timestamptz(3)
+  status           String
+  attemptCount     Int             @default(0) @map("attempt_count")
+  fetchedRowCount  Int             @default(0) @map("fetched_row_count")
+  datasetVersionId String?         @map("dataset_version_id") @db.Uuid
+  errorCode        String?         @map("error_code")
+  errorMessage     String?         @map("error_message")
+  metadata         Json            @default("{}")
+  datasetVersion   DatasetVersion? @relation(fields: [datasetVersionId], references: [id], onDelete: SetNull)
+
+  @@index([assetSymbol, timeframe, startedAt(sort: Desc)])
+  @@index([status, startedAt])
+  @@index([datasetVersionId])
+  @@map("market_ingestion_runs")
 }
 
 model QuantRunArtifact {
