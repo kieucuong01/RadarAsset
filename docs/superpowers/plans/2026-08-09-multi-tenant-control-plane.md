@@ -936,7 +936,7 @@ Add:
 "test:integration": "node scripts/run-integration-tests.mjs"
 ```
 
-The integration config includes only `*.integration.test.ts`, runs serially, and requires `TEST_DATABASE_URL`. It must refuse to run when `TEST_DATABASE_URL === DATABASE_URL` to protect development data. The wrapper preserves the development URL, migrates only the isolated `_test` database, then starts Vitest with both safety markers.
+The integration config includes only `*.integration.test.ts`, runs serially, and requires `TEST_DATABASE_URL`. The wrapper canonicalizes both URLs, requires local PostgreSQL hosts, and only accepts a test database whose name is the development database name plus the exact `_test` suffix. It preserves the development URL, migrates only that isolated test database, then starts Vitest with both safety markers.
 
 - [ ] **Step 2: Write a two-organization database isolation test**
 

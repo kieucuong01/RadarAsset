@@ -277,6 +277,84 @@ describe("database tenant isolation", () => {
     expect(demoUser).toBeNull();
   });
 
+  it("refuses to reset a reserved demo slug owned by another user", async () => {
+    const ownerId = randomUUID();
+    const demoUserId = randomUUID();
+    const organizationId = randomUUID();
+    const demoEmail = `collision-demo-${suffix}@example.test`;
+    const demoSlug = `collision-demo-${suffix}`;
+    try {
+      await prisma.appUser.createMany({
+        data: [
+          { id: ownerId, email: `collision-owner-${suffix}@example.test`, name: "Owner" },
+          { id: demoUserId, email: demoEmail, name: "Demo" },
+        ],
+      });
+      await prisma.organization.create({
+        data: {
+          id: organizationId,
+          name: "Reserved Slug Owner",
+          slug: demoSlug,
+          memberships: { create: { userId: ownerId, role: "owner" } },
+        },
+      });
+
+      await expect(
+        resetDemoIdentity(prisma, { email: demoEmail, organizationSlug: demoSlug }),
+      ).rejects.toThrow("reserved demo workspace");
+      await expect(
+        prisma.organization.findUnique({ where: { id: organizationId } }),
+      ).resolves.not.toBeNull();
+      await expect(
+        prisma.appUser.findUnique({ where: { id: demoUserId } }),
+      ).resolves.not.toBeNull();
+    } finally {
+      await prisma.organization.deleteMany({ where: { id: organizationId } });
+      await prisma.appUser.deleteMany({ where: { id: { in: [ownerId, demoUserId] } } });
+    }
+  });
+
+  it("refuses to reset a demo user linked to another tenant", async () => {
+    const demoUserId = randomUUID();
+    const demoOrganizationId = randomUUID();
+    const demoEmail = `cross-member-demo-${suffix}@example.test`;
+    const demoSlug = `cross-member-demo-${suffix}`;
+    try {
+      await prisma.appUser.create({
+        data: { id: demoUserId, email: demoEmail, name: "Cross Member Demo" },
+      });
+      await prisma.organization.create({
+        data: {
+          id: demoOrganizationId,
+          name: "Cross Member Demo",
+          slug: demoSlug,
+          memberships: { create: { userId: demoUserId, role: "owner" } },
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          organizationId: fixtures.organizationAId,
+          userId: demoUserId,
+          role: "viewer",
+        },
+      });
+
+      await expect(
+        resetDemoIdentity(prisma, { email: demoEmail, organizationSlug: demoSlug }),
+      ).rejects.toThrow("another organization");
+      await expect(
+        prisma.organization.findUnique({ where: { id: demoOrganizationId } }),
+      ).resolves.not.toBeNull();
+      await expect(
+        prisma.organization.findUnique({ where: { id: fixtures.organizationAId } }),
+      ).resolves.not.toBeNull();
+    } finally {
+      await prisma.membership.deleteMany({ where: { userId: demoUserId } });
+      await prisma.organization.deleteMany({ where: { id: demoOrganizationId } });
+      await prisma.appUser.deleteMany({ where: { id: demoUserId } });
+    }
+  });
+
   it("deletes private research artifacts with their organization", async () => {
     const userId = randomUUID();
     const organizationId = randomUUID();

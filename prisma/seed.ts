@@ -165,10 +165,12 @@ function generateBars(price: number, symbolIndex: number) {
 }
 
 async function main() {
-  await resetDemoIdentity(prisma, {
-    email: demoEmail,
-    organizationSlug: "demo-workspace",
-  });
+  await prisma.$transaction((transaction) =>
+    resetDemoIdentity(transaction, {
+      email: demoEmail,
+      organizationSlug: "demo-workspace",
+    }),
+  );
 
   await prisma.aiInsight.deleteMany({
     where: {

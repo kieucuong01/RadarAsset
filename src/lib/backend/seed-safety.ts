@@ -27,10 +27,58 @@ export async function resetDemoIdentity(
   prisma: DemoIdentityClient,
   input: { email: string; organizationSlug: string },
 ): Promise<void> {
-  await prisma.organization.deleteMany({
-    where: { slug: input.organizationSlug },
-  });
-  await prisma.appUser.deleteMany({
-    where: { email: input.email },
-  });
+  const [organization, user] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { slug: input.organizationSlug },
+      select: {
+        id: true,
+        memberships: { select: { userId: true, role: true } },
+      },
+    }),
+    prisma.appUser.findUnique({
+      where: { email: input.email },
+      select: {
+        id: true,
+        memberships: { select: { organizationId: true } },
+        portfolios: { select: { organizationId: true } },
+        watchlistItems: { select: { organizationId: true } },
+        researchRuns: { select: { organizationId: true } },
+        quantRuns: { select: { organizationId: true } },
+        invitationsSent: { select: { organizationId: true } },
+      },
+    }),
+  ]);
+
+  if (organization) {
+    const isExclusiveDemoWorkspace =
+      user &&
+      organization.memberships.length === 1 &&
+      organization.memberships[0]?.userId === user.id &&
+      organization.memberships[0]?.role === "owner";
+    if (!isExclusiveDemoWorkspace) {
+      throw new Error("The reserved demo workspace is not exclusively owned by the demo user.");
+    }
+  }
+
+  if (user) {
+    const demoOrganizationId = organization?.id;
+    const linkedOrganizationIds = [
+      ...user.memberships,
+      ...user.portfolios,
+      ...user.watchlistItems,
+      ...user.researchRuns,
+      ...user.quantRuns,
+      ...user.invitationsSent,
+    ].map((relation) => relation.organizationId);
+    if (linkedOrganizationIds.some((organizationId) => organizationId !== demoOrganizationId)) {
+      throw new Error("The demo user is linked to another organization.");
+    }
+  }
+
+  if (organization) {
+    await prisma.organization.deleteMany({ where: { id: organization.id } });
+  }
+  if (user) {
+    await prisma.appUser.deleteMany({ where: { id: user.id } });
+  }
 }

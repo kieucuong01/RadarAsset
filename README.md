@@ -37,8 +37,9 @@ quant_insight_radar
 
 If `psql` is not on PATH, create the database with pgAdmin or your PostgreSQL installer tools, then run the Prisma commands above.
 
-For tenant-isolation integration tests, set `TEST_DATABASE_URL` to a separate
-local database whose name ends in `_test`, then run `npm run test:integration`.
+For tenant-isolation integration tests, both database URLs must use a local
+PostgreSQL host. Set `TEST_DATABASE_URL` to the `DATABASE_URL` database name plus
+the exact `_test` suffix, then run `npm run test:integration`.
 The wrapper migrates only that test database and keeps `DATABASE_URL` as a
 different development-database safety marker.
 
