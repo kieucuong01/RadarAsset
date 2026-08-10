@@ -10,7 +10,9 @@ import {
   getQuantRun,
   listQuantRuns,
   loadPortfolioResponse,
+  loadWatchlist,
 } from "./db";
+import { resetDemoIdentity } from "./seed-safety";
 
 const prisma = getPrisma();
 const suffix = randomUUID().slice(0, 8);
@@ -124,6 +126,65 @@ describe("database tenant isolation", () => {
     ]);
     fixtures.quantRunAId = runA.id;
     fixtures.quantRunBId = runB.id;
+
+    await prisma.watchlistItem.createMany({
+      data: [
+        {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          assetId: fixtures.assetId,
+        },
+        {
+          organizationId: fixtures.organizationBId,
+          userId: fixtures.userBId,
+          assetId: fixtures.assetId,
+        },
+      ],
+    });
+    const [researchA, researchB] = await Promise.all([
+      prisma.researchRun.create({
+        data: {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          assetId: fixtures.assetId,
+          source: "integration-test",
+          kind: "sentiment",
+          status: "succeeded",
+        },
+      }),
+      prisma.researchRun.create({
+        data: {
+          organizationId: fixtures.organizationBId,
+          userId: fixtures.userBId,
+          assetId: fixtures.assetId,
+          source: "integration-test",
+          kind: "sentiment",
+          status: "succeeded",
+        },
+      }),
+    ]);
+    await prisma.aiInsight.createMany({
+      data: [
+        {
+          assetId: fixtures.assetId,
+          researchRunId: researchA.id,
+          source: "integration-test",
+          title: "Organization A private sentiment",
+          summary: "A-only research",
+          sentiment: "bull",
+          publishedAt: new Date("2026-08-10T00:00:00.000Z"),
+        },
+        {
+          assetId: fixtures.assetId,
+          researchRunId: researchB.id,
+          source: "integration-test",
+          title: "Organization B private sentiment",
+          summary: "B-only research",
+          sentiment: "bear",
+          publishedAt: new Date("2026-08-10T00:01:00.000Z"),
+        },
+      ],
+    });
   });
 
   afterAll(async () => {
@@ -159,6 +220,109 @@ describe("database tenant isolation", () => {
       "Quant run not found.",
     );
     await expect(getQuantRun(contextA, randomUUID())).rejects.toThrow("Quant run not found.");
+  });
+
+  it("keeps watchlist sentiment inside the active organization", async () => {
+    const [watchlistA, watchlistB] = await Promise.all([
+      loadWatchlist(contextA),
+      loadWatchlist(contextB),
+    ]);
+
+    expect(watchlistA).toEqual([
+      expect.objectContaining({ sym: fixtures.assetSymbol, sentiment: "bull" }),
+    ]);
+    expect(watchlistB).toEqual([
+      expect.objectContaining({ sym: fixtures.assetSymbol, sentiment: "bear" }),
+    ]);
+  });
+
+  it("resets a named demo identity without deleting another tenant", async () => {
+    const demoUserId = randomUUID();
+    const demoOrganizationId = randomUUID();
+    const demoEmail = `seed-demo-${suffix}@example.test`;
+    const demoSlug = `seed-demo-${suffix}`;
+    await prisma.appUser.create({
+      data: { id: demoUserId, email: demoEmail, name: "Seed Demo" },
+    });
+    await prisma.organization.create({
+      data: {
+        id: demoOrganizationId,
+        name: "Seed Demo",
+        slug: demoSlug,
+        memberships: {
+          create: { userId: demoUserId, role: "owner" },
+        },
+        portfolios: {
+          create: {
+            userId: demoUserId,
+            name: "Main Portfolio",
+            baseCurrency: "USD",
+          },
+        },
+      },
+    });
+
+    await resetDemoIdentity(prisma, {
+      email: demoEmail,
+      organizationSlug: demoSlug,
+    });
+
+    const [otherTenant, demoTenant, demoUser] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: fixtures.organizationAId } }),
+      prisma.organization.findUnique({ where: { id: demoOrganizationId } }),
+      prisma.appUser.findUnique({ where: { id: demoUserId } }),
+    ]);
+    expect(otherTenant).not.toBeNull();
+    expect(demoTenant).toBeNull();
+    expect(demoUser).toBeNull();
+  });
+
+  it("deletes private research artifacts with their organization", async () => {
+    const userId = randomUUID();
+    const organizationId = randomUUID();
+    const researchRunId = randomUUID();
+    const insightId = randomUUID();
+    try {
+      await prisma.appUser.create({
+        data: { id: userId, email: `cascade-${suffix}@example.test`, name: "Cascade Test" },
+      });
+      await prisma.organization.create({
+        data: {
+          id: organizationId,
+          name: "Cascade Test",
+          slug: `cascade-${suffix}`,
+          memberships: { create: { userId, role: "owner" } },
+        },
+      });
+      await prisma.researchRun.create({
+        data: {
+          id: researchRunId,
+          organizationId,
+          userId,
+          assetId: fixtures.assetId,
+          source: "integration-test",
+          kind: "sentiment",
+          status: "succeeded",
+          insights: {
+            create: {
+              id: insightId,
+              assetId: fixtures.assetId,
+              source: "integration-test",
+              title: "Private cascade insight",
+              summary: "Must not become a public orphan",
+              sentiment: "neutral",
+            },
+          },
+        },
+      });
+
+      await prisma.organization.delete({ where: { id: organizationId } });
+
+      await expect(prisma.aiInsight.findUnique({ where: { id: insightId } })).resolves.toBeNull();
+    } finally {
+      await prisma.organization.deleteMany({ where: { id: organizationId } });
+      await prisma.appUser.deleteMany({ where: { id: userId } });
+    }
   });
 
   it("never writes an organization A transaction into organization B", async () => {

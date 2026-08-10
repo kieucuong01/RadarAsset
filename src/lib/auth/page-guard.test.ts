@@ -34,8 +34,14 @@ describe("authenticated page guard", () => {
   it.each([
     ["https://attacker.example", "/portfolio"],
     ["//attacker.example", "/portfolio"],
+    ["/\\attacker.example", "/portfolio"],
+    ["/%5Cattacker.example", "/portfolio"],
+    ["/%2Fattacker.example", "/portfolio"],
+    ["/portfolio%0A@attacker.example", "/portfolio"],
     ["portfolio", "/portfolio"],
     ["/quant-lab?tab=runs", "/quant-lab?tab=runs"],
+    ["/onboarding?create=1", "/onboarding?create=1"],
+    ["/api/portfolio", "/portfolio"],
   ])("normalizes returnTo %s safely", (value, expected) => {
     expect(safeReturnTo(value, "/portfolio")).toBe(expected);
   });

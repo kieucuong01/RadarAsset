@@ -120,6 +120,13 @@ describe("organization-scoped database services", () => {
         where: { organizationId: "org-a", userId: "user-a" },
       }),
     );
+    expect(prisma.aiInsight.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [{ researchRunId: null }, { researchRun: { organizationId: "org-a" } }],
+        },
+      }),
+    );
     expect(prisma.watchlistItem.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {

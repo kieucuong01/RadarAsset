@@ -25,6 +25,9 @@ Generate a local Better Auth secret with at least 32 random characters and set
 `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, and a local-only
 `DEV_DEMO_PASSWORD` before migrating or seeding. The demo password must be at
 least 12 characters and must never be reused outside local development.
+Set `DEV_SEED_DATABASE` to the exact local database name as an additional
+fail-closed guard. The seed refuses remote hosts and never resets other
+organizations or users.
 
 The default local database is:
 
@@ -33,6 +36,11 @@ quant_insight_radar
 ```
 
 If `psql` is not on PATH, create the database with pgAdmin or your PostgreSQL installer tools, then run the Prisma commands above.
+
+For tenant-isolation integration tests, set `TEST_DATABASE_URL` to a separate
+local database whose name ends in `_test`, then run `npm run test:integration`.
+The wrapper migrates only that test database and keeps `DATABASE_URL` as a
+different development-database safety marker.
 
 ## Investor Intelligence
 

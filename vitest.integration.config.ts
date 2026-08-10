@@ -12,6 +12,8 @@ if (testDatabaseUrl === process.env.DATABASE_URL) {
   );
 }
 process.env.DATABASE_URL = testDatabaseUrl;
+process.env.BETTER_AUTH_URL ??= "http://localhost:3101";
+process.env.BETTER_AUTH_SECRET ??= "integration-test-only-better-auth-secret-64-characters-minimum";
 
 export default defineConfig({
   resolve: {

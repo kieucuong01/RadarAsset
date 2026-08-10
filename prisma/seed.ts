@@ -1,6 +1,8 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
+import { assertSeedDatabaseAllowed, resetDemoIdentity } from "../src/lib/backend/seed-safety";
+
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL is required for Prisma seed.");
@@ -18,6 +20,8 @@ function requiredEnvironment(name: string) {
 requiredEnvironment("BETTER_AUTH_URL");
 requiredEnvironment("BETTER_AUTH_SECRET");
 const demoPassword = requiredEnvironment("DEV_DEMO_PASSWORD");
+const allowedSeedDatabase = requiredEnvironment("DEV_SEED_DATABASE");
+assertSeedDatabaseAllowed(connectionString, allowedSeedDatabase);
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
@@ -161,27 +165,25 @@ function generateBars(price: number, symbolIndex: number) {
 }
 
 async function main() {
-  await prisma.portfolioTransaction.deleteMany();
-  await prisma.portfolioPosition.deleteMany();
-  await prisma.marketBar.deleteMany();
-  await prisma.watchlistItem.deleteMany();
-  await prisma.evidenceItem.deleteMany();
-  await prisma.forecastPoint.deleteMany();
-  await prisma.investmentThesis.deleteMany();
-  await prisma.modelEvaluation.deleteMany();
-  await prisma.providerRun.deleteMany();
-  await prisma.aiInsight.deleteMany();
-  await prisma.economicEvent.deleteMany();
-  await prisma.quantRun.deleteMany();
-  await prisma.researchRun.deleteMany();
-  await prisma.portfolio.deleteMany();
-  await prisma.asset.deleteMany();
-  await prisma.invitation.deleteMany();
-  await prisma.membership.deleteMany();
-  await prisma.session.deleteMany();
-  await prisma.account.deleteMany();
-  await prisma.organization.deleteMany({ where: { slug: "demo-workspace" } });
-  await prisma.appUser.deleteMany({ where: { email: demoEmail } });
+  await resetDemoIdentity(prisma, {
+    email: demoEmail,
+    organizationSlug: "demo-workspace",
+  });
+
+  await prisma.aiInsight.deleteMany({
+    where: {
+      researchRunId: null,
+      title: { in: insightSeed.map((insight) => insight.title) },
+    },
+  });
+  await prisma.economicEvent.deleteMany({
+    where: {
+      OR: eventSeed.map((event) => ({
+        event: event.event,
+        eventAt: new Date(event.eventAt),
+      })),
+    },
+  });
 
   const { auth } = await import("../src/lib/auth");
   const signUp = await auth.api.signUpEmail({
@@ -206,21 +208,33 @@ async function main() {
 
   const assetBySymbol = new Map<string, { id: string }>();
   for (const [index, asset] of assetSeed.entries()) {
-    const created = await prisma.asset.create({
-      data: {
+    const created = await prisma.asset.upsert({
+      where: { symbol: asset.symbol },
+      create: {
         symbol: asset.symbol,
         name: asset.name,
         assetClass: asset.assetClass,
         currency: "USD",
         provider: "seed",
         providerSymbol: asset.symbol,
-        bars: {
-          createMany: {
-            data: generateBars(asset.price, index),
-          },
-        },
+      },
+      update: {
+        name: asset.name,
+        assetClass: asset.assetClass,
+        currency: "USD",
+        provider: "seed",
+        providerSymbol: asset.symbol,
       },
       select: { id: true },
+    });
+    await prisma.marketBar.deleteMany({
+      where: { assetId: created.id, source: "seed" },
+    });
+    await prisma.marketBar.createMany({
+      data: generateBars(asset.price, index).map((bar) => ({
+        ...bar,
+        assetId: created.id,
+      })),
     });
     assetBySymbol.set(asset.symbol, created);
   }
@@ -283,6 +297,23 @@ async function main() {
   const btcAssetId = assetBySymbol.get("BTC")?.id;
   const vn30AssetId = assetBySymbol.get("VN30")?.id;
   const goldAssetId = assetBySymbol.get("GOLD")?.id;
+
+  await prisma.investmentThesis.deleteMany({
+    where: {
+      researchRunId: null,
+      source: "ai-berkshire",
+      assetId: { in: [vn30AssetId, goldAssetId].filter((id): id is string => Boolean(id)) },
+    },
+  });
+  if (btcAssetId) {
+    await prisma.modelEvaluation.deleteMany({
+      where: {
+        assetId: btcAssetId,
+        model: "kronos-small",
+        task: "directional_forecast",
+      },
+    });
+  }
 
   const last30daysRun = await prisma.researchRun.create({
     data: {

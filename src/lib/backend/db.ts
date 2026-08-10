@@ -502,6 +502,9 @@ export async function loadWatchlist(context: TenantContext) {
     }),
     loadTickerResponse(),
     prisma.aiInsight.findMany({
+      where: {
+        OR: [{ researchRunId: null }, { researchRun: { organizationId: context.organizationId } }],
+      },
       include: { asset: true },
       orderBy: { publishedAt: "desc" },
     }),

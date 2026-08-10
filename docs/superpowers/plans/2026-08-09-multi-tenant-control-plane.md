@@ -29,6 +29,7 @@
 ### Task 1: Add Better Auth dependencies and one permission source of truth
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `.env.example`
@@ -37,6 +38,7 @@
 - Create: `src/lib/auth/permissions.test.ts`
 
 **Interfaces:**
+
 - Produces: `TenantRole`, `TenantResource`, `TenantAction`, `hasTenantCapability(role, resource, action)`, `organizationAccessControl`, and `organizationRoles`.
 - Consumes: environment variables `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`.
 
@@ -122,24 +124,40 @@ export type TenantAction = "read" | "write" | "create" | "cancel" | "manage";
 
 const capabilities: Record<TenantRole, Partial<Record<TenantResource, TenantAction[]>>> = {
   owner: {
-    portfolio: ["read", "write"], watchlist: ["read", "write"], research: ["read", "write"],
-    backtest: ["read", "create", "cancel"], membership: ["read", "manage"],
+    portfolio: ["read", "write"],
+    watchlist: ["read", "write"],
+    research: ["read", "write"],
+    backtest: ["read", "create", "cancel"],
+    membership: ["read", "manage"],
   },
   admin: {
-    portfolio: ["read", "write"], watchlist: ["read", "write"], research: ["read", "write"],
-    backtest: ["read", "create", "cancel"], membership: ["read", "manage"],
+    portfolio: ["read", "write"],
+    watchlist: ["read", "write"],
+    research: ["read", "write"],
+    backtest: ["read", "create", "cancel"],
+    membership: ["read", "manage"],
   },
   editor: {
-    portfolio: ["read", "write"], watchlist: ["read", "write"], research: ["read", "write"],
-    backtest: ["read", "create", "cancel"], membership: ["read"],
+    portfolio: ["read", "write"],
+    watchlist: ["read", "write"],
+    research: ["read", "write"],
+    backtest: ["read", "create", "cancel"],
+    membership: ["read"],
   },
   viewer: {
-    portfolio: ["read"], watchlist: ["read"], research: ["read"], backtest: ["read"],
+    portfolio: ["read"],
+    watchlist: ["read"],
+    research: ["read"],
+    backtest: ["read"],
     membership: ["read"],
   },
 };
 
-export function hasTenantCapability(role: TenantRole, resource: TenantResource, action: TenantAction) {
+export function hasTenantCapability(
+  role: TenantRole,
+  resource: TenantResource,
+  action: TenantAction,
+) {
   return capabilities[role][resource]?.includes(action) ?? false;
 }
 ```
@@ -169,6 +187,7 @@ git commit -m "feat: add tenant permission foundation"
 ### Task 2: Add auth, organization, and tenant ownership schema
 
 **Files:**
+
 - Modify: `prisma/schema.prisma`
 - Create: `prisma/migrations/202608090001_multi_tenant_auth/migration.sql`
 - Modify: `prisma/seed.ts`
@@ -180,6 +199,7 @@ git commit -m "feat: add tenant permission foundation"
 - Create: `src/lib/backend/organization-provisioning.test.ts`
 
 **Interfaces:**
+
 - Produces: Better Auth-compatible `AppUser`, `Session`, `Account`, `Verification`, `Organization`, `Membership`, and `Invitation` models; required `organizationId` ownership on existing tenant resources; `auth` and `authClient`.
 - Consumes: `organizationAccessControl`, `organizationRoles`, and `getPrisma()`.
 
@@ -419,12 +439,14 @@ git commit -m "feat: add tenant ownership schema"
 ### Task 3: Resolve tenant context and authorization server-side
 
 **Files:**
+
 - Create: `src/lib/auth/errors.ts`
 - Create: `src/lib/auth/tenant-context.ts`
 - Create: `src/lib/auth/tenant-context.test.ts`
 - Modify: `src/app/api/_lib.ts`
 
 **Interfaces:**
+
 - Produces: `TenantContext`, `resolveTenantContext(input)`, `requireTenantContext()`, `requireTenantCapability(context, resource, action)`, `AuthenticationRequiredError`, `OrganizationRequiredError`, and `TenantForbiddenError`.
 - Consumes: Better Auth `auth.api.getSession`, active organization session field, Prisma Membership fallback, and permission helpers from Task 1.
 
@@ -512,12 +534,14 @@ git commit -m "feat: resolve server tenant context"
 ### Task 4: Scope database services to the active organization
 
 **Files:**
+
 - Modify: `src/lib/backend/db.ts`
 - Modify: `src/lib/backend/types.ts`
 - Create: `src/lib/backend/worker-context.ts`
 - Create: `src/lib/backend/tenant-scoping.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TenantContext` from Task 3.
 - Produces: `PortfolioTransactionCreateInput`, `WatchlistMutationInput`, `QuantRunCreateInput`, `ResearchRunImportInput`, `WorkerImportContext`, and organization-scoped database services.
 
@@ -681,6 +705,7 @@ git commit -m "feat: scope financial data by organization"
 ### Task 5: Enforce authentication and roles in API routes
 
 **Files:**
+
 - Modify: `src/app/api/portfolio/route.ts`
 - Modify: `src/app/api/portfolio/performance/route.ts`
 - Modify: `src/app/api/portfolio/transactions/route.ts`
@@ -693,6 +718,7 @@ git commit -m "feat: scope financial data by organization"
 - Create: `src/app/api/tenant-routes.test.ts`
 
 **Interfaces:**
+
 - Consumes: `requireTenantContext`, `requireTenantCapability`, scoped database functions, and `getWorkerImportContext`.
 - Produces: authenticated, role-checked current tenant APIs.
 
@@ -767,6 +793,7 @@ git commit -m "feat: enforce tenant API authorization"
 ### Task 6: Add sign-in, onboarding, workspace switching, and protected pages
 
 **Files:**
+
 - Create: `src/components/AuthForm.tsx`
 - Create: `src/components/AccountMenu.tsx`
 - Create: `src/components/OnboardingClient.tsx`
@@ -781,6 +808,7 @@ git commit -m "feat: enforce tenant API authorization"
 - Modify: `src/lib/mvp-ui.test.ts`
 
 **Interfaces:**
+
 - Consumes: `authClient`, organization client plugin, server `auth`, and tenant resolver.
 - Produces: functional email/password entry, personal workspace onboarding, active-workspace selection, sign-out, and protected Portfolio/Quant pages.
 
@@ -795,8 +823,12 @@ const membership = { organizationId: "org-1", role: "owner", createdAt: new Date
 expect(authDestination({ session: null, memberships: [] }, "/portfolio")).toBe(
   "/sign-in?returnTo=%2Fportfolio",
 );
-expect(authDestination({ session: sessionUser, memberships: [] }, "/portfolio")).toBe("/onboarding");
-expect(authDestination({ session: sessionUser, memberships: [membership] }, "/portfolio")).toBeNull();
+expect(authDestination({ session: sessionUser, memberships: [] }, "/portfolio")).toBe(
+  "/onboarding",
+);
+expect(
+  authDestination({ session: sessionUser, memberships: [membership] }, "/portfolio"),
+).toBeNull();
 ```
 
 Reject external `returnTo` values; only paths beginning with one `/` and not `//` are allowed.
@@ -885,12 +917,14 @@ git commit -m "feat: add authenticated workspace experience"
 ### Task 7: Prove tenant isolation and complete phase verification
 
 **Files:**
+
 - Create: `src/lib/backend/tenant-isolation.integration.test.ts`
 - Create: `vitest.integration.config.ts`
 - Modify: `package.json`
 - Modify only files required by proven verification failures.
 
 **Interfaces:**
+
 - Consumes: migrated PostgreSQL schema, Better Auth APIs, tenant context, scoped database services, and rendered auth flow.
 - Produces: repeatable database and browser evidence that two organizations cannot cross-read or cross-write current tenant data.
 
@@ -899,10 +933,10 @@ git commit -m "feat: add authenticated workspace experience"
 Add:
 
 ```json
-"test:integration": "vitest run --config vitest.integration.config.ts"
+"test:integration": "node scripts/run-integration-tests.mjs"
 ```
 
-The integration config includes only `*.integration.test.ts`, runs serially, and requires `TEST_DATABASE_URL`. It must refuse to run when `TEST_DATABASE_URL === DATABASE_URL` to protect development data.
+The integration config includes only `*.integration.test.ts`, runs serially, and requires `TEST_DATABASE_URL`. It must refuse to run when `TEST_DATABASE_URL === DATABASE_URL` to protect development data. The wrapper preserves the development URL, migrates only the isolated `_test` database, then starts Vitest with both safety markers.
 
 - [ ] **Step 2: Write a two-organization database isolation test**
 
@@ -922,16 +956,8 @@ Delete fixtures in `afterAll`; the command operates only against the dedicated t
 Run against the dedicated test database:
 
 ```powershell
-$previousDatabaseUrl = $env:DATABASE_URL
-try {
-  $env:DATABASE_URL = $env:TEST_DATABASE_URL
-  npx prisma migrate deploy
-  if ($LASTEXITCODE -ne 0) { throw "Prisma migration failed." }
-  npm run test:integration
-  if ($LASTEXITCODE -ne 0) { throw "Integration tests failed." }
-} finally {
-  $env:DATABASE_URL = $previousDatabaseUrl
-}
+npm run test:integration
+if ($LASTEXITCODE -ne 0) { throw "Integration tests failed." }
 ```
 
 Expected: migrations apply and all isolation assertions pass. Restore the development `DATABASE_URL` after the command.
