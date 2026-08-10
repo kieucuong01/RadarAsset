@@ -99,3 +99,85 @@ def test_publication_checksum_survives_a_non_utc_database_session() -> None:
             cursor.execute("DELETE FROM data_providers WHERE code = %s", (provider_code,))
         connection.commit()
         connection.close()
+
+
+def test_publish_if_changed_reuses_checksum_and_activates_only_a_correction() -> None:
+    suffix = uuid4().hex[:8]
+    symbol = f"QAID{suffix}"
+    provider_code = f"qa-idempotent-{suffix}"
+
+    def prepare(close_at_one: str):
+        bars = [
+            Bar(
+                asset=symbol,
+                timestamp=datetime(2026, 8, 10, hour, tzinfo=timezone.utc),
+                timeframe="1h",
+                open=Decimal("100"),
+                high=Decimal("110"),
+                low=Decimal("90"),
+                close=Decimal(close_at_one if hour == 1 else "100"),
+                volume=Decimal("10"),
+                source="qa-live",
+            )
+            for hour in range(3)
+        ]
+        return prepare_dataset_publication(
+            bars,
+            market="crypto_spot",
+            provider_code=provider_code,
+            provider_name="QA idempotent provider",
+            provider_symbol=symbol,
+            canonical_key=f"QA:IDEMPOTENT:{symbol}",
+            asset_name="QA idempotent asset",
+            currency="USD",
+            venue="QA",
+            timezone_name="UTC",
+            maximum_leverage=Decimal("1"),
+            terms_url=None,
+            source_metadata={"mode": "live", "upstreamProvider": "qa"},
+        )
+
+    connection = psycopg.connect(_test_database_url(), row_factory=dict_row)
+    try:
+        publisher = PostgresDatasetPublisher(connection)
+        first = publisher.publish_if_changed(prepare("101"))
+        connection.commit()
+        unchanged = publisher.publish_if_changed(prepare("101"))
+        connection.commit()
+        corrected = publisher.publish_if_changed(prepare("105"))
+        connection.commit()
+
+        assert first.status == "succeeded"
+        assert unchanged.status == "unchanged"
+        assert unchanged.dataset_version_id == first.dataset_version_id
+        assert corrected.status == "succeeded"
+        assert corrected.version == 2
+
+        active = publisher.load_active(symbol, "1h")
+        assert active is not None
+        assert active.dataset_version_id == corrected.dataset_version_id
+        assert active.version == 2
+        assert active.rows[1].close == Decimal("105.00000000")
+        assert active.source_metadata["mode"] == "live"
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS version_count,
+                       COUNT(*) FILTER (WHERE is_active) AS active_count
+                FROM dataset_versions dv
+                JOIN datasets d ON d.id = dv.dataset_id
+                JOIN assets a ON a.id = d.asset_id
+                WHERE a.symbol = %s AND d.timeframe = '1h'
+                """,
+                (symbol,),
+            )
+            counts = cursor.fetchone()
+        assert counts == {"version_count": 2, "active_count": 1}
+    finally:
+        connection.rollback()
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM assets WHERE symbol = %s", (symbol,))
+            cursor.execute("DELETE FROM data_providers WHERE code = %s", (provider_code,))
+        connection.commit()
+        connection.close()

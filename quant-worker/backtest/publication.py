@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import psycopg
 from psycopg.rows import dict_row
 
 from .models import Bar, QualityIssue
 from .quality import canonical_bar_checksum, normalize_bars, validate_bars
+from .snapshots import ActiveSnapshot
 
 
 PRICE_STORAGE_QUANTUM = Decimal("0.00000001")
@@ -59,6 +60,17 @@ class PreparedDatasetPublication:
     quality_status: str
     coverage_start: datetime
     coverage_end: datetime
+
+
+@dataclass(frozen=True)
+class PublicationResult:
+    status: Literal["succeeded", "unchanged"]
+    dataset_version_id: str
+    version: int
+    checksum: str
+    row_count: int
+    missing_bar_count: int
+    quality_status: str
 
 
 class DatasetPublisher(Protocol):
@@ -127,6 +139,95 @@ def publish_dataset(
 class PostgresDatasetPublisher:
     def __init__(self, connection: psycopg.Connection[Any]) -> None:
         self.connection = connection
+
+    def load_active(self, asset: str, timeframe: str) -> ActiveSnapshot | None:
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT d.id AS dataset_id,
+                       dv.id AS dataset_version_id,
+                       dv.version,
+                       dv.checksum,
+                       dv.source_metadata,
+                       dv.missing_bar_count,
+                       dv.quality_status
+                FROM assets a
+                JOIN datasets d ON d.asset_id = a.id
+                JOIN dataset_versions dv ON dv.dataset_id = d.id AND dv.is_active = true
+                WHERE a.symbol = %s
+                  AND d.timeframe = %s
+                  AND d.adjustment_policy = 'raw'
+                ORDER BY dv.published_at DESC
+                LIMIT 1
+                """,
+                (asset, timeframe),
+            )
+            manifest = cursor.fetchone()
+            if manifest is None:
+                return None
+            cursor.execute(
+                """
+                SELECT ts, open, high, low, close, volume, source
+                FROM dataset_bars
+                WHERE dataset_version_id = %s
+                ORDER BY ts
+                """,
+                (manifest["dataset_version_id"],),
+            )
+            stored_rows = cursor.fetchall()
+
+        rows = tuple(
+            Bar(
+                asset=asset,
+                timestamp=row["ts"].astimezone(timezone.utc),
+                timeframe=timeframe,
+                open=Decimal(str(row["open"])),
+                high=Decimal(str(row["high"])),
+                low=Decimal(str(row["low"])),
+                close=Decimal(str(row["close"])),
+                volume=(
+                    None if row["volume"] is None else Decimal(str(row["volume"]))
+                ),
+                source=str(row["source"]),
+            )
+            for row in stored_rows
+        )
+        metadata = manifest["source_metadata"]
+        return ActiveSnapshot(
+            dataset_id=str(manifest["dataset_id"]),
+            dataset_version_id=str(manifest["dataset_version_id"]),
+            version=int(manifest["version"]),
+            checksum=str(manifest["checksum"]),
+            source_metadata=metadata if isinstance(metadata, dict) else {},
+            rows=rows,
+            missing_bar_count=int(manifest["missing_bar_count"]),
+            quality_status=str(manifest["quality_status"]),
+        )
+
+    def publish_if_changed(
+        self, prepared: PreparedDatasetPublication
+    ) -> PublicationResult:
+        active = self.load_active(prepared.asset, prepared.timeframe)
+        if active is not None and active.checksum == prepared.checksum:
+            return PublicationResult(
+                status="unchanged",
+                dataset_version_id=active.dataset_version_id,
+                version=active.version,
+                checksum=active.checksum,
+                row_count=len(active.rows),
+                missing_bar_count=active.missing_bar_count,
+                quality_status=active.quality_status,
+            )
+        published = self.publish(prepared)
+        return PublicationResult(
+            status="succeeded",
+            dataset_version_id=str(published["datasetVersionId"]),
+            version=int(published["version"]),
+            checksum=str(published["checksum"]),
+            row_count=int(published["rowCount"]),
+            missing_bar_count=int(published["missingBarCount"]),
+            quality_status=str(published["qualityStatus"]),
+        )
 
     def publish(self, prepared: PreparedDatasetPublication) -> dict[str, Any]:
         with self.connection.cursor(row_factory=dict_row) as cursor:
