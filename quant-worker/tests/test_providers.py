@@ -292,7 +292,7 @@ def test_vnstock_routes_xauusd_and_uses_utc_for_naive_commodity_time() -> None:
     market = FakeMarket(
         [
             {
-                "time": "2026-08-10T12:00:00",
+                "time": "2026-08-10T00:00:00",
                 "open": 2400,
                 "high": 2410,
                 "low": 2390,
@@ -305,15 +305,32 @@ def test_vnstock_routes_xauusd_and_uses_utc_for_naive_commodity_time() -> None:
     rows = VnstockAdapter(market_factory=lambda: market).fetch(
         symbol="XAUUSD",
         asset="XAU",
-        timeframe="1h",
+        timeframe="1d",
         start=utc(2026, 8, 10),
         end=utc(2026, 8, 11),
         now=utc(2026, 8, 11),
     )
 
     assert market.commodity_calls == ["XAUUSD"]
-    assert rows[0].timestamp == utc(2026, 8, 10, 12)
-    assert rows[0].source == "dukascopy-via-vnstock"
+    assert rows[0].timestamp == utc(2026, 8, 10)
+    assert rows[0].source == "msn-via-vnstock"
+
+
+def test_vnstock_rejects_xau_hourly_instead_of_resampling_daily_msn_data() -> None:
+    market = FakeMarket([])
+
+    with pytest.raises(ProviderUnavailableError) as raised:
+        VnstockAdapter(market_factory=lambda: market).fetch(
+            symbol="XAUUSD",
+            asset="XAU",
+            timeframe="1h",
+            start=utc(2026, 8, 1),
+            end=utc(2026, 8, 10),
+            now=utc(2026, 8, 11),
+        )
+
+    assert raised.value.code == "unsupported_timeframe"
+    assert market.commodity_calls == []
 
 
 def test_vnstock_routes_fpt_through_vci() -> None:
@@ -340,6 +357,7 @@ def test_vnstock_routes_fpt_through_vci() -> None:
     )
 
     assert market.equity_calls == [("FPT", "VCI")]
+    assert market.instrument.calls[0]["count"] == 100_000
 
 
 def test_vnstock_rejects_missing_required_columns() -> None:
@@ -427,9 +445,9 @@ def test_vnstock_enforces_the_row_limit_before_normalization() -> None:
 
     with pytest.raises(ProviderUnavailableError) as raised:
         VnstockAdapter(market_factory=lambda: market, max_rows=100).fetch(
-            symbol="XAUUSD",
-            asset="XAU",
-            timeframe="1h",
+            symbol="FPT",
+            asset="FPT",
+            timeframe="1d",
             start=utc(2026, 8, 1),
             end=utc(2026, 8, 10),
             now=utc(2026, 8, 11),
@@ -438,7 +456,7 @@ def test_vnstock_enforces_the_row_limit_before_normalization() -> None:
     assert raised.value.code == "response_limit"
 
 
-def test_feed_catalog_records_xauusd_dukascopy_provenance() -> None:
+def test_feed_catalog_records_xauusd_msn_provenance() -> None:
     assert FEEDS["XAU"].provider_symbol == "XAUUSD"
     assert FEEDS["XAU"].client_provider == "vnstock"
-    assert FEEDS["XAU"].upstream_provider == "dukascopy"
+    assert FEEDS["XAU"].upstream_provider == "msn"

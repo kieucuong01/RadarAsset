@@ -58,6 +58,7 @@ const PUBLIC_MARKET_ERROR_CODES = new Set([
   "rate_limited",
   "response_limit",
   "stale_run",
+  "unsupported_timeframe",
 ]);
 
 function numberFromDecimal(value: unknown): number {

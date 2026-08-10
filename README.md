@@ -52,8 +52,10 @@ npm run db:migrate
 npm run market:ingest -- all --dry-run --env-file .env.local
 ```
 
-Live ingestion supports Binance BTC/USDT, Vnstock VCI FPT, and Dukascopy-backed XAU/USD on `1h`
-and `1d`. Successful feeds publish immutable dataset versions; an upstream failure leaves the last
+Live ingestion supports Binance BTC/USDT and Vnstock VCI FPT on `1h`/`1d`, plus MSN XAU/USD
+daily candles through Vnstock. The free MSN commodity feed does not provide genuine hourly
+candles, so XAU/USD `1h` reports `unsupported_timeframe` instead of resampling daily data.
+Successful feeds publish immutable dataset versions; an upstream failure leaves the last
 known-good version active and never substitutes a fixture. Quant Lab shows provider, coverage,
 version, row count, and `LIVE DATA` / `STALE` / `UNAVAILABLE` / `FIXTURE` state from
 `GET /api/market/data-health`.

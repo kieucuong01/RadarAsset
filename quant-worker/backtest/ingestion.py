@@ -104,8 +104,14 @@ def ingestion_window(
 ) -> IngestionWindow:
     if timeframe not in INTERVALS:
         raise ValueError("Unsupported ingestion timeframe.")
-    if active is None or active.is_fixture:
-        fetch_start = now - timedelta(days=730 if timeframe == "1d" else 60)
+    initial_start = now - timedelta(days=730 if timeframe == "1d" else 60)
+    history_is_truncated = bool(
+        active is not None
+        and len(active.rows) > 1
+        and active.rows[0].timestamp > initial_start + timedelta(days=7)
+    )
+    if active is None or active.is_fixture or history_is_truncated:
+        fetch_start = initial_start
         return IngestionWindow(
             fetch_start=fetch_start,
             fetch_end=now,

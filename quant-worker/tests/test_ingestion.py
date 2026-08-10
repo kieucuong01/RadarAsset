@@ -319,6 +319,23 @@ def test_ingestion_windows_use_initial_backfill_and_incremental_overlap() -> Non
     assert incremental.overlap_start == NOW - timedelta(days=3)
 
 
+def test_ingestion_window_restarts_backfill_when_active_history_is_truncated() -> None:
+    active = snapshot("BTC")
+    truncated = ActiveSnapshot(
+        dataset_id=active.dataset_id,
+        dataset_version_id=active.dataset_version_id,
+        version=active.version,
+        checksum=active.checksum,
+        source_metadata=active.source_metadata,
+        rows=(bar("BTC", 9, day=1), bar("BTC", 9, day=10)),
+    )
+
+    window = ingestion_window("1h", now=NOW, active=truncated)
+
+    assert window.fetch_start == NOW - timedelta(days=60)
+    assert window.overlap_start == window.fetch_start
+
+
 @pytest.mark.parametrize(
     ("asset", "timeframe"),
     [("ETH", "1h"), ("BTC", "4h"), ("", "1d")],

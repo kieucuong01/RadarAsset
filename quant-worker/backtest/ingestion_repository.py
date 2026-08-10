@@ -27,6 +27,7 @@ STABLE_ERROR_CODES = {
     "rate_limited",
     "response_limit",
     "stale_run",
+    "unsupported_timeframe",
 }
 
 

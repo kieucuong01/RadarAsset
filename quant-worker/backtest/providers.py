@@ -359,6 +359,11 @@ class VnstockAdapter:
             raise ValueError("Vnstock adapter received a symbol outside its allowlist.")
         if timeframe not in INTERVALS:
             raise ValueError("Unsupported Vnstock timeframe.")
+        if asset == "XAU" and timeframe == "1h":
+            raise ProviderUnavailableError(
+                "unsupported_timeframe",
+                "The free XAU/USD provider does not supply hourly candles.",
+            )
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
 
@@ -373,6 +378,7 @@ class VnstockAdapter:
                 start=start.date().isoformat(),
                 end=end.date().isoformat(),
                 interval=timeframe,
+                count=self.max_rows,
             )
             records = frame.to_dict("records")
         except ProviderUnavailableError:
@@ -422,7 +428,7 @@ class VnstockAdapter:
 
         feed = FEEDS[asset]
         source = (
-            "vnstock-vci-free" if asset == "FPT" else "dukascopy-via-vnstock"
+            "vnstock-vci-free" if asset == "FPT" else "msn-via-vnstock"
         )
         try:
             normalized = self.parse_records(

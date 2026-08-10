@@ -98,4 +98,22 @@ describe("market data health read model", () => {
     expect(xauDaily?.lastErrorCode).toBeNull();
     expect(JSON.stringify(response)).not.toContain("secret");
   });
+
+  it("exposes the stable unsupported timeframe state without an active dataset", async () => {
+    prisma.marketIngestionRun.findMany.mockResolvedValue([
+      {
+        assetSymbol: "XAU",
+        timeframe: "1h",
+        status: "unavailable",
+        errorCode: "unsupported_timeframe",
+      },
+    ]);
+
+    const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
+    const xauHourly = response.find((item) => item.symbol === "XAU" && item.timeframe === "1h");
+
+    expect(xauHourly?.lastErrorCode).toBe("unsupported_timeframe");
+    expect(xauHourly?.datasetVersionId).toBeNull();
+    expect(xauHourly?.freshness).toBe("unavailable");
+  });
 });

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Replace research fixtures as the active backtest data source with scheduled, observable, research-only ingestion for Binance Spot, Vietnamese equities through Vnstock, and XAU/USD from Dukascopy through Vnstock. The system must keep the last known-good immutable dataset active whenever an upstream source fails.
+Replace research fixtures as the active backtest data source with scheduled, observable, research-only ingestion for Binance Spot, Vietnamese equities through Vnstock, and XAU/USD daily data from MSN through Vnstock. The system must keep the last known-good immutable dataset active whenever an upstream source fails.
 
 ## Scope and Provider Routing
 
@@ -10,7 +10,7 @@ The first production-MVP universe remains intentionally small:
 
 - `CRYPTO:BINANCE:BTCUSDT`: direct Binance public Spot klines, provider symbol `BTCUSDT`.
 - `VN:HOSE:FPT`: Vnstock v4 free market-data adapter, provider symbol `FPT`.
-- `METAL:OTC:XAUUSD`: Vnstock v4 commodity adapter using symbol `XAUUSD`, with Dukascopy recorded as the upstream source.
+- `METAL:OTC:XAUUSD`: Vnstock v4 commodity adapter using symbol `XAUUSD`, with MSN recorded as the upstream source.
 
 Each asset supports `1h` and `1d`. All bars are normalized to UTC. Datasets remain marked `research_only`; no source is represented as commercially licensed. A live ingestion run never falls back to generated or fixture rows. Fixtures remain available only through an explicit test/bootstrap command and cannot become active through the scheduled ingestion entrypoint.
 
@@ -48,11 +48,11 @@ The CLI exits `0` when all selected feeds succeed, are unchanged, or are skipped
 
 The adapter uses the fixed allow-listed HTTPS endpoint `https://data-api.binance.vision/api/v3/klines`. It paginates with a maximum of 1,000 rows per request, advances by the last open time, rejects non-monotonic pages, and enforces a configured maximum page count. HTTP `429` honors `Retry-After`; transient `429` and `5xx` responses receive at most three attempts with exponential backoff and jitter. Redirects are rejected.
 
-### Vnstock and Dukascopy
+### Vnstock and XAU/USD
 
 The adapter imports Vnstock v4 lazily so unit tests and non-live worker commands do not contact a provider. Equity requests use `FPT`; commodity requests use `XAUUSD`, not the old `Gold` fixture label. Provider-returned frames are validated against a strict required-column allowlist and a maximum row count before normalization. Naive Vietnamese equity timestamps are interpreted in `Asia/Ho_Chi_Minh`; commodity timestamps follow the provider's documented timezone and are converted to UTC.
 
-Vnstock is the client boundary for XAU/USD in this MVP, while provenance stores both `client_provider=vnstock` and `upstream_provider=dukascopy`. A future direct Dukascopy or paid fallback can replace the adapter without changing datasets or the backtest engine.
+Live verification of Vnstock 4.0.5 showed that its commodity route uses MSN daily series. It does not provide genuine hourly XAU/USD candles: requesting `1h` only resamples daily observations. The adapter therefore records `client_provider=vnstock` and `upstream_provider=msn` for D1, while H1 returns `unsupported_timeframe`. A future keyed Dukascopy or paid fallback can replace the adapter without changing datasets or the backtest engine.
 
 ## Data Model and State Transitions
 
