@@ -58,9 +58,7 @@ describe("market data health read model", () => {
     ]);
 
     const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
-    const btcHourly = response.find(
-      (item) => item.symbol === "BTC" && item.timeframe === "1h",
-    );
+    const btcHourly = response.find((item) => item.symbol === "BTC" && item.timeframe === "1h");
 
     expect(response).toHaveLength(6);
     expect(btcHourly).toEqual({
@@ -95,9 +93,7 @@ describe("market data health read model", () => {
     ]);
 
     const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
-    const xauDaily = response.find(
-      (item) => item.symbol === "XAU" && item.timeframe === "1d",
-    );
+    const xauDaily = response.find((item) => item.symbol === "XAU" && item.timeframe === "1d");
 
     expect(xauDaily?.lastErrorCode).toBeNull();
     expect(JSON.stringify(response)).not.toContain("secret");

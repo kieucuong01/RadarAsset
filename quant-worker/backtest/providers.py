@@ -270,8 +270,25 @@ class BinanceSpotAdapter:
         )
 
 
+def _load_vnstock_market(
+    import_market: Callable[[], Any] | None = None,
+) -> Any:
+    import vnai
+
+    original_setup = vnai.async_setup_agent_environment
+    vnai.async_setup_agent_environment = lambda *args, **kwargs: False
+    try:
+        if import_market is not None:
+            return import_market()
+        from vnstock.ui import Market
+
+        return Market
+    finally:
+        vnai.async_setup_agent_environment = original_setup
+
+
 def _default_market_factory() -> Any:
-    from vnstock.ui import Market
+    Market = _load_vnstock_market()
 
     return Market()
 

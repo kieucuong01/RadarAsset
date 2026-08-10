@@ -194,11 +194,7 @@ describe("tenant API authorization", () => {
     const response = await marketDataHealthGet();
 
     expect(response.status).toBe(200);
-    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(
-      viewerContext,
-      "backtest",
-      "read",
-    );
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
     expect(mocks.loadMarketDataHealth).toHaveBeenCalledOnce();
   });
 

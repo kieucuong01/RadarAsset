@@ -13,6 +13,7 @@ from backtest.providers import (
     HttpJsonResponse,
     ProviderUnavailableError,
     VnstockAdapter,
+    _load_vnstock_market,
 )
 
 
@@ -263,6 +264,28 @@ def test_vnstock_adapter_normalizes_vietnam_time_to_utc() -> None:
     assert rows[0].close == Decimal("83.2")
     assert rows[0].volume == Decimal("1230000")
     assert rows[0].source == "vnstock-vci-free"
+
+
+def test_vnstock_import_suppresses_vendor_agent_environment_setup(
+    monkeypatch: Any,
+) -> None:
+    import vnai
+
+    setup_calls: list[str] = []
+
+    def vendor_setup(project_root: str = ".") -> bool:
+        setup_calls.append(project_root)
+        return True
+
+    monkeypatch.setattr(vnai, "async_setup_agent_environment", vendor_setup)
+
+    def fake_import() -> type[FakeMarket]:
+        assert vnai.async_setup_agent_environment(".") is False
+        return FakeMarket
+
+    assert _load_vnstock_market(fake_import) is FakeMarket
+    assert vnai.async_setup_agent_environment is vendor_setup
+    assert setup_calls == []
 
 
 def test_vnstock_routes_xauusd_and_uses_utc_for_naive_commodity_time() -> None:

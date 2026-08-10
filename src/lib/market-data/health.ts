@@ -24,12 +24,7 @@ function utcMidnight(value: Date) {
 
 function floorUtcHour(value: Date) {
   return new Date(
-    Date.UTC(
-      value.getUTCFullYear(),
-      value.getUTCMonth(),
-      value.getUTCDate(),
-      value.getUTCHours(),
-    ),
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), value.getUTCHours()),
   );
 }
 

@@ -45,9 +45,7 @@ describe("market data freshness", () => {
   it("rolls the expected FPT bar backward over the weekend", () => {
     const now = new Date("2026-08-09T12:00:00Z");
 
-    expect(expectedClosedBarOpen("vn_equity", "1h", now)).toEqual(
-      new Date("2026-08-07T07:00:00Z"),
-    );
+    expect(expectedClosedBarOpen("vn_equity", "1h", now)).toEqual(new Date("2026-08-07T07:00:00Z"));
     expect(
       calculateFreshness({
         market: "vn_equity",
