@@ -13,7 +13,7 @@ import {
 import { Activity, AlertTriangle, CheckCircle2, Play, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 
-import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Progress } from "@/components/ui/progress";
 import type { BacktestSubmission } from "@/lib/backtest/contracts";
 import {
@@ -124,18 +124,14 @@ export function BacktestWorkbench() {
   return (
     <div className="grid min-w-0 gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
       <aside className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-20 xl:self-start">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-semibold">MA Crossover v1</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Long-only · signal at close · fill at next bar open
-            </p>
-          </div>
-          <DataStatusBadge
-            status="SYSTEM"
-            detail="Kết quả do Python quant worker tạo từ dataset bất biến."
-          />
+        <div>
+          <h2 className="font-semibold">MA Crossover v1</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Long-only · signal at close · fill at next bar open
+          </p>
         </div>
+
+        <MarketDataHealthPanel timeframe={timeframe} />
 
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1 text-xs text-muted-foreground">

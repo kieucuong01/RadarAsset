@@ -27,9 +27,54 @@ $env:PYTHONPATH=(Resolve-Path "quant-worker").Path
 python quant-worker\bootstrap_research_datasets.py --mode fixture
 ```
 
-`fixture` mode is deterministic and explicitly stored as `research_fixture`. To fetch free
-research data through the configured Vnstock and Binance adapters, use `--mode live`. Both modes
-are recorded as `research_only`; neither grants commercial redistribution rights.
+`fixture` mode is deterministic and explicitly stored as `research_fixture`. Fixtures are for
+local bootstrap/tests only. Scheduled live ingestion never falls back to these generated rows.
+
+## Scheduled Market Data Ingestion
+
+The live ingestion CLI publishes immutable, research-only datasets independently for every feed:
+
+- Binance public Spot klines: `BTCUSDT`.
+- Vnstock VCI: `FPT`.
+- Dukascopy through Vnstock: `XAUUSD`.
+
+Run a provider-only smoke without database writes:
+
+```powershell
+python quant-worker\ingest_market_data.py all --dry-run --env-file .env.local
+```
+
+Publish all feeds, an hourly/daily schedule group, or one allow-listed feed:
+
+```powershell
+python quant-worker\ingest_market_data.py all --env-file .env.local
+python quant-worker\ingest_market_data.py hourly --env-file .env.local
+python quant-worker\ingest_market_data.py daily --env-file .env.local
+python quant-worker\ingest_market_data.py all --asset BTC --timeframe 1h --env-file .env.local
+```
+
+Exit code `0` means every selected feed succeeded, was unchanged, or was already locked. Exit `2`
+means a partial provider failure/unavailable capability; successful feeds are still committed.
+Exit `1` means invalid configuration or a fatal database/bootstrap failure. Errors are sanitized;
+provider response bodies and environment values are never logged.
+
+Use `scripts\run-market-ingestion.ps1` as the scheduler boundary. It resolves the repository root,
+propagates the Python exit code, and does not print `.env.local`:
+
+```powershell
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
+```
+
+For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
+Set **Start in** to the repository root. If `python` is not on the task account's PATH, add
+`-PythonExecutable C:\path\to\python.exe`. Do not register duplicate tasks for the same environment;
+PostgreSQL advisory locks are a final overlap guard, not a substitute for clean scheduling.
+
+`MARKET_INGEST_MAX_PAGES` defaults to `128` (`1..512`) and
+`MARKET_INGEST_MAX_ROWS` defaults to `100000` (`100..250000`). The CLI accepts only code-owned
+assets, timeframes, symbols, and HTTPS provider endpoints. No selected MVP provider requires an API
+key. The provider terms remain `research_only`; none grants commercial redistribution rights.
 
 ## Investor Intelligence Imports
 

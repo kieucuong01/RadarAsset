@@ -18,7 +18,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "quant:worker": "python quant-worker/worker.py"
+    "quant:worker": "python quant-worker/worker.py",
+    "market:ingest": "python quant-worker/ingest_market_data.py"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.6.26",

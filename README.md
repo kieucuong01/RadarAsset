@@ -43,6 +43,32 @@ the exact `_test` suffix, then run `npm run test:integration`.
 The wrapper migrates only that test database and keeps `DATABASE_URL` as a
 different development-database safety marker.
 
+## Market Data Ingestion
+
+Apply migrations, then verify the free providers without writing data:
+
+```powershell
+npm run db:migrate
+npm run market:ingest -- all --dry-run --env-file .env.local
+```
+
+Live ingestion supports Binance BTC/USDT, Vnstock VCI FPT, and Dukascopy-backed XAU/USD on `1h`
+and `1d`. Successful feeds publish immutable dataset versions; an upstream failure leaves the last
+known-good version active and never substitutes a fixture. Quant Lab shows provider, coverage,
+version, row count, and `LIVE DATA` / `STALE` / `UNAVAILABLE` / `FIXTURE` state from
+`GET /api/market/data-health`.
+
+Schedule the shared wrapper instead of running a second worker service:
+
+```text
+Hourly at minute 10: powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command hourly
+Daily at 01:15 UTC:   powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
+Start in:             <repository root>
+```
+
+The repository documents scheduler commands but does not register operating-system tasks
+automatically. Deployment must configure and observe its own cron/platform schedule.
+
 ## Investor Intelligence
 
 The local v1 backend stores research in PostgreSQL:
