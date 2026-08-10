@@ -48,8 +48,8 @@
 - Modify: `src/app/api/quant/runs/route.ts`
 
 **Interfaces:**
-- Produces `backtestSubmissionSchema`, `BacktestSubmission`, `normalizeBacktestSubmission()`, `hashBacktestSubmission()`, and `effectiveLeverageForMarket()`.
-- Normalized fields are `strategy`, `timeframe`, `fastPeriod`, `slowPeriod`, `initialCapital`, `feeBps`, `slippageBps`, `requestedLeverage`, `assets`, `from`, and `to`.
+- Produces `backtestSubmissionSchema`, `BacktestSubmission`, `normalizeBacktestSubmission()`, `hashBacktestSubmission()`, and `maximumLeverageForAsset()`.
+- Normalized fields are `strategy`, `timeframe`, `fastPeriod`, `slowPeriod`, `initialCapital`, `feeBps`, `slippageBps`, `legs`, `from`, and `to`.
 
 - [ ] Write failing table tests for unknown strategies/timeframes/assets, `fastPeriod >= slowPeriod`, excessive periods, invalid dates, non-positive capital, excessive costs, and leverage above market caps.
 - [ ] Write a failing stability test with a hand-pinned SHA-256 for semantically identical payloads whose input key order differs.
@@ -161,4 +161,3 @@
 - [ ] Run full Vitest, Python pytest, Prisma validation/migration status, TypeScript, ESLint, production build, `npm audit`, and `pip check`.
 - [ ] Start `next start`, complete a browser submission-to-result flow on desktop, then verify mobile has no horizontal overflow and that all rendered trades are long.
 - [ ] Audit every original requirement against schema rows, test output, worker output, API responses, and browser evidence before completion.
-

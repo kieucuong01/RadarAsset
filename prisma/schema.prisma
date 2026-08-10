@@ -77,18 +77,19 @@ model Verification {
 }
 
 model Organization {
-  id             String          @id @default(uuid()) @db.Uuid
-  name           String
-  slug           String          @unique
-  logo           String?
-  metadata       String?         @db.Text
-  createdAt      DateTime        @default(now()) @map("created_at")
-  memberships    Membership[]
-  invitations    Invitation[]
-  portfolios     Portfolio[]
-  watchlistItems WatchlistItem[]
-  researchRuns   ResearchRun[]
-  quantRuns      QuantRun[]
+  id                String             @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String             @unique
+  logo              String?
+  metadata          String?            @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  memberships       Membership[]
+  invitations       Invitation[]
+  portfolios        Portfolio[]
+  watchlistItems    WatchlistItem[]
+  researchRuns      ResearchRun[]
+  quantRuns         QuantRun[]
+  quantRunArtifacts QuantRunArtifact[]
 
   @@map("organizations")
 }
@@ -126,25 +127,32 @@ model Invitation {
 }
 
 model Asset {
-  id             String                 @id @default(uuid()) @db.Uuid
-  symbol         String                 @unique
-  name           String
-  assetClass     String                 @map("asset_class")
-  currency       String                 @default("USD")
-  provider       String?
-  providerSymbol String?                @map("provider_symbol")
-  createdAt      DateTime               @default(now()) @map("created_at")
-  updatedAt      DateTime               @updatedAt @map("updated_at")
-  bars           MarketBar[]
-  positions      PortfolioPosition[]
-  transactions   PortfolioTransaction[]
-  watchlistItems WatchlistItem[]
-  insights       AiInsight[]
-  researchRuns   ResearchRun[]
-  evidenceItems  EvidenceItem[]
-  theses         InvestmentThesis[]
-  forecasts      ForecastPoint[]
-  evaluations    ModelEvaluation[]
+  id                  String                 @id @default(uuid()) @db.Uuid
+  symbol              String                 @unique
+  canonicalKey        String?                @unique @map("canonical_key")
+  name                String
+  assetClass          String                 @map("asset_class")
+  market              String                 @default("other")
+  venue               String?
+  timezone            String                 @default("UTC")
+  maxLeverage         Decimal                @default(1) @map("max_leverage") @db.Decimal(5, 2)
+  currency            String                 @default("USD")
+  provider            String?
+  providerSymbol      String?                @map("provider_symbol")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  bars                MarketBar[]
+  positions           PortfolioPosition[]
+  transactions        PortfolioTransaction[]
+  watchlistItems      WatchlistItem[]
+  insights            AiInsight[]
+  researchRuns        ResearchRun[]
+  evidenceItems       EvidenceItem[]
+  theses              InvestmentThesis[]
+  forecasts           ForecastPoint[]
+  evaluations         ModelEvaluation[]
+  providerInstruments ProviderInstrument[]
+  datasets            Dataset[]
 
   @@index([assetClass])
   @@map("assets")
@@ -402,22 +410,150 @@ model EconomicEvent {
 }
 
 model QuantRun {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  userId         String?      @map("user_id") @db.Uuid
-  strategyName   String       @map("strategy_name")
-  status         String       @default("queued")
-  parameters     Json         @default("{}")
-  metrics        Json?
-  errorMessage   String?      @map("error_message")
-  startedAt      DateTime?    @map("started_at")
-  finishedAt     DateTime?    @map("finished_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           AppUser?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  userId            String?            @map("user_id") @db.Uuid
+  strategyName      String             @map("strategy_name")
+  status            String             @default("queued")
+  timeframe         String             @default("1d")
+  progress          Int                @default(0)
+  strategyHash      String?            @map("strategy_hash")
+  datasetVersionIds Json               @default("[]") @map("dataset_version_ids")
+  engineVersion     String             @default("ma-cross-v1") @map("engine_version")
+  parameters        Json               @default("{}")
+  metrics           Json?
+  errorMessage      String?            @map("error_message")
+  startedAt         DateTime?          @map("started_at")
+  finishedAt        DateTime?          @map("finished_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  artifacts         QuantRunArtifact[]
 
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@map("quant_runs")
+}
+
+model DataProvider {
+  id           String               @id @default(uuid()) @db.Uuid
+  code         String               @unique
+  name         String
+  termsUrl     String?              @map("terms_url")
+  licenseScope String               @default("research_only") @map("license_scope")
+  status       String               @default("active")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  instruments  ProviderInstrument[]
+  versions     DatasetVersion[]
+
+  @@map("data_providers")
+}
+
+model ProviderInstrument {
+  id             String       @id @default(uuid()) @db.Uuid
+  providerId     String       @map("provider_id") @db.Uuid
+  assetId        String       @map("asset_id") @db.Uuid
+  providerSymbol String       @map("provider_symbol")
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  provider       DataProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, providerSymbol])
+  @@unique([providerId, assetId])
+  @@index([assetId])
+  @@map("provider_instruments")
+}
+
+model Dataset {
+  id               String           @id @default(uuid()) @db.Uuid
+  assetId          String           @map("asset_id") @db.Uuid
+  timeframe        String
+  adjustmentPolicy String           @default("raw") @map("adjustment_policy")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  asset            Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  versions         DatasetVersion[]
+
+  @@unique([assetId, timeframe, adjustmentPolicy])
+  @@index([assetId, timeframe])
+  @@map("datasets")
+}
+
+model DatasetVersion {
+  id              String             @id @default(uuid()) @db.Uuid
+  datasetId       String             @map("dataset_id") @db.Uuid
+  providerId      String             @map("provider_id") @db.Uuid
+  version         Int
+  checksum        String
+  coverageStart   DateTime           @map("coverage_start")
+  coverageEnd     DateTime           @map("coverage_end")
+  rowCount        Int                @map("row_count")
+  missingBarCount Int                @default(0) @map("missing_bar_count")
+  qualityStatus   String             @default("passed") @map("quality_status")
+  qualitySummary  Json               @default("{}") @map("quality_summary")
+  sourceMetadata  Json               @default("{}") @map("source_metadata")
+  isActive        Boolean            @default(false) @map("is_active")
+  publishedAt     DateTime           @default(now()) @map("published_at")
+  dataset         Dataset            @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  provider        DataProvider       @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  bars            DatasetBar[]
+  issues          DataQualityIssue[]
+
+  @@unique([datasetId, version])
+  @@index([datasetId, isActive])
+  @@index([providerId])
+  @@map("dataset_versions")
+}
+
+model DatasetBar {
+  id               String         @id @default(uuid()) @db.Uuid
+  datasetVersionId String         @map("dataset_version_id") @db.Uuid
+  ts               DateTime       @db.Timestamptz(3)
+  open             Decimal        @db.Decimal(20, 8)
+  high             Decimal        @db.Decimal(20, 8)
+  low              Decimal        @db.Decimal(20, 8)
+  close            Decimal        @db.Decimal(20, 8)
+  volume           Decimal?       @db.Decimal(24, 4)
+  source           String
+  qualityFlags     Json           @default("[]") @map("quality_flags")
+  ingestedAt       DateTime       @default(now()) @map("ingested_at")
+  datasetVersion   DatasetVersion @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([datasetVersionId, ts])
+  @@index([datasetVersionId, ts])
+  @@map("dataset_bars")
+}
+
+model DataQualityIssue {
+  id               String         @id @default(uuid()) @db.Uuid
+  datasetVersionId String         @map("dataset_version_id") @db.Uuid
+  code             String
+  severity         String
+  ts               DateTime?
+  details          Json           @default("{}")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  datasetVersion   DatasetVersion @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([datasetVersionId, severity])
+  @@map("data_quality_issues")
+}
+
+model QuantRunArtifact {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  quantRunId     String       @map("quant_run_id") @db.Uuid
+  kind           String
+  checksum       String
+  payload        Json
+  rowCount       Int          @default(0) @map("row_count")
+  schemaVersion  Int          @default(1) @map("schema_version")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quantRun       QuantRun     @relation(fields: [quantRunId], references: [id], onDelete: Cascade)
+
+  @@unique([quantRunId, kind])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("quant_run_artifacts")
 }

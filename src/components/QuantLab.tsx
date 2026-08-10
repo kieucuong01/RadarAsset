@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   LineChart,
   Line,
@@ -43,6 +44,16 @@ import { DataStatusBadge } from "@/components/DataStatusBadge";
 
 type TabKey = "optimizer" | "predict" | "backtest";
 
+const BacktestWorkbench = dynamic(
+  () => import("@/components/BacktestWorkbench").then((module) => module.BacktestWorkbench),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-[420px] animate-pulse rounded-2xl border border-border bg-card" />
+    ),
+  },
+);
+
 const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "optimizer", label: "Portfolio Optimizer", icon: Sliders },
   { key: "predict", label: "AI Prediction", icon: Brain },
@@ -77,13 +88,18 @@ export function QuantLab() {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">Quant Lab</h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Các biểu đồ và chỉ số bên dưới được tạo từ mô hình cục bộ với dữ liệu tổng hợp. Đây là
-            công cụ minh họa, không phải tín hiệu giao dịch trực tiếp hay kết quả đã kiểm chứng.
+            Optimizer và AI Prediction là mô phỏng minh họa. Backtest chạy bằng Python worker trên
+            dataset có phiên bản, checksum và kiểm tra chất lượng; đây không phải tín hiệu giao
+            dịch.
           </p>
         </div>
         <DataStatusBadge
-          status="SIMULATED"
-          detail="Kết quả được tính trong trình duyệt; API chỉ lưu yêu cầu chạy khi khả dụng."
+          status={tab === "backtest" ? "SYSTEM" : "SIMULATED"}
+          detail={
+            tab === "backtest"
+              ? "Backtest được queue và xử lý bởi Python worker từ dataset bất biến."
+              : "Optimizer và AI Prediction vẫn là mô phỏng trong trình duyệt."
+          }
         />
       </div>
 
@@ -114,7 +130,7 @@ export function QuantLab() {
 
       {tab === "optimizer" && <OptimizerTab />}
       {tab === "predict" && <PredictTab />}
-      {tab === "backtest" && <BacktestTab />}
+      {tab === "backtest" && <BacktestWorkbench />}
     </main>
   );
 }

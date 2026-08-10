@@ -16,8 +16,20 @@ Environment:
 - `DATABASE_URL` points at the same local PostgreSQL database used by Prisma.
 - `QUANT_WORKER_API_TOKEN` protects research import endpoints when set.
 
-The worker claims one queued row from `quant_runs`, calculates deterministic v1 metrics from
-`market_bars`, and writes the result back to PostgreSQL.
+The worker claims one queued `MA Crossover Backtest`, verifies immutable dataset checksums,
+executes next-bar long-only fills with fees and adverse slippage, then commits real metrics and
+checksummed equity, drawdown, trade, and manifest artifacts to PostgreSQL.
+
+Publish six local research datasets (FPT, BTC/USDT, and XAU/USD in 1D and 1H):
+
+```powershell
+$env:PYTHONPATH=(Resolve-Path "quant-worker").Path
+python quant-worker\bootstrap_research_datasets.py --mode fixture
+```
+
+`fixture` mode is deterministic and explicitly stored as `research_fixture`. To fetch free
+research data through the configured Vnstock and Binance adapters, use `--mode live`. Both modes
+are recorded as `research_only`; neither grants commercial redistribution rights.
 
 ## Investor Intelligence Imports
 

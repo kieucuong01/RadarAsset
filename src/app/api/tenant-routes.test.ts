@@ -107,18 +107,72 @@ describe("tenant API authorization", () => {
   it("allows editor quant creation with server-derived ownership", async () => {
     mocks.requireTenantContext.mockResolvedValue(editorContext);
 
+    const payload = {
+      strategy: "ma_cross",
+      timeframe: "1d",
+      fastPeriod: 5,
+      slowPeriod: 20,
+      initialCapital: 100_000,
+      feeBps: 10,
+      slippageBps: 5,
+      from: "2024-01-01",
+      to: "2025-01-01",
+      legs: [
+        { symbol: "FPT", leverage: 2 },
+        { symbol: "BTC", leverage: 1 },
+        { symbol: "XAU", leverage: 1 },
+      ],
+    };
+
     const response = await quantPost(
       new Request("http://localhost/api/quant/runs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ strategyName: "Momentum" }),
+        body: JSON.stringify(payload),
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(202);
     expect(mocks.createQuantRun).toHaveBeenCalledWith(editorContext, {
-      strategyName: "Momentum",
+      ...payload,
+      legs: [
+        { symbol: "BTC", leverage: 1 },
+        { symbol: "FPT", leverage: 2 },
+        { symbol: "XAU", leverage: 1 },
+      ],
     });
+  });
+
+  it("rejects malformed backtest input before persistence", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+
+    const response = await quantPost(
+      new Request("http://localhost/api/quant/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ strategy: "user_python", organizationId: "attacker-org" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.createQuantRun).not.toHaveBeenCalled();
+  });
+
+  it("denies viewer backtest submission before persistence", async () => {
+    mocks.requireTenantCapability.mockImplementation(() => {
+      throw new TenantForbiddenError();
+    });
+
+    const response = await quantPost(
+      new Request("http://localhost/api/quant/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.createQuantRun).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a quant id hidden by organization scoping", async () => {

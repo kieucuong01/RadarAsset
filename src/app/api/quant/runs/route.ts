@@ -2,14 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
+import { normalizeBacktestSubmission } from "@/lib/backtest/contracts";
 import { createQuantRun, listQuantRuns } from "@/lib/backend/db";
 
 export const dynamic = "force-dynamic";
-
-const quantRunSchema = z.object({
-  strategyName: z.string().min(1),
-  parameters: z.record(z.string(), z.unknown()).optional(),
-});
 
 export async function GET() {
   try {
@@ -25,9 +21,9 @@ export async function POST(request: Request) {
   try {
     const context = await requireTenantContext();
     requireTenantCapability(context, "backtest", "create");
-    const payload = quantRunSchema.parse(await request.json());
+    const payload = normalizeBacktestSubmission(await request.json());
     const run = await createQuantRun(context, payload);
-    return NextResponse.json(run, { status: 201 });
+    return NextResponse.json(run, { status: 202 });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 503;
     return apiError(error, status);

@@ -126,6 +126,16 @@ describe("database tenant isolation", () => {
     ]);
     fixtures.quantRunAId = runA.id;
     fixtures.quantRunBId = runB.id;
+    await prisma.quantRunArtifact.create({
+      data: {
+        organizationId: fixtures.organizationBId,
+        quantRunId: runB.id,
+        kind: "manifest",
+        checksum: "b".repeat(64),
+        payload: { tenant: "organization-b" },
+        rowCount: 1,
+      },
+    });
 
     await prisma.watchlistItem.createMany({
       data: [
@@ -216,6 +226,10 @@ describe("database tenant isolation", () => {
   });
 
   it("hides another organization's quant id like a random id", async () => {
+    const ownRun = await getQuantRun(contextB, fixtures.quantRunBId);
+    expect(ownRun.artifacts).toEqual([
+      expect.objectContaining({ kind: "manifest", checksum: "b".repeat(64) }),
+    ]);
     await expect(getQuantRun(contextA, fixtures.quantRunBId)).rejects.toThrow(
       "Quant run not found.",
     );

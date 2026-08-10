@@ -58,12 +58,15 @@ The API accepts one strict allow-listed strategy:
   "initialCapital": 100000,
   "feeBps": 10,
   "slippageBps": 5,
-  "requestedLeverage": 1,
-  "assets": ["FPT", "BTC", "XAU"]
+  "legs": [
+    { "symbol": "FPT", "leverage": 2 },
+    { "symbol": "BTC", "leverage": 1 },
+    { "symbol": "XAU", "leverage": 1 }
+  ]
 }
 ```
 
-The server clamps neither invalid leverage nor unknown values silently. It rejects them. The effective per-asset leverage is validated against versioned asset constraints: FPT `<=2`, BTC/XAU `<=1`. Short orders are absent from the DSL and engine.
+The server clamps neither invalid leverage nor unknown values silently. It rejects them. Every leg's leverage is validated against versioned asset constraints: FPT `<=2`, BTC/XAU `<=1`. Short orders are absent from the DSL and engine.
 
 For every asset sleeve:
 
@@ -98,4 +101,3 @@ Malformed strategy, missing active dataset, checksum mismatch, invalid bars, and
 - Integration tests cover dataset publication immutability and tenant run/artifact isolation against a migrated test database.
 - Browser E2E submits a real run, executes the worker, polls to success, and verifies rendered real metrics/trades/equity on desktop plus a mobile overflow check.
 - Full Vitest, Python tests, TypeScript, ESLint, production build, migration, and security audit gates run before completion is claimed.
-

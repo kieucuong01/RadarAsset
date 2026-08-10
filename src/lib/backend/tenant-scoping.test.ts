@@ -13,7 +13,7 @@ const { prisma } = vi.hoisted(() => {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
-    asset: { findUnique: vi.fn() },
+    asset: { findUnique: vi.fn(), findMany: vi.fn() },
     marketBar: { findMany: vi.fn(), findFirst: vi.fn() },
     watchlistItem: { findMany: vi.fn(), upsert: vi.fn() },
     aiInsight: { findMany: vi.fn(), create: vi.fn() },
@@ -181,17 +181,55 @@ describe("organization-scoped database services", () => {
   });
 
   it("scopes quant create, list, and detail operations", async () => {
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        symbol: "BTC",
+        maxLeverage: 1,
+        datasets: [{ versions: [{ id: "dataset-btc-1d-v1" }] }],
+      },
+    ]);
     prisma.quantRun.create.mockResolvedValue({
       id: "run-1",
-      strategyName: "Momentum",
+      strategyName: "MA Crossover Backtest",
       status: "queued",
-      parameters: {},
+      timeframe: "1d",
+      progress: 0,
+      strategyHash: "hash",
+      datasetVersionIds: ["dataset-btc-1d-v1"],
+      engineVersion: "ma-cross-v1",
+      parameters: {
+        strategy: "ma_cross",
+        timeframe: "1d",
+        fastPeriod: 5,
+        slowPeriod: 20,
+        initialCapital: 10000,
+        feeBps: 10,
+        slippageBps: 5,
+        from: "2024-01-01",
+        to: "2025-01-01",
+        legs: [{ symbol: "BTC", leverage: 1 }],
+      },
       metrics: null,
       errorMessage: null,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: new Date("2026-01-01"),
+      artifacts: [],
     });
     prisma.quantRun.findFirst.mockResolvedValue(null);
 
-    await createQuantRun(editorContext, { strategyName: "Momentum" });
+    await createQuantRun(editorContext, {
+      strategy: "ma_cross",
+      timeframe: "1d",
+      fastPeriod: 5,
+      slowPeriod: 20,
+      initialCapital: 10000,
+      feeBps: 10,
+      slippageBps: 5,
+      from: "2024-01-01",
+      to: "2025-01-01",
+      legs: [{ symbol: "BTC", leverage: 1 }],
+    });
     await listQuantRuns(viewerContext);
     await expect(getQuantRun(viewerContext, "run-other")).rejects.toThrow("Quant run not found.");
 
@@ -206,9 +244,14 @@ describe("organization-scoped database services", () => {
     expect(prisma.quantRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { organizationId: "org-a" } }),
     );
-    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith({
-      where: { id: "run-other", organizationId: "org-a" },
-    });
+    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "run-other", organizationId: "org-a" },
+        include: expect.objectContaining({
+          artifacts: expect.objectContaining({ where: { organizationId: "org-a" } }),
+        }),
+      }),
+    );
   });
 
   it("resolves the worker organization only from server configuration", async () => {

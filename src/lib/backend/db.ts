@@ -24,7 +24,6 @@ import type {
   PortfolioResponse,
   PortfolioTransactionCreateInput,
   PortfolioTimeframe,
-  QuantRunCreateInput,
   QuantRunResponse,
   QuantRunStatus,
   ResearchRunImportInput,
@@ -32,6 +31,8 @@ import type {
   TransactionType,
   WatchlistMutationInput,
 } from "./types";
+import type { BacktestSubmission } from "@/lib/backtest/contracts";
+import { hashBacktestSubmission, maximumLeverageForAsset } from "@/lib/backtest/contracts";
 import type { WorkerImportContext } from "./worker-context";
 
 const TIMEFRAME_LIMITS = {
@@ -696,16 +697,55 @@ export async function upsertWatchlistItem(context: TenantContext, input: Watchli
   return loadWatchlist(context);
 }
 
-export async function createQuantRun(context: TenantContext, input: QuantRunCreateInput) {
+export async function createQuantRun(context: TenantContext, input: BacktestSubmission) {
   const prisma = getPrisma();
+  const symbols = input.legs.map((leg) => leg.symbol);
+  const assets = await prisma.asset.findMany({
+    where: { symbol: { in: symbols } },
+    select: {
+      symbol: true,
+      maxLeverage: true,
+      datasets: {
+        where: { timeframe: input.timeframe, adjustmentPolicy: "raw" },
+        select: {
+          versions: {
+            where: { isActive: true },
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+  const assetBySymbol = new Map(assets.map((asset) => [asset.symbol, asset]));
+  const datasetVersionIds: string[] = [];
+  for (const leg of input.legs) {
+    const asset = assetBySymbol.get(leg.symbol);
+    const version = asset?.datasets[0]?.versions[0];
+    if (!asset || !version) {
+      throw new Error(
+        `No active ${input.timeframe} research dataset is available for ${leg.symbol}.`,
+      );
+    }
+    const databaseMaximum = Number(asset.maxLeverage);
+    if (leg.leverage > databaseMaximum || leg.leverage > maximumLeverageForAsset(leg.symbol)) {
+      throw new Error(`${leg.symbol} leverage exceeds the configured product limit.`);
+    }
+    datasetVersionIds.push(version.id);
+  }
   const run = await prisma.quantRun.create({
     data: {
       organizationId: context.organizationId,
       userId: context.userId,
-      strategyName: input.strategyName,
+      strategyName: "MA Crossover Backtest",
       status: "queued",
-      parameters: (input.parameters ?? {}) as Prisma.InputJsonValue,
+      timeframe: input.timeframe,
+      progress: 0,
+      strategyHash: hashBacktestSubmission(input),
+      datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
+      engineVersion: "ma-cross-v1",
+      parameters: input as Prisma.InputJsonValue,
     },
+    include: { artifacts: true },
   });
   return quantRunToResponse(run);
 }
@@ -716,6 +756,7 @@ export async function listQuantRuns(context: TenantContext) {
     where: { organizationId: context.organizationId },
     orderBy: { createdAt: "desc" },
     take: 25,
+    include: { artifacts: true },
   });
   return runs.map(quantRunToResponse);
 }
@@ -724,6 +765,12 @@ export async function getQuantRun(context: TenantContext, id: string) {
   const prisma = getPrisma();
   const run = await prisma.quantRun.findFirst({
     where: { id, organizationId: context.organizationId },
+    include: {
+      artifacts: {
+        where: { organizationId: context.organizationId },
+        orderBy: { kind: "asc" },
+      },
+    },
   });
   if (!run) throw new Error("Quant run not found.");
   return quantRunToResponse(run);
@@ -733,17 +780,56 @@ function quantRunToResponse(run: {
   id: string;
   strategyName: string;
   status: string;
+  timeframe?: string;
+  progress?: number;
+  strategyHash?: string | null;
+  datasetVersionIds?: unknown;
+  engineVersion?: string;
   parameters: unknown;
   metrics: unknown;
   errorMessage: string | null;
+  startedAt?: Date | null;
+  finishedAt?: Date | null;
+  createdAt?: Date;
+  artifacts?: Array<{
+    id: string;
+    kind: string;
+    checksum: string;
+    payload: unknown;
+    rowCount: number;
+    schemaVersion: number;
+  }>;
 }): QuantRunResponse {
+  const timeframe = run.timeframe === "1h" ? "1h" : "1d";
+  const datasetVersionIds = Array.isArray(run.datasetVersionIds)
+    ? run.datasetVersionIds.filter((value): value is string => typeof value === "string")
+    : [];
   return {
     id: run.id,
     strategyName: run.strategyName,
     status: assertQuantRunStatus(run.status),
+    timeframe,
+    progress: run.progress ?? (run.status === "succeeded" || run.status === "failed" ? 100 : 0),
+    strategyHash: run.strategyHash ?? null,
+    datasetVersionIds,
+    engineVersion: run.engineVersion ?? "legacy-v1",
     parameters: objectJson(run.parameters),
     metrics: run.metrics === null ? null : objectJson(run.metrics),
     errorMessage: run.errorMessage,
+    startedAt: run.startedAt?.toISOString() ?? null,
+    finishedAt: run.finishedAt?.toISOString() ?? null,
+    createdAt: run.createdAt?.toISOString() ?? new Date(0).toISOString(),
+    artifacts: (run.artifacts ?? []).map((artifact) => ({
+      id: artifact.id,
+      kind:
+        artifact.kind === "equity" || artifact.kind === "drawdown" || artifact.kind === "trades"
+          ? artifact.kind
+          : "manifest",
+      checksum: artifact.checksum,
+      payload: artifact.payload,
+      rowCount: artifact.rowCount,
+      schemaVersion: artifact.schemaVersion,
+    })),
   };
 }
 

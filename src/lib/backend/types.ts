@@ -22,11 +22,6 @@ export type WatchlistMutationInput = {
   alert?: number | null;
 };
 
-export type QuantRunCreateInput = {
-  strategyName: string;
-  parameters?: Record<string, unknown>;
-};
-
 export type ResearchRunImportInput = {
   source: string;
   kind: string;
@@ -222,9 +217,25 @@ export type QuantRunResponse = {
   id: string;
   strategyName: string;
   status: QuantRunStatus;
+  timeframe: "1d" | "1h";
+  progress: number;
+  strategyHash: string | null;
+  datasetVersionIds: string[];
+  engineVersion: string;
   parameters: Record<string, unknown>;
   metrics: Record<string, unknown> | null;
   errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  artifacts: Array<{
+    id: string;
+    kind: "equity" | "drawdown" | "trades" | "manifest";
+    checksum: string;
+    payload: unknown;
+    rowCount: number;
+    schemaVersion: number;
+  }>;
 };
 
 export type InvestorInsightInput = {
