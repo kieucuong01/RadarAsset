@@ -1,22 +1,133 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import random
+import time
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterable
+from typing import Any, Protocol
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
+from .catalog import FEEDS
 from .models import Bar
 from .quality import normalize_bars
+
+
+INTERVALS = {"1h": timedelta(hours=1), "1d": timedelta(days=1)}
+INTERVAL_MILLISECONDS = {"1h": 3_600_000, "1d": 86_400_000}
+
+
+class ProviderUnavailableError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class HttpJsonResponse:
+    status: int
+    headers: Mapping[str, str]
+    payload: object
+
+
+class HttpJsonTransport(Protocol):
+    def get_json(self, url: str, *, timeout_seconds: float) -> HttpJsonResponse: ...
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        request: Request,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Any,
+        new_url: str,
+    ) -> None:
+        return None
+
+
+class UrllibJsonTransport:
+    max_response_bytes = 8_000_000
+
+    def __init__(self) -> None:
+        self._opener = build_opener(_RejectRedirects())
+
+    def get_json(self, url: str, *, timeout_seconds: float) -> HttpJsonResponse:
+        request = Request(url, headers={"User-Agent": "RadarAsset/1.0"})
+        try:
+            with self._opener.open(request, timeout=timeout_seconds) as response:
+                body = response.read(self.max_response_bytes + 1)
+                if len(body) > self.max_response_bytes:
+                    raise ProviderUnavailableError(
+                        "response_limit", "Provider response exceeded the size limit."
+                    )
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise ProviderUnavailableError(
+                        "invalid_response", "Provider response was not valid JSON."
+                    ) from error
+                return HttpJsonResponse(
+                    status=int(response.status),
+                    headers=dict(response.headers.items()),
+                    payload=payload,
+                )
+        except HTTPError as error:
+            return HttpJsonResponse(
+                status=int(error.code),
+                headers=dict(error.headers.items()) if error.headers else {},
+                payload=None,
+            )
+        except (TimeoutError, URLError, OSError) as error:
+            raise ProviderUnavailableError(
+                "network_error", "Provider network request failed."
+            ) from error
+
+
+def only_closed_bars(
+    rows: Iterable[Bar], *, timeframe: str, now: datetime
+) -> list[Bar]:
+    try:
+        duration = INTERVALS[timeframe]
+    except KeyError as error:
+        raise ValueError("Unsupported provider timeframe.") from error
+    return [row for row in rows if row.timestamp + duration <= now]
 
 
 class BinanceSpotAdapter:
     base_url = "https://data-api.binance.vision/api/v3/klines"
 
+    def __init__(
+        self,
+        *,
+        transport: HttpJsonTransport | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        jitter: Callable[[], float] = random.random,
+        max_pages: int = 128,
+        max_rows: int = 100_000,
+        timeout_seconds: float = 15,
+    ) -> None:
+        if not 1 <= max_pages <= 512:
+            raise ValueError("Binance max_pages is outside the supported range.")
+        if not 100 <= max_rows <= 250_000:
+            raise ValueError("Binance max_rows is outside the supported range.")
+        self.transport = transport or UrllibJsonTransport()
+        self.sleep = sleep
+        self.jitter = jitter
+        self.max_pages = max_pages
+        self.max_rows = max_rows
+        self.timeout_seconds = timeout_seconds
+
     @staticmethod
-    def parse_klines(payload: Iterable[list[Any]], *, asset: str, timeframe: str) -> list[Bar]:
+    def parse_klines(
+        payload: Iterable[list[Any]], *, asset: str, timeframe: str
+    ) -> list[Bar]:
         rows: list[Bar] = []
         for item in payload:
             if len(item) < 12:
@@ -24,7 +135,9 @@ class BinanceSpotAdapter:
             rows.append(
                 Bar(
                     asset=asset,
-                    timestamp=datetime.fromtimestamp(int(item[0]) / 1000, tz=timezone.utc),
+                    timestamp=datetime.fromtimestamp(
+                        int(item[0]) / 1000, tz=timezone.utc
+                    ),
                     timeframe=timeframe,
                     open=Decimal(str(item[1])),
                     high=Decimal(str(item[2])),
@@ -36,6 +149,49 @@ class BinanceSpotAdapter:
             )
         return normalize_bars(rows)
 
+    def _retry_delay(self, response: HttpJsonResponse, attempt: int) -> float:
+        raw_retry_after = response.headers.get("Retry-After")
+        if response.status == 429 and raw_retry_after is not None:
+            try:
+                return max(0.0, min(float(raw_retry_after), 60.0))
+            except ValueError:
+                pass
+        return min((2**attempt) + max(0.0, min(self.jitter(), 1.0)), 60.0)
+
+    def _request_page(self, url: str) -> list[Any]:
+        last_code = "provider_unavailable"
+        for attempt in range(3):
+            try:
+                response = self.transport.get_json(
+                    url, timeout_seconds=self.timeout_seconds
+                )
+            except ProviderUnavailableError as error:
+                last_code = error.code
+                if attempt == 2:
+                    raise ProviderUnavailableError(
+                        last_code, "Provider request failed."
+                    ) from error
+                self.sleep(min((2**attempt) + self.jitter(), 60.0))
+                continue
+            if response.status == 200:
+                if not isinstance(response.payload, list):
+                    raise ProviderUnavailableError(
+                        "invalid_response", "Provider response must be an array."
+                    )
+                return response.payload
+            if response.status == 429 or 500 <= response.status <= 599:
+                last_code = (
+                    "rate_limited" if response.status == 429 else "provider_unavailable"
+                )
+                if attempt == 2:
+                    break
+                self.sleep(self._retry_delay(response, attempt))
+                continue
+            raise ProviderUnavailableError(
+                "provider_rejected", "Provider rejected the request."
+            )
+        raise ProviderUnavailableError(last_code, "Provider request failed.")
+
     def fetch(
         self,
         *,
@@ -44,25 +200,94 @@ class BinanceSpotAdapter:
         timeframe: str,
         start: datetime,
         end: datetime,
+        now: datetime | None = None,
     ) -> list[Bar]:
-        params = urlencode(
-            {
-                "symbol": symbol,
-                "interval": timeframe,
-                "startTime": int(start.timestamp() * 1000),
-                "endTime": int(end.timestamp() * 1000),
-                "limit": 1000,
-            }
+        if symbol != FEEDS["BTC"].provider_symbol or asset != "BTC":
+            raise ValueError("Binance adapter received a symbol outside its allowlist.")
+        if timeframe not in INTERVAL_MILLISECONDS:
+            raise ValueError("Unsupported Binance timeframe.")
+        if start.tzinfo is None or end.tzinfo is None or start >= end:
+            raise ValueError("Binance fetch requires an ordered timezone-aware range.")
+
+        end_ms = int(end.timestamp() * 1000)
+        cursor_ms = int(start.timestamp() * 1000)
+        interval_ms = INTERVAL_MILLISECONDS[timeframe]
+        payload: list[list[Any]] = []
+        pages = 0
+
+        while cursor_ms < end_ms:
+            if pages >= self.max_pages:
+                raise ProviderUnavailableError(
+                    "response_limit", "Provider pagination exceeded the page limit."
+                )
+            params = urlencode(
+                {
+                    "symbol": symbol,
+                    "interval": timeframe,
+                    "startTime": cursor_ms,
+                    "endTime": end_ms,
+                    "limit": 1000,
+                }
+            )
+            page = self._request_page(f"{self.base_url}?{params}")
+            pages += 1
+            if not page:
+                break
+            if not all(isinstance(item, list) and len(item) >= 12 for item in page):
+                raise ProviderUnavailableError(
+                    "invalid_response", "Provider returned an incomplete kline page."
+                )
+            try:
+                timestamps = [int(item[0]) for item in page]
+            except (TypeError, ValueError) as error:
+                raise ProviderUnavailableError(
+                    "invalid_response", "Provider returned an invalid timestamp."
+                ) from error
+            if timestamps != sorted(set(timestamps)) or timestamps[0] < cursor_ms:
+                raise ProviderUnavailableError(
+                    "invalid_response", "Provider returned non-monotonic klines."
+                )
+            next_cursor = timestamps[-1] + interval_ms
+            if next_cursor <= cursor_ms:
+                raise ProviderUnavailableError(
+                    "invalid_response", "Provider pagination did not advance."
+                )
+            payload.extend(page)
+            if len(payload) > self.max_rows:
+                raise ProviderUnavailableError(
+                    "response_limit", "Provider response exceeded the row limit."
+                )
+            cursor_ms = next_cursor
+
+        try:
+            normalized = self.parse_klines(payload, asset=asset, timeframe=timeframe)
+        except (ArithmeticError, TypeError, ValueError) as error:
+            raise ProviderUnavailableError(
+                "invalid_response", "Provider returned invalid kline values."
+            ) from error
+        return only_closed_bars(
+            normalized, timeframe=timeframe, now=now or datetime.now(timezone.utc)
         )
-        request = Request(f"{self.base_url}?{params}", headers={"User-Agent": "RadarAsset/1.0"})
-        with urlopen(request, timeout=15) as response:  # noqa: S310 - fixed allow-listed host
-            payload = json.loads(response.read().decode("utf-8"))
-        if not isinstance(payload, list):
-            raise ValueError("Binance kline response must be an array.")
-        return self.parse_klines(payload, asset=asset, timeframe=timeframe)
+
+
+def _default_market_factory() -> Any:
+    from vnstock.ui import Market
+
+    return Market()
 
 
 class VnstockAdapter:
+    def __init__(
+        self,
+        *,
+        market_factory: Callable[[], Any] = _default_market_factory,
+        max_rows: int = 100_000,
+    ) -> None:
+        if not 100 <= max_rows <= 250_000:
+            raise ValueError("Vnstock max_rows is outside the supported range.")
+        self.market_factory = market_factory
+        self.max_rows = max_rows
+
     @staticmethod
     def parse_records(
         records: Iterable[dict[str, Any]],
@@ -70,9 +295,10 @@ class VnstockAdapter:
         asset: str,
         timeframe: str,
         source: str,
+        naive_timezone: str = "Asia/Ho_Chi_Minh",
     ) -> list[Bar]:
         rows: list[Bar] = []
-        local_zone = ZoneInfo("Asia/Ho_Chi_Minh")
+        local_zone = ZoneInfo(naive_timezone)
         for record in records:
             raw_time = record.get("time")
             if isinstance(raw_time, datetime):
@@ -110,20 +336,65 @@ class VnstockAdapter:
         timeframe: str,
         start: datetime,
         end: datetime,
+        now: datetime | None = None,
     ) -> list[Bar]:
-        from vnstock.ui import Market
+        if asset not in {"FPT", "XAU"} or symbol != FEEDS[asset].provider_symbol:
+            raise ValueError("Vnstock adapter received a symbol outside its allowlist.")
+        if timeframe not in INTERVALS:
+            raise ValueError("Unsupported Vnstock timeframe.")
+        if start.tzinfo is None or end.tzinfo is None or start >= end:
+            raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
 
-        market = Market()
-        instrument = market.equity(symbol) if asset == "FPT" else market.commodity("Gold")
-        frame = instrument.ohlcv(
-            start=start.date().isoformat(),
-            end=end.date().isoformat(),
-            interval="1D" if timeframe == "1d" else "1h",
+        try:
+            market = self.market_factory()
+            instrument = (
+                market.equity(symbol, source="VCI")
+                if asset == "FPT"
+                else market.commodity(symbol)
+            )
+            frame = instrument.ohlcv(
+                start=start.date().isoformat(),
+                end=end.date().isoformat(),
+                interval=timeframe,
+            )
+            records = frame.to_dict("records")
+        except ProviderUnavailableError:
+            raise
+        except Exception as error:
+            raise ProviderUnavailableError(
+                "provider_unavailable", "Provider request failed."
+            ) from error
+
+        if not isinstance(records, list) or not records:
+            raise ProviderUnavailableError(
+                "provider_unavailable", "Provider returned no bars."
+            )
+        if len(records) > self.max_rows:
+            raise ProviderUnavailableError(
+                "response_limit", "Provider response exceeded the row limit."
+            )
+        required = {"time", "open", "high", "low", "close"}
+        if any(not isinstance(record, dict) or not required <= record.keys() for record in records):
+            raise ProviderUnavailableError(
+                "invalid_response", "Provider response schema is invalid."
+            )
+
+        feed = FEEDS[asset]
+        source = (
+            "vnstock-vci-free" if asset == "FPT" else "dukascopy-via-vnstock"
         )
-        records = frame.to_dict("records")
-        return self.parse_records(
-            records,
-            asset=asset,
-            timeframe=timeframe,
-            source="vnstock-free",
+        try:
+            normalized = self.parse_records(
+                records,
+                asset=asset,
+                timeframe=timeframe,
+                source=source,
+                naive_timezone=feed.naive_timezone,
+            )
+        except (ArithmeticError, KeyError, TypeError, ValueError) as error:
+            raise ProviderUnavailableError(
+                "invalid_response", "Provider returned invalid market data."
+            ) from error
+        return only_closed_bars(
+            normalized, timeframe=timeframe, now=now or datetime.now(timezone.utc)
         )

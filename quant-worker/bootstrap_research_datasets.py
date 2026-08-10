@@ -9,6 +9,7 @@ from typing import Iterator
 
 import psycopg
 
+from backtest.catalog import FEEDS
 from backtest.models import Bar
 from backtest.providers import BinanceSpotAdapter, VnstockAdapter
 from backtest.publication import (
@@ -19,49 +20,10 @@ from backtest.publication import (
 from worker import database_url
 
 
-ASSETS = {
-    "FPT": {
-        "market": "vn_equity",
-        "canonical_key": "VN:HOSE:FPT",
-        "asset_name": "FPT Corporation",
-        "currency": "VND",
-        "venue": "HOSE",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "maximum_leverage": Decimal("2"),
-        "provider_code": "vnstock-free",
-        "provider_name": "Vnstock Free",
-        "provider_symbol": "FPT",
-        "terms_url": "https://vnstocks.com/docs/vnstock",
-        "base_price": Decimal("100000"),
-    },
-    "BTC": {
-        "market": "crypto_spot",
-        "canonical_key": "CRYPTO:BINANCE:BTCUSDT",
-        "asset_name": "Bitcoin / Tether",
-        "currency": "USDT",
-        "venue": "BINANCE",
-        "timezone": "UTC",
-        "maximum_leverage": Decimal("1"),
-        "provider_code": "binance-public",
-        "provider_name": "Binance Public Spot",
-        "provider_symbol": "BTCUSDT",
-        "terms_url": "https://developers.binance.com/en/docs/products/spot/rest-api",
-        "base_price": Decimal("42000"),
-    },
-    "XAU": {
-        "market": "metal_spot",
-        "canonical_key": "METAL:OTC:XAUUSD",
-        "asset_name": "Gold Spot / US Dollar",
-        "currency": "USD",
-        "venue": "OTC",
-        "timezone": "UTC",
-        "maximum_leverage": Decimal("1"),
-        "provider_code": "vnstock-free",
-        "provider_name": "Vnstock Free",
-        "provider_symbol": "Gold",
-        "terms_url": "https://vnstocks.com/docs/vnstock/du-lieu-thi-truong-market-data",
-        "base_price": Decimal("2000"),
-    },
+FIXTURE_BASE_PRICES = {
+    "FPT": Decimal("100000"),
+    "BTC": Decimal("42000"),
+    "XAU": Decimal("2000"),
 }
 
 
@@ -93,8 +55,7 @@ def _timestamps(asset: str, timeframe: str, count: int) -> Iterator[datetime]:
 
 
 def fixture_bars(asset: str, timeframe: str, count: int) -> list[Bar]:
-    metadata = ASSETS[asset]
-    base_price = Decimal(metadata["base_price"])
+    base_price = FIXTURE_BASE_PRICES[asset]
     rows: list[Bar] = []
     previous_close = base_price
     for index, timestamp in enumerate(_timestamps(asset, timeframe, count)):
@@ -123,18 +84,18 @@ def fixture_bars(asset: str, timeframe: str, count: int) -> list[Bar]:
 
 def live_bars(asset: str, timeframe: str) -> list[Bar]:
     end = datetime.now(timezone.utc)
-    start = end - (timedelta(days=730) if timeframe == "1d" else timedelta(days=40))
-    metadata = ASSETS[asset]
+    start = end - (timedelta(days=730) if timeframe == "1d" else timedelta(days=60))
+    feed = FEEDS[asset]
     if asset == "BTC":
         return BinanceSpotAdapter().fetch(
-            symbol=str(metadata["provider_symbol"]),
+            symbol=feed.provider_symbol,
             asset=asset,
             timeframe=timeframe,
             start=start,
             end=end,
         )
     return VnstockAdapter().fetch(
-        symbol=str(metadata["provider_symbol"]),
+        symbol=feed.provider_symbol,
         asset=asset,
         timeframe=timeframe,
         start=start,
@@ -147,7 +108,7 @@ def bootstrap(mode: str) -> list[dict[str, object]]:
     with psycopg.connect(database_url(), autocommit=False) as connection:
         publisher = PostgresDatasetPublisher(connection)
         for timeframe in ("1d", "1h"):
-            for asset, metadata in ASSETS.items():
+            for asset, feed in FEEDS.items():
                 rows = live_bars(asset, timeframe) if mode == "live" else fixture_bars(
                     asset,
                     timeframe,
@@ -155,26 +116,35 @@ def bootstrap(mode: str) -> list[dict[str, object]]:
                 )
                 prepared = prepare_dataset_publication(
                     rows,
-                    market=str(metadata["market"]),
-                    provider_code=str(metadata["provider_code"]),
-                    provider_name=str(metadata["provider_name"]),
-                    provider_symbol=str(metadata["provider_symbol"]),
-                    canonical_key=str(metadata["canonical_key"]),
-                    asset_name=str(metadata["asset_name"]),
-                    currency=str(metadata["currency"]),
-                    venue=str(metadata["venue"]),
-                    timezone_name=str(metadata["timezone"]),
-                    maximum_leverage=Decimal(metadata["maximum_leverage"]),
-                    terms_url=str(metadata["terms_url"]),
+                    market=feed.market,
+                    provider_code=feed.provider_code,
+                    provider_name=feed.provider_name,
+                    provider_symbol=feed.provider_symbol,
+                    canonical_key=feed.canonical_key,
+                    asset_name=feed.asset_name,
+                    currency=feed.currency,
+                    venue=feed.venue,
+                    timezone_name=feed.timezone_name,
+                    maximum_leverage=feed.maximum_leverage,
+                    terms_url=feed.terms_url,
                     source_metadata={
                         "mode": mode,
                         "licenseScope": "research_only",
-                        "provider": metadata["provider_code"],
-                        "providerSymbol": metadata["provider_symbol"],
+                        "provider": feed.provider_code,
+                        "providerSymbol": feed.provider_symbol,
+                        "clientProvider": feed.client_provider,
+                        "upstreamProvider": feed.upstream_provider,
                     },
                 )
                 result = publish_dataset(publisher, prepared)
-                results.append({"asset": asset, "timeframe": timeframe, **result})
+                results.append(
+                    {
+                        "asset": asset,
+                        "timeframe": timeframe,
+                        "provider": feed.provider_code,
+                        **result,
+                    }
+                )
         connection.commit()
     return results
 
