@@ -335,6 +335,42 @@ def test_vnstock_rejects_missing_required_columns() -> None:
     assert raised.value.code == "invalid_response"
 
 
+def test_vnstock_drops_missing_price_sentinels_and_normalizes_negative_volume() -> None:
+    market = FakeMarket(
+        [
+            {
+                "time": "2026-08-07T00:00:00",
+                "open": -99_999_902,
+                "high": 4_371.63,
+                "low": 4_229.22,
+                "close": 4_341.71,
+                "volume": -99_999_902,
+            },
+            {
+                "time": "2026-08-08T00:00:00",
+                "open": 4_341.71,
+                "high": 4_380.00,
+                "low": 4_300.00,
+                "close": 4_350.00,
+                "volume": -99_999_902,
+            },
+        ]
+    )
+
+    rows = VnstockAdapter(market_factory=lambda: market).fetch(
+        symbol="XAUUSD",
+        asset="XAU",
+        timeframe="1d",
+        start=utc(2026, 8, 7),
+        end=utc(2026, 8, 9),
+        now=utc(2026, 8, 10),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].timestamp == utc(2026, 8, 8)
+    assert rows[0].volume is None
+
+
 def test_vnstock_maps_provider_failures_to_a_sanitized_error() -> None:
     market = FakeMarket([], RuntimeError("upstream token=do-not-store"))
 

@@ -379,13 +379,37 @@ class VnstockAdapter:
                 "invalid_response", "Provider response schema is invalid."
             )
 
+        sanitized_records: list[dict[str, Any]] = []
+        try:
+            for record in records:
+                prices = tuple(
+                    Decimal(str(record[field]))
+                    for field in ("open", "high", "low", "close")
+                )
+                if any(not value.is_finite() or value <= 0 for value in prices):
+                    continue
+                sanitized = dict(record)
+                if sanitized.get("volume") is not None:
+                    volume = Decimal(str(sanitized["volume"]))
+                    if not volume.is_finite() or volume < 0:
+                        sanitized["volume"] = None
+                sanitized_records.append(sanitized)
+        except (ArithmeticError, TypeError, ValueError) as error:
+            raise ProviderUnavailableError(
+                "invalid_response", "Provider returned invalid market data."
+            ) from error
+        if not sanitized_records:
+            raise ProviderUnavailableError(
+                "invalid_response", "Provider returned no valid market bars."
+            )
+
         feed = FEEDS[asset]
         source = (
             "vnstock-vci-free" if asset == "FPT" else "dukascopy-via-vnstock"
         )
         try:
             normalized = self.parse_records(
-                records,
+                sanitized_records,
                 asset=asset,
                 timeframe=timeframe,
                 source=source,

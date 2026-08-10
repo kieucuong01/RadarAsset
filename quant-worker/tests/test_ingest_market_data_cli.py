@@ -7,11 +7,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import pytest
+
 from backtest.ingestion import IngestionOutcome
 from ingest_market_data import (
     build_selections,
     load_database_url,
     main,
+    psycopg_connection_url,
     read_bounded_environment_integer,
 )
 
@@ -120,3 +123,16 @@ def test_bounded_integer_rejects_values_outside_the_code_owned_range(
         assert str(error) == "MARKET_INGEST_MAX_PAGES is outside the supported range."
     else:
         raise AssertionError("Expected the out-of-range limit to be rejected.")
+
+
+def test_psycopg_connection_url_removes_the_prisma_public_schema_parameter() -> None:
+    assert psycopg_connection_url(
+        "postgresql://user:pass@localhost:5432/qa?schema=public&sslmode=disable"
+    ) == "postgresql://user:pass@localhost:5432/qa?sslmode=disable"
+
+
+def test_psycopg_connection_url_rejects_a_non_public_prisma_schema() -> None:
+    with pytest.raises(ValueError, match="Only the public database schema is supported"):
+        psycopg_connection_url(
+            "postgresql://user:pass@localhost:5432/qa?schema=private"
+        )

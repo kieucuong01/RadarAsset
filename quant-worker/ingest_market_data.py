@@ -8,6 +8,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
 
@@ -65,6 +66,20 @@ def load_database_url(env_file: Path) -> str:
         os.environ["DATABASE_URL"] = value
         return value
     raise ValueError("DATABASE_URL is not configured.")
+
+
+def psycopg_connection_url(database_url: str) -> str:
+    parsed = urlsplit(database_url)
+    parameters = parse_qsl(parsed.query, keep_blank_values=True)
+    schema_values = [value for key, value in parameters if key == "schema"]
+    if any(value != "public" for value in schema_values):
+        raise ValueError("Only the public database schema is supported.")
+    psycopg_query = urlencode(
+        [(key, value) for key, value in parameters if key != "schema"]
+    )
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, psycopg_query, parsed.fragment)
+    )
 
 
 def build_selections(
@@ -175,7 +190,9 @@ def main(
             )
         else:
             database_url = load_database_url(Path(args.env_file))
-            connection = connection_factory(database_url, autocommit=True)
+            connection = connection_factory(
+                psycopg_connection_url(database_url), autocommit=True
+            )
             try:
                 outcomes, exit_code = run_ingestion_fn(
                     selections,
