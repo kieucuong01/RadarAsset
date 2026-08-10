@@ -6,6 +6,38 @@ export type PortfolioTimeframe = "1W" | "1M" | "YTD" | "1Y";
 
 export type QuantRunStatus = "queued" | "running" | "succeeded" | "failed";
 
+export type MarketDataMarket = "crypto_spot" | "vn_equity" | "metal_spot";
+
+export type MarketDataTimeframe = "1h" | "1d";
+
+export type MarketDataFreshness = "fresh" | "stale" | "unavailable" | "fixture";
+
+export type MarketIngestionStatus =
+  | "running"
+  | "succeeded"
+  | "unchanged"
+  | "skipped"
+  | "failed"
+  | "unavailable";
+
+export type MarketDataHealthItem = {
+  symbol: "FPT" | "BTC" | "XAU";
+  market: MarketDataMarket;
+  timeframe: MarketDataTimeframe;
+  providerCode: string | null;
+  providerName: string | null;
+  upstreamProvider: string | null;
+  datasetVersionId: string | null;
+  version: number | null;
+  rowCount: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  publishedAt: string | null;
+  lastIngestionStatus: MarketIngestionStatus | null;
+  lastErrorCode: string | null;
+  freshness: MarketDataFreshness;
+};
+
 export type PortfolioTransactionCreateInput = {
   symbol: string;
   type: TransactionType;

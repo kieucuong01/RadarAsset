@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   createQuantRun: vi.fn(),
   listQuantRuns: vi.fn(),
   getQuantRun: vi.fn(),
+  loadMarketDataHealth: vi.fn(),
   loadResearchRuns: vi.fn(),
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
     createQuantRun: mocks.createQuantRun,
     listQuantRuns: mocks.listQuantRuns,
     getQuantRun: mocks.getQuantRun,
+    loadMarketDataHealth: mocks.loadMarketDataHealth,
     loadResearchRuns: mocks.loadResearchRuns,
     importResearchRun: mocks.importResearchRun,
   };
@@ -44,6 +46,7 @@ import { GET as portfolioGet } from "./portfolio/route";
 import { GET as watchlistGet, POST as watchlistPost } from "./watchlist/route";
 import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
+import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
 
 const viewerContext = {
@@ -63,6 +66,7 @@ describe("tenant API authorization", () => {
     mocks.loadWatchlist.mockResolvedValue([]);
     mocks.upsertWatchlistItem.mockResolvedValue([]);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
+    mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -184,6 +188,27 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(404);
     expect(mocks.getQuantRun).toHaveBeenCalledWith(viewerContext, "run-b");
+  });
+
+  it("allows viewer market data health reads through backtest capability", async () => {
+    const response = await marketDataHealthGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(
+      viewerContext,
+      "backtest",
+      "read",
+    );
+    expect(mocks.loadMarketDataHealth).toHaveBeenCalledOnce();
+  });
+
+  it("does not expose market data health without a tenant session", async () => {
+    mocks.requireTenantContext.mockRejectedValue(new AuthenticationRequiredError());
+
+    const response = await marketDataHealthGet();
+
+    expect(response.status).toBe(401);
+    expect(mocks.loadMarketDataHealth).not.toHaveBeenCalled();
   });
 
   it("fails closed when the worker token is not configured", async () => {

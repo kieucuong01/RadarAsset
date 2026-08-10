@@ -17,6 +17,10 @@ import type {
   InvestmentThesisInput,
   InvestorInsightInput,
   MarketBarInput,
+  MarketDataHealthItem,
+  MarketDataMarket,
+  MarketDataTimeframe,
+  MarketIngestionStatus,
   MarketTickerResponse,
   PortfolioHistoricalBar,
   PortfolioLedgerAsset,
@@ -33,6 +37,7 @@ import type {
 } from "./types";
 import type { BacktestSubmission } from "@/lib/backtest/contracts";
 import { hashBacktestSubmission, maximumLeverageForAsset } from "@/lib/backtest/contracts";
+import { calculateFreshness } from "@/lib/market-data/health";
 import type { WorkerImportContext } from "./worker-context";
 
 const TIMEFRAME_LIMITS = {
@@ -41,6 +46,19 @@ const TIMEFRAME_LIMITS = {
   YTD: 90,
   "1Y": 252,
 } as const;
+
+const MARKET_DATA_SYMBOLS = ["FPT", "BTC", "XAU"] as const;
+const MARKET_DATA_TIMEFRAMES = ["1d", "1h"] as const;
+const PUBLIC_MARKET_ERROR_CODES = new Set([
+  "ingestion_failed",
+  "invalid_response",
+  "network_error",
+  "provider_rejected",
+  "provider_unavailable",
+  "rate_limited",
+  "response_limit",
+  "stale_run",
+]);
 
 function numberFromDecimal(value: unknown): number {
   if (typeof value === "number") return value;
@@ -64,6 +82,31 @@ function assertTransactionType(value: string): TransactionType {
 function assertQuantRunStatus(value: string): QuantRunStatus {
   if (value === "running" || value === "succeeded" || value === "failed") return value;
   return "queued";
+}
+
+function assertMarketDataMarket(value: string): MarketDataMarket {
+  if (value === "vn_equity" || value === "crypto_spot" || value === "metal_spot") {
+    return value;
+  }
+  throw new Error("Unsupported market data market.");
+}
+
+function marketIngestionStatus(value: string | undefined): MarketIngestionStatus | null {
+  if (
+    value === "running" ||
+    value === "succeeded" ||
+    value === "unchanged" ||
+    value === "skipped" ||
+    value === "failed" ||
+    value === "unavailable"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function publicMarketErrorCode(value: string | null | undefined) {
+  return value && PUBLIC_MARKET_ERROR_CODES.has(value) ? value : null;
 }
 
 function assertInsightSentiment(value: string): InvestorInsightInput["sentiment"] {
@@ -695,6 +738,116 @@ export async function upsertWatchlistItem(context: TenantContext, input: Watchli
   });
 
   return loadWatchlist(context);
+}
+
+export async function loadMarketDataHealth(now = new Date()): Promise<MarketDataHealthItem[]> {
+  const prisma = getPrisma();
+  const [assets, recentRuns] = await Promise.all([
+    prisma.asset.findMany({
+      where: { symbol: { in: [...MARKET_DATA_SYMBOLS] } },
+      select: {
+        symbol: true,
+        market: true,
+        datasets: {
+          where: {
+            timeframe: { in: [...MARKET_DATA_TIMEFRAMES] },
+            adjustmentPolicy: "raw",
+          },
+          select: {
+            timeframe: true,
+            versions: {
+              where: { isActive: true },
+              orderBy: { publishedAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                version: true,
+                rowCount: true,
+                coverageStart: true,
+                coverageEnd: true,
+                publishedAt: true,
+                sourceMetadata: true,
+                provider: { select: { code: true, name: true } },
+                bars: {
+                  orderBy: { ts: "desc" },
+                  take: 1,
+                  select: { source: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.marketIngestionRun.findMany({
+      where: {
+        assetSymbol: { in: [...MARKET_DATA_SYMBOLS] },
+        timeframe: { in: [...MARKET_DATA_TIMEFRAMES] },
+      },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      select: {
+        assetSymbol: true,
+        timeframe: true,
+        status: true,
+        errorCode: true,
+      },
+    }),
+  ]);
+
+  const assetBySymbol = new Map(assets.map((asset) => [asset.symbol, asset]));
+  const latestRunByFeed = new Map<string, (typeof recentRuns)[number]>();
+  for (const run of recentRuns) {
+    const key = `${run.assetSymbol}:${run.timeframe}`;
+    if (!latestRunByFeed.has(key)) latestRunByFeed.set(key, run);
+  }
+
+  return MARKET_DATA_TIMEFRAMES.flatMap((timeframe) =>
+    MARKET_DATA_SYMBOLS.map((symbol): MarketDataHealthItem => {
+      const asset = assetBySymbol.get(symbol);
+      const market = asset ? assertMarketDataMarket(asset.market) : marketForSymbol(symbol);
+      const dataset = asset?.datasets.find((item) => item.timeframe === timeframe);
+      const version = dataset?.versions[0];
+      const metadata = objectJson(version?.sourceMetadata);
+      const lastRun = latestRunByFeed.get(`${symbol}:${timeframe}`);
+      const lastStatus = marketIngestionStatus(lastRun?.status);
+      const source =
+        metadata.mode === "fixture" ? "research_fixture" : (version?.bars[0]?.source ?? null);
+      const upstreamProvider =
+        typeof metadata.upstreamProvider === "string" ? metadata.upstreamProvider : null;
+
+      return {
+        symbol,
+        market,
+        timeframe: timeframe as MarketDataTimeframe,
+        providerCode: version?.provider.code ?? null,
+        providerName: version?.provider.name ?? null,
+        upstreamProvider,
+        datasetVersionId: version?.id ?? null,
+        version: version?.version ?? null,
+        rowCount: version?.rowCount ?? 0,
+        coverageStart: version?.coverageStart.toISOString() ?? null,
+        coverageEnd: version?.coverageEnd.toISOString() ?? null,
+        publishedAt: version?.publishedAt.toISOString() ?? null,
+        lastIngestionStatus: lastStatus,
+        lastErrorCode: publicMarketErrorCode(lastRun?.errorCode),
+        freshness: calculateFreshness({
+          market,
+          timeframe: timeframe as MarketDataTimeframe,
+          coverageEnd: version?.coverageEnd ?? null,
+          source,
+          lastStatus,
+          now,
+        }),
+      };
+    }),
+  );
+}
+
+function marketForSymbol(symbol: (typeof MARKET_DATA_SYMBOLS)[number]): MarketDataMarket {
+  if (symbol === "FPT") return "vn_equity";
+  if (symbol === "BTC") return "crypto_spot";
+  return "metal_spot";
 }
 
 export async function createQuantRun(context: TenantContext, input: BacktestSubmission) {
