@@ -13,6 +13,7 @@ const MARKET_LEVERAGE_CAP = {
   crypto_spot: 1,
   metal_spot: 1,
 } as const;
+const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 
 type SupportedMarket = keyof typeof MARKET_LEVERAGE_CAP;
 type ArtifactKind = QuantRunResponse["artifacts"][number]["kind"];
@@ -123,7 +124,7 @@ async function resolvePortfolioLegs(input: PortfolioBacktestSubmission): Promise
         take: 1,
         select: {
           versions: {
-            where: { isActive: true, qualityStatus: "passed" },
+            where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
             orderBy: { version: "desc" },
             take: 1,
             select: {

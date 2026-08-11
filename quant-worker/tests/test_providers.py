@@ -463,6 +463,21 @@ def test_feed_catalog_records_xauusd_msn_provenance() -> None:
     assert FEEDS["XAU"].upstream_provider == "msn"
 
 
+def test_feed_catalog_includes_liquid_vietnam_equities() -> None:
+    expected_symbols = {"FPT", "VCB", "HPG", "VNM", "MWG", "SSI", "VIC"}
+
+    assert expected_symbols <= set(FEEDS)
+    assert {
+        symbol
+        for symbol, feed in FEEDS.items()
+        if feed.provider_code == "vnstock-vci-free" and feed.market == "vn_equity"
+    } >= expected_symbols
+    assert all(FEEDS[symbol].maximum_leverage == Decimal("2") for symbol in expected_symbols)
+    assert expected_symbols <= {
+        item.canonical_symbol for item in VnstockAdapter().list_instruments()
+    }
+
+
 def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
     transport = SequenceTransport(
         [

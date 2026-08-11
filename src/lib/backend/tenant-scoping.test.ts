@@ -52,6 +52,7 @@ import {
   createQuantRun,
   getQuantRun,
   importResearchRun,
+  loadAssets,
   listQuantRuns,
   loadAssetIntelligence,
   loadInsights,
@@ -123,6 +124,49 @@ describe("organization-scoped database services", () => {
     expect(prisma.portfolioTransaction.create).not.toHaveBeenCalled();
   });
 
+  it("ranks assets with active datasets first for portfolio buy selection", async () => {
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        id: "asset-aaa",
+        symbol: "AAA",
+        name: "Catalog Only",
+        assetClass: "crypto",
+        currency: "USDT",
+        provider: "binance-public",
+        providerSymbol: "AAAUSDT",
+        datasets: [],
+      },
+      {
+        id: "asset-xau",
+        symbol: "XAU",
+        name: "Gold Spot / US Dollar",
+        assetClass: "commodity",
+        currency: "USD",
+        provider: "msn-via-vnstock",
+        providerSymbol: "XAUUSD",
+        datasets: [{ versions: [{ id: "dataset-xau" }] }],
+      },
+    ]);
+
+    await expect(loadAssets()).resolves.toEqual([
+      expect.objectContaining({ symbol: "XAU" }),
+      expect.objectContaining({ symbol: "AAA" }),
+    ]);
+    expect(prisma.asset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          datasets: expect.objectContaining({
+            select: expect.objectContaining({
+              versions: expect.objectContaining({
+                where: { isActive: true, qualityStatus: { in: ["passed", "warning"] } },
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("scopes watchlist reads and compound-key writes", async () => {
     prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc" });
     prisma.watchlistItem.upsert.mockResolvedValue({ id: "watch-1" });
@@ -133,6 +177,19 @@ describe("organization-scoped database services", () => {
     expect(prisma.watchlistItem.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { organizationId: "org-a", userId: "user-a" },
+        include: expect.objectContaining({
+          asset: expect.objectContaining({
+            include: expect.objectContaining({
+              datasets: expect.objectContaining({
+                select: expect.objectContaining({
+                  versions: expect.objectContaining({
+                    where: { isActive: true, qualityStatus: { in: ["passed", "warning"] } },
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
       }),
     );
     expect(prisma.aiInsight.findMany).toHaveBeenCalledWith(

@@ -15,7 +15,7 @@ from .publication import (
 from .snapshots import ActiveSnapshot, merge_snapshot
 
 
-AssetSymbol = Literal["FPT", "BTC", "XAU"]
+AssetSymbol = str
 Timeframe = Literal["1h", "1d"]
 IngestionStatus = Literal[
     "succeeded", "unchanged", "skipped", "failed", "unavailable"

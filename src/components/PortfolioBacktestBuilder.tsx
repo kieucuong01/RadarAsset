@@ -57,6 +57,12 @@ import {
   type StrategyCatalogItem,
 } from "@/lib/backtest/client";
 import { requestOptimizedAllocation } from "@/lib/backtest/optimizer-client";
+import {
+  OPTIMIZER_METHOD_DESCRIPTIONS,
+  OPTIMIZER_METHOD_LABELS,
+  OPTIMIZER_METHODS,
+  type OptimizerMethod,
+} from "@/lib/backtest/optimizer-methods";
 
 type PortfolioBacktestBuilderProps = {
   onRunCreated: (run: BacktestRun) => void;
@@ -85,7 +91,10 @@ export function PortfolioBacktestBuilder({
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
-  const [riskAversion, setRiskAversion] = useState(4);
+  const [optimizerMethod, setOptimizerMethod] = useState<OptimizerMethod>("risk_parity");
+  const [targetReturnPct, setTargetReturnPct] = useState(8);
+  const [targetVolatilityPct, setTargetVolatilityPct] = useState(20);
+  const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const loadedInitialSymbols = useRef(false);
 
@@ -198,12 +207,15 @@ export function PortfolioBacktestBuilder({
       const requestedCap = Math.round(maxWeightPct * 100);
       const proposal = await requestOptimizedAllocation({
         symbols: state.legs.map((leg) => leg.symbol),
+        method: optimizerMethod,
         timeframe: state.timeframe,
         from: state.from,
         to: state.to,
-        riskAversion,
         maxWeightBps: Math.min(10_000, Math.max(minimumCap, requestedCap)),
         totalWeightBps: investableBps,
+        ...(optimizerMethod === "target_return" ? { targetReturnPct } : {}),
+        ...(optimizerMethod === "target_volatility" ? { targetVolatilityPct } : {}),
+        ...(optimizerMethod === "risk_tolerance" ? { riskTolerance: markowitzRiskTolerance } : {}),
         dividendMode: state.assumptions.dividendMode,
       });
       dispatch({ type: "optimizerApplied", proposal });
@@ -367,17 +379,72 @@ export function PortfolioBacktestBuilder({
               </ToggleGroup>
             </Field>
             <div className="flex flex-wrap items-end gap-3">
-              <Field className="w-40">
-                <FieldLabel>Risk aversion: {riskAversion}</FieldLabel>
-                <Slider
-                  value={[riskAversion]}
-                  min={1}
-                  max={10}
-                  step={1}
-                  onValueChange={([value]) => setRiskAversion(value)}
-                  aria-label="Risk aversion"
-                />
+              <Field className="w-64">
+                <FieldLabel htmlFor="backtest-optimizer-method">Optimization method</FieldLabel>
+                <Select
+                  value={optimizerMethod}
+                  onValueChange={(value: OptimizerMethod) => setOptimizerMethod(value)}
+                >
+                  <SelectTrigger id="backtest-optimizer-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {OPTIMIZER_METHODS.map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {OPTIMIZER_METHOD_LABELS[method]}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  {OPTIMIZER_METHOD_DESCRIPTIONS[optimizerMethod]}
+                </FieldDescription>
               </Field>
+              {optimizerMethod === "target_return" ? (
+                <Field className="w-40">
+                  <FieldLabel htmlFor="backtest-target-return">Target return/năm</FieldLabel>
+                  <Input
+                    id="backtest-target-return"
+                    type="number"
+                    inputMode="decimal"
+                    min={-100}
+                    max={1000}
+                    step={0.5}
+                    value={targetReturnPct}
+                    onChange={(event) => setTargetReturnPct(Number(event.target.value))}
+                  />
+                </Field>
+              ) : null}
+              {optimizerMethod === "target_volatility" ? (
+                <Field className="w-40">
+                  <FieldLabel htmlFor="backtest-target-volatility">Target vol/năm</FieldLabel>
+                  <Input
+                    id="backtest-target-volatility"
+                    type="number"
+                    inputMode="decimal"
+                    min={0.1}
+                    max={1000}
+                    step={0.5}
+                    value={targetVolatilityPct}
+                    onChange={(event) => setTargetVolatilityPct(Number(event.target.value))}
+                  />
+                </Field>
+              ) : null}
+              {optimizerMethod === "risk_tolerance" ? (
+                <Field className="w-40">
+                  <FieldLabel>Risk tolerance: {markowitzRiskTolerance}</FieldLabel>
+                  <Slider
+                    value={[markowitzRiskTolerance]}
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    onValueChange={([value]) => setMarkowitzRiskTolerance(value)}
+                    aria-label="Markowitz risk tolerance"
+                  />
+                </Field>
+              ) : null}
               <Field className="w-40">
                 <FieldLabel>Max/mã: {maxWeightPct}%</FieldLabel>
                 <Slider
@@ -495,6 +562,12 @@ export function PortfolioBacktestBuilder({
               </Badge>
             </div>
             <Progress value={Math.min(100, allocationTotalBps / 100)} />
+            {state.optimizerProposal ? (
+              <p className="text-xs text-muted-foreground">
+                Optimized by {OPTIMIZER_METHOD_LABELS[state.optimizerProposal.method]} ·{" "}
+                {state.optimizerProposal.source.library} {state.optimizerProposal.source.version}
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

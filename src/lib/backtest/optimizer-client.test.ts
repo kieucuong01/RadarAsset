@@ -4,16 +4,25 @@ import { parseOptimizerProposal, requestOptimizedAllocation } from "./optimizer-
 
 const request = {
   symbols: ["BTC", "VNM"],
+  method: "target_return" as const,
   timeframe: "1d" as const,
   from: "2025-01-01",
   to: "2025-12-31",
-  riskAversion: 4,
   maxWeightBps: 7_000,
   totalWeightBps: 8_000,
+  targetReturnPct: 14,
   dividendMode: "exclude" as const,
 };
 
 const proposal = {
+  method: "target_return" as const,
+  source: {
+    library: "portfolio-allocation",
+    version: "0.0.11",
+    repository: "https://github.com/lequant40/portfolio_allocation_js",
+    directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
+    license: "MIT",
+  },
   weightsBps: { BTC: 3_000, VNM: 5_000 },
   totalWeightBps: 8_000,
   expectedReturnPct: 12.5,
@@ -25,7 +34,7 @@ const proposal = {
 };
 
 describe("optimizer API client", () => {
-  it("posts the strict portfolio request and parses the proposal", async () => {
+  it("posts the strict Markowitz portfolio request and parses the proposal", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(proposal), {
         status: 200,

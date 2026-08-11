@@ -247,6 +247,11 @@ describe("portfolio quant run persistence", () => {
         select: expect.objectContaining({
           datasets: expect.objectContaining({
             where: expect.objectContaining({ adjustmentPolicy: "total_return" }),
+            select: expect.objectContaining({
+              versions: expect.objectContaining({
+                where: { isActive: true, qualityStatus: { in: ["passed", "warning"] } },
+              }),
+            }),
           }),
         }),
       }),

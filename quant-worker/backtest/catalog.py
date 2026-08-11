@@ -23,24 +23,36 @@ class AssetFeed:
     naive_timezone: str
 
 
-FEEDS = {
-    "FPT": AssetFeed(
-        symbol="FPT",
+def vn_equity_feed(symbol: str, name: str, venue: str = "HOSE") -> AssetFeed:
+    return AssetFeed(
+        symbol=symbol,
         market="vn_equity",
-        canonical_key="VN:HOSE:FPT",
-        asset_name="FPT Corporation",
+        canonical_key=f"VN:{venue}:{symbol}",
+        asset_name=name,
         currency="VND",
-        venue="HOSE",
+        venue=venue,
         timezone_name="Asia/Ho_Chi_Minh",
         maximum_leverage=Decimal("2"),
         provider_code="vnstock-vci-free",
         provider_name="Vnstock VCI Free",
-        provider_symbol="FPT",
+        provider_symbol=symbol,
         terms_url="https://vnstocks.com/docs/vnstock",
         client_provider="vnstock",
         upstream_provider="vci",
         naive_timezone="Asia/Ho_Chi_Minh",
+    )
+
+
+FEEDS = {
+    "FPT": vn_equity_feed("FPT", "FPT Corporation"),
+    "VCB": vn_equity_feed(
+        "VCB", "Joint Stock Commercial Bank for Foreign Trade of Vietnam"
     ),
+    "HPG": vn_equity_feed("HPG", "Hoa Phat Group"),
+    "VNM": vn_equity_feed("VNM", "Vietnam Dairy Products"),
+    "MWG": vn_equity_feed("MWG", "Mobile World Investment Corporation"),
+    "SSI": vn_equity_feed("SSI", "SSI Securities Corporation"),
+    "VIC": vn_equity_feed("VIC", "Vingroup"),
     "BTC": AssetFeed(
         symbol="BTC",
         market="crypto_spot",

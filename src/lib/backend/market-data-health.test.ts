@@ -18,7 +18,7 @@ describe("market data health read model", () => {
     prisma.marketIngestionRun.findMany.mockResolvedValue([]);
   });
 
-  it("returns all six feeds and exposes only the latest stable error code", async () => {
+  it("returns all configured feeds and exposes only the latest stable error code", async () => {
     prisma.asset.findMany.mockResolvedValue([
       {
         symbol: "BTC",
@@ -60,7 +60,7 @@ describe("market data health read model", () => {
     const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
     const btcHourly = response.find((item) => item.symbol === "BTC" && item.timeframe === "1h");
 
-    expect(response).toHaveLength(6);
+    expect(response).toHaveLength(18);
     expect(btcHourly).toEqual({
       symbol: "BTC",
       market: "crypto_spot",

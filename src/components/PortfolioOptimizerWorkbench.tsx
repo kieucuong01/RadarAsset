@@ -34,6 +34,12 @@ import {
   requestOptimizedAllocation,
   type OptimizerProposal,
 } from "@/lib/backtest/optimizer-client";
+import {
+  OPTIMIZER_METHOD_DESCRIPTIONS,
+  OPTIMIZER_METHOD_LABELS,
+  OPTIMIZER_METHODS,
+  type OptimizerMethod,
+} from "@/lib/backtest/optimizer-methods";
 
 export function PortfolioOptimizerWorkbench({
   initialSymbols = [],
@@ -45,7 +51,10 @@ export function PortfolioOptimizerWorkbench({
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
   const [assets, setAssets] = useState<QuantAssetCatalogItem[]>([]);
-  const [riskAversion, setRiskAversion] = useState(4);
+  const [method, setMethod] = useState<OptimizerMethod>("risk_parity");
+  const [targetReturnPct, setTargetReturnPct] = useState(8);
+  const [targetVolatilityPct, setTargetVolatilityPct] = useState(20);
+  const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const [proposal, setProposal] = useState<OptimizerProposal | null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,12 +95,15 @@ export function PortfolioOptimizerWorkbench({
       const minimumCap = Math.ceil(10_000 / assets.length);
       const result = await requestOptimizedAllocation({
         symbols: assets.map((asset) => asset.symbol),
+        method,
         timeframe,
         from,
         to,
-        riskAversion,
         maxWeightBps: Math.max(minimumCap, Math.round(maxWeightPct * 100)),
         totalWeightBps: 10_000,
+        ...(method === "target_return" ? { targetReturnPct } : {}),
+        ...(method === "target_volatility" ? { targetVolatilityPct } : {}),
+        ...(method === "risk_tolerance" ? { riskTolerance: markowitzRiskTolerance } : {}),
         dividendMode: "exclude",
       });
       setProposal(result);
@@ -107,9 +119,9 @@ export function PortfolioOptimizerWorkbench({
     <div className="grid min-w-0 gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
       <Card className="h-fit lg:sticky lg:top-20">
         <CardHeader>
-          <CardTitle>Mean-Variance Optimizer</CardTitle>
+          <CardTitle>Awesome-Quant Optimizer</CardTitle>
           <CardDescription>
-            Tối ưu long-only từ close series giao nhau; không dùng score hoặc correlation mô phỏng.
+            Powered by portfolio-allocation from awesome-quant; no in-house optimizer.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -162,22 +174,96 @@ export function PortfolioOptimizerWorkbench({
                 </Field>
               </div>
               <Field>
-                <FieldLabel>Risk aversion: {riskAversion}</FieldLabel>
-                <Slider
-                  value={[riskAversion]}
-                  min={1}
-                  max={10}
-                  step={1}
-                  onValueChange={([value]) => {
-                    setRiskAversion(value);
+                <FieldLabel htmlFor="optimizer-method">Optimization method</FieldLabel>
+                <Select
+                  value={method}
+                  onValueChange={(value: OptimizerMethod) => {
+                    setMethod(value);
                     setProposal(null);
                   }}
-                  aria-label="Optimizer risk aversion"
-                />
-                <FieldDescription>
-                  1 thiên về lợi nhuận; 10 thiên về giảm biến động.
-                </FieldDescription>
+                >
+                  <SelectTrigger id="optimizer-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {OPTIMIZER_METHODS.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {OPTIMIZER_METHOD_LABELS[item]}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>{OPTIMIZER_METHOD_DESCRIPTIONS[method]}</FieldDescription>
               </Field>
+              {method === "target_return" ? (
+                <Field>
+                  <FieldLabel htmlFor="optimizer-target-return">
+                    Target return/năm: {targetReturnPct}%
+                  </FieldLabel>
+                  <Input
+                    id="optimizer-target-return"
+                    type="number"
+                    inputMode="decimal"
+                    min={-100}
+                    max={1000}
+                    step={0.5}
+                    value={targetReturnPct}
+                    onChange={(event) => {
+                      setTargetReturnPct(Number(event.target.value));
+                      setProposal(null);
+                    }}
+                  />
+                  <FieldDescription>
+                    Markowitz sẽ tìm volatility thấp nhất tại mức return này.
+                  </FieldDescription>
+                </Field>
+              ) : null}
+              {method === "target_volatility" ? (
+                <Field>
+                  <FieldLabel htmlFor="optimizer-target-volatility">
+                    Target volatility/năm: {targetVolatilityPct}%
+                  </FieldLabel>
+                  <Input
+                    id="optimizer-target-volatility"
+                    type="number"
+                    inputMode="decimal"
+                    min={0.1}
+                    max={1000}
+                    step={0.5}
+                    value={targetVolatilityPct}
+                    onChange={(event) => {
+                      setTargetVolatilityPct(Number(event.target.value));
+                      setProposal(null);
+                    }}
+                  />
+                  <FieldDescription>
+                    Markowitz sẽ tìm expected return cao nhất tại volatility này.
+                  </FieldDescription>
+                </Field>
+              ) : null}
+              {method === "risk_tolerance" ? (
+                <Field>
+                  <FieldLabel htmlFor="optimizer-risk-tolerance">
+                    Risk tolerance: {markowitzRiskTolerance}
+                  </FieldLabel>
+                  <Slider
+                    value={[markowitzRiskTolerance]}
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    onValueChange={([value]) => {
+                      setMarkowitzRiskTolerance(value);
+                      setProposal(null);
+                    }}
+                    aria-label="Markowitz risk tolerance"
+                  />
+                  <FieldDescription>
+                    Giá trị cao hơn nghiêng nhiều hơn về expected return.
+                  </FieldDescription>
+                </Field>
+              ) : null}
               <Field>
                 <FieldLabel>Trọng số tối đa/mã: {maxWeightPct}%</FieldLabel>
                 <Slider
@@ -306,8 +392,9 @@ export function PortfolioOptimizerWorkbench({
                   ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                {proposal.observationCount} overlapping returns · deterministic long-only capped
-                simplex
+                {proposal.observationCount} overlapping returns ·{" "}
+                {OPTIMIZER_METHOD_LABELS[proposal.method]} · {proposal.source.library}{" "}
+                {proposal.source.version}
               </p>
             </>
           ) : (

@@ -2,8 +2,11 @@ import { z } from "zod";
 
 import type { TenantContext } from "@/lib/auth/tenant-context";
 import { backtestSymbolSchema } from "@/lib/backtest/contracts";
-import { optimizeMeanVariance } from "@/lib/backtest/optimizer";
+import { OPTIMIZER_METHODS } from "@/lib/backtest/optimizer-methods";
+import { optimizePortfolioAllocation } from "@/lib/backtest/optimizer";
 import { getPrisma } from "@/lib/db/prisma";
+
+const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 
 function realIsoDate(value: string) {
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -18,12 +21,15 @@ const isoDateSchema = z
 export const quantOptimizerRequestSchema = z
   .object({
     symbols: z.array(backtestSymbolSchema).min(1).max(10),
+    method: z.enum(OPTIMIZER_METHODS).default("risk_parity"),
     timeframe: z.enum(["1d", "1h"]),
     from: isoDateSchema,
     to: isoDateSchema,
-    riskAversion: z.number().min(1).max(10),
     maxWeightBps: z.number().int().min(1).max(10_000),
     totalWeightBps: z.number().int().min(1).max(10_000),
+    targetReturnPct: z.number().finite().min(-100).max(1_000).optional(),
+    targetVolatilityPct: z.number().finite().positive().max(1_000).optional(),
+    riskTolerance: z.number().finite().positive().max(1_000_000).optional(),
     dividendMode: z.enum(["exclude", "adjusted_prices"]),
   })
   .strict()
@@ -51,6 +57,27 @@ export const quantOptimizerRequestSchema = z
         code: "custom",
         path: ["maxWeightBps"],
         message: "Maximum weight cannot satisfy the investable target.",
+      });
+    }
+    if (value.method === "target_return" && value.targetReturnPct === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["targetReturnPct"],
+        message: "Target return is required.",
+      });
+    }
+    if (value.method === "target_volatility" && value.targetVolatilityPct === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["targetVolatilityPct"],
+        message: "Target volatility is required.",
+      });
+    }
+    if (value.method === "risk_tolerance" && value.riskTolerance === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["riskTolerance"],
+        message: "Risk tolerance is required.",
       });
     }
   });
@@ -109,7 +136,7 @@ export async function optimizeQuantAllocation(
         take: 1,
         select: {
           versions: {
-            where: { isActive: true, qualityStatus: "passed" },
+            where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
             orderBy: { version: "desc" },
             take: 1,
             select: {
@@ -165,12 +192,15 @@ export async function optimizeQuantAllocation(
       return [symbol, prices.slice(1).map((price, index) => price / prices[index] - 1)];
     }),
   );
-  const optimized = optimizeMeanVariance({
+  const optimized = optimizePortfolioAllocation({
     returnsBySymbol,
-    riskAversion: input.riskAversion,
+    method: input.method,
     maxWeightBps: input.maxWeightBps,
     totalWeightBps: input.totalWeightBps,
     periodsPerYear: input.timeframe === "1d" ? 252 : 1_512,
+    targetReturnPct: input.targetReturnPct,
+    targetVolatilityPct: input.targetVolatilityPct,
+    riskTolerance: input.riskTolerance,
   });
   return { ...optimized, totalWeightBps: input.totalWeightBps, datasetVersionIds };
 }

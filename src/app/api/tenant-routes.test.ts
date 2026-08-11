@@ -136,6 +136,14 @@ describe("tenant API authorization", () => {
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
     mocks.optimizeQuantAllocation.mockResolvedValue({
+      method: "risk_parity",
+      source: {
+        library: "portfolio-allocation",
+        version: "0.0.11",
+        repository: "https://github.com/lequant40/portfolio_allocation_js",
+        directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
+        license: "MIT",
+      },
       weightsBps: { BTC: 10_000 },
       totalWeightBps: 10_000,
       expectedReturnPct: 10,
@@ -422,10 +430,10 @@ describe("tenant API authorization", () => {
     mocks.requireTenantContext.mockResolvedValue(editorContext);
     const payload = {
       symbols: ["BTC"],
+      method: "risk_parity",
       timeframe: "1d",
       from: "2025-01-01",
       to: "2025-12-31",
-      riskAversion: 4,
       maxWeightBps: 10_000,
       totalWeightBps: 10_000,
       dividendMode: "exclude",

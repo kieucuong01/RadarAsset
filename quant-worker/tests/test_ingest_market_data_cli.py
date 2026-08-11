@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from backtest.catalog import FEEDS
 from backtest.ingestion import IngestionOutcome
 from ingest_market_data import (
     build_selections,
@@ -25,16 +26,18 @@ NOW = datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
 def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
     hourly = build_selections("hourly", asset=None, timeframe=None)
     daily = build_selections("daily", asset=None, timeframe=None)
+    all_selections = build_selections("all", asset=None, timeframe=None)
+    hourly_symbols = [symbol for symbol, feed in FEEDS.items() if feed.market != "metal_spot"]
 
     assert [(item.asset, item.timeframe) for item in hourly] == [
-        ("FPT", "1h"),
-        ("BTC", "1h"),
-        ("XAU", "1h"),
+        (symbol, "1h") for symbol in hourly_symbols
     ]
     assert [(item.asset, item.timeframe) for item in daily] == [
-        ("FPT", "1d"),
-        ("BTC", "1d"),
-        ("XAU", "1d"),
+        (symbol, "1d") for symbol in FEEDS
+    ]
+    assert [(item.asset, item.timeframe) for item in all_selections] == [
+        *[(symbol, "1d") for symbol in FEEDS],
+        *[(symbol, "1h") for symbol in hourly_symbols],
     ]
 
 
@@ -75,16 +78,15 @@ def test_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -
     )
 
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    hourly_symbols = [symbol for symbol, feed in FEEDS.items() if feed.market != "metal_spot"]
     assert exit_code == 2
     assert [(item.asset, item.timeframe) for item in captured] == [
-        ("FPT", "1h"),
-        ("BTC", "1h"),
-        ("XAU", "1h"),
+        (symbol, "1h") for symbol in hourly_symbols
     ]
     assert lines[-1] == {
         "status": "partial_failure",
-        "selected": 3,
-        "succeeded": 2,
+        "selected": len(hourly_symbols),
+        "succeeded": len(hourly_symbols) - 1,
         "degraded": 1,
     }
     assert "errorMessage" not in lines[0]

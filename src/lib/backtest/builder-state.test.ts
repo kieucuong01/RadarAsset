@@ -8,6 +8,7 @@ import {
   reduceBuilder,
   toPortfolioBacktestSubmission,
 } from "./builder-state";
+import { OPTIMIZER_SOURCES } from "./optimizer-methods";
 import { listStrategyCatalog } from "./strategy-catalog";
 
 const strategyCatalog = listStrategyCatalog();
@@ -48,6 +49,27 @@ function addTwoAssets() {
   return reduceBuilder(state, { type: "assetAdded", asset: btc, strategy: turtle });
 }
 
+function optimizerProposal(
+  weightsBps: Record<string, number>,
+  datasetVersionIds = {
+    BTC: btc.datasetVersionId!,
+    VNM: vnm.datasetVersionId!,
+  },
+) {
+  return {
+    method: "risk_parity" as const,
+    source: OPTIMIZER_SOURCES.portfolioAllocation,
+    weightsBps,
+    totalWeightBps: 8_000,
+    expectedReturnPct: 12,
+    volatilityPct: 18,
+    sharpe: 0.67,
+    observationCount: 252,
+    datasetVersionIds,
+    warnings: [],
+  };
+}
+
 describe("portfolio backtest builder state", () => {
   it("starts empty without injecting fixed assets", () => {
     const state = createInitialBuilderState(new Date("2026-08-11T00:00:00.000Z"));
@@ -82,19 +104,10 @@ describe("portfolio backtest builder state", () => {
   });
 
   it("applies an immutable optimizer proposal while preserving cash", () => {
-    const optimized = applyOptimizerProposal(addTwoAssets(), {
-      weightsBps: { BTC: 5_000, VNM: 3_000 },
-      totalWeightBps: 8_000,
-      expectedReturnPct: 12,
-      volatilityPct: 18,
-      sharpe: 0.67,
-      observationCount: 252,
-      datasetVersionIds: {
-        BTC: btc.datasetVersionId!,
-        VNM: vnm.datasetVersionId!,
-      },
-      warnings: [],
-    });
+    const optimized = applyOptimizerProposal(
+      addTwoAssets(),
+      optimizerProposal({ BTC: 5_000, VNM: 3_000 }),
+    );
 
     expect(optimized.allocationMode).toBe("optimized");
     expect(optimized.assumptions.cashAllocationBps).toBe(2_000);
@@ -106,30 +119,18 @@ describe("portfolio backtest builder state", () => {
 
   it("rejects a stale optimizer proposal whose dataset no longer matches", () => {
     expect(() =>
-      applyOptimizerProposal(addTwoAssets(), {
-        weightsBps: { BTC: 4_000, VNM: 4_000 },
-        totalWeightBps: 8_000,
-        expectedReturnPct: 12,
-        volatilityPct: 18,
-        sharpe: 0.67,
-        observationCount: 252,
-        datasetVersionIds: { BTC: "stale", VNM: vnm.datasetVersionId! },
-        warnings: [],
-      }),
+      applyOptimizerProposal(
+        addTwoAssets(),
+        optimizerProposal({ BTC: 4_000, VNM: 4_000 }, { BTC: "stale", VNM: vnm.datasetVersionId! }),
+      ),
     ).toThrow("datasets no longer match");
   });
 
   it("refreshes selected asset eligibility and invalidates an old optimizer proposal", () => {
-    const optimized = applyOptimizerProposal(addTwoAssets(), {
-      weightsBps: { BTC: 4_000, VNM: 4_000 },
-      totalWeightBps: 8_000,
-      expectedReturnPct: 12,
-      volatilityPct: 18,
-      sharpe: 0.67,
-      observationCount: 252,
-      datasetVersionIds: { BTC: btc.datasetVersionId!, VNM: vnm.datasetVersionId! },
-      warnings: [],
-    });
+    const optimized = applyOptimizerProposal(
+      addTwoAssets(),
+      optimizerProposal({ BTC: 4_000, VNM: 4_000 }),
+    );
     const refreshed = reduceBuilder(optimized, {
       type: "assetRefreshed",
       asset: { ...btc, datasetVersionId: "33333333-3333-4333-8333-333333333333" },

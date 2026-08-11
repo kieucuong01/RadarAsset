@@ -1,24 +1,38 @@
 import { z } from "zod";
 
 import { backtestSymbolSchema } from "./contracts";
+import { OPTIMIZER_METHODS } from "./optimizer-methods";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const optimizerRequestSchema = z
   .object({
     symbols: z.array(backtestSymbolSchema).min(1).max(10),
+    method: z.enum(OPTIMIZER_METHODS),
     timeframe: z.enum(["1d", "1h"]),
     from: z.string(),
     to: z.string(),
-    riskAversion: z.number().min(1).max(10),
     maxWeightBps: z.number().int().min(1).max(10_000),
     totalWeightBps: z.number().int().min(1).max(10_000),
+    targetReturnPct: z.number().finite().min(-100).max(1_000).optional(),
+    targetVolatilityPct: z.number().finite().positive().max(1_000).optional(),
+    riskTolerance: z.number().finite().positive().max(1_000_000).optional(),
     dividendMode: z.enum(["exclude", "adjusted_prices"]),
   })
   .strict();
 
 const optimizerProposalSchema = z
   .object({
+    method: z.enum(OPTIMIZER_METHODS),
+    source: z
+      .object({
+        library: z.string().min(1),
+        version: z.string().min(1),
+        repository: z.string().url(),
+        directory: z.string().min(1),
+        license: z.string().min(1),
+      })
+      .strict(),
     weightsBps: z.record(backtestSymbolSchema, z.number().int().min(0).max(10_000)),
     totalWeightBps: z.number().int().min(1).max(10_000),
     expectedReturnPct: z.number().finite(),

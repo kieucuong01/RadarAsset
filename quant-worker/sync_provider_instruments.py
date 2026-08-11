@@ -14,6 +14,7 @@ from backtest.providers import (
     ProviderInstrumentDescriptor,
     VnstockAdapter,
 )
+from backtest.catalog import FEEDS
 from ingest_market_data import load_database_url, psycopg_connection_url
 
 
@@ -40,14 +41,48 @@ def provider_code(descriptor: ProviderInstrumentDescriptor) -> str:
     raise ValueError("Unsupported provider instrument market.")
 
 
+def select_provider_instruments(
+    descriptors: Iterable[ProviderInstrumentDescriptor],
+) -> list[ProviderInstrumentDescriptor]:
+    reserved_non_crypto_symbols = {
+        feed.symbol for feed in FEEDS.values() if feed.market != "crypto_spot"
+    }
+    selected = [
+        descriptor
+        for descriptor in descriptors
+        if not (
+            descriptor.market == "crypto_spot"
+            and descriptor.canonical_symbol in reserved_non_crypto_symbols
+        )
+    ]
+    return sorted(selected, key=lambda item: (item.canonical_symbol, item.market))
+
+
 def sync_provider_instruments(
     connection: psycopg.Connection[Any],
     descriptors: Iterable[ProviderInstrumentDescriptor],
 ) -> int:
-    rows = sorted(descriptors, key=lambda item: (provider_code(item), item.canonical_symbol))
+    rows = sorted(
+        select_provider_instruments(descriptors),
+        key=lambda item: (provider_code(item), item.canonical_symbol),
+    )
+    reserved_non_crypto_symbols = sorted(
+        feed.symbol for feed in FEEDS.values() if feed.market != "crypto_spot"
+    )
     synchronized = 0
     with connection.transaction():
         with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM provider_instruments pi
+                USING data_providers p, assets a
+                WHERE pi.provider_id = p.id
+                  AND pi.asset_id = a.id
+                  AND p.code = 'binance-public'
+                  AND a.symbol = ANY(%s)
+                """,
+                (reserved_non_crypto_symbols,),
+            )
             for descriptor in rows:
                 code = provider_code(descriptor)
                 name, terms_url = PROVIDERS[code]

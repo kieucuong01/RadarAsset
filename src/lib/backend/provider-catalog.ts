@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 import { getPrisma } from "@/lib/db/prisma";
 
 export const APPROVED_PROVIDER_CODES = [
@@ -6,8 +8,16 @@ export const APPROVED_PROVIDER_CODES = [
   "vnstock-vci-free",
 ] as const;
 
+const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
+const CATALOG_SCAN_LIMIT = 500;
 type ApprovedProviderCode = (typeof APPROVED_PROVIDER_CODES)[number];
 type ProviderMarket = "vn_equity" | "crypto_spot" | "metal_spot";
+
+const MARKET_PRIORITY: Record<ProviderMarket, number> = {
+  vn_equity: 0,
+  metal_spot: 1,
+  crypto_spot: 2,
+};
 
 export type ProviderInstrumentResult = {
   id: string;
@@ -22,7 +32,24 @@ export type ProviderInstrumentResult = {
   supportedTimeframes: Array<"1d" | "1h">;
 };
 
-const include = { provider: true, asset: true } as const;
+const include = {
+  provider: true,
+  asset: {
+    include: {
+      datasets: {
+        where: { adjustmentPolicy: "raw" },
+        select: {
+          timeframe: true,
+          versions: {
+            where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
+            select: { id: true, rowCount: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.ProviderInstrumentInclude;
 
 function approvedCode(value: string): value is ApprovedProviderCode {
   return APPROVED_PROVIDER_CODES.includes(value as ApprovedProviderCode);
@@ -44,6 +71,10 @@ function mapRow(row: {
     market: string;
     venue: string | null;
     currency: string;
+    datasets: Array<{
+      timeframe: string;
+      versions: Array<{ id: string; rowCount?: number | null }>;
+    }>;
   };
 }): ProviderInstrumentResult {
   if (!approvedCode(row.provider.code) || row.provider.status !== "active") {
@@ -67,6 +98,17 @@ function mapRow(row: {
   };
 }
 
+function readyRank(row: Parameters<typeof mapRow>[0]) {
+  return row.asset.datasets.some((dataset) => dataset.versions.length > 0) ? 0 : 1;
+}
+
+function rowCount(row: Parameters<typeof mapRow>[0]) {
+  return row.asset.datasets.reduce(
+    (total, dataset) => total + (dataset.versions[0]?.rowCount ?? 0),
+    0,
+  );
+}
+
 export async function searchProviderInstruments(input: { q: string; limit?: number }) {
   const q = input.q.trim().toUpperCase().slice(0, 40);
   const take = Math.min(Math.max(input.limit ?? 20, 1), 50);
@@ -85,9 +127,18 @@ export async function searchProviderInstruments(input: { q: string; limit?: numb
     },
     include,
     orderBy: [{ asset: { symbol: "asc" } }, { providerSymbol: "asc" }],
-    take,
+    take: CATALOG_SCAN_LIMIT,
   });
-  return { items: rows.map(mapRow) };
+  const ranked = [...rows].sort((left, right) => {
+    const readiness = readyRank(left) - readyRank(right);
+    if (readiness !== 0) return readiness;
+    const marketRank = MARKET_PRIORITY[market(left.asset.market)] - MARKET_PRIORITY[market(right.asset.market)];
+    if (marketRank !== 0) return marketRank;
+    const rows = rowCount(right) - rowCount(left);
+    if (rows !== 0) return rows;
+    return left.asset.symbol.localeCompare(right.asset.symbol);
+  });
+  return { items: ranked.slice(0, take).map(mapRow) };
 }
 
 export async function resolveProviderInstrument(providerCode: string, providerSymbol: string) {

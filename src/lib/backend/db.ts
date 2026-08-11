@@ -53,8 +53,9 @@ const TIMEFRAME_LIMITS = {
   "1Y": 252,
 } as const;
 
-const MARKET_DATA_SYMBOLS = ["FPT", "BTC", "XAU"] as const;
+const MARKET_DATA_SYMBOLS = ["FPT", "VCB", "HPG", "VNM", "MWG", "SSI", "VIC", "BTC", "XAU"] as const;
 const MARKET_DATA_TIMEFRAMES = ["1d", "1h"] as const;
+const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 const PUBLIC_MARKET_ERROR_CODES = new Set([
   "ingestion_failed",
   "invalid_response",
@@ -378,7 +379,7 @@ export async function loadPortfolioPerformance(
 
 export async function loadAssets() {
   const prisma = getPrisma();
-  return prisma.asset.findMany({
+  const assets = await prisma.asset.findMany({
     orderBy: [{ assetClass: "asc" }, { symbol: "asc" }],
     select: {
       id: true,
@@ -388,8 +389,43 @@ export async function loadAssets() {
       currency: true,
       provider: true,
       providerSymbol: true,
+      datasets: {
+        where: { adjustmentPolicy: "raw" },
+        select: {
+          versions: {
+            where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
+            select: { id: true, rowCount: true },
+            take: 1,
+          },
+        },
+      },
     },
   });
+  const priority = (assetClass: string) => {
+    if (assetClass === "equity") return 0;
+    if (assetClass === "commodity") return 1;
+    if (assetClass === "crypto") return 2;
+    return 3;
+  };
+  return assets
+    .sort((left, right) => {
+      const leftReady = left.datasets.some((dataset) => dataset.versions.length > 0);
+      const rightReady = right.datasets.some((dataset) => dataset.versions.length > 0);
+      if (leftReady !== rightReady) return leftReady ? -1 : 1;
+      const classRank = priority(left.assetClass) - priority(right.assetClass);
+      if (classRank !== 0) return classRank;
+      const leftRows = left.datasets.reduce(
+        (total, dataset) => total + (dataset.versions[0]?.rowCount ?? 0),
+        0,
+      );
+      const rightRows = right.datasets.reduce(
+        (total, dataset) => total + (dataset.versions[0]?.rowCount ?? 0),
+        0,
+      );
+      if (leftRows !== rightRows) return rightRows - leftRows;
+      return left.symbol.localeCompare(right.symbol);
+    })
+    .map(({ datasets, ...asset }) => asset);
 }
 
 export async function loadTickerResponse(symbols?: string[]): Promise<MarketTickerResponse[]> {
@@ -555,7 +591,7 @@ export async function loadWatchlist(context: TenantContext) {
               select: {
                 timeframe: true,
                 versions: {
-                  where: { isActive: true, qualityStatus: "passed" },
+                  where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
                   select: { id: true },
                   take: 1,
                 },
@@ -812,7 +848,7 @@ export async function upsertWatchlistItem(context: TenantContext, input: Watchli
         assetId: instrument.assetId,
         timeframe: { in: supported },
         adjustmentPolicy: "raw",
-        versions: { some: { isActive: true, qualityStatus: "passed" } },
+        versions: { some: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } } },
       },
       select: { timeframe: true },
     });

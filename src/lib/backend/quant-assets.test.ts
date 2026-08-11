@@ -71,7 +71,7 @@ describe("supported Quant asset catalog", () => {
     ]);
     expect(prisma.asset.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        take: 50,
+        take: 500,
         where: expect.objectContaining({
           market: { in: ["vn_equity", "crypto_spot", "metal_spot"] },
           OR: [
@@ -109,5 +109,34 @@ describe("supported Quant asset catalog", () => {
       backtestable: false,
       reasonCode: "DATASET_RANGE_INSUFFICIENT",
     });
+  });
+
+  it("accepts active warning datasets and ranks eligible assets before unavailable catalog rows", async () => {
+    prisma.asset.findMany.mockResolvedValue([vn30Asset, vnmAsset]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "", timeframe: "1d", from: "2025-01-01", to: "2026-01-01" },
+      new Date("2026-01-02T12:00:00.000Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      symbol: "VNM",
+      backtestable: true,
+      reasonCode: null,
+    });
+    expect(prisma.asset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 500,
+        select: expect.objectContaining({
+          datasets: expect.objectContaining({
+            select: expect.objectContaining({
+              versions: expect.objectContaining({
+                where: { isActive: true, qualityStatus: { in: ["passed", "warning"] } },
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 });

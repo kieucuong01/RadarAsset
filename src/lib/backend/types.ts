@@ -21,7 +21,7 @@ export type MarketIngestionStatus =
   | "unavailable";
 
 export type MarketDataHealthItem = {
-  symbol: "FPT" | "BTC" | "XAU";
+  symbol: string;
   market: MarketDataMarket;
   timeframe: MarketDataTimeframe;
   providerCode: string | null;

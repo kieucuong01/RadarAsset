@@ -6,6 +6,15 @@ import { calculateFreshness } from "@/lib/market-data/health";
 import type { MarketDataMarket, MarketDataTimeframe, QuantAssetCatalogResponse } from "./types";
 
 const SUPPORTED_MARKETS = ["vn_equity", "crypto_spot", "metal_spot"] as const;
+const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
+const CATALOG_SCAN_LIMIT = 500;
+const CATALOG_RESPONSE_LIMIT = 50;
+type QuantAssetReasonCode = QuantAssetCatalogResponse["items"][number]["reasonCode"];
+const MARKET_PRIORITY: Record<MarketDataMarket, number> = {
+  vn_equity: 0,
+  metal_spot: 1,
+  crypto_spot: 2,
+};
 
 function isRealIsoDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -67,7 +76,7 @@ export async function loadQuantAssetCatalog(
         : {}),
     },
     orderBy: { symbol: "asc" },
-    take: 50,
+    take: CATALOG_SCAN_LIMIT,
     select: {
       symbol: true,
       name: true,
@@ -80,7 +89,7 @@ export async function loadQuantAssetCatalog(
         take: 1,
         select: {
           versions: {
-            where: { isActive: true, qualityStatus: "passed" },
+            where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
             orderBy: { version: "desc" },
             take: 1,
             select: {
@@ -110,7 +119,7 @@ export async function loadQuantAssetCatalog(
       const rangeCovered = Boolean(
         version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
       );
-      const reasonCode = !version
+      const reasonCode: QuantAssetReasonCode = !version
         ? "DATASET_UNAVAILABLE"
         : !rangeCovered
           ? "DATASET_RANGE_INSUFFICIENT"
@@ -139,6 +148,14 @@ export async function loadQuantAssetCatalog(
         backtestable: reasonCode === null,
         reasonCode,
       };
-    }),
+    }).sort((left, right) => {
+      const readiness = Number(right.backtestable) - Number(left.backtestable);
+      if (readiness !== 0) return readiness;
+      const market = MARKET_PRIORITY[left.market] - MARKET_PRIORITY[right.market];
+      if (market !== 0) return market;
+      const rows = right.rowCount - left.rowCount;
+      if (rows !== 0) return rows;
+      return left.symbol.localeCompare(right.symbol);
+    }).slice(0, CATALOG_RESPONSE_LIMIT),
   };
 }

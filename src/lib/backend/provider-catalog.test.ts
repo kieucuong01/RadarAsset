@@ -20,6 +20,12 @@ const row = {
     market: "vn_equity",
     venue: "HOSE",
     currency: "VND",
+    datasets: [
+      {
+        timeframe: "1d",
+        versions: [{ id: "dataset-vnm-1d" }],
+      },
+    ],
   },
 };
 
@@ -53,7 +59,7 @@ describe("approved provider instrument catalog", () => {
             { asset: { name: { startsWith: "VNM", mode: "insensitive" } } },
           ],
         }),
-        take: 50,
+        take: 500,
       }),
     );
   });
@@ -79,5 +85,64 @@ describe("approved provider instrument catalog", () => {
   it("rejects an unapproved provider before querying storage", async () => {
     await expect(resolveProviderInstrument("user-url", "BTC")).rejects.toThrow("approved");
     expect(prisma.providerInstrument.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("ranks instruments with ready datasets before catalog-only matches", async () => {
+    prisma.providerInstrument.findMany.mockResolvedValue([
+      {
+        ...row,
+        id: "instrument-aaa",
+        providerSymbol: "AAA",
+        asset: { ...row.asset, id: "asset-aaa", symbol: "AAA", datasets: [] },
+      },
+      row,
+    ]);
+
+    await expect(searchProviderInstruments({ q: "", limit: 1 })).resolves.toEqual({
+      items: [expect.objectContaining({ symbol: "VNM" })],
+    });
+    expect(prisma.providerInstrument.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 500,
+        include: expect.objectContaining({
+          asset: expect.objectContaining({
+            include: expect.objectContaining({
+              datasets: expect.objectContaining({
+                select: expect.objectContaining({
+                  versions: expect.objectContaining({
+                    where: { isActive: true, qualityStatus: { in: ["passed", "warning"] } },
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("keeps ready Vietnam equities visible ahead of ready crypto in the default picker", async () => {
+    prisma.providerInstrument.findMany.mockResolvedValue([
+      {
+        ...row,
+        id: "instrument-btc",
+        providerSymbol: "BTCUSDT",
+        provider: { code: "binance-public", status: "active" },
+        asset: {
+          ...row.asset,
+          id: "asset-btc",
+          symbol: "BTC",
+          name: "Bitcoin / Tether",
+          market: "crypto_spot",
+          currency: "USDT",
+          datasets: [{ timeframe: "1d", versions: [{ id: "dataset-btc", rowCount: 730 }] }],
+        },
+      },
+      row,
+    ]);
+
+    await expect(searchProviderInstruments({ q: "", limit: 2 })).resolves.toMatchObject({
+      items: [{ symbol: "VNM" }, { symbol: "BTC" }],
+    });
   });
 });

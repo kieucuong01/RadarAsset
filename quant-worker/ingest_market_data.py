@@ -46,6 +46,11 @@ def read_bounded_environment_integer(
     return value
 
 
+def supports_scheduled_timeframe(asset: str, timeframe: str) -> bool:
+    feed = FEEDS[asset]
+    return not (feed.market == "metal_spot" and timeframe == "1h")
+
+
 def load_database_url(env_file: Path) -> str:
     existing = os.getenv("DATABASE_URL")
     if existing:
@@ -95,7 +100,11 @@ def build_selections(
             raise ValueError("Single-feed selection cannot be combined with a schedule command.")
         return [IngestionSelection(asset, timeframe)]
     if command == "hourly":
-        return [IngestionSelection(symbol, "1h") for symbol in FEEDS]
+        return [
+            IngestionSelection(symbol, "1h")
+            for symbol in FEEDS
+            if supports_scheduled_timeframe(symbol, "1h")
+        ]
     if command == "daily":
         return [IngestionSelection(symbol, "1d") for symbol in FEEDS]
     if command == "all":
@@ -103,6 +112,7 @@ def build_selections(
             IngestionSelection(symbol, scheduled_timeframe)
             for scheduled_timeframe in ("1d", "1h")
             for symbol in FEEDS
+            if supports_scheduled_timeframe(symbol, scheduled_timeframe)
         ]
     raise ValueError("Unsupported ingestion command.")
 

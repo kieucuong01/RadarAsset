@@ -1,16 +1,31 @@
+import PortfolioAllocation from "portfolio-allocation";
+
+import {
+  OPTIMIZER_METHOD_LABELS,
+  OPTIMIZER_SOURCES,
+  type OptimizerMethod,
+} from "./optimizer-methods";
+
 const MIN_OBSERVATIONS = 30;
-const ITERATIONS = 500;
-const GRADIENT_STEP = 1;
+const BASIS_POINTS = 10_000;
+const EPSILON = 1e-10;
+
+export { OPTIMIZER_METHODS, OPTIMIZER_SOURCES } from "./optimizer-methods";
 
 export type OptimizerInput = {
   returnsBySymbol: Record<string, number[]>;
-  riskAversion: number;
+  method: OptimizerMethod;
   maxWeightBps: number;
   totalWeightBps?: number;
   periodsPerYear?: number;
+  targetReturnPct?: number;
+  targetVolatilityPct?: number;
+  riskTolerance?: number;
 };
 
 export type OptimizerResult = {
+  method: OptimizerMethod;
+  source: (typeof OPTIMIZER_SOURCES)["portfolioAllocation"];
   weightsBps: Record<string, number>;
   expectedReturnPct: number;
   volatilityPct: number;
@@ -18,6 +33,52 @@ export type OptimizerResult = {
   observationCount: number;
   warnings: string[];
 };
+
+type PortfolioAllocationOptions = {
+  constraints?: {
+    minWeights?: number[];
+    maxWeights?: number[];
+    return?: number;
+    volatility?: number;
+    riskTolerance?: number;
+  };
+  optimizationMethod?: "automatic" | "critical-line" | "gsmo";
+  optimizationMethodParams?: {
+    epsGsmo?: number;
+    maxIterGsmo?: number;
+  };
+};
+
+type PortfolioAllocationApi = {
+  equalWeights(nbAssets: number): number[];
+  inverseVolatilityWeights(variances: number[]): number[];
+  globalMinimumVarianceWeights(
+    covarianceMatrix: number[][],
+    options?: PortfolioAllocationOptions,
+  ): number[];
+  maximumSharpeRatioWeights(
+    expectedReturns: number[],
+    covarianceMatrix: number[][],
+    riskFreeRate: number,
+    options?: PortfolioAllocationOptions,
+  ): number[];
+  meanVarianceOptimizationWeights(
+    expectedReturns: number[],
+    covarianceMatrix: number[][],
+    options: PortfolioAllocationOptions,
+  ): number[];
+  equalRiskContributionWeights(
+    covarianceMatrix: number[][],
+    options?: PortfolioAllocationOptions,
+  ): number[];
+  mostDiversifiedWeights(
+    covarianceMatrix: number[][],
+    options?: PortfolioAllocationOptions,
+  ): number[];
+  minimumCorrelationWeights(covarianceMatrix: number[][]): number[];
+};
+
+const allocationLibrary = PortfolioAllocation as PortfolioAllocationApi;
 
 function mean(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -35,25 +96,22 @@ function dot(left: number[], right: number[]) {
   return left.reduce((sum, value, index) => sum + value * right[index], 0);
 }
 
-function projectCappedSimplex(values: number[], cap: number) {
-  if (cap * values.length < 1 - 1e-12) {
-    throw new Error("Maximum asset weight cannot satisfy the portfolio total.");
+function normalizedWeights(weights: number[]) {
+  if (weights.some((weight) => !Number.isFinite(weight) || weight < -EPSILON)) {
+    throw new Error("PortfolioAllocation returned invalid weights.");
   }
-  let lower = Math.min(...values.map((value) => value - cap));
-  let upper = Math.max(...values);
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    const lambda = (lower + upper) / 2;
-    const total = values.reduce(
-      (sum, value) => sum + Math.min(cap, Math.max(0, value - lambda)),
-      0,
-    );
-    if (total > 1) lower = lambda;
-    else upper = lambda;
+  const cleaned = weights.map((weight) => Math.max(0, weight));
+  const total = cleaned.reduce((sum, weight) => sum + weight, 0);
+  if (!Number.isFinite(total) || total <= 0) {
+    throw new Error("PortfolioAllocation returned zero weights.");
   }
-  const lambda = (lower + upper) / 2;
-  const projected = values.map((value) => Math.min(cap, Math.max(0, value - lambda)));
-  const total = projected.reduce((sum, value) => sum + value, 0);
-  return projected.map((value) => value / total);
+  return cleaned.map((weight) => weight / total);
+}
+
+function assertCapSupport(method: OptimizerMethod, weights: number[], cap: number) {
+  const breached = weights.some((weight) => weight > cap + EPSILON);
+  if (!breached) return;
+  throw new Error(`${OPTIMIZER_METHOD_LABELS[method]} does not support max-weight repair.`);
 }
 
 function basisPoints(
@@ -83,20 +141,138 @@ function basisPoints(
   return Object.fromEntries(symbols.map((symbol, index) => [symbol, rounded[index]]));
 }
 
-export function optimizeMeanVariance(input: OptimizerInput): OptimizerResult {
+function optimizerWeights(
+  input: OptimizerInput,
+  means: number[],
+  covarianceMatrix: number[][],
+  totalWeightBps: number,
+  periodsPerYear: number,
+) {
+  const method = input.method;
+  if (means.length === 1) return [1];
+
+  const cap = input.maxWeightBps / totalWeightBps;
+  const constraints = { maxWeights: Array(means.length).fill(cap) };
+  const constrainedOptions: PortfolioAllocationOptions = {
+    constraints,
+    optimizationMethod: "automatic",
+    optimizationMethodParams: { epsGsmo: 1e-10, maxIterGsmo: 10_000 },
+  };
+
+  if (method === "equal_weight") {
+    const weights = normalizedWeights(allocationLibrary.equalWeights(means.length));
+    assertCapSupport(method, weights, cap);
+    return weights;
+  }
+
+  if (method === "inverse_volatility") {
+    const variances = covarianceMatrix.map((row, index) => row[index]);
+    const weights = normalizedWeights(allocationLibrary.inverseVolatilityWeights(variances));
+    assertCapSupport(method, weights, cap);
+    return weights;
+  }
+
+  if (method === "minimum_variance") {
+    return normalizedWeights(
+      allocationLibrary.globalMinimumVarianceWeights(covarianceMatrix, constrainedOptions),
+    );
+  }
+
+  if (method === "maximum_sharpe") {
+    try {
+      return normalizedWeights(
+        allocationLibrary.maximumSharpeRatioWeights(means, covarianceMatrix, 0, constrainedOptions),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (
+        means.some((expectedReturn) => expectedReturn > 0) &&
+        !message.includes("minimum return constraint")
+      ) {
+        throw error;
+      }
+      return {
+        weights: normalizedWeights(
+          allocationLibrary.globalMinimumVarianceWeights(covarianceMatrix, constrainedOptions),
+        ),
+        warnings: ["MAX_SHARPE_FALLBACK_MIN_VARIANCE"],
+      };
+    }
+  }
+
+  if (method === "target_return") {
+    if (!Number.isFinite(input.targetReturnPct)) {
+      throw new Error("Target return is required.");
+    }
+    return normalizedWeights(
+      allocationLibrary.meanVarianceOptimizationWeights(means, covarianceMatrix, {
+        ...constrainedOptions,
+        constraints: {
+          ...constraints,
+          return: input.targetReturnPct! / 100 / periodsPerYear,
+        },
+      }),
+    );
+  }
+
+  if (method === "target_volatility") {
+    if (!Number.isFinite(input.targetVolatilityPct) || input.targetVolatilityPct! <= 0) {
+      throw new Error("Target volatility is required.");
+    }
+    return normalizedWeights(
+      allocationLibrary.meanVarianceOptimizationWeights(means, covarianceMatrix, {
+        ...constrainedOptions,
+        constraints: {
+          ...constraints,
+          volatility: input.targetVolatilityPct! / 100 / Math.sqrt(periodsPerYear),
+        },
+      }),
+    );
+  }
+
+  if (method === "risk_tolerance") {
+    if (!Number.isFinite(input.riskTolerance) || input.riskTolerance! <= 0) {
+      throw new Error("Risk tolerance is required.");
+    }
+    return normalizedWeights(
+      allocationLibrary.meanVarianceOptimizationWeights(means, covarianceMatrix, {
+        ...constrainedOptions,
+        constraints: {
+          ...constraints,
+          riskTolerance: input.riskTolerance!,
+        },
+      }),
+    );
+  }
+
+  if (method === "risk_parity") {
+    return normalizedWeights(
+      allocationLibrary.equalRiskContributionWeights(covarianceMatrix, constrainedOptions),
+    );
+  }
+
+  if (method === "most_diversified") {
+    return normalizedWeights(
+      allocationLibrary.mostDiversifiedWeights(covarianceMatrix, constrainedOptions),
+    );
+  }
+
+  const weights = normalizedWeights(allocationLibrary.minimumCorrelationWeights(covarianceMatrix));
+  assertCapSupport(method, weights, cap);
+  return weights;
+}
+
+export function optimizePortfolioAllocation(input: OptimizerInput): OptimizerResult {
   const symbols = Object.keys(input.returnsBySymbol).sort();
   if (symbols.length < 1 || symbols.length > 10) throw new Error("Expected 1 to 10 assets.");
-  if (!Number.isFinite(input.riskAversion) || input.riskAversion < 1 || input.riskAversion > 10) {
-    throw new Error("Risk aversion must be between 1 and 10.");
-  }
-  const totalWeightBps = input.totalWeightBps ?? 10_000;
-  if (!Number.isInteger(totalWeightBps) || totalWeightBps < 1 || totalWeightBps > 10_000) {
+  const totalWeightBps = input.totalWeightBps ?? BASIS_POINTS;
+  if (!Number.isInteger(totalWeightBps) || totalWeightBps < 1 || totalWeightBps > BASIS_POINTS) {
     throw new Error("Total optimized weight must be between 1 and 10,000 basis points.");
   }
   if (
     !Number.isInteger(input.maxWeightBps) ||
     input.maxWeightBps < 1 ||
-    input.maxWeightBps > 10_000 ||
+    input.maxWeightBps > BASIS_POINTS ||
     input.maxWeightBps * symbols.length < totalWeightBps
   ) {
     throw new Error("Maximum asset weight cannot satisfy the portfolio total.");
@@ -115,40 +291,43 @@ export function optimizeMeanVariance(input: OptimizerInput): OptimizerResult {
   }
 
   const means = series.map(mean);
-  const matrix = series.map((left, leftIndex) =>
+  const covarianceMatrix = series.map((left, leftIndex) =>
     series.map((right, rightIndex) => covariance(left, right, means[leftIndex], means[rightIndex])),
   );
-  const cap = input.maxWeightBps / totalWeightBps;
-  let weights = projectCappedSimplex(Array(symbols.length).fill(1 / symbols.length), cap);
-  for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-    const gradient = means.map(
-      (expectedReturn, index) => expectedReturn - input.riskAversion * dot(matrix[index], weights),
-    );
-    weights = projectCappedSimplex(
-      weights.map((weight, index) => weight + GRADIENT_STEP * gradient[index]),
-      cap,
-    );
-  }
-
   const periodsPerYear = input.periodsPerYear ?? 252;
   if (!Number.isFinite(periodsPerYear) || periodsPerYear <= 0) {
     throw new Error("Periods per year must be positive.");
   }
+  const weightsResult = optimizerWeights(
+    input,
+    means,
+    covarianceMatrix,
+    totalWeightBps,
+    periodsPerYear,
+  );
+  const weights = Array.isArray(weightsResult) ? weightsResult : weightsResult.weights;
+  const optimizerWarnings = Array.isArray(weightsResult) ? [] : weightsResult.warnings;
+
   const periodReturn = dot(means, weights);
   const variance = Math.max(
     0,
-    weights.reduce((total, weight, index) => total + weight * dot(matrix[index], weights), 0),
+    weights.reduce(
+      (total, weight, index) => total + weight * dot(covarianceMatrix[index], weights),
+      0,
+    ),
   );
   const annualVolatility = Math.sqrt(variance * periodsPerYear);
   const annualReturn = periodReturn * periodsPerYear;
   const singular = variance <= 1e-18;
 
   return {
+    method: input.method,
+    source: OPTIMIZER_SOURCES.portfolioAllocation,
     weightsBps: basisPoints(symbols, weights, totalWeightBps, input.maxWeightBps),
     expectedReturnPct: annualReturn * 100,
     volatilityPct: singular ? 0 : annualVolatility * 100,
     sharpe: singular ? null : annualReturn / annualVolatility,
     observationCount: observations,
-    warnings: singular ? ["SINGULAR_COVARIANCE"] : [],
+    warnings: [...optimizerWarnings, ...(singular ? ["SINGULAR_COVARIANCE"] : [])],
   };
 }
