@@ -30,6 +30,27 @@ describe("awesome-quant sourced portfolio optimizer", () => {
     expect(result.weightsBps).toEqual({ BTC: 3_334, FPT: 3_333, XAU: 3_333 });
     expect(Object.values(result.weightsBps).reduce((sum, value) => sum + value, 0)).toBe(10_000);
     expect(result.observationCount).toBe(40);
+    expect(result.assetMetrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ symbol: "BTC", expectedReturnPct: 0, volatilityPct: 3.22 }),
+        expect.objectContaining({ symbol: "FPT", expectedReturnPct: 252, volatilityPct: 3.22 }),
+        expect.objectContaining({ symbol: "XAU", expectedReturnPct: 63, volatilityPct: 2.41 }),
+      ]),
+    );
+    expect(result.correlationMatrix).toEqual([
+      {
+        symbol: "BTC",
+        correlations: expect.objectContaining({ BTC: 1, FPT: 1, XAU: 1 }),
+      },
+      {
+        symbol: "FPT",
+        correlations: expect.objectContaining({ BTC: 1, FPT: 1, XAU: 1 }),
+      },
+      {
+        symbol: "XAU",
+        correlations: expect.objectContaining({ BTC: 1, FPT: 1, XAU: 1 }),
+      },
+    ]);
   });
 
   it("uses PortfolioAllocation inverse volatility instead of return chasing", () => {

@@ -31,6 +31,15 @@ export type OptimizerResult = {
   volatilityPct: number;
   sharpe: number | null;
   observationCount: number;
+  assetMetrics: Array<{
+    symbol: string;
+    expectedReturnPct: number;
+    volatilityPct: number;
+  }>;
+  correlationMatrix: Array<{
+    symbol: string;
+    correlations: Record<string, number>;
+  }>;
   warnings: string[];
 };
 
@@ -94,6 +103,49 @@ function covariance(left: number[], right: number[], leftMean: number, rightMean
 
 function dot(left: number[], right: number[]) {
   return left.reduce((sum, value, index) => sum + value * right[index], 0);
+}
+
+function rounded(value: number, decimals: number) {
+  return Number(value.toFixed(decimals));
+}
+
+function clampedCorrelation(value: number) {
+  return Math.min(1, Math.max(-1, value));
+}
+
+function assetMetrics(
+  symbols: string[],
+  means: number[],
+  covarianceMatrix: number[][],
+  periodsPerYear: number,
+) {
+  return symbols.map((symbol, index) => ({
+    symbol,
+    expectedReturnPct: rounded(means[index] * periodsPerYear * 100, 2),
+    volatilityPct: rounded(
+      Math.sqrt(Math.max(0, covarianceMatrix[index][index]) * periodsPerYear) * 100,
+      2,
+    ),
+  }));
+}
+
+function correlationMatrix(symbols: string[], covarianceMatrix: number[][]) {
+  const variances = covarianceMatrix.map((row, index) => Math.max(0, row[index]));
+  return symbols.map((symbol, leftIndex) => ({
+    symbol,
+    correlations: Object.fromEntries(
+      symbols.map((rightSymbol, rightIndex) => {
+        const denominator = Math.sqrt(variances[leftIndex] * variances[rightIndex]);
+        const value =
+          denominator <= EPSILON
+            ? leftIndex === rightIndex
+              ? 1
+              : 0
+            : covarianceMatrix[leftIndex][rightIndex] / denominator;
+        return [rightSymbol, rounded(clampedCorrelation(value), 4)];
+      }),
+    ),
+  }));
 }
 
 function normalizedWeights(weights: number[]) {
@@ -328,6 +380,8 @@ export function optimizePortfolioAllocation(input: OptimizerInput): OptimizerRes
     volatilityPct: singular ? 0 : annualVolatility * 100,
     sharpe: singular ? null : annualReturn / annualVolatility,
     observationCount: observations,
+    assetMetrics: assetMetrics(symbols, means, covarianceMatrix, periodsPerYear),
+    correlationMatrix: correlationMatrix(symbols, covarianceMatrix),
     warnings: [...optimizerWarnings, ...(singular ? ["SINGULAR_COVARIANCE"] : [])],
   };
 }

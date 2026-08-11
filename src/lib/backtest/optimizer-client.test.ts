@@ -29,6 +29,14 @@ const proposal = {
   volatilityPct: 18.2,
   sharpe: 0.69,
   observationCount: 252,
+  assetMetrics: [
+    { symbol: "BTC", expectedReturnPct: 16, volatilityPct: 24 },
+    { symbol: "VNM", expectedReturnPct: 10, volatilityPct: 14 },
+  ],
+  correlationMatrix: [
+    { symbol: "BTC", correlations: { BTC: 1, VNM: 0.32 } },
+    { symbol: "VNM", correlations: { BTC: 0.32, VNM: 1 } },
+  ],
   datasetVersionIds: { BTC: "dataset-btc", VNM: "dataset-vnm" },
   warnings: [],
 };
