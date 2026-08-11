@@ -72,9 +72,10 @@ def _simulate_sleeve(
     *,
     sleeve_capital: Decimal,
     config: EngineConfig,
+    strategy: Strategy,
 ) -> tuple[dict[str, dict[str, Decimal]], list[dict[str, Any]], Decimal, Decimal]:
     rows = normalize_bars(bars)
-    if len(rows) < config.slow_period + 2:
+    if len(rows) < strategy.warmup_bars + 2:
         raise ValueError(f"Insufficient bars for {asset}.")
     leverage = config.leverage_by_asset[asset]
     maximum = _maximum_leverage(config.market_by_asset[asset])
@@ -96,11 +97,6 @@ def _simulate_sleeve(
     total_slippage = ZERO
     trades: list[dict[str, Any]] = []
     points: dict[str, dict[str, Decimal]] = {}
-    strategy = config.strategy or MovingAverageCrossoverStrategy(
-        fast_period=config.fast_period,
-        slow_period=config.slow_period,
-    )
-
     for index, row in enumerate(rows):
         if pending is not None:
             action, signal_at = pending
@@ -173,11 +169,17 @@ def _simulate_sleeve(
     return points, trades, total_fees, total_slippage
 
 
-def run_ma_cross(bars_by_asset: dict[str, list[Bar]], config: EngineConfig) -> BacktestResult:
-    if config.fast_period < 2 or config.fast_period >= config.slow_period:
-        raise ValueError("MA periods are invalid.")
+def run_strategy(
+    bars_by_asset: dict[str, list[Bar]],
+    config: EngineConfig,
+    *,
+    strategy: Strategy | None = None,
+) -> BacktestResult:
     if config.initial_capital <= ZERO:
         raise ValueError("Initial capital must be positive.")
+    selected_strategy = strategy or config.strategy
+    if selected_strategy is None:
+        raise ValueError("A strategy implementation is required.")
     assets = sorted(bars_by_asset)
     if not assets:
         raise ValueError("At least one asset is required.")
@@ -195,6 +197,7 @@ def run_ma_cross(bars_by_asset: dict[str, list[Bar]], config: EngineConfig) -> B
             bars_by_asset[asset],
             sleeve_capital=sleeve_capital,
             config=config,
+            strategy=selected_strategy,
         )
         sleeve_points[asset] = points
         trades.extend(asset_trades)
@@ -257,7 +260,9 @@ def run_ma_cross(bars_by_asset: dict[str, list[Bar]], config: EngineConfig) -> B
     }
     trades.sort(key=lambda trade: (str(trade["exitAt"]), str(trade["asset"])))
     manifest = {
-        "engineVersion": "ma-cross-v1",
+        "engineVersion": f"{selected_strategy.code}-v1",
+        "strategyCode": selected_strategy.code,
+        "strategyVersion": selected_strategy.version,
         "strategyHash": config.strategy_hash,
         "datasetChecksums": dict(sorted(config.dataset_checksums.items())),
         "assets": assets,
@@ -275,4 +280,17 @@ def run_ma_cross(bars_by_asset: dict[str, list[Bar]], config: EngineConfig) -> B
         drawdown=drawdown,
         trades=trades,
         manifest=manifest,
+    )
+
+
+def run_ma_cross(bars_by_asset: dict[str, list[Bar]], config: EngineConfig) -> BacktestResult:
+    if config.fast_period < 2 or config.fast_period >= config.slow_period:
+        raise ValueError("MA periods are invalid.")
+    return run_strategy(
+        bars_by_asset,
+        config,
+        strategy=MovingAverageCrossoverStrategy(
+            fast_period=config.fast_period,
+            slow_period=config.slow_period,
+        ),
     )

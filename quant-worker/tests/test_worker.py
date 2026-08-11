@@ -2,6 +2,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
 from worker import DatasetInput, QueuedRun, bars_in_run_range, process_next_run
@@ -163,6 +165,102 @@ def test_process_next_run_accepts_versioned_catalog_ma_parameters() -> None:
             market="crypto_spot",
             checksum=canonical_bar_checksum(golden_bars()),
             bars=golden_bars(),
+        ),
+    )
+
+    response = process_next_run(repository)
+
+    assert response["status"] == "succeeded"
+    assert repository.failed is None
+
+
+def test_process_next_run_dispatches_turtle_strategy_from_catalog_parameters() -> None:
+    run = queued_run()
+    run = QueuedRun(
+        **{
+            **run.__dict__,
+            "parameters": {
+                "strategyCode": "turtle_breakout",
+                "strategyVersion": "1.0.0",
+                "strategyParameters": {"entryPeriod": 2, "exitPeriod": 2},
+                "timeframe": "1d",
+                "initialCapital": 1000,
+                "feeBps": 10,
+                "slippageBps": 5,
+                "from": "2024-01-01",
+                "to": "2024-01-31",
+                "legs": [{"symbol": "BTC", "leverage": 1}],
+            },
+        }
+    )
+    bars = golden_bars()
+    repository = FakeRepository(
+        run,
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(bars),
+            bars=bars,
+        ),
+    )
+
+    response = process_next_run(repository)
+
+    assert response["status"] == "succeeded"
+    assert repository.failed is None
+    assert repository.completed is not None
+    manifest = next(artifact for artifact in repository.completed[2] if artifact["kind"] == "manifest")
+    assert manifest["payload"]["strategyCode"] == "turtle_breakout"
+
+
+@pytest.mark.parametrize(
+    ("strategy_code", "strategy_parameters"),
+    [
+        ("signal_rolling_reversal", {"confirmationBars": 2}),
+        (
+            "abcd_causal",
+            {
+                "pivotLeftBars": 1,
+                "pivotRightBars": 1,
+                "retracementMin": 0.382,
+                "retracementMax": 0.886,
+                "extensionMin": 1.13,
+                "extensionMax": 1.618,
+            },
+        ),
+    ],
+)
+def test_process_next_run_dispatches_remaining_catalog_strategies(
+    strategy_code: str, strategy_parameters: dict[str, Any]
+) -> None:
+    run = queued_run()
+    run = QueuedRun(
+        **{
+            **run.__dict__,
+            "parameters": {
+                "strategyCode": strategy_code,
+                "strategyVersion": "1.0.0",
+                "strategyParameters": strategy_parameters,
+                "timeframe": "1d",
+                "initialCapital": 1000,
+                "feeBps": 10,
+                "slippageBps": 5,
+                "from": "2024-01-01",
+                "to": "2024-01-31",
+                "legs": [{"symbol": "BTC", "leverage": 1}],
+            },
+        }
+    )
+    bars = golden_bars()
+    repository = FakeRepository(
+        run,
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(bars),
+            bars=bars,
         ),
     )
 

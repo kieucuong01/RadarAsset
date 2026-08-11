@@ -11,10 +11,16 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import psycopg
 from psycopg.rows import dict_row
 
-from backtest.engine import EngineConfig, artifact_checksum, run_ma_cross
+from backtest.engine import EngineConfig, artifact_checksum, run_strategy
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
-from backtest.strategies import MovingAverageCrossoverStrategy
+from backtest.strategies import (
+    AbcdCausalStrategy,
+    MovingAverageCrossoverStrategy,
+    SignalRollingReversalStrategy,
+    Strategy,
+    TurtleBreakoutStrategy,
+)
 
 
 DEFAULT_DATABASE_URL = (
@@ -89,19 +95,20 @@ def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig
     legacy_keys = common_keys | {"strategy", "fastPeriod", "slowPeriod"}
     catalog_keys = common_keys | {"strategyCode", "strategyVersion", "strategyParameters"}
     if set(parameters) == catalog_keys:
-        if parameters.get("strategyCode") != "ma_crossover" or parameters.get("strategyVersion") != "1.0.0":
+        if parameters.get("strategyVersion") != "1.0.0":
             raise ValueError("Unsupported strategy version.")
         strategy_parameters = parameters.get("strategyParameters")
-        if not isinstance(strategy_parameters, dict) or set(strategy_parameters) != {
-            "fastPeriod",
-            "slowPeriod",
-        }:
+        if not isinstance(strategy_parameters, dict):
             raise ValueError("Strategy parameters do not match the allow-listed contract.")
-        fast_period = int(strategy_parameters["fastPeriod"])
-        slow_period = int(strategy_parameters["slowPeriod"])
+        strategy, fast_period, slow_period = _catalog_strategy(
+            str(parameters.get("strategyCode")), strategy_parameters
+        )
     elif set(parameters) == legacy_keys and parameters.get("strategy") == "ma_cross":
-        fast_period = int(parameters["fastPeriod"])
-        slow_period = int(parameters["slowPeriod"])
+        fast_period = _strict_int(parameters["fastPeriod"], "fastPeriod", 2, 200)
+        slow_period = _strict_int(parameters["slowPeriod"], "slowPeriod", 3, 400)
+        if fast_period >= slow_period:
+            raise ValueError("MA periods are invalid.")
+        strategy = MovingAverageCrossoverStrategy(fast_period=fast_period, slow_period=slow_period)
     else:
         raise ValueError("Backtest parameters do not match the allow-listed strategy contract.")
     timeframe = parameters.get("timeframe")
@@ -133,8 +140,77 @@ def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig
         market_by_asset={dataset.asset: dataset.market for dataset in datasets},
         strategy_hash=run.strategy_hash,
         dataset_checksums={dataset.asset: dataset.checksum for dataset in datasets},
-        strategy=MovingAverageCrossoverStrategy(fast_period=fast_period, slow_period=slow_period),
+        strategy=strategy,
     )
+
+
+def _strict_int(value: object, name: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise ValueError(f"{name} is invalid.")
+    return value
+
+
+def _strict_decimal(value: object, name: str, minimum: str, maximum: str) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} is invalid.")
+    decimal = Decimal(str(value))
+    if not Decimal(minimum) <= decimal <= Decimal(maximum):
+        raise ValueError(f"{name} is invalid.")
+    return decimal
+
+
+def _catalog_strategy(
+    code: str, parameters: dict[str, Any]
+) -> tuple[Strategy, int, int]:
+    if code == "ma_crossover":
+        if set(parameters) != {"fastPeriod", "slowPeriod"}:
+            raise ValueError("Strategy parameters do not match the MA contract.")
+        fast_period = _strict_int(parameters["fastPeriod"], "fastPeriod", 2, 200)
+        slow_period = _strict_int(parameters["slowPeriod"], "slowPeriod", 3, 400)
+        if fast_period >= slow_period:
+            raise ValueError("MA periods are invalid.")
+        strategy = MovingAverageCrossoverStrategy(fast_period, slow_period)
+        return strategy, fast_period, slow_period
+    if code == "turtle_breakout":
+        if set(parameters) != {"entryPeriod", "exitPeriod"}:
+            raise ValueError("Strategy parameters do not match the Turtle contract.")
+        entry_period = _strict_int(parameters["entryPeriod"], "entryPeriod", 2, 250)
+        exit_period = _strict_int(parameters["exitPeriod"], "exitPeriod", 2, 250)
+        strategy = TurtleBreakoutStrategy(entry_period, exit_period)
+        return strategy, 2, max(3, strategy.warmup_bars)
+    if code == "signal_rolling_reversal":
+        if set(parameters) != {"confirmationBars"}:
+            raise ValueError("Strategy parameters do not match the rolling contract.")
+        confirmation_bars = _strict_int(parameters["confirmationBars"], "confirmationBars", 2, 20)
+        strategy = SignalRollingReversalStrategy(confirmation_bars)
+        return strategy, 2, max(3, strategy.warmup_bars)
+    if code == "abcd_causal":
+        required = {
+            "pivotLeftBars",
+            "pivotRightBars",
+            "retracementMin",
+            "retracementMax",
+            "extensionMin",
+            "extensionMax",
+        }
+        if set(parameters) != required:
+            raise ValueError("Strategy parameters do not match the ABCD contract.")
+        pivot_left = _strict_int(parameters["pivotLeftBars"], "pivotLeftBars", 1, 10)
+        pivot_right = _strict_int(parameters["pivotRightBars"], "pivotRightBars", 1, 10)
+        retracement_min = _strict_decimal(parameters["retracementMin"], "retracementMin", "0.1", "1.5")
+        retracement_max = _strict_decimal(parameters["retracementMax"], "retracementMax", "0.2", "2")
+        extension_min = _strict_decimal(parameters["extensionMin"], "extensionMin", "0.5", "3")
+        extension_max = _strict_decimal(parameters["extensionMax"], "extensionMax", "0.75", "4")
+        strategy = AbcdCausalStrategy(
+            pivot_left,
+            pivot_right,
+            retracement_min,
+            retracement_max,
+            extension_min,
+            extension_max,
+        )
+        return strategy, 2, max(3, strategy.warmup_bars)
+    raise ValueError("Unsupported strategy code.")
 
 
 def bars_in_run_range(bars: list[Bar], run: QueuedRun) -> list[Bar]:
@@ -184,9 +260,10 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
             for dataset in datasets
         ]
         config = _engine_config(run, execution_datasets)
-        result = run_ma_cross(
+        result = run_strategy(
             {dataset.asset: dataset.bars for dataset in execution_datasets},
             config,
+            strategy=config.strategy,
         )
         manifest = {
             **result.manifest,

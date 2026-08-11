@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from backtest.engine import EngineConfig, artifact_checksum, run_ma_cross
+from backtest.engine import EngineConfig, artifact_checksum, run_ma_cross, run_strategy
 from backtest.models import Bar
-from backtest.strategies import MovingAverageCrossoverStrategy
+from backtest.strategies import MovingAverageCrossoverStrategy, TurtleBreakoutStrategy
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "ma_cross_golden.json"
@@ -111,6 +111,18 @@ def test_engine_uses_shared_ma_strategy_without_changing_golden_output() -> None
     legacy_defaults = run_ma_cross(bars_by_asset, base_config())
 
     assert inline_strategy == legacy_defaults
+
+
+def test_generic_engine_runs_turtle_strategy_through_the_same_artifact_pipeline() -> None:
+    bars_by_asset, _markets = load_fixture()
+    strategy = TurtleBreakoutStrategy(entry_period=2, exit_period=2)
+
+    result = run_strategy(bars_by_asset, base_config(strategy=strategy), strategy=strategy)
+
+    assert result.manifest["strategyCode"] == "turtle_breakout"
+    assert result.manifest["strategyVersion"] == "1.0.0"
+    assert result.manifest["rules"]["executionTiming"] == "next-bar-open"
+    assert all(trade["side"] == "long" for trade in result.trades)
 
 
 @pytest.mark.parametrize(

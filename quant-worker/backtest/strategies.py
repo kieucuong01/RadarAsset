@@ -22,6 +22,7 @@ class StrategySignal:
 class Strategy(Protocol):
     code: str
     version: str
+    warmup_bars: int
 
     def signal(
         self,
@@ -43,6 +44,10 @@ class MovingAverageCrossoverStrategy:
     slow_period: int
     code: str = "ma_crossover"
     version: str = "1.0.0"
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.slow_period
 
     def __post_init__(self) -> None:
         if self.fast_period < 2 or self.fast_period >= self.slow_period:
@@ -82,6 +87,10 @@ class TurtleBreakoutStrategy:
     exit_period: int
     code: str = "turtle_breakout"
     version: str = "1.0.0"
+
+    @property
+    def warmup_bars(self) -> int:
+        return max(self.entry_period, self.exit_period)
 
     def __post_init__(self) -> None:
         if self.entry_period < 2 or self.exit_period < 2:
@@ -126,6 +135,10 @@ class SignalRollingReversalStrategy:
     confirmation_bars: int
     code: str = "signal_rolling_reversal"
     version: str = "1.0.0"
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.confirmation_bars
 
     def __post_init__(self) -> None:
         if self.confirmation_bars < 2 or self.confirmation_bars > 20:
@@ -190,6 +203,10 @@ class AbcdCausalStrategy:
     extension_max: Decimal
     code: str = "abcd_causal"
     version: str = "1.0.0"
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.pivot_left_bars + self.pivot_right_bars + 4
 
     def __post_init__(self) -> None:
         if (
