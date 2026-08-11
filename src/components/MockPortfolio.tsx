@@ -28,6 +28,7 @@ import {
   YAxis,
 } from "recharts";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { FavoriteAssetsPanel } from "@/components/FavoriteAssetsPanel";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import { StrategyAssignmentPanel } from "@/components/StrategyAssignmentPanel";
 import { Button } from "@/components/ui/button";
@@ -370,6 +371,7 @@ export function MockPortfolio() {
       </section>
 
       <HoldingsTable holdings={holdings} fmt0={fmt0} fmt2={fmt2} />
+      <FavoriteAssetsPanel holdings={holdings} timeframe={timeframe} onRecorded={setPortfolio} />
       <RiskMetrics metrics={portfolio?.riskMetrics ?? []} />
       <StrategyAssignmentPanel
         holdings={holdings}
