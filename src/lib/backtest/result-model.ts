@@ -105,6 +105,8 @@ export type BacktestResultModel = {
     cashFlow: CashFlowPoint[];
     rebalance: RebalancePoint[];
     assumptions: z.infer<typeof displayedAssumptionsSchema>;
+    analytics: Record<string, unknown> | null;
+    reportHtml: string | null;
   };
   legs: Array<{
     id: string;
@@ -133,6 +135,8 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
   const cashFlowArtifact = artifactByKind(aggregateArtifacts, "cash_flow");
   const rebalanceArtifact = artifactByKind(aggregateArtifacts, "rebalance");
   const manifestArtifact = artifactByKind(aggregateArtifacts, "manifest");
+  const analyticsArtifact = artifactByKind(aggregateArtifacts, "analytics", false);
+  const reportArtifact = artifactByKind(aggregateArtifacts, "report_html", false);
   if (
     equityArtifact?.kind !== "equity" ||
     drawdownArtifact?.kind !== "drawdown" ||
@@ -210,6 +214,11 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
         "rebalance",
       ),
       assumptions: aggregateManifest.assumptions,
+      analytics:
+        analyticsArtifact?.kind === "analytics"
+          ? parsePayload(z.record(z.string(), z.unknown()), analyticsArtifact.payload, "analytics")
+          : null,
+      reportHtml: reportArtifact?.kind === "report_html" ? reportArtifact.payload : null,
     },
     legs,
   };

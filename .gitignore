@@ -15,6 +15,7 @@ node_modules
 .next
 .worktrees/
 .npm-cache
+.venv/
 dist
 dist-ssr
 .output

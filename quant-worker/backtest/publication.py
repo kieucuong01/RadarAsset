@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from .models import Bar, QualityIssue
 from .quality import canonical_bar_checksum, normalize_bars, validate_bars
 from .snapshots import ActiveSnapshot
+from .signal_evaluator import ActiveAssignment, evaluate_latest_signal
 
 
 PRICE_STORAGE_QUANTUM = Decimal("0.00000001")
@@ -416,6 +417,73 @@ class PostgresDatasetPublisher:
                 "UPDATE dataset_versions SET is_active = true WHERE id = %s",
                 (version_id,),
             )
+            cursor.execute(
+                """
+                SELECT assignment.id AS assignment_id,
+                       assignment.organization_id,
+                       assignment.asset_id,
+                       assignment.strategy_version_id,
+                       assignment.parameters,
+                       strategy.code AS strategy_code,
+                       strategy.version AS strategy_version,
+                       COALESCE(position.quantity, 0) AS position_quantity
+                FROM strategy_assignments AS assignment
+                JOIN strategy_versions AS strategy
+                  ON strategy.id = assignment.strategy_version_id
+                LEFT JOIN portfolio_positions AS position
+                  ON position.portfolio_id = assignment.portfolio_id
+                 AND position.asset_id = assignment.asset_id
+                WHERE assignment.asset_id = %s
+                  AND assignment.status = 'active'
+                  AND strategy.status = 'active'
+                """,
+                (asset_id,),
+            )
+            for row in cursor.fetchall():
+                parameters = row["parameters"] if isinstance(row["parameters"], dict) else {}
+                try:
+                    signal = evaluate_latest_signal(
+                        ActiveAssignment(
+                            assignment_id=str(row["assignment_id"]),
+                            organization_id=str(row["organization_id"]),
+                            asset_id=str(row["asset_id"]),
+                            strategy_version_id=str(row["strategy_version_id"]),
+                            strategy_code=str(row["strategy_code"]),
+                            strategy_version=str(row["strategy_version"]),
+                            parameters=parameters,
+                            position_quantity=Decimal(str(row["position_quantity"])),
+                        ),
+                        list(prepared.rows),
+                        dataset_version_id=version_id,
+                    )
+                except ValueError:
+                    continue
+                if signal is None:
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO strategy_signals (
+                        id, organization_id, assignment_id, asset_id,
+                        strategy_version_id, signal_type, status, signal_at,
+                        execution_at, signal_price, reason, metadata, created_at
+                    ) VALUES (
+                        gen_random_uuid(), %s, %s, %s, %s, %s, 'suggested', %s,
+                        NULL, %s, %s, %s::jsonb, NOW()
+                    )
+                    ON CONFLICT (assignment_id, signal_type, signal_at) DO NOTHING
+                    """,
+                    (
+                        signal["organizationId"],
+                        signal["assignmentId"],
+                        signal["assetId"],
+                        signal["strategyVersionId"],
+                        signal["signalType"],
+                        signal["signalAt"],
+                        signal["signalPrice"],
+                        signal["reason"],
+                        json.dumps(signal["metadata"], separators=(",", ":")),
+                    ),
+                )
         return {
             "datasetVersionId": version_id,
             "version": version_number,

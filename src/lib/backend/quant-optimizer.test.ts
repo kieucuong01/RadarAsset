@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prisma } = vi.hoisted(() => ({ prisma: { asset: { findMany: vi.fn() } } }));
+const { prisma, engine } = vi.hoisted(() => ({
+  prisma: { asset: { findMany: vi.fn() } },
+  engine: vi.fn(),
+}));
 
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
+vi.mock("./quant-engine-client", () => ({ requestQuantEngineOptimization: engine }));
 
 import {
   QuantOptimizerEligibilityError,
@@ -22,6 +26,7 @@ function bars(multiplier: number) {
 const assets = [
   {
     symbol: "BTC",
+    market: "crypto_spot",
     datasets: [
       {
         versions: [
@@ -37,6 +42,7 @@ const assets = [
   },
   {
     symbol: "VNM",
+    market: "vn_equity",
     datasets: [
       {
         versions: [
@@ -67,6 +73,37 @@ describe("quant allocation optimizer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.asset.findMany.mockResolvedValue(assets);
+    engine.mockResolvedValue({
+      method: "risk_parity",
+      source: {
+        library: "skfolio",
+        version: "0.20.1",
+        repository: "https://github.com/skfolio/skfolio",
+        directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
+        license: "BSD-3-Clause",
+      },
+      weightsBps: { BTC: 4000, VNM: 4000 },
+      expectedReturnPct: 8,
+      volatilityPct: 10,
+      sharpe: 0.8,
+      observationCount: 40,
+      assetMetrics: [
+        { symbol: "BTC", expectedReturnPct: 10, volatilityPct: 20 },
+        { symbol: "VNM", expectedReturnPct: 6, volatilityPct: 8 },
+      ],
+      correlationMatrix: [
+        { symbol: "BTC", correlations: { BTC: 1, VNM: 0.2 } },
+        { symbol: "VNM", correlations: { BTC: 0.2, VNM: 1 } },
+      ],
+      validation: {
+        split: "chronological_70_30",
+        trainObservationCount: 30,
+        testObservationCount: 10,
+        inSample: { expectedReturnPct: 8, volatilityPct: 10, sharpe: 0.8, maxDrawdownPct: -4 },
+        outOfSample: { expectedReturnPct: 6, volatilityPct: 11, sharpe: 0.5, maxDrawdownPct: -5 },
+      },
+      warnings: [],
+    });
   });
 
   it("loads immutable aligned closes and returns dataset-bound weights", async () => {
@@ -75,11 +112,17 @@ describe("quant allocation optimizer", () => {
     expect(result.datasetVersionIds).toEqual({ BTC: "dataset-btc", VNM: "dataset-vnm" });
     expect(result.method).toBe("risk_parity");
     expect(result.source).toEqual(
-      expect.objectContaining({ library: "portfolio-allocation", license: "MIT" }),
+      expect.objectContaining({ library: "skfolio", license: "BSD-3-Clause" }),
     );
     expect(result.totalWeightBps).toBe(8_000);
     expect(Object.values(result.weightsBps).reduce((sum, value) => sum + value, 0)).toBe(8_000);
     expect(result.observationCount).toBe(40);
+    expect(engine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketBySymbol: { BTC: "crypto_spot", VNM: "vn_equity" },
+        timeframe: "1d",
+      }),
+    );
     expect(prisma.asset.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { symbol: { in: ["BTC", "VNM"] } },

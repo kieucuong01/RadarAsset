@@ -221,8 +221,8 @@ export function StrategyAssignmentPanel({
                 </div>
                 {assignment.signals.length === 0 ? (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    No BUY/SELL signals yet. Apply this strategy from a completed backtest to import
-                    trade points.
+                    No new BUY/SELL signal yet. Active assignments are evaluated whenever a new
+                    immutable market dataset is published.
                   </p>
                 ) : (
                   <div className="mt-3 space-y-2">

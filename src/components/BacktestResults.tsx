@@ -148,6 +148,16 @@ export function BacktestResults({ run }: { run: BacktestRun }) {
     }
   }
 
+  function downloadQuantStatsReport() {
+    if (!model.aggregate.reportHtml) return;
+    const url = URL.createObjectURL(new Blob([model.aggregate.reportHtml], { type: "text/html" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `quantstats-${run.id.slice(0, 8)}.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="min-w-0 space-y-5" aria-labelledby="backtest-results-heading">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -177,6 +187,26 @@ export function BacktestResults({ run }: { run: BacktestRun }) {
           </Card>
         ))}
       </div>
+
+      {model.aggregate.analytics ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>QuantStats IS / OOS report</CardTitle>
+            <CardDescription>
+              Chronological 70/30 split with market-aware annualization. The HTML tear sheet is
+              downloaded instead of rendered inside the app.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              Source: QuantStats · immutable run artifact
+            </span>
+            <Button onClick={downloadQuantStatsReport} disabled={!model.aggregate.reportHtml}>
+              Download HTML report
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Tabs defaultValue="aggregate" className="min-w-0">
         <div className="max-w-full overflow-x-auto pb-1">

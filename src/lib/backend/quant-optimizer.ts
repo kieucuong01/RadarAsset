@@ -2,9 +2,10 @@ import { z } from "zod";
 
 import type { TenantContext } from "@/lib/auth/tenant-context";
 import { backtestSymbolSchema } from "@/lib/backtest/contracts";
+import { parseOptimizerProposal } from "@/lib/backtest/optimizer-client";
 import { OPTIMIZER_METHODS } from "@/lib/backtest/optimizer-methods";
-import { optimizePortfolioAllocation } from "@/lib/backtest/optimizer";
 import { getPrisma } from "@/lib/db/prisma";
+import { requestQuantEngineOptimization } from "./quant-engine-client";
 
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 
@@ -131,6 +132,7 @@ export async function optimizeQuantAllocation(
     orderBy: { symbol: "asc" },
     select: {
       symbol: true,
+      market: true,
       datasets: {
         where: { timeframe: input.timeframe, adjustmentPolicy },
         take: 1,
@@ -157,6 +159,7 @@ export async function optimizeQuantAllocation(
   const assetBySymbol = new Map(assets.map((asset) => [asset.symbol, asset]));
   const pricesBySymbol: Record<string, Map<number, number>> = {};
   const datasetVersionIds: Record<string, string> = {};
+  const marketBySymbol: Record<string, string> = {};
   for (const symbol of symbols) {
     const version = assetBySymbol.get(symbol)?.datasets[0]?.versions[0];
     if (!version) {
@@ -172,6 +175,7 @@ export async function optimizeQuantAllocation(
       );
     }
     datasetVersionIds[symbol] = version.id;
+    marketBySymbol[symbol] = assetBySymbol.get(symbol)!.market;
     pricesBySymbol[symbol] = new Map(
       version.bars.map((bar) => [bar.ts.valueOf(), closeNumber(bar.close)]),
     );
@@ -192,15 +196,20 @@ export async function optimizeQuantAllocation(
       return [symbol, prices.slice(1).map((price, index) => price / prices[index] - 1)];
     }),
   );
-  const optimized = optimizePortfolioAllocation({
+  const optimized = await requestQuantEngineOptimization({
     returnsBySymbol,
+    marketBySymbol,
+    timeframe: input.timeframe,
     method: input.method,
     maxWeightBps: input.maxWeightBps,
     totalWeightBps: input.totalWeightBps,
-    periodsPerYear: input.timeframe === "1d" ? 252 : 1_512,
     targetReturnPct: input.targetReturnPct,
     targetVolatilityPct: input.targetVolatilityPct,
     riskTolerance: input.riskTolerance,
   });
-  return { ...optimized, totalWeightBps: input.totalWeightBps, datasetVersionIds };
+  return parseOptimizerProposal({
+    ...(optimized as Record<string, unknown>),
+    totalWeightBps: input.totalWeightBps,
+    datasetVersionIds,
+  });
 }

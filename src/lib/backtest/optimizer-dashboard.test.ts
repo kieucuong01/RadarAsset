@@ -6,7 +6,7 @@ import type { OptimizerProposal } from "./optimizer-client";
 
 const proposal: OptimizerProposal = {
   method: "risk_parity",
-  source: OPTIMIZER_SOURCES.portfolioAllocation,
+  source: OPTIMIZER_SOURCES.skfolio,
   weightsBps: { BTC: 5_000, VNM: 3_000, XAU: 2_000 },
   totalWeightBps: 10_000,
   expectedReturnPct: 12,
@@ -23,6 +23,13 @@ const proposal: OptimizerProposal = {
     { symbol: "VNM", correlations: { BTC: 0.42, VNM: 1, XAU: 0.08 } },
     { symbol: "XAU", correlations: { BTC: -0.12, VNM: 0.08, XAU: 1 } },
   ],
+  validation: {
+    split: "chronological_70_30",
+    trainObservationCount: 176,
+    testObservationCount: 76,
+    inSample: { expectedReturnPct: 13, volatilityPct: 17, sharpe: 0.76, maxDrawdownPct: -8 },
+    outOfSample: { expectedReturnPct: 8, volatilityPct: 20, sharpe: 0.4, maxDrawdownPct: -12 },
+  },
   datasetVersionIds: {
     BTC: "dataset-btc",
     VNM: "dataset-vnm",

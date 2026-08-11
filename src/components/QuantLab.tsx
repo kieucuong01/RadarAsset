@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { Activity, Brain, FlaskConical, Sliders } from "lucide-react";
+import { Activity, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +23,12 @@ const BacktestWorkbench = dynamic(
   { ssr: false, loading: () => <WorkbenchSkeleton /> },
 );
 
-type TabKey = "optimizer" | "predict" | "backtest";
+const FactorLab = dynamic(
+  () => import("@/components/FactorLab").then((module) => module.FactorLab),
+  { ssr: false, loading: () => <WorkbenchSkeleton /> },
+);
+
+type TabKey = "optimizer" | "predict" | "backtest" | "factors";
 
 export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] }) {
   const [tab, setTab] = useState<TabKey>(() => initialQuantLabTab(initialSymbols));
@@ -63,6 +68,10 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
               <FlaskConical />
               Backtest & Risk Engine
             </TabsTrigger>
+            <TabsTrigger value="factors">
+              <ChartScatter />
+              VN Factor Lab
+            </TabsTrigger>
             <TabsTrigger value="predict">
               <Brain />
               AI Prediction
@@ -75,6 +84,9 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
         </TabsContent>
         <TabsContent value="backtest">
           <BacktestWorkbench initialSymbols={initialSymbols} />
+        </TabsContent>
+        <TabsContent value="factors">
+          <FactorLab />
         </TabsContent>
         <TabsContent value="predict">
           <Card>

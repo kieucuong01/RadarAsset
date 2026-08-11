@@ -121,6 +121,20 @@ def test_request_worker_claims_once_and_publishes_dataset() -> None:
     assert provider.calls[0]["symbol"] == "ETHUSDT"
 
 
+def test_request_worker_records_ccxt_fallback_provenance() -> None:
+    repository = FakeRequestRepository(request())
+    fallback_rows = bars()
+    fallback_rows[0] = Bar(
+        **{**fallback_rows[0].__dict__, "source": "ccxt:kraken"}
+    )
+
+    process_next_ingestion_request(
+        repository, lambda _code: FakeProvider(fallback_rows), now=NOW
+    )
+
+    assert repository.prepared.source_metadata["fallbackProvider"] == "ccxt:kraken"
+
+
 def test_request_worker_rejects_unapproved_provider() -> None:
     repository = FakeRequestRepository(request("user-url"))
 

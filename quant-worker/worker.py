@@ -14,6 +14,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backtest.engine import EngineConfig, artifact_checksum, run_strategy
+from backtest.analytics import build_performance_analytics
 from backtest.models import Bar
 from backtest.portfolio import (
     PortfolioAssumptions,
@@ -21,13 +22,8 @@ from backtest.portfolio import (
     run_portfolio,
 )
 from backtest.quality import canonical_bar_checksum
-from backtest.strategies import (
-    AbcdCausalStrategy,
-    MovingAverageCrossoverStrategy,
-    SignalRollingReversalStrategy,
-    Strategy,
-    TurtleBreakoutStrategy,
-)
+from backtest.strategies import MovingAverageCrossoverStrategy, Strategy
+from backtest.strategy_factory import strategy_from_catalog
 
 
 DEFAULT_DATABASE_URL = (
@@ -189,55 +185,10 @@ def _strict_decimal(value: object, name: str, minimum: str, maximum: str) -> Dec
 def _catalog_strategy(
     code: str, parameters: dict[str, Any]
 ) -> tuple[Strategy, int, int]:
-    if code == "ma_crossover":
-        if set(parameters) != {"fastPeriod", "slowPeriod"}:
-            raise ValueError("Strategy parameters do not match the MA contract.")
-        fast_period = _strict_int(parameters["fastPeriod"], "fastPeriod", 2, 200)
-        slow_period = _strict_int(parameters["slowPeriod"], "slowPeriod", 3, 400)
-        if fast_period >= slow_period:
-            raise ValueError("MA periods are invalid.")
-        strategy = MovingAverageCrossoverStrategy(fast_period, slow_period)
-        return strategy, fast_period, slow_period
-    if code == "turtle_breakout":
-        if set(parameters) != {"entryPeriod", "exitPeriod"}:
-            raise ValueError("Strategy parameters do not match the Turtle contract.")
-        entry_period = _strict_int(parameters["entryPeriod"], "entryPeriod", 2, 250)
-        exit_period = _strict_int(parameters["exitPeriod"], "exitPeriod", 2, 250)
-        strategy = TurtleBreakoutStrategy(entry_period, exit_period)
-        return strategy, 2, max(3, strategy.warmup_bars)
-    if code == "signal_rolling_reversal":
-        if set(parameters) != {"confirmationBars"}:
-            raise ValueError("Strategy parameters do not match the rolling contract.")
-        confirmation_bars = _strict_int(parameters["confirmationBars"], "confirmationBars", 2, 20)
-        strategy = SignalRollingReversalStrategy(confirmation_bars)
-        return strategy, 2, max(3, strategy.warmup_bars)
-    if code == "abcd_causal":
-        required = {
-            "pivotLeftBars",
-            "pivotRightBars",
-            "retracementMin",
-            "retracementMax",
-            "extensionMin",
-            "extensionMax",
-        }
-        if set(parameters) != required:
-            raise ValueError("Strategy parameters do not match the ABCD contract.")
-        pivot_left = _strict_int(parameters["pivotLeftBars"], "pivotLeftBars", 1, 10)
-        pivot_right = _strict_int(parameters["pivotRightBars"], "pivotRightBars", 1, 10)
-        retracement_min = _strict_decimal(parameters["retracementMin"], "retracementMin", "0.1", "1.5")
-        retracement_max = _strict_decimal(parameters["retracementMax"], "retracementMax", "0.2", "2")
-        extension_min = _strict_decimal(parameters["extensionMin"], "extensionMin", "0.5", "3")
-        extension_max = _strict_decimal(parameters["extensionMax"], "extensionMax", "0.75", "4")
-        strategy = AbcdCausalStrategy(
-            pivot_left,
-            pivot_right,
-            retracement_min,
-            retracement_max,
-            extension_min,
-            extension_max,
-        )
-        return strategy, 2, max(3, strategy.warmup_bars)
-    raise ValueError("Unsupported strategy code.")
+    strategy = strategy_from_catalog(code, "1.0.0", parameters)
+    fast_period = getattr(strategy, "fast_period", 2)
+    slow_period = getattr(strategy, "slow_period", max(3, strategy.warmup_bars))
+    return strategy, fast_period, slow_period
 
 
 def bars_in_run_range(bars: list[Bar], run: QueuedRun) -> list[Bar]:
@@ -323,6 +274,27 @@ def _artifact(
         "quantRunLegId": leg_id,
         "metrics": metrics,
     }
+
+
+def _performance_artifacts(
+    equity: list[dict[str, Any]],
+    *,
+    markets: list[str],
+    timeframe: str,
+    title: str,
+) -> list[dict[str, Any]]:
+    if len(equity) < 31:
+        return []
+    report = build_performance_analytics(
+        equity,
+        markets=markets,
+        timeframe=timeframe,
+        title=title,
+    )
+    return [
+        _artifact("analytics", report.metrics),
+        _artifact("report_html", report.html),
+    ]
 
 
 def _process_portfolio_run(
@@ -460,6 +432,14 @@ def _process_portfolio_run(
         ("manifest", aggregate_manifest),
     ):
         artifacts.append(_artifact(kind, payload))
+    artifacts.extend(
+        _performance_artifacts(
+            portfolio.equity,
+            markets=[leg.market for leg in portfolio_legs],
+            timeframe=timeframe,
+            title="Portfolio backtest",
+        )
+    )
     return portfolio.summary, artifacts
 
 
@@ -518,6 +498,14 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
                     ("manifest", manifest),
                 )
             ]
+            artifacts.extend(
+                _performance_artifacts(
+                    result.equity,
+                    markets=[dataset.market for dataset in execution_datasets],
+                    timeframe=str(run.parameters.get("timeframe", "1d")),
+                    title=f"{config.strategy.code} backtest",
+                )
+            )
             summary = result.summary
         repository.complete_run(run, summary, artifacts)
         return {"status": "succeeded", "id": run.id, "metrics": summary}

@@ -15,7 +15,12 @@ import psycopg
 from backtest.catalog import FEEDS
 from backtest.ingestion import IngestionSelection, run_ingestion
 from backtest.ingestion_repository import PostgresIngestionRepository
-from backtest.providers import BinanceSpotAdapter, VnstockAdapter
+from backtest.providers import (
+    BinanceSpotAdapter,
+    CcxtSpotAdapter,
+    FallbackMarketDataProvider,
+    VnstockAdapter,
+)
 
 
 class CliUsageError(ValueError):
@@ -131,7 +136,10 @@ def _argument_parser() -> StrictArgumentParser:
 
 def provider_for_code(provider_code: str, max_pages: int, max_rows: int) -> Any:
     if provider_code == "binance-public":
-        return BinanceSpotAdapter(max_pages=max_pages, max_rows=max_rows)
+        return FallbackMarketDataProvider(
+            BinanceSpotAdapter(max_pages=max_pages, max_rows=max_rows),
+            CcxtSpotAdapter(max_pages=max_pages, max_rows=max_rows),
+        )
     if provider_code in {"vnstock-vci-free", "msn-via-vnstock"}:
         return VnstockAdapter(max_rows=max_rows)
     raise ValueError("Provider is not approved for market ingestion.")

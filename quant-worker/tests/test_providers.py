@@ -10,12 +10,54 @@ import pytest
 from backtest.catalog import FEEDS
 from backtest.providers import (
     BinanceSpotAdapter,
+    CcxtSpotAdapter,
+    FallbackMarketDataProvider,
     HttpJsonResponse,
     ProviderInstrumentDescriptor,
     ProviderUnavailableError,
     VnstockAdapter,
     _load_vnstock_market,
 )
+
+
+class FailingProvider:
+    def fetch(self, **_kwargs: Any) -> list[Any]:
+        raise ProviderUnavailableError("provider_unavailable", "primary failed")
+
+
+class FakeCcxtExchange:
+    id = "kraken"
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int, int]] = []
+
+    def load_markets(self) -> None:
+        return None
+
+    def fetch_ohlcv(self, symbol: str, timeframe: str, since: int, limit: int) -> list[list[Any]]:
+        self.calls.append((symbol, timeframe, since, limit))
+        if len(self.calls) > 1:
+            return []
+        return [[since, 100, 102, 99, 101, 12.5]]
+
+
+def test_ccxt_fallback_is_used_only_after_primary_failure() -> None:
+    exchange = FakeCcxtExchange()
+    fallback = CcxtSpotAdapter(exchange=exchange, max_pages=2, max_rows=100)
+    provider = FallbackMarketDataProvider(FailingProvider(), fallback)
+
+    rows = provider.fetch(
+        symbol="BTCUSDT",
+        asset="BTC",
+        timeframe="1h",
+        start=utc(2025, 1, 1),
+        end=utc(2025, 1, 1, 2),
+        now=utc(2025, 1, 1, 3),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].source == "ccxt:kraken"
+    assert exchange.calls[0][0] == "BTC/USD"
 
 
 def utc(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:

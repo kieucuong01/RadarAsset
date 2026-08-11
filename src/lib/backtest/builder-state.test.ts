@@ -58,7 +58,7 @@ function optimizerProposal(
 ) {
   return {
     method: "risk_parity" as const,
-    source: OPTIMIZER_SOURCES.portfolioAllocation,
+    source: OPTIMIZER_SOURCES.skfolio,
     weightsBps,
     totalWeightBps: 8_000,
     expectedReturnPct: 12,

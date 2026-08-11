@@ -17,11 +17,11 @@ const request = {
 const proposal = {
   method: "target_return" as const,
   source: {
-    library: "portfolio-allocation",
-    version: "0.0.11",
-    repository: "https://github.com/lequant40/portfolio_allocation_js",
+    library: "skfolio",
+    version: "0.20.1",
+    repository: "https://github.com/skfolio/skfolio",
     directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
-    license: "MIT",
+    license: "BSD-3-Clause",
   },
   weightsBps: { BTC: 3_000, VNM: 5_000 },
   totalWeightBps: 8_000,
@@ -37,6 +37,13 @@ const proposal = {
     { symbol: "BTC", correlations: { BTC: 1, VNM: 0.32 } },
     { symbol: "VNM", correlations: { BTC: 0.32, VNM: 1 } },
   ],
+  validation: {
+    split: "chronological_70_30" as const,
+    trainObservationCount: 176,
+    testObservationCount: 76,
+    inSample: { expectedReturnPct: 13, volatilityPct: 17, sharpe: 0.76, maxDrawdownPct: -8 },
+    outOfSample: { expectedReturnPct: 8, volatilityPct: 20, sharpe: 0.4, maxDrawdownPct: -12 },
+  },
   datasetVersionIds: { BTC: "dataset-btc", VNM: "dataset-vnm" },
   warnings: [],
 };

@@ -135,6 +135,7 @@ def prepare_for_feed(
     selection: IngestionSelection, rows: list[Bar]
 ) -> PreparedDatasetPublication:
     feed = FEEDS[selection.asset]
+    fallback_source = next((row.source for row in rows if row.source.startswith("ccxt:")), None)
     return prepare_dataset_publication(
         rows,
         market=feed.market,
@@ -155,6 +156,7 @@ def prepare_for_feed(
             "providerSymbol": feed.provider_symbol,
             "clientProvider": feed.client_provider,
             "upstreamProvider": feed.upstream_provider,
+            "fallbackProvider": fallback_source,
         },
     )
 

@@ -329,6 +329,121 @@ class BinanceSpotAdapter:
         )
 
 
+class CcxtSpotAdapter:
+    def __init__(
+        self,
+        *,
+        exchange: Any | None = None,
+        exchange_id: str = "kraken",
+        max_pages: int = 128,
+        max_rows: int = 100_000,
+    ) -> None:
+        if not 1 <= max_pages <= 512 or not 100 <= max_rows <= 250_000:
+            raise ValueError("CCXT limits are outside the supported range.")
+        if exchange is None:
+            try:
+                import ccxt
+
+                exchange = getattr(ccxt, exchange_id)({"enableRateLimit": True, "timeout": 15_000})
+            except (ImportError, AttributeError) as error:
+                raise ProviderUnavailableError("provider_unavailable", "CCXT is unavailable.") from error
+        self.exchange = exchange
+        self.exchange_id = str(getattr(exchange, "id", exchange_id))
+        self.max_pages = max_pages
+        self.max_rows = max_rows
+
+    @staticmethod
+    def unified_symbol(symbol: str) -> str:
+        value = symbol.strip().upper()
+        match = re.fullmatch(r"([A-Z0-9]{2,20})(USDT|USD)", value)
+        if match is None:
+            raise ValueError("Unsupported CCXT spot symbol.")
+        return f"{match.group(1)}/USD"
+
+    def fetch(
+        self,
+        *,
+        symbol: str,
+        asset: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        now: datetime | None = None,
+    ) -> list[Bar]:
+        if timeframe not in INTERVALS:
+            raise ValueError("Unsupported provider timeframe.")
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Provider boundaries must be timezone-aware.")
+        since = int(start.astimezone(timezone.utc).timestamp() * 1000)
+        end_ms = int(end.astimezone(timezone.utc).timestamp() * 1000)
+        step_ms = INTERVAL_MILLISECONDS[timeframe]
+        rows: list[Bar] = []
+        try:
+            self.exchange.load_markets()
+            for _ in range(self.max_pages):
+                page = self.exchange.fetch_ohlcv(
+                    self.unified_symbol(symbol),
+                    timeframe,
+                    since=since,
+                    limit=min(1000, self.max_rows),
+                )
+                if not page:
+                    break
+                timestamps = [int(item[0]) for item in page]
+                if timestamps != sorted(timestamps) or len(set(timestamps)) != len(timestamps):
+                    raise ProviderUnavailableError("invalid_response", "CCXT returned invalid ordering.")
+                for item in page:
+                    if not isinstance(item, (list, tuple)) or len(item) < 6:
+                        raise ProviderUnavailableError("invalid_response", "CCXT returned an invalid candle.")
+                    timestamp = datetime.fromtimestamp(int(item[0]) / 1000, tz=timezone.utc)
+                    if timestamp > end.astimezone(timezone.utc):
+                        continue
+                    rows.append(
+                        Bar(
+                            asset=asset,
+                            timestamp=timestamp,
+                            timeframe=timeframe,
+                            open=Decimal(str(item[1])),
+                            high=Decimal(str(item[2])),
+                            low=Decimal(str(item[3])),
+                            close=Decimal(str(item[4])),
+                            volume=None if item[5] is None else Decimal(str(item[5])),
+                            source=f"ccxt:{self.exchange_id}",
+                        )
+                    )
+                    if len(rows) > self.max_rows:
+                        raise ProviderUnavailableError("response_limit", "CCXT row limit exceeded.")
+                next_since = timestamps[-1] + step_ms
+                if next_since <= since or next_since > end_ms:
+                    break
+                since = next_since
+            else:
+                raise ProviderUnavailableError("response_limit", "CCXT page limit exceeded.")
+        except ProviderUnavailableError:
+            raise
+        except Exception as error:
+            raise ProviderUnavailableError("provider_unavailable", "CCXT fallback failed.") from error
+        if not rows:
+            raise ProviderUnavailableError("provider_unavailable", "CCXT returned no bars.")
+        return only_closed_bars(
+            normalize_bars(rows), timeframe=timeframe, now=now or datetime.now(timezone.utc)
+        )
+
+
+class FallbackMarketDataProvider:
+    def __init__(self, primary: Any, fallback: Any) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def fetch(self, **kwargs: Any) -> list[Bar]:
+        try:
+            return self.primary.fetch(**kwargs)
+        except ProviderUnavailableError as error:
+            if error.code == "unsupported_timeframe":
+                raise
+            return self.fallback.fetch(**kwargs)
+
+
 def _load_vnstock_market(
     import_market: Callable[[], Any] | None = None,
 ) -> Any:

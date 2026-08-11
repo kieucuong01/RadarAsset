@@ -55,6 +55,14 @@ const artifactSchema = z.discriminatedUnion("kind", [
     .object({ ...artifactBase, kind: z.literal("equity"), payload: z.array(equityPointSchema) })
     .strict(),
   z
+    .object({
+      ...artifactBase,
+      kind: z.literal("analytics"),
+      payload: z.record(z.string(), z.unknown()),
+    })
+    .strict(),
+  z.object({ ...artifactBase, kind: z.literal("report_html"), payload: z.string() }).strict(),
+  z
     .object({ ...artifactBase, kind: z.literal("drawdown"), payload: z.array(drawdownPointSchema) })
     .strict(),
   z.object({ ...artifactBase, kind: z.literal("trades"), payload: z.array(tradeSchema) }).strict(),

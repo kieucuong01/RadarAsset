@@ -68,6 +68,18 @@ def test_vietnam_hourly_quality_understands_trading_sessions_and_lunch_break() -
     assert report.issues[0].timestamp == datetime(2024, 1, 2, 3, tzinfo=timezone.utc)
 
 
+def test_vietnam_daily_quality_does_not_flag_tet_holiday() -> None:
+    report = validate_bars(
+        [
+            bar("2025-01-28T00:00:00Z", asset="FPT", timeframe="1d"),
+            bar("2025-02-03T00:00:00Z", asset="FPT", timeframe="1d"),
+        ],
+        market="vn_equity",
+    )
+
+    assert report.missing_bar_count == 0
+
+
 def test_gold_daily_quality_does_not_treat_weekend_as_missing() -> None:
     report = validate_bars(
         [

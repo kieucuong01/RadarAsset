@@ -13,6 +13,12 @@ const IMPLEMENTATION_HASHES: Record<string, string> = {
   "signal_rolling_reversal@1.0.0":
     "059784ca9863c91bd298f0b100c04cc7aa22abb2511a3ca6313a276d3143aca9",
   "abcd_causal@1.0.0": "ea97244d5e5dad14ed2686d3b913fd7b7605d9c6e5bfbfb683835b55e578ca7b",
+  "ema_trend@1.0.0": "8840d8ad711a583f6f0c1da991b60f5085b9bd7f463bb9a2b653a1c9f4fea44d",
+  "rsi_mean_reversion@1.0.0": "edf42f3f9a5a8e7920d7702d198de264b13b5d928c4e3c1cd3000046720426af",
+  "bollinger_mean_reversion@1.0.0":
+    "eea61cec25fcb4565e4fb09b47b0c3f699bbfa1445dbf9099f58d95a457a2b97",
+  "macd_momentum@1.0.0": "75512f6248bf9164a85526a75dabc71aa6e09f320ab37b86c7619d0015a0be49",
+  "atr_breakout@1.0.0": "0b915452fd6946b76e6c12f8450b46d9d40668a812c5377e53362804f747c291",
 };
 
 type StrategyMarket = "vn_equity" | "crypto_spot" | "metal_spot";
@@ -37,6 +43,8 @@ type StrategyDefinitionInput = {
   parameterSchema: readonly StrategyParameterDescriptor[];
   defaultParameters: Readonly<Record<string, number>>;
   validator: z.ZodTypeAny;
+  sourceAttribution?: string;
+  modificationNotice?: string;
 };
 
 export type StrategyDefinition = StrategyDefinitionInput & {
@@ -225,6 +233,154 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
         }
       }),
   }),
+  makeDefinition({
+    code: "ema_trend",
+    version: "1.0.0",
+    name: "EMA Trend",
+    category: "rule_based",
+    supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+    supportedTimeframes: ["1d", "1h"],
+    requiredWarmup: "slowPeriod + 1",
+    parameterSchema: [
+      { name: "fastPeriod", label: "Fast EMA", type: "integer", min: 2, max: 100, default: 12 },
+      { name: "slowPeriod", label: "Slow EMA", type: "integer", min: 3, max: 250, default: 26 },
+    ],
+    defaultParameters: { fastPeriod: 12, slowPeriod: 26 },
+    validator: z
+      .object({
+        fastPeriod: z.number().int().min(2).max(100),
+        slowPeriod: z.number().int().min(3).max(250),
+      })
+      .strict()
+      .refine((value) => value.fastPeriod < value.slowPeriod, {
+        message: "Fast period must be lower than slow period.",
+      }),
+    sourceAttribution: "Technical indicators powered by talipp (MIT).",
+    modificationNotice: "Causal close signal with next-bar execution.",
+  }),
+  makeDefinition({
+    code: "rsi_mean_reversion",
+    version: "1.0.0",
+    name: "RSI Mean Reversion",
+    category: "rule_based",
+    supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+    supportedTimeframes: ["1d", "1h"],
+    requiredWarmup: "period + 1",
+    parameterSchema: [
+      { name: "period", label: "RSI period", type: "integer", min: 2, max: 100, default: 14 },
+      { name: "oversold", label: "Oversold", type: "number", min: 1, max: 50, default: 30 },
+      { name: "overbought", label: "Recovery", type: "number", min: 50, max: 99, default: 55 },
+    ],
+    defaultParameters: { period: 14, oversold: 30, overbought: 55 },
+    validator: z
+      .object({
+        period: z.number().int().min(2).max(100),
+        oversold: z.number().min(1).max(50),
+        overbought: z.number().min(50).max(99),
+      })
+      .strict()
+      .refine((value) => value.oversold < value.overbought, {
+        message: "Oversold must be lower than overbought.",
+      }),
+    sourceAttribution: "Technical indicators powered by talipp (MIT).",
+    modificationNotice: "Long-only mean-reversion signal with next-bar execution.",
+  }),
+  makeDefinition({
+    code: "bollinger_mean_reversion",
+    version: "1.0.0",
+    name: "Bollinger Mean Reversion",
+    category: "rule_based",
+    supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+    supportedTimeframes: ["1d", "1h"],
+    requiredWarmup: "period",
+    parameterSchema: [
+      { name: "period", label: "Band period", type: "integer", min: 2, max: 200, default: 20 },
+      {
+        name: "standardDeviations",
+        label: "Standard deviations",
+        type: "number",
+        min: 0.5,
+        max: 5,
+        default: 2,
+      },
+    ],
+    defaultParameters: { period: 20, standardDeviations: 2 },
+    validator: z
+      .object({
+        period: z.number().int().min(2).max(200),
+        standardDeviations: z.number().min(0.5).max(5),
+      })
+      .strict(),
+    sourceAttribution: "Technical indicators powered by talipp (MIT).",
+    modificationNotice: "Long-only lower-band entry and center-band exit.",
+  }),
+  makeDefinition({
+    code: "macd_momentum",
+    version: "1.0.0",
+    name: "MACD Momentum",
+    category: "rule_based",
+    supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+    supportedTimeframes: ["1d", "1h"],
+    requiredWarmup: "slowPeriod + signalPeriod",
+    parameterSchema: [
+      { name: "fastPeriod", label: "Fast EMA", type: "integer", min: 2, max: 100, default: 12 },
+      { name: "slowPeriod", label: "Slow EMA", type: "integer", min: 3, max: 250, default: 26 },
+      { name: "signalPeriod", label: "Signal EMA", type: "integer", min: 2, max: 100, default: 9 },
+    ],
+    defaultParameters: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+    validator: z
+      .object({
+        fastPeriod: z.number().int().min(2).max(100),
+        slowPeriod: z.number().int().min(3).max(250),
+        signalPeriod: z.number().int().min(2).max(100),
+      })
+      .strict()
+      .refine((value) => value.fastPeriod < value.slowPeriod, {
+        message: "Fast period must be lower than slow period.",
+      }),
+    sourceAttribution: "Technical indicators powered by talipp (MIT).",
+    modificationNotice: "Causal histogram crossover with next-bar execution.",
+  }),
+  makeDefinition({
+    code: "atr_breakout",
+    version: "1.0.0",
+    name: "ATR Breakout",
+    category: "rule_based",
+    supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+    supportedTimeframes: ["1d", "1h"],
+    requiredWarmup: "max(atrPeriod, breakoutPeriod, exitPeriod)",
+    parameterSchema: [
+      { name: "atrPeriod", label: "ATR period", type: "integer", min: 2, max: 100, default: 14 },
+      {
+        name: "breakoutPeriod",
+        label: "Breakout lookback",
+        type: "integer",
+        min: 2,
+        max: 250,
+        default: 20,
+      },
+      {
+        name: "exitPeriod",
+        label: "Exit lookback",
+        type: "integer",
+        min: 2,
+        max: 250,
+        default: 10,
+      },
+      { name: "atrMultiplier", label: "ATR buffer", type: "number", min: 0, max: 5, default: 0.5 },
+    ],
+    defaultParameters: { atrPeriod: 14, breakoutPeriod: 20, exitPeriod: 10, atrMultiplier: 0.5 },
+    validator: z
+      .object({
+        atrPeriod: z.number().int().min(2).max(100),
+        breakoutPeriod: z.number().int().min(2).max(250),
+        exitPeriod: z.number().int().min(2).max(250),
+        atrMultiplier: z.number().min(0).max(5),
+      })
+      .strict(),
+    sourceAttribution: "Technical indicators powered by talipp (MIT).",
+    modificationNotice: "ATR-buffered breakout with prior-bar levels and next-bar execution.",
+  }),
 ] as const;
 
 function makeDefinition(input: StrategyDefinitionInput): StrategyDefinition {
@@ -234,8 +390,8 @@ function makeDefinition(input: StrategyDefinitionInput): StrategyDefinition {
   }
   return {
     ...input,
-    sourceAttribution: SOURCE_ATTRIBUTION,
-    modificationNotice: MODIFICATION_NOTICE,
+    sourceAttribution: input.sourceAttribution ?? SOURCE_ATTRIBUTION,
+    modificationNotice: input.modificationNotice ?? MODIFICATION_NOTICE,
     implementationHash,
   };
 }

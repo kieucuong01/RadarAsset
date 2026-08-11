@@ -8,6 +8,7 @@ import {
   optimizeQuantAllocation,
   quantOptimizerRequestSchema,
 } from "@/lib/backend/quant-optimizer";
+import { QuantEngineError } from "@/lib/backend/quant-engine-client";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,9 @@ export async function POST(request: Request) {
         ? 400
         : error instanceof QuantOptimizerEligibilityError
           ? 409
-          : 503;
+          : error instanceof QuantEngineError && error.code === "REJECTED"
+            ? 409
+            : 503;
     return apiError(error, status);
   }
 }

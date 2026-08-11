@@ -9,6 +9,8 @@ export const OPTIMIZER_METHODS = [
   "risk_parity",
   "most_diversified",
   "minimum_correlation",
+  "minimum_cvar",
+  "hierarchical_risk_parity",
 ] as const;
 
 export type OptimizerMethod = (typeof OPTIMIZER_METHODS)[number];
@@ -24,6 +26,8 @@ export const OPTIMIZER_METHOD_LABELS = {
   risk_parity: "Risk Parity / Equal Risk Contribution",
   most_diversified: "Most Diversified",
   minimum_correlation: "Minimum Correlation",
+  minimum_cvar: "Minimum CVaR",
+  hierarchical_risk_parity: "Hierarchical Risk Parity",
 } satisfies Record<OptimizerMethod, string>;
 
 export const OPTIMIZER_METHOD_DESCRIPTIONS = {
@@ -39,14 +43,16 @@ export const OPTIMIZER_METHOD_DESCRIPTIONS = {
   most_diversified: "Tối đa hóa diversification ratio với constraint long-only/max weight.",
   minimum_correlation:
     "Heuristic ưu tiên phân tán tương quan; không tự repair nếu vượt max weight.",
+  minimum_cvar: "Minimize expected loss in the worst 5% of historical observations.",
+  hierarchical_risk_parity: "Cluster correlated assets and allocate risk through the hierarchy.",
 } satisfies Record<OptimizerMethod, string>;
 
 export const OPTIMIZER_SOURCES = {
-  portfolioAllocation: {
-    library: "portfolio-allocation",
-    version: "0.0.11",
-    repository: "https://github.com/lequant40/portfolio_allocation_js",
+  skfolio: {
+    library: "skfolio",
+    version: "0.20.x",
+    repository: "https://github.com/skfolio/skfolio",
     directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
-    license: "MIT",
+    license: "BSD-3-Clause",
   },
 } as const;

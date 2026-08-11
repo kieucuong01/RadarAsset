@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable
 
 from .models import Bar, QualityIssue, QualityReport
+from .market_calendar import expected_bar_timestamps
 
 
 def normalize_bars(rows: Iterable[Bar]) -> list[Bar]:
@@ -68,35 +69,12 @@ def _valid_number(value: Decimal) -> bool:
 def _expected_timestamps(rows: list[Bar], market: str) -> set[datetime]:
     if len(rows) < 2:
         return {row.timestamp for row in rows}
-    first = rows[0].timestamp
-    last = rows[-1].timestamp
-    timeframe = rows[0].timeframe
-    expected: set[datetime] = set()
-
-    if timeframe == "1h" and market == "vn_equity":
-        current_date = first.date()
-        while current_date <= last.date():
-            if current_date.weekday() < 5:
-                for hour in (2, 3, 4, 6, 7):
-                    candidate = datetime(
-                        current_date.year,
-                        current_date.month,
-                        current_date.day,
-                        hour,
-                        tzinfo=timezone.utc,
-                    )
-                    if first <= candidate <= last:
-                        expected.add(candidate)
-            current_date += timedelta(days=1)
-        return expected
-
-    step = timedelta(hours=1) if timeframe == "1h" else timedelta(days=1)
-    candidate = first
-    while candidate <= last:
-        if market == "crypto_spot" or candidate.weekday() < 5:
-            expected.add(candidate)
-        candidate += step
-    return expected
+    return expected_bar_timestamps(
+        rows[0].timestamp,
+        rows[-1].timestamp,
+        timeframe=rows[0].timeframe,
+        market=market,
+    )
 
 
 def validate_bars(rows: Iterable[Bar], *, market: str) -> QualityReport:

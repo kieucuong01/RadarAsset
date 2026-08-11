@@ -21,6 +21,21 @@ npm run dev
 
 Copy `.env.example` to `.env.local` and update `DATABASE_URL` if your local PostgreSQL user, password, port, or database name differs.
 
+The web development server uses the stable address `http://localhost:3100`:
+
+```powershell
+npm run dev
+```
+
+Portfolio optimization, Factor Lab and QuantStats use the private Python quant engine. On Windows,
+create the project environment once and start the engine on port `8100`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn service:app --app-dir quant-worker --host 127.0.0.1 --port 8100
+```
+
 Generate a local Better Auth secret with at least 32 random characters and set
 `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, and a local-only
 `DEV_DEMO_PASSWORD` before migrating or seeding. The demo password must be at

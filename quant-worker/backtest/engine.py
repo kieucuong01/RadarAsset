@@ -110,6 +110,9 @@ def _simulate_sleeve(
     previous_timestamp = None
     trades: list[dict[str, Any]] = []
     points: dict[str, dict[str, Decimal]] = {}
+    prepare = getattr(strategy, "prepare", None)
+    if callable(prepare):
+        prepare(rows)
     for index, row in enumerate(rows):
         if previous_timestamp is not None and quantity > ZERO and borrowed_principal > ZERO:
             elapsed_days = Decimal(str((row.timestamp - previous_timestamp).total_seconds())) / Decimal(

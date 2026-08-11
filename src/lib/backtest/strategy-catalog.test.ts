@@ -9,12 +9,17 @@ import {
 } from "./strategy-catalog";
 
 describe("strategy catalog", () => {
-  it("exposes the four approved runnable strategies in stable order", () => {
+  it("exposes the approved runnable strategies in stable order", () => {
     expect(STRATEGY_CATALOG.map((item) => item.code)).toEqual([
       "ma_crossover",
       "turtle_breakout",
       "signal_rolling_reversal",
       "abcd_causal",
+      "ema_trend",
+      "rsi_mean_reversion",
+      "bollinger_mean_reversion",
+      "macd_momentum",
+      "atr_breakout",
     ]);
     expect(STRATEGY_CATALOG.every((item) => item.version === "1.0.0")).toBe(true);
   });
@@ -54,7 +59,7 @@ describe("strategy catalog", () => {
 
   it("exposes a JSON-safe catalog without executable validators", () => {
     const catalog = listStrategyCatalog();
-    expect(catalog).toHaveLength(4);
+    expect(catalog).toHaveLength(9);
     expect(catalog[0]).not.toHaveProperty("validator");
     expect(catalog[0]).toMatchObject({
       code: "ma_crossover",
@@ -76,8 +81,8 @@ describe("strategy catalog", () => {
     };
 
     await syncStrategyCatalog(repository);
-    expect(rows.size).toBe(4);
-    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(4);
+    expect(rows.size).toBe(9);
+    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(9);
 
     const key = "ma_crossover:1.0.0";
     rows.set(key, { ...rows.get(key), implementationHash: "b".repeat(64) });
@@ -108,7 +113,7 @@ describe("strategy catalog", () => {
       },
     };
 
-    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(4);
-    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(4);
+    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(9);
+    await expect(syncStrategyCatalog(repository)).resolves.toHaveLength(9);
   });
 });

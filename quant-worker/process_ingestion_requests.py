@@ -77,6 +77,9 @@ def _prepare_request_dataset(
             incoming,
             overlap_start=window.overlap_start,
         )
+    fallback_source = next(
+        (row.source for row in rows if row.source.startswith("ccxt:")), None
+    )
     return prepare_dataset_publication(
         rows,
         market=request.market,
@@ -95,6 +98,7 @@ def _prepare_request_dataset(
             "licenseScope": "research_only",
             "provider": request.provider_code,
             "providerSymbol": request.provider_symbol,
+            "fallbackProvider": fallback_source,
         },
     )
 

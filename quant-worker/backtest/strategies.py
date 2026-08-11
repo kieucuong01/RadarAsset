@@ -5,6 +5,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Protocol, Sequence
 
+from talipp.indicators import ATR, BB, EMA, MACD, RSI
+from talipp.ohlcv import OHLCV
+
 from .models import Bar
 
 
@@ -295,4 +298,226 @@ class AbcdCausalStrategy:
                     "targetMax": str(pattern.target_max.normalize()),
                 },
             )
+        return None
+
+
+def _float_closes(bars: Sequence[Bar], index: int) -> list[float]:
+    return [float(bar.close) for bar in bars[: index + 1]]
+
+
+@dataclass
+class EmaTrendStrategy:
+    fast_period: int
+    slow_period: int
+    code: str = "ema_trend"
+    version: str = "1.0.0"
+    _prepared_id: int | None = field(default=None, init=False, repr=False)
+    _fast_values: list[float | None] | None = field(default=None, init=False, repr=False)
+    _slow_values: list[float | None] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.slow_period + 1
+
+    def __post_init__(self) -> None:
+        if self.fast_period < 2 or self.fast_period >= self.slow_period:
+            raise ValueError("EMA periods are invalid.")
+
+    def prepare(self, bars: Sequence[Bar]) -> None:
+        closes = _float_closes(bars, len(bars) - 1)
+        self._prepared_id = id(bars)
+        self._fast_values = list(EMA(self.fast_period, closes))
+        self._slow_values = list(EMA(self.slow_period, closes))
+
+    def signal(self, bars: Sequence[Bar], index: int, *, in_position: bool) -> StrategySignal | None:
+        if index < self.slow_period:
+            return None
+        if self._prepared_id == id(bars) and self._fast_values is not None and self._slow_values is not None:
+            fast, slow = self._fast_values, self._slow_values
+        else:
+            closes = _float_closes(bars, index)
+            fast, slow = list(EMA(self.fast_period, closes)), list(EMA(self.slow_period, closes))
+        if fast[-2] is None or slow[-2] is None or fast[-1] is None or slow[-1] is None:
+            return None
+        metadata = {"fastEma": str(fast[-1]), "slowEma": str(slow[-1])}
+        if not in_position and fast[-2] <= slow[-2] and fast[-1] > slow[-1]:
+            return StrategySignal("buy", bars[index].timestamp, "ema_bullish_cross", metadata)
+        if in_position and fast[-2] >= slow[-2] and fast[-1] < slow[-1]:
+            return StrategySignal("sell", bars[index].timestamp, "ema_bearish_cross", metadata)
+        return None
+
+
+@dataclass
+class RsiMeanReversionStrategy:
+    period: int
+    oversold: Decimal
+    overbought: Decimal
+    code: str = "rsi_mean_reversion"
+    version: str = "1.0.0"
+    _prepared_id: int | None = field(default=None, init=False, repr=False)
+    _values: list[float | None] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.period + 1
+
+    def __post_init__(self) -> None:
+        if self.period < 2 or not Decimal("1") <= self.oversold < self.overbought <= Decimal("99"):
+            raise ValueError("RSI parameters are invalid.")
+
+    def prepare(self, bars: Sequence[Bar]) -> None:
+        self._prepared_id = id(bars)
+        self._values = list(RSI(self.period, _float_closes(bars, len(bars) - 1)))
+
+    def signal(self, bars: Sequence[Bar], index: int, *, in_position: bool) -> StrategySignal | None:
+        if index < self.period:
+            return None
+        value = (
+            self._values[index]
+            if self._prepared_id == id(bars) and self._values is not None
+            else RSI(self.period, _float_closes(bars, index))[-1]
+        )
+        if value is None:
+            return None
+        metadata = {"rsi": str(value)}
+        if not in_position and Decimal(str(value)) <= self.oversold:
+            return StrategySignal("buy", bars[index].timestamp, "rsi_oversold", metadata)
+        if in_position and Decimal(str(value)) >= self.overbought:
+            return StrategySignal("sell", bars[index].timestamp, "rsi_recovered", metadata)
+        return None
+
+
+@dataclass
+class BollingerMeanReversionStrategy:
+    period: int
+    standard_deviations: Decimal
+    code: str = "bollinger_mean_reversion"
+    version: str = "1.0.0"
+    _prepared_id: int | None = field(default=None, init=False, repr=False)
+    _values: list[object | None] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.period
+
+    def __post_init__(self) -> None:
+        if self.period < 2 or not Decimal("0.5") <= self.standard_deviations <= Decimal("5"):
+            raise ValueError("Bollinger parameters are invalid.")
+
+    def prepare(self, bars: Sequence[Bar]) -> None:
+        self._prepared_id = id(bars)
+        self._values = list(BB(self.period, float(self.standard_deviations), _float_closes(bars, len(bars) - 1)))
+
+    def signal(self, bars: Sequence[Bar], index: int, *, in_position: bool) -> StrategySignal | None:
+        if index < self.period - 1:
+            return None
+        value = (
+            self._values[index]
+            if self._prepared_id == id(bars) and self._values is not None
+            else BB(self.period, float(self.standard_deviations), _float_closes(bars, index))[-1]
+        )
+        if value is None:
+            return None
+        close = float(bars[index].close)
+        metadata = {"lowerBand": str(value.lb), "centerBand": str(value.cb), "upperBand": str(value.ub)}
+        if not in_position and close < value.lb:
+            return StrategySignal("buy", bars[index].timestamp, "bollinger_lower_break", metadata)
+        if in_position and close >= value.cb:
+            return StrategySignal("sell", bars[index].timestamp, "bollinger_mean_reversion", metadata)
+        return None
+
+
+@dataclass
+class MacdMomentumStrategy:
+    fast_period: int
+    slow_period: int
+    signal_period: int
+    code: str = "macd_momentum"
+    version: str = "1.0.0"
+    _prepared_id: int | None = field(default=None, init=False, repr=False)
+    _values: list[object | None] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def warmup_bars(self) -> int:
+        return self.slow_period + self.signal_period
+
+    def __post_init__(self) -> None:
+        if self.fast_period < 2 or self.fast_period >= self.slow_period or self.signal_period < 2:
+            raise ValueError("MACD periods are invalid.")
+
+    def prepare(self, bars: Sequence[Bar]) -> None:
+        self._prepared_id = id(bars)
+        self._values = list(MACD(self.fast_period, self.slow_period, self.signal_period, _float_closes(bars, len(bars) - 1)))
+
+    def signal(self, bars: Sequence[Bar], index: int, *, in_position: bool) -> StrategySignal | None:
+        if index < self.warmup_bars:
+            return None
+        values = (
+            self._values
+            if self._prepared_id == id(bars) and self._values is not None
+            else list(MACD(self.fast_period, self.slow_period, self.signal_period, _float_closes(bars, index)))
+        )
+        previous, current = values[-2], values[-1]
+        if (
+            previous is None
+            or current is None
+            or previous.histogram is None
+            or current.histogram is None
+        ):
+            return None
+        metadata = {"macd": str(current.macd), "signal": str(current.signal), "histogram": str(current.histogram)}
+        if not in_position and previous.histogram <= 0 < current.histogram:
+            return StrategySignal("buy", bars[index].timestamp, "macd_bullish_cross", metadata)
+        if in_position and previous.histogram >= 0 > current.histogram:
+            return StrategySignal("sell", bars[index].timestamp, "macd_bearish_cross", metadata)
+        return None
+
+
+@dataclass
+class AtrBreakoutStrategy:
+    atr_period: int
+    breakout_period: int
+    exit_period: int
+    atr_multiplier: Decimal
+    code: str = "atr_breakout"
+    version: str = "1.0.0"
+    _prepared_id: int | None = field(default=None, init=False, repr=False)
+    _values: list[float | None] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def warmup_bars(self) -> int:
+        return max(self.atr_period, self.breakout_period, self.exit_period)
+
+    def __post_init__(self) -> None:
+        if min(self.atr_period, self.breakout_period, self.exit_period) < 2 or not Decimal("0") <= self.atr_multiplier <= Decimal("5"):
+            raise ValueError("ATR breakout parameters are invalid.")
+
+    @staticmethod
+    def _ohlcv(bars: Sequence[Bar], end: int) -> list[OHLCV]:
+        return [
+            OHLCV(float(bar.open), float(bar.high), float(bar.low), float(bar.close), None if bar.volume is None else float(bar.volume), bar.timestamp)
+            for bar in bars[: end + 1]
+        ]
+
+    def prepare(self, bars: Sequence[Bar]) -> None:
+        self._prepared_id = id(bars)
+        self._values = list(ATR(self.atr_period, self._ohlcv(bars, len(bars) - 1)))
+
+    def signal(self, bars: Sequence[Bar], index: int, *, in_position: bool) -> StrategySignal | None:
+        if index < self.warmup_bars:
+            return None
+        atr = (
+            self._values[index]
+            if self._prepared_id == id(bars) and self._values is not None
+            else ATR(self.atr_period, self._ohlcv(bars, index))[-1]
+        )
+        if atr is None:
+            return None
+        entry = max(bar.high for bar in bars[index - self.breakout_period : index]) + Decimal(str(atr)) * self.atr_multiplier
+        exit_level = min(bar.low for bar in bars[index - self.exit_period : index])
+        metadata = {"atr": str(atr), "entryLevel": str(entry), "exitLevel": str(exit_level)}
+        if not in_position and bars[index].close > entry:
+            return StrategySignal("buy", bars[index].timestamp, "atr_breakout_entry", metadata)
+        if in_position and bars[index].close < exit_level:
+            return StrategySignal("sell", bars[index].timestamp, "atr_breakout_exit", metadata)
         return None

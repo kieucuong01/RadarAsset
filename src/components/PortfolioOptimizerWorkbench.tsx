@@ -153,7 +153,7 @@ export function PortfolioOptimizerWorkbench({
         <CardHeader>
           <CardTitle>Awesome-Quant Optimizer</CardTitle>
           <CardDescription>
-            Powered by portfolio-allocation from awesome-quant; no in-house optimizer.
+            Powered by skfolio. Fit on the first 70% and validate on the final 30% OOS.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -407,6 +407,13 @@ export function PortfolioOptimizerWorkbench({
                 <Metric label="Volatility" value={`${proposal.volatilityPct.toFixed(2)}%`} />
                 <Metric label="Sharpe" value={proposal.sharpe?.toFixed(2) ?? "N/A"} />
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ValidationMetrics label="In sample (70%)" metrics={proposal.validation.inSample} />
+                <ValidationMetrics
+                  label="Out of sample (30%)"
+                  metrics={proposal.validation.outOfSample}
+                />
+              </div>
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
                 <AllocationPie slices={dashboardModel.allocationSlices} />
                 <RiskReturnChart points={dashboardModel.riskReturnPoints} />
@@ -438,6 +445,26 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border p-4">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function ValidationMetrics({
+  label,
+  metrics,
+}: {
+  label: string;
+  metrics: OptimizerProposal["validation"]["inSample"];
+}) {
+  return (
+    <div className="rounded-lg border p-4">
+      <p className="text-sm font-semibold">{label}</p>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm tabular-nums">
+        <span>Return {metrics.expectedReturnPct.toFixed(2)}%</span>
+        <span>Vol {metrics.volatilityPct.toFixed(2)}%</span>
+        <span>Sharpe {metrics.sharpe?.toFixed(2) ?? "N/A"}</span>
+        <span>Max DD {metrics.maxDrawdownPct.toFixed(2)}%</span>
+      </div>
     </div>
   );
 }

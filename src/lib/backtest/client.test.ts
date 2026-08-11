@@ -58,7 +58,7 @@ describe("backtest API client", () => {
       .fn()
       .mockResolvedValue(new Response(JSON.stringify(listStrategyCatalog()), { status: 200 }));
 
-    await expect(getStrategyCatalog(fetcher)).resolves.toHaveLength(4);
+    await expect(getStrategyCatalog(fetcher)).resolves.toHaveLength(9);
   });
 
   it("loads and validates the versioned strategy catalog", async () => {

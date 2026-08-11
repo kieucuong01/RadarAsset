@@ -138,11 +138,11 @@ describe("tenant API authorization", () => {
     mocks.optimizeQuantAllocation.mockResolvedValue({
       method: "risk_parity",
       source: {
-        library: "portfolio-allocation",
-        version: "0.0.11",
-        repository: "https://github.com/lequant40/portfolio_allocation_js",
+        library: "skfolio",
+        version: "0.20.1",
+        repository: "https://github.com/skfolio/skfolio",
         directory: "awesome-quant: Portfolio Optimization & Risk Analysis",
-        license: "MIT",
+        license: "BSD-3-Clause",
       },
       weightsBps: { BTC: 10_000 },
       totalWeightBps: 10_000,

@@ -64,6 +64,29 @@ const optimizerProposalSchema = z
     observationCount: z.number().int().min(30),
     assetMetrics: z.array(optimizerAssetMetricSchema).min(1).max(10),
     correlationMatrix: z.array(optimizerCorrelationRowSchema).min(1).max(10),
+    validation: z
+      .object({
+        split: z.literal("chronological_70_30"),
+        trainObservationCount: z.number().int().min(29),
+        testObservationCount: z.number().int().min(1),
+        inSample: z
+          .object({
+            expectedReturnPct: z.number().finite(),
+            volatilityPct: z.number().finite().nonnegative(),
+            sharpe: z.number().finite().nullable(),
+            maxDrawdownPct: z.number().finite().nonpositive(),
+          })
+          .strict(),
+        outOfSample: z
+          .object({
+            expectedReturnPct: z.number().finite(),
+            volatilityPct: z.number().finite().nonnegative(),
+            sharpe: z.number().finite().nullable(),
+            maxDrawdownPct: z.number().finite().nonpositive(),
+          })
+          .strict(),
+      })
+      .strict(),
     datasetVersionIds: z.record(backtestSymbolSchema, z.string().min(1)),
     warnings: z.array(z.string()),
   })
