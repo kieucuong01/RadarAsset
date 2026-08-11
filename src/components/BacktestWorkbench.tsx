@@ -91,10 +91,10 @@ export function BacktestWorkbench() {
 
   async function startBacktest() {
     const submission: BacktestSubmission = {
-      strategy: "ma_cross",
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyParameters: { fastPeriod, slowPeriod },
       timeframe,
-      fastPeriod,
-      slowPeriod,
       initialCapital,
       feeBps,
       slippageBps,

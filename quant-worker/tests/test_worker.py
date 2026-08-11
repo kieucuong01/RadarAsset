@@ -136,6 +136,42 @@ def test_process_next_run_is_idle_when_no_queued_backtest_exists() -> None:
     assert process_next_run(repository) == {"status": "idle", "message": "No queued backtest runs."}
 
 
+def test_process_next_run_accepts_versioned_catalog_ma_parameters() -> None:
+    run = queued_run()
+    run = QueuedRun(
+        **{
+            **run.__dict__,
+            "parameters": {
+                "strategyCode": "ma_crossover",
+                "strategyVersion": "1.0.0",
+                "strategyParameters": {"fastPeriod": 2, "slowPeriod": 3},
+                "timeframe": "1d",
+                "initialCapital": 1000,
+                "feeBps": 10,
+                "slippageBps": 5,
+                "from": "2024-01-01",
+                "to": "2024-01-31",
+                "legs": [{"symbol": "BTC", "leverage": 1}],
+            },
+        }
+    )
+    repository = FakeRepository(
+        run,
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(golden_bars()),
+            bars=golden_bars(),
+        ),
+    )
+
+    response = process_next_run(repository)
+
+    assert response["status"] == "succeeded"
+    assert repository.failed is None
+
+
 def test_worker_filters_dataset_rows_to_the_inclusive_requested_date_range() -> None:
     run = queued_run()
     run = QueuedRun(

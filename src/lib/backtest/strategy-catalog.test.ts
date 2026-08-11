@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   STRATEGY_CATALOG,
+  listStrategyCatalog,
   normalizeStrategyParameters,
   strategyDefinition,
   syncStrategyCatalog,
@@ -49,6 +50,17 @@ describe("strategy catalog", () => {
     expect(first).toEqual(second);
     expect(first.implementationHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.sourceAttribution).toContain("Apache License 2.0");
+  });
+
+  it("exposes a JSON-safe catalog without executable validators", () => {
+    const catalog = listStrategyCatalog();
+    expect(catalog).toHaveLength(4);
+    expect(catalog[0]).not.toHaveProperty("validator");
+    expect(catalog[0]).toMatchObject({
+      code: "ma_crossover",
+      version: "1.0.0",
+      defaultParameters: { fastPeriod: 5, slowPeriod: 20 },
+    });
   });
 
   it("synchronizes missing rows and rejects catalog drift", async () => {

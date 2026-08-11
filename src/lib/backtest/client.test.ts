@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getBacktestRun, isActiveRun, parseBacktestRun, submitBacktest } from "./client";
+import {
+  getBacktestRun,
+  getStrategyCatalog,
+  isActiveRun,
+  parseBacktestRun,
+  submitBacktest,
+} from "./client";
 
 const submission = {
-  strategy: "ma_cross" as const,
+  strategyCode: "ma_crossover" as const,
+  strategyVersion: "1.0.0" as const,
+  strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
   timeframe: "1d" as const,
-  fastPeriod: 5,
-  slowPeriod: 20,
   initialCapital: 100_000,
   feeBps: 10,
   slippageBps: 5,
@@ -18,6 +24,8 @@ const submission = {
 const queuedRun = {
   id: "run-1",
   strategyName: "MA Crossover Backtest",
+  strategyCode: "ma_crossover",
+  strategyVersion: "1.0.0",
   status: "queued",
   timeframe: "1d",
   progress: 0,
@@ -34,6 +42,44 @@ const queuedRun = {
 };
 
 describe("backtest API client", () => {
+  it("loads and validates the versioned strategy catalog", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            code: "ma_crossover",
+            version: "1.0.0",
+            name: "MA Crossover",
+            category: "rule_based",
+            status: "active",
+            parameterSchema: [
+              {
+                name: "fastPeriod",
+                label: "Fast SMA",
+                type: "integer",
+                min: 2,
+                max: 200,
+                default: 5,
+              },
+            ],
+            defaultParameters: { fastPeriod: 5 },
+            supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
+            supportedTimeframes: ["1d", "1h"],
+            implementationHash: "a".repeat(64),
+            sourceAttribution: "Apache License 2.0",
+            modificationNotice: "Causal rewrite",
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    const catalog = await getStrategyCatalog(fetcher);
+
+    expect(catalog[0]?.code).toBe("ma_crossover");
+    expect(fetcher).toHaveBeenCalledWith("/api/quant/strategies", { cache: "no-store" });
+  });
+
   it("submits a strict payload and accepts the HTTP 202 queued contract", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(queuedRun), {
@@ -45,6 +91,7 @@ describe("backtest API client", () => {
     const result = await submitBacktest(submission, fetcher);
 
     expect(result.status).toBe("queued");
+    expect(result.strategyCode).toBe("ma_crossover");
     expect(fetcher).toHaveBeenCalledWith(
       "/api/quant/runs",
       expect.objectContaining({

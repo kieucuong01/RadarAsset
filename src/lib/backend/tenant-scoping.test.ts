@@ -31,6 +31,7 @@ const { prisma } = vi.hoisted(() => {
       findFirst: vi.fn(),
       create: vi.fn(),
     },
+    strategyVersion: { findUnique: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -75,6 +76,12 @@ describe("organization-scoped database services", () => {
     prisma.watchlistItem.findMany.mockResolvedValue([]);
     prisma.researchRun.findMany.mockResolvedValue([]);
     prisma.quantRun.findMany.mockResolvedValue([]);
+    prisma.strategyVersion.findUnique.mockResolvedValue({
+      id: "strategy-version-1",
+      code: "ma_crossover",
+      version: "1.0.0",
+      name: "MA Crossover",
+    });
   });
 
   it("scopes portfolio selection to the server organization", async () => {
@@ -198,10 +205,10 @@ describe("organization-scoped database services", () => {
       datasetVersionIds: ["dataset-btc-1d-v1"],
       engineVersion: "ma-cross-v1",
       parameters: {
-        strategy: "ma_cross",
+        strategyCode: "ma_crossover",
+        strategyVersion: "1.0.0",
+        strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
         timeframe: "1d",
-        fastPeriod: 5,
-        slowPeriod: 20,
         initialCapital: 10000,
         feeBps: 10,
         slippageBps: 5,
@@ -219,10 +226,10 @@ describe("organization-scoped database services", () => {
     prisma.quantRun.findFirst.mockResolvedValue(null);
 
     await createQuantRun(editorContext, {
-      strategy: "ma_cross",
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
       timeframe: "1d",
-      fastPeriod: 5,
-      slowPeriod: 20,
       initialCapital: 10000,
       feeBps: 10,
       slippageBps: 5,
@@ -238,6 +245,7 @@ describe("organization-scoped database services", () => {
         data: expect.objectContaining({
           organizationId: "org-a",
           userId: "user-a",
+          strategyVersionId: "strategy-version-1",
         }),
       }),
     );
@@ -252,6 +260,27 @@ describe("organization-scoped database services", () => {
         }),
       }),
     );
+  });
+
+  it("fails closed when a requested strategy version is not synchronized", async () => {
+    prisma.strategyVersion.findUnique.mockResolvedValue(null);
+
+    await expect(
+      createQuantRun(editorContext, {
+        strategyCode: "ma_crossover",
+        strategyVersion: "1.0.0",
+        strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        timeframe: "1d",
+        initialCapital: 10000,
+        feeBps: 10,
+        slippageBps: 5,
+        from: "2024-01-01",
+        to: "2025-01-01",
+        legs: [{ symbol: "BTC", leverage: 1 }],
+      }),
+    ).rejects.toThrow("not synchronized");
+    expect(prisma.asset.findMany).not.toHaveBeenCalled();
+    expect(prisma.quantRun.create).not.toHaveBeenCalled();
   });
 
   it("resolves the worker organization only from server configuration", async () => {

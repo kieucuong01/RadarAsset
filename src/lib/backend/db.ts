@@ -853,6 +853,20 @@ function marketForSymbol(symbol: (typeof MARKET_DATA_SYMBOLS)[number]): MarketDa
 
 export async function createQuantRun(context: TenantContext, input: BacktestSubmission) {
   const prisma = getPrisma();
+  const strategyVersion = await prisma.strategyVersion.findUnique({
+    where: {
+      code_version: {
+        code: input.strategyCode,
+        version: input.strategyVersion,
+      },
+    },
+    select: { id: true, code: true, version: true, name: true },
+  });
+  if (!strategyVersion) {
+    throw new Error(
+      `Strategy ${input.strategyCode}@${input.strategyVersion} is not synchronized in the catalog.`,
+    );
+  }
   const symbols = input.legs.map((leg) => leg.symbol);
   const assets = await prisma.asset.findMany({
     where: { symbol: { in: symbols } },
@@ -890,16 +904,20 @@ export async function createQuantRun(context: TenantContext, input: BacktestSubm
     data: {
       organizationId: context.organizationId,
       userId: context.userId,
-      strategyName: "MA Crossover Backtest",
+      strategyVersionId: strategyVersion.id,
+      strategyName: strategyVersion.name,
       status: "queued",
       timeframe: input.timeframe,
       progress: 0,
       strategyHash: hashBacktestSubmission(input),
       datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
-      engineVersion: "ma-cross-v1",
+      engineVersion: `${input.strategyCode}-v1`,
       parameters: input as Prisma.InputJsonValue,
     },
-    include: { artifacts: true },
+    include: {
+      artifacts: true,
+      strategyVersion: { select: { code: true, version: true } },
+    },
   });
   return quantRunToResponse(run);
 }
@@ -910,7 +928,10 @@ export async function listQuantRuns(context: TenantContext) {
     where: { organizationId: context.organizationId },
     orderBy: { createdAt: "desc" },
     take: 25,
-    include: { artifacts: true },
+    include: {
+      artifacts: true,
+      strategyVersion: { select: { code: true, version: true } },
+    },
   });
   return runs.map(quantRunToResponse);
 }
@@ -920,6 +941,7 @@ export async function getQuantRun(context: TenantContext, id: string) {
   const run = await prisma.quantRun.findFirst({
     where: { id, organizationId: context.organizationId },
     include: {
+      strategyVersion: { select: { code: true, version: true } },
       artifacts: {
         where: { organizationId: context.organizationId },
         orderBy: { kind: "asc" },
@@ -933,6 +955,7 @@ export async function getQuantRun(context: TenantContext, id: string) {
 function quantRunToResponse(run: {
   id: string;
   strategyName: string;
+  strategyVersion?: { code: string; version: string } | null;
   status: string;
   timeframe?: string;
   progress?: number;
@@ -961,6 +984,8 @@ function quantRunToResponse(run: {
   return {
     id: run.id,
     strategyName: run.strategyName,
+    strategyCode: run.strategyVersion?.code ?? "legacy",
+    strategyVersion: run.strategyVersion?.version ?? "0.0.0",
     status: assertQuantRunStatus(run.status),
     timeframe,
     progress: run.progress ?? (run.status === "succeeded" || run.status === "failed" ? 100 : 0),

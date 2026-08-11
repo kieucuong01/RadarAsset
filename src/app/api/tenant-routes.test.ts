@@ -46,6 +46,7 @@ import { GET as portfolioGet } from "./portfolio/route";
 import { GET as watchlistGet, POST as watchlistPost } from "./watchlist/route";
 import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
+import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
 
@@ -89,6 +90,16 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "watchlist", "read");
     expect(mocks.loadWatchlist).toHaveBeenCalledWith(viewerContext);
+  });
+
+  it("allows viewer reads of the versioned strategy catalog", async () => {
+    const response = await strategyCatalogGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
+    await expect(response.json()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "ma_crossover", version: "1.0.0" })]),
+    );
   });
 
   it("denies viewer writes before request validation or persistence", async () => {
@@ -138,7 +149,15 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(202);
     expect(mocks.createQuantRun).toHaveBeenCalledWith(editorContext, {
-      ...payload,
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+      timeframe: payload.timeframe,
+      initialCapital: payload.initialCapital,
+      feeBps: payload.feeBps,
+      slippageBps: payload.slippageBps,
+      from: payload.from,
+      to: payload.to,
       legs: [
         { symbol: "BTC", leverage: 1 },
         { symbol: "FPT", leverage: 2 },

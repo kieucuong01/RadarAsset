@@ -254,6 +254,10 @@ export function strategyDefinition(code: string, version: string) {
   return definition;
 }
 
+export function listStrategyCatalog() {
+  return STRATEGY_CATALOG.map(({ validator: _validator, ...definition }) => definition);
+}
+
 export function normalizeStrategyParameters(code: string, input: unknown) {
   const definition = STRATEGY_CATALOG.find((item) => item.code === code);
   if (!definition) throw new Error(`Strategy ${code} not found.`);

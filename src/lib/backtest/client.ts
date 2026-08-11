@@ -65,10 +65,42 @@ const artifactSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+const strategyCatalogItemSchema = z
+  .object({
+    code: z.string(),
+    version: z.string(),
+    name: z.string(),
+    category: z.string(),
+    status: z.string(),
+    parameterSchema: z.array(
+      z
+        .object({
+          name: z.string(),
+          label: z.string(),
+          type: z.enum(["integer", "number"]),
+          min: z.number(),
+          max: z.number(),
+          default: z.number(),
+        })
+        .strict(),
+    ),
+    defaultParameters: z.record(z.string(), z.number()),
+    supportedMarkets: z.array(z.string()),
+    supportedTimeframes: z.array(z.enum(["1d", "1h"])),
+    implementationHash: z.string().length(64),
+    sourceAttribution: z.string().nullable(),
+    modificationNotice: z.string().nullable(),
+  })
+  .strict();
+
+export type StrategyCatalogItem = z.infer<typeof strategyCatalogItemSchema>;
+
 const backtestRunSchema = z
   .object({
     id: z.string(),
     strategyName: z.string(),
+    strategyCode: z.string(),
+    strategyVersion: z.string(),
     status: z.enum(["queued", "running", "succeeded", "failed"]),
     timeframe: z.enum(["1d", "1h"]),
     progress: z.number().int().min(0).max(100),
@@ -94,6 +126,22 @@ export function parseBacktestRun(input: unknown): BacktestRun {
     throw new Error("Invalid backtest response.");
   }
   return parsed.data;
+}
+
+export function parseStrategyCatalog(input: unknown): StrategyCatalogItem[] {
+  const parsed = z.array(strategyCatalogItemSchema).safeParse(input);
+  if (!parsed.success) {
+    throw new Error("Invalid strategy catalog response.");
+  }
+  return parsed.data;
+}
+
+export async function getStrategyCatalog(fetcher: Fetcher = fetch): Promise<StrategyCatalogItem[]> {
+  const response = await fetcher("/api/quant/strategies", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Strategy catalog is unavailable.");
+  }
+  return parseStrategyCatalog(await response.json());
 }
 
 export function isActiveRun(status: BacktestRun["status"]) {

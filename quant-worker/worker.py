@@ -14,6 +14,7 @@ from psycopg.rows import dict_row
 from backtest.engine import EngineConfig, artifact_checksum, run_ma_cross
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
+from backtest.strategies import MovingAverageCrossoverStrategy
 
 
 DEFAULT_DATABASE_URL = (
@@ -76,11 +77,8 @@ def database_url() -> str:
 
 def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig:
     parameters = run.parameters
-    allowed_keys = {
-        "strategy",
+    common_keys = {
         "timeframe",
-        "fastPeriod",
-        "slowPeriod",
         "initialCapital",
         "feeBps",
         "slippageBps",
@@ -88,7 +86,23 @@ def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig
         "to",
         "legs",
     }
-    if set(parameters) != allowed_keys or parameters.get("strategy") != "ma_cross":
+    legacy_keys = common_keys | {"strategy", "fastPeriod", "slowPeriod"}
+    catalog_keys = common_keys | {"strategyCode", "strategyVersion", "strategyParameters"}
+    if set(parameters) == catalog_keys:
+        if parameters.get("strategyCode") != "ma_crossover" or parameters.get("strategyVersion") != "1.0.0":
+            raise ValueError("Unsupported strategy version.")
+        strategy_parameters = parameters.get("strategyParameters")
+        if not isinstance(strategy_parameters, dict) or set(strategy_parameters) != {
+            "fastPeriod",
+            "slowPeriod",
+        }:
+            raise ValueError("Strategy parameters do not match the allow-listed contract.")
+        fast_period = int(strategy_parameters["fastPeriod"])
+        slow_period = int(strategy_parameters["slowPeriod"])
+    elif set(parameters) == legacy_keys and parameters.get("strategy") == "ma_cross":
+        fast_period = int(parameters["fastPeriod"])
+        slow_period = int(parameters["slowPeriod"])
+    else:
         raise ValueError("Backtest parameters do not match the allow-listed strategy contract.")
     timeframe = parameters.get("timeframe")
     if timeframe not in {"1d", "1h"}:
@@ -111,14 +125,15 @@ def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig
         raise ValueError("Dataset timeframe does not match the run timeframe.")
     return EngineConfig(
         initial_capital=Decimal(str(parameters["initialCapital"])),
-        fast_period=int(parameters["fastPeriod"]),
-        slow_period=int(parameters["slowPeriod"]),
+        fast_period=fast_period,
+        slow_period=slow_period,
         fee_bps=Decimal(str(parameters["feeBps"])),
         slippage_bps=Decimal(str(parameters["slippageBps"])),
         leverage_by_asset=leverage_by_asset,
         market_by_asset={dataset.asset: dataset.market for dataset in datasets},
         strategy_hash=run.strategy_hash,
         dataset_checksums={dataset.asset: dataset.checksum for dataset in datasets},
+        strategy=MovingAverageCrossoverStrategy(fast_period=fast_period, slow_period=slow_period),
     )
 
 
@@ -216,7 +231,7 @@ class PostgresWorkerRepository:
                   SELECT id
                   FROM quant_runs
                   WHERE status = 'queued'
-                    AND strategy_name = 'MA Crossover Backtest'
+                    AND (strategy_version_id IS NOT NULL OR strategy_name = 'MA Crossover Backtest')
                   ORDER BY created_at ASC
                   FOR UPDATE SKIP LOCKED
                   LIMIT 1

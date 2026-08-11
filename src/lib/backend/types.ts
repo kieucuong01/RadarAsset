@@ -248,6 +248,8 @@ export type WatchlistItemResponse = {
 export type QuantRunResponse = {
   id: string;
   strategyName: string;
+  strategyCode: string;
+  strategyVersion: string;
   status: QuantRunStatus;
   timeframe: "1d" | "1h";
   progress: number;

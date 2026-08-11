@@ -25,7 +25,54 @@ const validSubmission = {
   ],
 } as const;
 
+const genericSubmission = {
+  strategyCode: "turtle_breakout" as const,
+  strategyVersion: "1.0.0" as const,
+  strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+  timeframe: "1d" as const,
+  initialCapital: 10_000,
+  feeBps: 10,
+  slippageBps: 5,
+  from: "2024-01-01",
+  to: "2024-02-01",
+  legs: [{ symbol: "BTC" as const, leverage: 1 }],
+};
+
 describe("real backtest submission contract", () => {
+  it("normalizes a catalog strategy and validates its strategy-specific parameters", () => {
+    expect(normalizeBacktestSubmission(genericSubmission)).toEqual({
+      ...genericSubmission,
+      legs: [{ symbol: "BTC", leverage: 1 }],
+    });
+    expect(backtestSubmissionSchema.safeParse(genericSubmission).success).toBe(true);
+    expect(
+      backtestSubmissionSchema.safeParse({
+        ...genericSubmission,
+        strategyParameters: { entryPeriod: 20, exitPeriod: 25, unsafe: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      backtestSubmissionSchema.safeParse({ ...genericSubmission, strategyVersion: "9.9.9" })
+        .success,
+    ).toBe(false);
+
+    expect(() =>
+      normalizeBacktestSubmission({
+        ...genericSubmission,
+        strategyCode: "ma_crossover",
+        strategyParameters: { fastPeriod: 20, slowPeriod: 5 },
+      }),
+    ).toThrowError();
+  });
+
+  it("maps the legacy MA payload to the versioned catalog contract", () => {
+    expect(normalizeBacktestSubmission(validSubmission)).toMatchObject({
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyParameters: { fastPeriod: 2, slowPeriod: 3 },
+    });
+  });
+
   it("defaults new runs to a recent UTC window instead of an obsolete fixed year", () => {
     expect(createRollingBacktestRange(new Date("2026-08-11T02:00:00Z"))).toEqual({
       from: "2026-04-13",
@@ -42,7 +89,7 @@ describe("real backtest submission contract", () => {
       { symbol: "XAU", leverage: 1 },
     ]);
     expect(hashBacktestSubmission(normalized)).toBe(
-      "d5a7e8a029b1e3002798d23a39711eb240178b2e7f0b48624a2ce6fcf3e76350",
+      "9000e840f0cd09fdd39e17335d953d0365bd1ba81a10f84e6db4beedd999be97",
     );
 
     const reorderedKeys = {
@@ -58,7 +105,7 @@ describe("real backtest submission contract", () => {
       strategy: validSubmission.strategy,
     };
     expect(hashBacktestSubmission(normalizeBacktestSubmission(reorderedKeys))).toBe(
-      "d5a7e8a029b1e3002798d23a39711eb240178b2e7f0b48624a2ce6fcf3e76350",
+      "9000e840f0cd09fdd39e17335d953d0365bd1ba81a10f84e6db4beedd999be97",
     );
   });
 
