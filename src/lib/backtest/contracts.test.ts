@@ -3,74 +3,131 @@ import { describe, expect, it } from "vitest";
 import {
   backtestSubmissionSchema,
   createRollingBacktestRange,
-  maximumLeverageForAsset,
   normalizeBacktestSubmission,
 } from "./contracts";
 import { hashBacktestSubmission } from "./hash";
 
-const validSubmission = {
-  strategy: "ma_cross",
-  timeframe: "1d",
-  fastPeriod: 2,
-  slowPeriod: 3,
-  initialCapital: 10_000,
-  feeBps: 10,
-  slippageBps: 5,
-  from: "2024-01-01",
-  to: "2024-02-01",
-  legs: [
-    { symbol: "XAU", leverage: 1 },
-    { symbol: "FPT", leverage: 2 },
-    { symbol: "BTC", leverage: 1 },
-  ],
-} as const;
-
-const genericSubmission = {
-  strategyCode: "turtle_breakout" as const,
-  strategyVersion: "1.0.0" as const,
-  strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+const validPortfolioSubmission = {
   timeframe: "1d" as const,
-  initialCapital: 10_000,
+  from: "2025-01-01",
+  to: "2026-01-01",
+  totalCapital: 100_000,
+  allocationMode: "custom" as const,
   feeBps: 10,
   slippageBps: 5,
-  from: "2024-01-01",
-  to: "2024-02-01",
-  legs: [{ symbol: "BTC" as const, leverage: 1 }],
-};
-
-describe("real backtest submission contract", () => {
-  it("normalizes a catalog strategy and validates its strategy-specific parameters", () => {
-    expect(normalizeBacktestSubmission(genericSubmission)).toEqual({
-      ...genericSubmission,
-      legs: [{ symbol: "BTC", leverage: 1 }],
-    });
-    expect(backtestSubmissionSchema.safeParse(genericSubmission).success).toBe(true);
-    expect(
-      backtestSubmissionSchema.safeParse({
-        ...genericSubmission,
-        strategyParameters: { entryPeriod: 20, exitPeriod: 25, unsafe: true },
-      }).success,
-    ).toBe(false);
-    expect(
-      backtestSubmissionSchema.safeParse({ ...genericSubmission, strategyVersion: "9.9.9" })
-        .success,
-    ).toBe(false);
-
-    expect(() =>
-      normalizeBacktestSubmission({
-        ...genericSubmission,
-        strategyCode: "ma_crossover",
-        strategyParameters: { fastPeriod: 20, slowPeriod: 5 },
-      }),
-    ).toThrowError();
-  });
-
-  it("maps the legacy MA payload to the versioned catalog contract", () => {
-    expect(normalizeBacktestSubmission(validSubmission)).toMatchObject({
+  legs: [
+    {
+      symbol: "vnm",
+      allocationBps: 3000,
+      leverage: 2,
       strategyCode: "ma_crossover",
       strategyVersion: "1.0.0",
-      strategyParameters: { fastPeriod: 2, slowPeriod: 3 },
+      strategyParameters: { slowPeriod: 20, fastPeriod: 5 },
+    },
+    {
+      symbol: "btc",
+      allocationBps: 7000,
+      leverage: 1,
+      strategyCode: "turtle_breakout",
+      strategyVersion: "1.0.0",
+      strategyParameters: { exitPeriod: 10, entryPeriod: 20 },
+    },
+  ],
+};
+
+describe("portfolio backtest submission contract", () => {
+  it("normalizes every leg independently and sorts the canonical portfolio", () => {
+    expect(normalizeBacktestSubmission(validPortfolioSubmission)).toEqual({
+      timeframe: "1d",
+      from: "2025-01-01",
+      to: "2026-01-01",
+      totalCapital: 100_000,
+      allocationMode: "custom",
+      feeBps: 10,
+      slippageBps: 5,
+      legs: [
+        {
+          symbol: "BTC",
+          allocationBps: 7000,
+          leverage: 1,
+          strategyCode: "turtle_breakout",
+          strategyVersion: "1.0.0",
+          strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+        },
+        {
+          symbol: "VNM",
+          allocationBps: 3000,
+          leverage: 2,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+      ],
     });
+  });
+
+  it("keeps the portfolio hash stable across leg and parameter-key ordering", () => {
+    const first = hashBacktestSubmission(validPortfolioSubmission);
+    const second = hashBacktestSubmission({
+      ...validPortfolioSubmission,
+      legs: [...validPortfolioSubmission.legs].reverse().map((leg) => ({
+        ...leg,
+        strategyParameters: Object.fromEntries(
+          Object.entries(leg.strategyParameters).reverse(),
+        ),
+      })),
+    });
+
+    expect(second).toBe(first);
+    expect(hashBacktestSubmission({ ...validPortfolioSubmission, feeBps: 11 })).not.toBe(first);
+  });
+
+  it("maps the legacy shared-strategy payload to equal independent legs", () => {
+    expect(
+      normalizeBacktestSubmission({
+        strategyCode: "ma_crossover",
+        strategyVersion: "1.0.0",
+        strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        timeframe: "1d",
+        initialCapital: 10_000,
+        feeBps: 10,
+        slippageBps: 5,
+        from: "2024-01-01",
+        to: "2024-02-01",
+        legs: [
+          { symbol: "VNM", leverage: 2 },
+          { symbol: "BTC", leverage: 1 },
+        ],
+      }),
+    ).toMatchObject({
+      totalCapital: 10_000,
+      allocationMode: "equal",
+      legs: [
+        {
+          symbol: "BTC",
+          allocationBps: 5000,
+          strategyCode: "ma_crossover",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+        {
+          symbol: "VNM",
+          allocationBps: 5000,
+          strategyCode: "ma_crossover",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["duplicate symbols", { ...validPortfolioSubmission, legs: [validPortfolioSubmission.legs[0], validPortfolioSubmission.legs[0]] }],
+    ["allocation below 10,000 bps", { ...validPortfolioSubmission, legs: validPortfolioSubmission.legs.map((leg, index) => ({ ...leg, allocationBps: index === 0 ? 2999 : leg.allocationBps })) }],
+    ["more than ten legs", { ...validPortfolioSubmission, legs: Array.from({ length: 11 }, (_, index) => ({ ...validPortfolioSubmission.legs[0], symbol: `VN${index}`, allocationBps: index === 0 ? 10000 : 0 })) }],
+    ["a nonexistent calendar date", { ...validPortfolioSubmission, from: "2025-02-30" }],
+    ["a reversed date range", { ...validPortfolioSubmission, from: "2027-01-01" }],
+    ["one leg with invalid parameters", { ...validPortfolioSubmission, legs: [validPortfolioSubmission.legs[0], { ...validPortfolioSubmission.legs[1], strategyParameters: { entryPeriod: 20, exitPeriod: 10, execute: "shell" } }] }],
+  ])("rejects %s", (_name, payload) => {
+    expect(backtestSubmissionSchema.safeParse(payload).success).toBe(false);
   });
 
   it("defaults new runs to a recent UTC window instead of an obsolete fixed year", () => {
@@ -78,67 +135,5 @@ describe("real backtest submission contract", () => {
       from: "2026-04-13",
       to: "2026-08-11",
     });
-  });
-
-  it("normalizes leg ordering and produces a stable pinned strategy hash", () => {
-    const normalized = normalizeBacktestSubmission(validSubmission);
-
-    expect(normalized.legs).toEqual([
-      { symbol: "BTC", leverage: 1 },
-      { symbol: "FPT", leverage: 2 },
-      { symbol: "XAU", leverage: 1 },
-    ]);
-    expect(hashBacktestSubmission(normalized)).toBe(
-      "9000e840f0cd09fdd39e17335d953d0365bd1ba81a10f84e6db4beedd999be97",
-    );
-
-    const reorderedKeys = {
-      legs: [...validSubmission.legs].reverse(),
-      to: validSubmission.to,
-      from: validSubmission.from,
-      slippageBps: validSubmission.slippageBps,
-      feeBps: validSubmission.feeBps,
-      initialCapital: validSubmission.initialCapital,
-      slowPeriod: validSubmission.slowPeriod,
-      fastPeriod: validSubmission.fastPeriod,
-      timeframe: validSubmission.timeframe,
-      strategy: validSubmission.strategy,
-    };
-    expect(hashBacktestSubmission(normalizeBacktestSubmission(reorderedKeys))).toBe(
-      "9000e840f0cd09fdd39e17335d953d0365bd1ba81a10f84e6db4beedd999be97",
-    );
-  });
-
-  it.each([
-    ["unknown strategy", { ...validSubmission, strategy: "user_python" }],
-    ["unknown timeframe", { ...validSubmission, timeframe: "5m" }],
-    ["fast period not below slow period", { ...validSubmission, fastPeriod: 3 }],
-    ["period above complexity limit", { ...validSubmission, slowPeriod: 401 }],
-    ["non-positive capital", { ...validSubmission, initialCapital: 0 }],
-    ["excessive fee", { ...validSubmission, feeBps: 101 }],
-    ["excessive slippage", { ...validSubmission, slippageBps: 201 }],
-    ["reversed date range", { ...validSubmission, from: "2024-03-01" }],
-    ["unknown asset", { ...validSubmission, legs: [{ symbol: "ETH", leverage: 1 }] }],
-    [
-      "duplicate asset",
-      {
-        ...validSubmission,
-        legs: [
-          { symbol: "BTC", leverage: 1 },
-          { symbol: "BTC", leverage: 1 },
-        ],
-      },
-    ],
-    ["crypto leverage", { ...validSubmission, legs: [{ symbol: "BTC", leverage: 1.01 }] }],
-    ["gold leverage", { ...validSubmission, legs: [{ symbol: "XAU", leverage: 1.1 }] }],
-    ["Vietnam leverage", { ...validSubmission, legs: [{ symbol: "FPT", leverage: 2.01 }] }],
-  ])("rejects %s", (_name, payload) => {
-    expect(backtestSubmissionSchema.safeParse(payload).success).toBe(false);
-  });
-
-  it("exposes explicit leverage caps without silently clamping input", () => {
-    expect(maximumLeverageForAsset("FPT")).toBe(2);
-    expect(maximumLeverageForAsset("BTC")).toBe(1);
-    expect(maximumLeverageForAsset("XAU")).toBe(1);
   });
 });

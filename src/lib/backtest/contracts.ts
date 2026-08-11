@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { equalAllocationBps, TOTAL_ALLOCATION_BPS } from "./allocation";
 import {
   normalizeStrategyParameters,
   strategyDefinition,
@@ -7,6 +8,7 @@ import {
 } from "./strategy-catalog";
 
 const DEFAULT_BACKTEST_WINDOW_DAYS = 120;
+const MAX_PORTFOLIO_LEGS = 10;
 
 function toUtcDate(value: Date) {
   return value.toISOString().slice(0, 10);
@@ -15,50 +17,43 @@ function toUtcDate(value: Date) {
 export function createRollingBacktestRange(now = new Date()) {
   const from = new Date(now);
   from.setUTCDate(from.getUTCDate() - DEFAULT_BACKTEST_WINDOW_DAYS);
-
-  return {
-    from: toUtcDate(from),
-    to: toUtcDate(now),
-  };
+  return { from: toUtcDate(from), to: toUtcDate(now) };
 }
 
-export const backtestAssetSchema = z.enum(["FPT", "BTC", "XAU"]);
-export type BacktestAsset = z.infer<typeof backtestAssetSchema>;
+export const backtestSymbolSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9][A-Z0-9._/-]{0,19}$/, "Invalid asset symbol.");
 
-export function maximumLeverageForAsset(asset: BacktestAsset) {
-  return asset === "FPT" ? 2 : 1;
+function isRealIsoDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.");
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.")
+  .refine(isRealIsoDate, "Expected a real calendar date.");
 
-const backtestLegSchema = z
+const strategyCodeSchema = z.string().trim().min(1).max(64);
+const strategyVersionSchema = z
+  .string()
+  .regex(/^\d+\.\d+\.\d+$/, "Expected semantic strategy version.");
+
+export const portfolioBacktestLegSchema = z
   .object({
-    symbol: backtestAssetSchema,
-    leverage: z.number().min(1),
+    symbol: backtestSymbolSchema,
+    allocationBps: z.number().int().min(0).max(TOTAL_ALLOCATION_BPS),
+    leverage: z.number().min(1).max(2),
+    strategyCode: strategyCodeSchema,
+    strategyVersion: strategyVersionSchema,
+    strategyParameters: z.record(z.string(), z.unknown()),
   })
-  .strict()
-  .superRefine((leg, context) => {
-    if (leg.leverage > maximumLeverageForAsset(leg.symbol)) {
-      context.addIssue({
-        code: "custom",
-        path: ["leverage"],
-        message: `${leg.symbol} leverage exceeds its product limit.`,
-      });
-    }
-  });
+  .strict();
 
-const commonSubmissionFields = {
-  timeframe: z.enum(["1d", "1h"]),
-  initialCapital: z.number().positive().max(100_000_000_000),
-  feeBps: z.number().min(0).max(100),
-  slippageBps: z.number().min(0).max(200),
-  from: isoDateSchema,
-  to: isoDateSchema,
-  legs: z.array(backtestLegSchema).min(1).max(3),
-};
-
-function validateCommonSubmission(
-  submission: { from: string; to: string; legs: Array<{ symbol: BacktestAsset }> },
+function validateRangeAndUniqueLegs(
+  submission: { from: string; to: string; legs: Array<{ symbol: string }> },
   context: z.RefinementCtx,
 ) {
   if (submission.from > submission.to) {
@@ -80,19 +75,66 @@ function validateCommonSubmission(
 
 export const canonicalBacktestSubmissionSchema = z
   .object({
-    strategyCode: z.enum([
-      "ma_crossover",
-      "turtle_breakout",
-      "signal_rolling_reversal",
-      "abcd_causal",
-    ]),
-    strategyVersion: z.string().regex(/^\d+\.\d+\.\d+$/, "Expected semantic strategy version."),
-    strategyParameters: z.record(z.string(), z.unknown()),
-    ...commonSubmissionFields,
+    timeframe: z.enum(["1d", "1h"]),
+    from: isoDateSchema,
+    to: isoDateSchema,
+    totalCapital: z.number().positive().max(100_000_000_000),
+    allocationMode: z.enum(["equal", "custom", "optimized"]),
+    feeBps: z.number().min(0).max(100),
+    slippageBps: z.number().min(0).max(200),
+    legs: z.array(portfolioBacktestLegSchema).min(1).max(MAX_PORTFOLIO_LEGS),
   })
   .strict()
   .superRefine((submission, context) => {
-    validateCommonSubmission(submission, context);
+    validateRangeAndUniqueLegs(submission, context);
+    if (
+      submission.legs.reduce((total, leg) => total + leg.allocationBps, 0) !==
+      TOTAL_ALLOCATION_BPS
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["legs"],
+        message: "Portfolio allocation must total exactly 10,000 basis points.",
+      });
+    }
+    submission.legs.forEach((leg, index) => {
+      try {
+        strategyDefinition(leg.strategyCode, leg.strategyVersion);
+        normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: ["legs", index, "strategyParameters"],
+          message: error instanceof Error ? error.message : "Strategy parameters are invalid.",
+        });
+      }
+    });
+  });
+
+const legacyLegSchema = z
+  .object({ symbol: backtestSymbolSchema, leverage: z.number().min(1).max(2) })
+  .strict();
+
+const legacyCommonFields = {
+  timeframe: z.enum(["1d", "1h"]),
+  initialCapital: z.number().positive().max(100_000_000_000),
+  feeBps: z.number().min(0).max(100),
+  slippageBps: z.number().min(0).max(200),
+  from: isoDateSchema,
+  to: isoDateSchema,
+  legs: z.array(legacyLegSchema).min(1).max(MAX_PORTFOLIO_LEGS),
+};
+
+const legacyCatalogSubmissionSchema = z
+  .object({
+    strategyCode: strategyCodeSchema,
+    strategyVersion: strategyVersionSchema,
+    strategyParameters: z.record(z.string(), z.unknown()),
+    ...legacyCommonFields,
+  })
+  .strict()
+  .superRefine((submission, context) => {
+    validateRangeAndUniqueLegs(submission, context);
     try {
       strategyDefinition(submission.strategyCode, submission.strategyVersion);
       normalizeStrategyParameters(submission.strategyCode, submission.strategyParameters);
@@ -105,16 +147,16 @@ export const canonicalBacktestSubmissionSchema = z
     }
   });
 
-const legacyBacktestSubmissionSchema = z
+const legacyMaSubmissionSchema = z
   .object({
     strategy: z.literal("ma_cross"),
     fastPeriod: z.number().int().min(2).max(200),
     slowPeriod: z.number().int().min(3).max(400),
-    ...commonSubmissionFields,
+    ...legacyCommonFields,
   })
   .strict()
   .superRefine((submission, context) => {
-    validateCommonSubmission(submission, context);
+    validateRangeAndUniqueLegs(submission, context);
     if (submission.fastPeriod >= submission.slowPeriod) {
       context.addIssue({
         code: "custom",
@@ -126,41 +168,76 @@ const legacyBacktestSubmissionSchema = z
 
 export const backtestSubmissionSchema = z.union([
   canonicalBacktestSubmissionSchema,
-  legacyBacktestSubmissionSchema,
+  legacyCatalogSubmissionSchema,
+  legacyMaSubmissionSchema,
 ]);
 
-type CanonicalBacktestSubmission = z.infer<typeof canonicalBacktestSubmissionSchema>;
-export type BacktestSubmission = Omit<CanonicalBacktestSubmission, "strategyCode"> & {
+type CanonicalPortfolioSubmission = z.infer<typeof canonicalBacktestSubmissionSchema>;
+type CanonicalPortfolioLeg = CanonicalPortfolioSubmission["legs"][number];
+
+export type PortfolioBacktestLeg = Omit<CanonicalPortfolioLeg, "strategyCode"> & {
   strategyCode: StrategyCode;
 };
 
-export function normalizeBacktestSubmission(input: unknown): BacktestSubmission {
+export type PortfolioBacktestSubmission = Omit<CanonicalPortfolioSubmission, "legs"> & {
+  legs: PortfolioBacktestLeg[];
+};
+
+/** @deprecated Use PortfolioBacktestSubmission. */
+export type BacktestSubmission = PortfolioBacktestSubmission;
+
+export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSubmission {
   const parsed = backtestSubmissionSchema.parse(input);
-  const canonical: CanonicalBacktestSubmission =
-    "strategyCode" in parsed
-      ? parsed
-      : {
-          strategyCode: "ma_crossover",
-          strategyVersion: "1.0.0",
-          strategyParameters: {
-            fastPeriod: parsed.fastPeriod,
-            slowPeriod: parsed.slowPeriod,
-          },
-          timeframe: parsed.timeframe,
-          initialCapital: parsed.initialCapital,
-          feeBps: parsed.feeBps,
-          slippageBps: parsed.slippageBps,
-          from: parsed.from,
-          to: parsed.to,
-          legs: parsed.legs,
-        };
-  strategyDefinition(canonical.strategyCode, canonical.strategyVersion);
+  let canonical: CanonicalPortfolioSubmission;
+
+  if ("totalCapital" in parsed) {
+    canonical = parsed;
+  } else {
+    const allocationBySymbol = equalAllocationBps(parsed.legs.map((leg) => leg.symbol));
+    const sharedStrategy =
+      "strategyCode" in parsed
+        ? {
+            strategyCode: parsed.strategyCode,
+            strategyVersion: parsed.strategyVersion,
+            strategyParameters: parsed.strategyParameters,
+          }
+        : {
+            strategyCode: "ma_crossover",
+            strategyVersion: "1.0.0",
+            strategyParameters: {
+              fastPeriod: parsed.fastPeriod,
+              slowPeriod: parsed.slowPeriod,
+            },
+          };
+    canonical = {
+      timeframe: parsed.timeframe,
+      from: parsed.from,
+      to: parsed.to,
+      totalCapital: parsed.initialCapital,
+      allocationMode: "equal",
+      feeBps: parsed.feeBps,
+      slippageBps: parsed.slippageBps,
+      legs: parsed.legs.map((leg) => ({
+        ...leg,
+        allocationBps: allocationBySymbol[leg.symbol],
+        ...sharedStrategy,
+      })),
+    };
+  }
+
   return {
     ...canonical,
-    strategyParameters: normalizeStrategyParameters(
-      canonical.strategyCode,
-      canonical.strategyParameters,
-    ),
-    legs: [...canonical.legs].sort((left, right) => left.symbol.localeCompare(right.symbol)),
+    legs: canonical.legs
+      .map((leg) => {
+        strategyDefinition(leg.strategyCode, leg.strategyVersion);
+        return {
+          ...leg,
+          strategyParameters: normalizeStrategyParameters(
+            leg.strategyCode,
+            leg.strategyParameters,
+          ),
+        };
+      })
+      .sort((left, right) => left.symbol.localeCompare(right.symbol)),
   };
 }
