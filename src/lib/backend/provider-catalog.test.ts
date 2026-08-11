@@ -47,6 +47,11 @@ describe("approved provider instrument catalog", () => {
             status: "active",
             code: { in: ["binance-public", "msn-via-vnstock", "vnstock-vci-free"] },
           },
+          OR: [
+            { providerSymbol: { contains: "VNM", mode: "insensitive" } },
+            { asset: { symbol: { contains: "VNM", mode: "insensitive" } } },
+            { asset: { name: { startsWith: "VNM", mode: "insensitive" } } },
+          ],
         }),
         take: 50,
       }),

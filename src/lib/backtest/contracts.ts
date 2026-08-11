@@ -15,9 +15,11 @@ function toUtcDate(value: Date) {
 }
 
 export function createRollingBacktestRange(now = new Date()) {
-  const from = new Date(now);
+  const completedDay = new Date(now);
+  completedDay.setUTCDate(completedDay.getUTCDate() - 1);
+  const from = new Date(completedDay);
   from.setUTCDate(from.getUTCDate() - DEFAULT_BACKTEST_WINDOW_DAYS);
-  return { from: toUtcDate(from), to: toUtcDate(now) };
+  return { from: toUtcDate(from), to: toUtcDate(completedDay) };
 }
 
 export const backtestSymbolSchema = z

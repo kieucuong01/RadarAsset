@@ -11,3 +11,7 @@ export function normalizePreselectedSymbols(input: string | string[] | undefined
   }
   return symbols;
 }
+
+export function initialQuantLabTab(symbols: string[]): "optimizer" | "backtest" {
+  return symbols.length > 0 ? "backtest" : "optimizer";
+}

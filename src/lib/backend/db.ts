@@ -612,14 +612,13 @@ export async function loadWatchlist(context: TenantContext) {
       .filter((timeframe): timeframe is "1d" | "1h" => timeframe === "1d" || timeframe === "1h")
       .sort();
     const activeRequest = activeRequestByAsset.get(item.asset.id);
-    const datasetState =
-      backtestableTimeframes.length > 0
+    const datasetState = activeRequest
+      ? "loading"
+      : backtestableTimeframes.length > 0
         ? "ready"
-        : activeRequest
-          ? "loading"
-          : item.asset.datasets.length > 0
-            ? "stale"
-            : "unavailable";
+        : item.asset.datasets.length > 0
+          ? "stale"
+          : "unavailable";
     return {
       id: item.id,
       sym: item.asset.symbol,

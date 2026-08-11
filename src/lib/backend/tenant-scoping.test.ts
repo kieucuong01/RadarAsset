@@ -159,6 +159,41 @@ describe("organization-scoped database services", () => {
     );
   });
 
+  it("keeps polling while another requested timeframe is still active", async () => {
+    prisma.watchlistItem.findMany.mockResolvedValue([
+      {
+        id: "watch-eth",
+        alert: null,
+        asset: {
+          id: "asset-eth",
+          symbol: "ETH",
+          name: "Ethereum",
+          datasets: [
+            { timeframe: "1d", versions: [{ id: "eth-1d" }] },
+            { timeframe: "1h", versions: [] },
+          ],
+        },
+      },
+    ]);
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([
+      {
+        id: "request-eth-1h",
+        status: "running",
+        createdAt: new Date("2026-08-11T00:00:00Z"),
+        providerInstrument: { assetId: "asset-eth" },
+      },
+    ]);
+
+    await expect(loadWatchlist(viewerContext)).resolves.toEqual([
+      expect.objectContaining({
+        sym: "ETH",
+        datasetState: "loading",
+        ingestionRequestId: "request-eth-1h",
+        backtestableTimeframes: ["1d"],
+      }),
+    ]);
+  });
+
   it("removes only the tenant and user owned watchlist row", async () => {
     prisma.watchlistItem.deleteMany.mockResolvedValue({ count: 1 });
 

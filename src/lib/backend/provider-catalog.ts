@@ -78,7 +78,7 @@ export async function searchProviderInstruments(input: { q: string; limit?: numb
             OR: [
               { providerSymbol: { contains: q, mode: "insensitive" as const } },
               { asset: { symbol: { contains: q, mode: "insensitive" as const } } },
-              { asset: { name: { contains: q, mode: "insensitive" as const } } },
+              { asset: { name: { startsWith: q, mode: "insensitive" as const } } },
             ],
           }
         : {}),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePreselectedSymbols } from "./preselection";
+import { initialQuantLabTab, normalizePreselectedSymbols } from "./preselection";
 
 describe("Quant Lab URL preselection", () => {
   it("normalizes comma-separated and repeated values without fixed defaults", () => {
@@ -15,5 +15,10 @@ describe("Quant Lab URL preselection", () => {
     expect(
       normalizePreselectedSymbols(["A,B,C,D,E,F,G,H,I,J,K", "bad symbol", "<script>"]),
     ).toEqual(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
+  });
+
+  it("opens the backtest builder when Mock Portfolio hands off symbols", () => {
+    expect(initialQuantLabTab(["ETH"])).toBe("backtest");
+    expect(initialQuantLabTab([])).toBe("optimizer");
   });
 });

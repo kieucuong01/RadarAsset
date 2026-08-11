@@ -8,6 +8,7 @@ import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { initialQuantLabTab } from "@/lib/backtest/preselection";
 
 const PortfolioOptimizerWorkbench = dynamic(
   () =>
@@ -25,7 +26,7 @@ const BacktestWorkbench = dynamic(
 type TabKey = "optimizer" | "predict" | "backtest";
 
 export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] }) {
-  const [tab, setTab] = useState<TabKey>("optimizer");
+  const [tab, setTab] = useState<TabKey>(() => initialQuantLabTab(initialSymbols));
 
   return (
     <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">

@@ -271,8 +271,8 @@ describe("portfolio backtest submission contract", () => {
 
   it("defaults new runs to a recent UTC window instead of an obsolete fixed year", () => {
     expect(createRollingBacktestRange(new Date("2026-08-11T02:00:00Z"))).toEqual({
-      from: "2026-04-13",
-      to: "2026-08-11",
+      from: "2026-04-12",
+      to: "2026-08-10",
     });
   });
 });
