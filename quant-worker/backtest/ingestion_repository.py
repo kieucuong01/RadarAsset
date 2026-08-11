@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import socket
+import uuid
+from dataclasses import dataclass
+from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -29,6 +33,176 @@ STABLE_ERROR_CODES = {
     "stale_run",
     "unsupported_timeframe",
 }
+
+
+@dataclass(frozen=True)
+class QueuedIngestionRequest:
+    id: str
+    provider_code: str
+    provider_name: str
+    terms_url: str | None
+    provider_symbol: str
+    asset: str
+    asset_name: str
+    market: str
+    venue: str | None
+    currency: str
+    timezone_name: str
+    canonical_key: str
+    maximum_leverage: Decimal
+    timeframe: str
+    worker_id: str
+    attempt_count: int
+
+
+class PostgresRequestRepository:
+    def __init__(
+        self,
+        connection: psycopg.Connection[Any],
+        *,
+        worker_id: str | None = None,
+        lease_seconds: int = 300,
+    ) -> None:
+        if not connection.autocommit:
+            raise ValueError("Request repository requires an autocommit connection.")
+        if lease_seconds < 1:
+            raise ValueError("Request lease must be positive.")
+        self.connection = connection
+        self.worker_id = worker_id or f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
+        self.lease_seconds = lease_seconds
+        self.publisher = PostgresDatasetPublisher(connection)
+
+    def claim_next_request(self) -> QueuedIngestionRequest | None:
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    WITH next_request AS (
+                      SELECT request.id
+                      FROM market_ingestion_requests AS request
+                      WHERE (
+                        (request.status = 'queued' AND request.available_at <= NOW())
+                        OR (
+                          request.status = 'running'
+                          AND request.lease_expires_at <= NOW()
+                          AND request.attempt_count < 3
+                        )
+                      )
+                      ORDER BY request.available_at, request.created_at
+                      FOR UPDATE SKIP LOCKED
+                      LIMIT 1
+                    )
+                    UPDATE market_ingestion_requests AS request
+                    SET status = 'running',
+                        worker_id = %s,
+                        lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                        attempt_count = request.attempt_count + 1,
+                        error_code = NULL,
+                        updated_at = NOW()
+                    FROM next_request
+                    WHERE request.id = next_request.id
+                    RETURNING request.id, request.provider_instrument_id,
+                              request.timeframe, request.worker_id, request.attempt_count
+                    """,
+                    (self.worker_id, self.lease_seconds),
+                )
+                claimed = cursor.fetchone()
+                if claimed is None:
+                    return None
+                cursor.execute(
+                    """
+                    SELECT provider.code AS provider_code, provider.name AS provider_name,
+                           provider.terms_url, instrument.provider_symbol,
+                           asset.symbol, asset.name AS asset_name, asset.market, asset.venue,
+                           asset.currency, asset.timezone, asset.canonical_key,
+                           asset.max_leverage
+                    FROM provider_instruments AS instrument
+                    JOIN data_providers AS provider ON provider.id = instrument.provider_id
+                    JOIN assets AS asset ON asset.id = instrument.asset_id
+                    WHERE instrument.id = %s
+                    """,
+                    (claimed["provider_instrument_id"],),
+                )
+                metadata = cursor.fetchone()
+                if metadata is None:
+                    raise RuntimeError("Claimed provider instrument is unavailable.")
+        return QueuedIngestionRequest(
+            id=str(claimed["id"]),
+            provider_code=str(metadata["provider_code"]),
+            provider_name=str(metadata["provider_name"]),
+            terms_url=None if metadata["terms_url"] is None else str(metadata["terms_url"]),
+            provider_symbol=str(metadata["provider_symbol"]),
+            asset=str(metadata["symbol"]),
+            asset_name=str(metadata["asset_name"]),
+            market=str(metadata["market"]),
+            venue=None if metadata["venue"] is None else str(metadata["venue"]),
+            currency=str(metadata["currency"]),
+            timezone_name=str(metadata["timezone"]),
+            canonical_key=str(metadata["canonical_key"] or f"{metadata['market']}:{metadata['symbol']}"),
+            maximum_leverage=Decimal(str(metadata["max_leverage"])),
+            timeframe=str(claimed["timeframe"]),
+            worker_id=str(claimed["worker_id"]),
+            attempt_count=int(claimed["attempt_count"]),
+        )
+
+    def load_active(self, request: QueuedIngestionRequest) -> ActiveSnapshot | None:
+        return self.publisher.load_active(request.asset, request.timeframe)
+
+    def publish(
+        self, request: QueuedIngestionRequest, prepared: PreparedDatasetPublication
+    ) -> PublicationResult:
+        del request
+        with self.connection.transaction():
+            return self.publisher.publish_if_changed(prepared)
+
+    def complete_request(self, request: QueuedIngestionRequest, dataset_version_id: str) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests
+                SET status = 'succeeded', dataset_version_id = %s,
+                    lease_expires_at = NULL, error_code = NULL, updated_at = NOW()
+                WHERE id = %s AND status = 'running' AND worker_id = %s
+                  AND lease_expires_at > NOW()
+                """,
+                (dataset_version_id, request.id, request.worker_id),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("Ingestion request lease is no longer active.")
+
+    def retry_or_fail(self, request: QueuedIngestionRequest, code: str) -> None:
+        terminal = request.attempt_count >= 3
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests
+                SET status = %s,
+                    available_at = CASE WHEN %s THEN available_at ELSE NOW() + (%s * INTERVAL '1 minute') END,
+                    worker_id = NULL, lease_expires_at = NULL,
+                    error_code = %s, updated_at = NOW()
+                WHERE id = %s AND status = 'running' AND worker_id = %s
+                """,
+                (
+                    "failed" if terminal else "queued",
+                    terminal,
+                    min(15, 2 ** max(0, request.attempt_count - 1)),
+                    code,
+                    request.id,
+                    request.worker_id,
+                ),
+            )
+
+    def fail_request(self, request: QueuedIngestionRequest, code: str) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests
+                SET status = 'failed', worker_id = NULL, lease_expires_at = NULL,
+                    error_code = %s, updated_at = NOW()
+                WHERE id = %s AND status = 'running' AND worker_id = %s
+                """,
+                (code, request.id, request.worker_id),
+            )
 
 
 class PostgresIngestionRepository:

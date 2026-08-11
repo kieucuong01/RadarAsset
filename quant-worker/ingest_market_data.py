@@ -119,11 +119,17 @@ def _argument_parser() -> StrictArgumentParser:
     return parser
 
 
+def provider_for_code(provider_code: str, max_pages: int, max_rows: int) -> Any:
+    if provider_code == "binance-public":
+        return BinanceSpotAdapter(max_pages=max_pages, max_rows=max_rows)
+    if provider_code in {"vnstock-vci-free", "msn-via-vnstock"}:
+        return VnstockAdapter(max_rows=max_rows)
+    raise ValueError("Provider is not approved for market ingestion.")
+
+
 def _provider_factory(max_pages: int, max_rows: int) -> Callable[[str], Any]:
     def create(asset: str) -> Any:
-        if asset == "BTC":
-            return BinanceSpotAdapter(max_pages=max_pages, max_rows=max_rows)
-        return VnstockAdapter(max_rows=max_rows)
+        return provider_for_code(FEEDS[asset].provider_code, max_pages, max_rows)
 
     return create
 
