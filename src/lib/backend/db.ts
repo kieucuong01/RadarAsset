@@ -39,7 +39,6 @@ import type {
   WatchlistMutationInput,
 } from "./types";
 import type { BacktestSubmission } from "@/lib/backtest/contracts";
-import { maximumLeverageForAsset } from "@/lib/backtest/contracts";
 import { hashBacktestSubmission } from "@/lib/backtest/hash";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import { calculateFreshness } from "@/lib/market-data/health";
@@ -1132,18 +1131,33 @@ function marketForSymbol(symbol: (typeof MARKET_DATA_SYMBOLS)[number]): MarketDa
 
 export async function createQuantRun(context: TenantContext, input: BacktestSubmission) {
   const prisma = getPrisma();
+  const aggregateStrategy = input.legs[0];
+  if (
+    !aggregateStrategy ||
+    input.legs.some(
+      (leg) =>
+        leg.strategyCode !== aggregateStrategy.strategyCode ||
+        leg.strategyVersion !== aggregateStrategy.strategyVersion ||
+        JSON.stringify(leg.strategyParameters) !==
+          JSON.stringify(aggregateStrategy.strategyParameters),
+    )
+  ) {
+    throw new Error(
+      "Mixed per-asset strategies are not available until the portfolio runner is enabled.",
+    );
+  }
   const strategyVersion = await prisma.strategyVersion.findUnique({
     where: {
       code_version: {
-        code: input.strategyCode,
-        version: input.strategyVersion,
+        code: aggregateStrategy.strategyCode,
+        version: aggregateStrategy.strategyVersion,
       },
     },
     select: { id: true, code: true, version: true, name: true },
   });
   if (!strategyVersion) {
     throw new Error(
-      `Strategy ${input.strategyCode}@${input.strategyVersion} is not synchronized in the catalog.`,
+      `Strategy ${aggregateStrategy.strategyCode}@${aggregateStrategy.strategyVersion} is not synchronized in the catalog.`,
     );
   }
   const symbols = input.legs.map((leg) => leg.symbol);
@@ -1174,7 +1188,7 @@ export async function createQuantRun(context: TenantContext, input: BacktestSubm
       );
     }
     const databaseMaximum = Number(asset.maxLeverage);
-    if (leg.leverage > databaseMaximum || leg.leverage > maximumLeverageForAsset(leg.symbol)) {
+    if (leg.leverage > databaseMaximum) {
       throw new Error(`${leg.symbol} leverage exceeds the configured product limit.`);
     }
     datasetVersionIds.push(version.id);
@@ -1190,7 +1204,7 @@ export async function createQuantRun(context: TenantContext, input: BacktestSubm
       progress: 0,
       strategyHash: hashBacktestSubmission(input),
       datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
-      engineVersion: `${input.strategyCode}-v1`,
+      engineVersion: `${aggregateStrategy.strategyCode}-v1`,
       parameters: input as Prisma.InputJsonValue,
     },
     include: {

@@ -9,16 +9,23 @@ import {
 } from "./client";
 
 const submission = {
-  strategyCode: "ma_crossover" as const,
-  strategyVersion: "1.0.0" as const,
-  strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
   timeframe: "1d" as const,
-  initialCapital: 100_000,
+  totalCapital: 100_000,
+  allocationMode: "equal" as const,
   feeBps: 10,
   slippageBps: 5,
   from: "2024-01-01",
   to: "2025-01-01",
-  legs: [{ symbol: "BTC" as const, leverage: 1 }],
+  legs: [
+    {
+      symbol: "BTC",
+      allocationBps: 10_000,
+      leverage: 1,
+      strategyCode: "ma_crossover" as const,
+      strategyVersion: "1.0.0" as const,
+      strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+    },
+  ],
 };
 
 const queuedRun = {

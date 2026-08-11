@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Progress } from "@/components/ui/progress";
 import { createRollingBacktestRange, type BacktestSubmission } from "@/lib/backtest/contracts";
+import { equalAllocationBps } from "@/lib/backtest/allocation";
 import {
   getStrategyCatalog,
   getBacktestRun,
@@ -138,20 +139,40 @@ export function BacktestWorkbench() {
   );
 
   async function startBacktest() {
+    const allocation = equalAllocationBps(["FPT", "BTC", "XAU"]);
     const submission: BacktestSubmission = {
-      strategyCode,
-      strategyVersion,
-      strategyParameters,
       timeframe,
-      initialCapital,
+      totalCapital: initialCapital,
+      allocationMode: "equal",
       feeBps,
       slippageBps,
       from,
       to,
       legs: [
-        { symbol: "FPT", leverage: fptLeverage },
-        { symbol: "BTC", leverage: 1 },
-        { symbol: "XAU", leverage: 1 },
+        {
+          symbol: "FPT",
+          allocationBps: allocation.FPT,
+          leverage: fptLeverage,
+          strategyCode,
+          strategyVersion,
+          strategyParameters,
+        },
+        {
+          symbol: "BTC",
+          allocationBps: allocation.BTC,
+          leverage: 1,
+          strategyCode,
+          strategyVersion,
+          strategyParameters,
+        },
+        {
+          symbol: "XAU",
+          allocationBps: allocation.XAU,
+          leverage: 1,
+          strategyCode,
+          strategyVersion,
+          strategyParameters,
+        },
       ],
     };
     setSubmitting(true);

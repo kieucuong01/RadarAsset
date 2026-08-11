@@ -208,16 +208,23 @@ describe("organization-scoped database services", () => {
       datasetVersionIds: ["dataset-btc-1d-v1"],
       engineVersion: "ma-cross-v1",
       parameters: {
-        strategyCode: "ma_crossover",
-        strategyVersion: "1.0.0",
-        strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
         timeframe: "1d",
-        initialCapital: 10000,
+        totalCapital: 10000,
+        allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
         from: "2024-01-01",
         to: "2025-01-01",
-        legs: [{ symbol: "BTC", leverage: 1 }],
+        legs: [
+          {
+            symbol: "BTC",
+            allocationBps: 10000,
+            leverage: 1,
+            strategyCode: "ma_crossover",
+            strategyVersion: "1.0.0",
+            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+          },
+        ],
       },
       metrics: null,
       errorMessage: null,
@@ -229,16 +236,23 @@ describe("organization-scoped database services", () => {
     prisma.quantRun.findFirst.mockResolvedValue(null);
 
     await createQuantRun(editorContext, {
-      strategyCode: "ma_crossover",
-      strategyVersion: "1.0.0",
-      strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
       timeframe: "1d",
-      initialCapital: 10000,
+      totalCapital: 10000,
+      allocationMode: "equal",
       feeBps: 10,
       slippageBps: 5,
       from: "2024-01-01",
       to: "2025-01-01",
-      legs: [{ symbol: "BTC", leverage: 1 }],
+      legs: [
+        {
+          symbol: "BTC",
+          allocationBps: 10000,
+          leverage: 1,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+      ],
     });
     await listQuantRuns(viewerContext);
     await expect(getQuantRun(viewerContext, "run-other")).rejects.toThrow("Quant run not found.");
@@ -270,19 +284,60 @@ describe("organization-scoped database services", () => {
 
     await expect(
       createQuantRun(editorContext, {
-        strategyCode: "ma_crossover",
-        strategyVersion: "1.0.0",
-        strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
         timeframe: "1d",
-        initialCapital: 10000,
+        totalCapital: 10000,
+        allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
         from: "2024-01-01",
         to: "2025-01-01",
-        legs: [{ symbol: "BTC", leverage: 1 }],
+        legs: [
+          {
+            symbol: "BTC",
+            allocationBps: 10000,
+            leverage: 1,
+            strategyCode: "ma_crossover",
+            strategyVersion: "1.0.0",
+            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+          },
+        ],
       }),
     ).rejects.toThrow("not synchronized");
     expect(prisma.asset.findMany).not.toHaveBeenCalled();
+    expect(prisma.quantRun.create).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before persistence when the legacy runner receives mixed strategies", async () => {
+    await expect(
+      createQuantRun(editorContext, {
+        timeframe: "1d",
+        totalCapital: 10000,
+        allocationMode: "equal",
+        feeBps: 10,
+        slippageBps: 5,
+        from: "2024-01-01",
+        to: "2025-01-01",
+        legs: [
+          {
+            symbol: "BTC",
+            allocationBps: 5000,
+            leverage: 1,
+            strategyCode: "ma_crossover",
+            strategyVersion: "1.0.0",
+            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+          },
+          {
+            symbol: "FPT",
+            allocationBps: 5000,
+            leverage: 1,
+            strategyCode: "turtle_breakout",
+            strategyVersion: "1.0.0",
+            strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+          },
+        ],
+      }),
+    ).rejects.toThrow("Mixed per-asset strategies are not available");
+    expect(prisma.strategyVersion.findUnique).not.toHaveBeenCalled();
     expect(prisma.quantRun.create).not.toHaveBeenCalled();
   });
 
