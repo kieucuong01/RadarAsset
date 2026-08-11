@@ -1263,6 +1263,8 @@ function quantRunToResponse(run: {
   createdAt?: Date;
   artifacts?: Array<{
     id: string;
+    quantRunLegId?: string | null;
+    scopeKey?: string;
     kind: string;
     checksum: string;
     payload: unknown;
@@ -1291,8 +1293,11 @@ function quantRunToResponse(run: {
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     createdAt: run.createdAt?.toISOString() ?? new Date(0).toISOString(),
+    legs: [],
     artifacts: (run.artifacts ?? []).map((artifact) => ({
       id: artifact.id,
+      quantRunLegId: artifact.quantRunLegId ?? null,
+      scopeKey: artifact.scopeKey ?? "aggregate",
       kind:
         artifact.kind === "equity" || artifact.kind === "drawdown" || artifact.kind === "trades"
           ? artifact.kind

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
   loadQuantAssetCatalog: vi.fn(),
+  optimizeQuantAllocation: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/tenant-context", () => ({
@@ -57,6 +58,21 @@ vi.mock("@/lib/backend/quant-assets", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/backend/quant-runs", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/quant-runs")>();
+  return {
+    ...original,
+    createPortfolioQuantRun: mocks.createQuantRun,
+    listPortfolioQuantRuns: mocks.listQuantRuns,
+    loadPortfolioQuantRun: mocks.getQuantRun,
+  };
+});
+
+vi.mock("@/lib/backend/quant-optimizer", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/quant-optimizer")>();
+  return { ...original, optimizeQuantAllocation: mocks.optimizeQuantAllocation };
+});
+
 import { GET as portfolioGet } from "./portfolio/route";
 import {
   GET as strategyAssignmentsGet,
@@ -69,7 +85,9 @@ import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { GET as quantAssetsGet } from "./quant/assets/route";
+import { POST as quantOptimizePost } from "./quant/allocations/optimize/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
+import { PortfolioRunEligibilityError } from "@/lib/backend/quant-runs";
 
 const viewerContext = {
   userId: "user-a",
@@ -93,6 +111,16 @@ describe("tenant API authorization", () => {
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
+    mocks.optimizeQuantAllocation.mockResolvedValue({
+      weightsBps: { BTC: 10_000 },
+      totalWeightBps: 10_000,
+      expectedReturnPct: 10,
+      volatilityPct: 20,
+      sharpe: 0.5,
+      observationCount: 40,
+      datasetVersionIds: { BTC: "dataset-btc" },
+      warnings: [],
+    });
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -315,6 +343,60 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.createQuantRun).not.toHaveBeenCalled();
+  });
+
+  it("allows editors to optimize an authenticated portfolio allocation", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const payload = {
+      symbols: ["BTC"],
+      timeframe: "1d",
+      from: "2025-01-01",
+      to: "2025-12-31",
+      riskAversion: 4,
+      maxWeightBps: 10_000,
+      totalWeightBps: 10_000,
+      dividendMode: "exclude",
+    };
+
+    const response = await quantOptimizePost(
+      new Request("http://localhost/api/quant/allocations/optimize", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "backtest", "create");
+    expect(mocks.optimizeQuantAllocation).toHaveBeenCalledWith(editorContext, payload);
+  });
+
+  it("maps deterministic portfolio eligibility failures to conflict", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    mocks.createQuantRun.mockRejectedValue(
+      new PortfolioRunEligibilityError("DATASET_UNAVAILABLE", "BTC is unavailable."),
+    );
+
+    const response = await quantPost(
+      new Request("http://localhost/api/quant/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          strategy: "ma_cross",
+          timeframe: "1d",
+          fastPeriod: 5,
+          slowPeriod: 20,
+          initialCapital: 100_000,
+          feeBps: 10,
+          slippageBps: 5,
+          from: "2024-01-01",
+          to: "2025-01-01",
+          legs: [{ symbol: "BTC", leverage: 1 }],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
   });
 
   it("denies viewer backtest submission before persistence", async () => {

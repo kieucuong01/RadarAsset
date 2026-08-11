@@ -303,8 +303,8 @@ export type WatchlistItemResponse = {
 export type QuantRunResponse = {
   id: string;
   strategyName: string;
-  strategyCode: string;
-  strategyVersion: string;
+  strategyCode: string | null;
+  strategyVersion: string | null;
   status: QuantRunStatus;
   timeframe: "1d" | "1h";
   progress: number;
@@ -317,9 +317,38 @@ export type QuantRunResponse = {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  legs: Array<{
+    id: string;
+    symbol: string;
+    market: MarketDataMarket;
+    currency: string;
+    allocationBps: number;
+    initialNotional: number;
+    leverage: number;
+    strategyCode: string;
+    strategyVersion: string;
+    strategyName: string;
+    strategyParameters: Record<string, unknown>;
+    implementationHash: string;
+    datasetVersionId: string;
+    status: QuantRunStatus;
+    progress: number;
+    metrics: Record<string, unknown> | null;
+    errorCode: string | null;
+  }>;
   artifacts: Array<{
     id: string;
-    kind: "equity" | "drawdown" | "trades" | "manifest";
+    quantRunLegId: string | null;
+    scopeKey: string;
+    kind:
+      | "equity"
+      | "drawdown"
+      | "trades"
+      | "manifest"
+      | "benchmark"
+      | "contribution"
+      | "cash_flow"
+      | "rebalance";
     checksum: string;
     payload: unknown;
     rowCount: number;

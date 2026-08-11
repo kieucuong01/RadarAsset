@@ -48,6 +48,7 @@ const queuedRun = {
   startedAt: null,
   finishedAt: null,
   createdAt: "2026-08-10T00:00:00.000Z",
+  legs: [],
   artifacts: [],
 };
 
@@ -117,6 +118,50 @@ describe("backtest API client", () => {
         body: JSON.stringify(submission),
       }),
     );
+  });
+
+  it("parses independently resolved legs and scoped artifacts", () => {
+    const parsed = parseBacktestRun({
+      ...queuedRun,
+      strategyCode: null,
+      strategyVersion: null,
+      legs: [
+        {
+          id: "leg-btc",
+          symbol: "BTC",
+          market: "crypto_spot",
+          currency: "USDT",
+          allocationBps: 10_000,
+          initialNotional: 100_000,
+          leverage: 1,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyName: "MA Crossover",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+          implementationHash: "b".repeat(64),
+          datasetVersionId: "dataset-1",
+          status: "queued",
+          progress: 0,
+          metrics: null,
+          errorCode: null,
+        },
+      ],
+      artifacts: [
+        {
+          id: "manifest-1",
+          quantRunLegId: "leg-btc",
+          scopeKey: "leg:leg-btc",
+          kind: "manifest",
+          checksum: "c".repeat(64),
+          payload: { schemaVersion: 1 },
+          rowCount: 1,
+          schemaVersion: 1,
+        },
+      ],
+    });
+
+    expect(parsed.legs[0]).toMatchObject({ symbol: "BTC", strategyCode: "ma_crossover" });
+    expect(parsed.artifacts[0]).toMatchObject({ scopeKey: "leg:leg-btc" });
   });
 
   it("classifies only queued and running states as active", () => {

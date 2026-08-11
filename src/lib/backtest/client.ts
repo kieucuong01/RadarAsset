@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { BacktestSubmission } from "./contracts";
+import { backtestSymbolSchema, type BacktestSubmission } from "./contracts";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -23,7 +23,7 @@ const drawdownPointSchema = z
 
 const tradeSchema = z
   .object({
-    asset: z.enum(["FPT", "BTC", "XAU"]),
+    asset: backtestSymbolSchema,
     side: z.literal("long"),
     entrySignalAt: z.string(),
     entryAt: z.string(),
@@ -43,6 +43,8 @@ const tradeSchema = z
 
 const artifactBase = {
   id: z.string(),
+  quantRunLegId: z.string().nullable(),
+  scopeKey: z.string().min(1),
   checksum: z.string().length(64),
   rowCount: z.number().int().nonnegative(),
   schemaVersion: z.literal(1),
@@ -63,7 +65,32 @@ const artifactSchema = z.discriminatedUnion("kind", [
       payload: z.record(z.string(), z.unknown()),
     })
     .strict(),
+  ...(["benchmark", "contribution", "cash_flow", "rebalance"] as const).map((kind) =>
+    z.object({ ...artifactBase, kind: z.literal(kind), payload: z.unknown() }).strict(),
+  ),
 ]);
+
+const runLegSchema = z
+  .object({
+    id: z.string(),
+    symbol: backtestSymbolSchema,
+    market: z.enum(["vn_equity", "crypto_spot", "metal_spot"]),
+    currency: z.string().min(1),
+    allocationBps: z.number().int().min(0).max(10_000),
+    initialNotional: z.number().nonnegative(),
+    leverage: z.number().min(1).max(2),
+    strategyCode: z.string().min(1),
+    strategyVersion: z.string().min(1),
+    strategyName: z.string().min(1),
+    strategyParameters: z.record(z.string(), z.unknown()),
+    implementationHash: z.string().length(64),
+    datasetVersionId: z.string().min(1),
+    status: z.enum(["queued", "running", "succeeded", "failed"]),
+    progress: z.number().int().min(0).max(100),
+    metrics: z.record(z.string(), z.unknown()).nullable(),
+    errorCode: z.string().nullable(),
+  })
+  .strict();
 
 const strategyCatalogItemSchema = z
   .object({
@@ -99,8 +126,8 @@ const backtestRunSchema = z
   .object({
     id: z.string(),
     strategyName: z.string(),
-    strategyCode: z.string(),
-    strategyVersion: z.string(),
+    strategyCode: z.string().nullable(),
+    strategyVersion: z.string().nullable(),
     status: z.enum(["queued", "running", "succeeded", "failed"]),
     timeframe: z.enum(["1d", "1h"]),
     progress: z.number().int().min(0).max(100),
@@ -113,6 +140,7 @@ const backtestRunSchema = z
     startedAt: z.string().nullable(),
     finishedAt: z.string().nullable(),
     createdAt: z.string(),
+    legs: z.array(runLegSchema),
     artifacts: z.array(artifactSchema),
   })
   .strict();
