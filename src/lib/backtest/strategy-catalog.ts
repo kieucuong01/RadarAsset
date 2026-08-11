@@ -249,7 +249,12 @@ export function strategyDefinition(code: string, version: string) {
 }
 
 export function listStrategyCatalog() {
-  return STRATEGY_CATALOG.map(({ validator: _validator, ...definition }) => definition);
+  return STRATEGY_CATALOG.map(
+    ({ validator: _validator, requiredWarmup: _requiredWarmup, ...definition }) => ({
+      ...definition,
+      status: "active" as const,
+    }),
+  );
 }
 
 export function normalizeStrategyParameters(code: string, input: unknown) {
