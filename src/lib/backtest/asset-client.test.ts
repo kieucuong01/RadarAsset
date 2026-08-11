@@ -41,9 +41,9 @@ describe("Quant asset catalog client", () => {
   });
 
   it("rejects missing, extra, or internally inconsistent catalog fields", () => {
-    expect(() => parseQuantAssetCatalog({ items: [{ ...validItem, internalProviderKey: "x" }] })).toThrow(
-      "Invalid quant asset catalog response.",
-    );
+    expect(() =>
+      parseQuantAssetCatalog({ items: [{ ...validItem, internalProviderKey: "x" }] }),
+    ).toThrow("Invalid quant asset catalog response.");
     expect(() =>
       parseQuantAssetCatalog({
         items: [{ ...validItem, backtestable: false, reasonCode: null }],

@@ -8,9 +8,7 @@ export function equalAllocationBps(symbols: string[]): Record<string, number> {
 
   const base = Math.floor(TOTAL_ALLOCATION_BPS / ordered.length);
   let remainder = TOTAL_ALLOCATION_BPS - base * ordered.length;
-  return Object.fromEntries(
-    ordered.map((symbol) => [symbol, base + (remainder-- > 0 ? 1 : 0)]),
-  );
+  return Object.fromEntries(ordered.map((symbol) => [symbol, base + (remainder-- > 0 ? 1 : 0)]));
 }
 
 export function notionalFromBps(totalCapital: number, allocationBps: number) {

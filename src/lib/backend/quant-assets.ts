@@ -3,11 +3,7 @@ import { z } from "zod";
 import { getPrisma } from "@/lib/db/prisma";
 import { calculateFreshness } from "@/lib/market-data/health";
 
-import type {
-  MarketDataMarket,
-  MarketDataTimeframe,
-  QuantAssetCatalogResponse,
-} from "./types";
+import type { MarketDataMarket, MarketDataTimeframe, QuantAssetCatalogResponse } from "./types";
 
 const SUPPORTED_MARKETS = ["vn_equity", "crypto_spot", "metal_spot"] as const;
 
@@ -112,9 +108,7 @@ export async function loadQuantAssetCatalog(
       const market = supportedMarket(asset.market);
       const version = asset.datasets[0]?.versions[0] ?? null;
       const rangeCovered = Boolean(
-        version &&
-          version.coverageStart <= requestedStart &&
-          version.coverageEnd >= requestedEnd,
+        version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
       );
       const reasonCode = !version
         ? "DATASET_UNAVAILABLE"

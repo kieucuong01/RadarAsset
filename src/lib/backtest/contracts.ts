@@ -88,8 +88,7 @@ export const canonicalBacktestSubmissionSchema = z
   .superRefine((submission, context) => {
     validateRangeAndUniqueLegs(submission, context);
     if (
-      submission.legs.reduce((total, leg) => total + leg.allocationBps, 0) !==
-      TOTAL_ALLOCATION_BPS
+      submission.legs.reduce((total, leg) => total + leg.allocationBps, 0) !== TOTAL_ALLOCATION_BPS
     ) {
       context.addIssue({
         code: "custom",
@@ -232,10 +231,7 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
         strategyDefinition(leg.strategyCode, leg.strategyVersion);
         return {
           ...leg,
-          strategyParameters: normalizeStrategyParameters(
-            leg.strategyCode,
-            leg.strategyParameters,
-          ),
+          strategyParameters: normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters),
         };
       })
       .sort((left, right) => left.symbol.localeCompare(right.symbol)),

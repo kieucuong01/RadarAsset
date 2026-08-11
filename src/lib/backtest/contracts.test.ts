@@ -72,9 +72,7 @@ describe("portfolio backtest submission contract", () => {
       ...validPortfolioSubmission,
       legs: [...validPortfolioSubmission.legs].reverse().map((leg) => ({
         ...leg,
-        strategyParameters: Object.fromEntries(
-          Object.entries(leg.strategyParameters).reverse(),
-        ),
+        strategyParameters: Object.fromEntries(Object.entries(leg.strategyParameters).reverse()),
       })),
     });
 
@@ -120,12 +118,49 @@ describe("portfolio backtest submission contract", () => {
   });
 
   it.each([
-    ["duplicate symbols", { ...validPortfolioSubmission, legs: [validPortfolioSubmission.legs[0], validPortfolioSubmission.legs[0]] }],
-    ["allocation below 10,000 bps", { ...validPortfolioSubmission, legs: validPortfolioSubmission.legs.map((leg, index) => ({ ...leg, allocationBps: index === 0 ? 2999 : leg.allocationBps })) }],
-    ["more than ten legs", { ...validPortfolioSubmission, legs: Array.from({ length: 11 }, (_, index) => ({ ...validPortfolioSubmission.legs[0], symbol: `VN${index}`, allocationBps: index === 0 ? 10000 : 0 })) }],
+    [
+      "duplicate symbols",
+      {
+        ...validPortfolioSubmission,
+        legs: [validPortfolioSubmission.legs[0], validPortfolioSubmission.legs[0]],
+      },
+    ],
+    [
+      "allocation below 10,000 bps",
+      {
+        ...validPortfolioSubmission,
+        legs: validPortfolioSubmission.legs.map((leg, index) => ({
+          ...leg,
+          allocationBps: index === 0 ? 2999 : leg.allocationBps,
+        })),
+      },
+    ],
+    [
+      "more than ten legs",
+      {
+        ...validPortfolioSubmission,
+        legs: Array.from({ length: 11 }, (_, index) => ({
+          ...validPortfolioSubmission.legs[0],
+          symbol: `VN${index}`,
+          allocationBps: index === 0 ? 10000 : 0,
+        })),
+      },
+    ],
     ["a nonexistent calendar date", { ...validPortfolioSubmission, from: "2025-02-30" }],
     ["a reversed date range", { ...validPortfolioSubmission, from: "2027-01-01" }],
-    ["one leg with invalid parameters", { ...validPortfolioSubmission, legs: [validPortfolioSubmission.legs[0], { ...validPortfolioSubmission.legs[1], strategyParameters: { entryPeriod: 20, exitPeriod: 10, execute: "shell" } }] }],
+    [
+      "one leg with invalid parameters",
+      {
+        ...validPortfolioSubmission,
+        legs: [
+          validPortfolioSubmission.legs[0],
+          {
+            ...validPortfolioSubmission.legs[1],
+            strategyParameters: { entryPeriod: 20, exitPeriod: 10, execute: "shell" },
+          },
+        ],
+      },
+    ],
   ])("rejects %s", (_name, payload) => {
     expect(backtestSubmissionSchema.safeParse(payload).success).toBe(false);
   });

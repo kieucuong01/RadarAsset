@@ -19,9 +19,7 @@ const quantAssetCatalogItemSchema = z
     rowCount: z.number().int().nonnegative(),
     freshness: z.enum(["fresh", "stale", "unavailable", "fixture"]),
     backtestable: z.boolean(),
-    reasonCode: z
-      .enum(["DATASET_UNAVAILABLE", "DATASET_RANGE_INSUFFICIENT"])
-      .nullable(),
+    reasonCode: z.enum(["DATASET_UNAVAILABLE", "DATASET_RANGE_INSUFFICIENT"]).nullable(),
   })
   .strict()
   .superRefine((item, context) => {
@@ -41,9 +39,7 @@ const quantAssetCatalogItemSchema = z
     }
   });
 
-const quantAssetCatalogSchema = z
-  .object({ items: z.array(quantAssetCatalogItemSchema) })
-  .strict();
+const quantAssetCatalogSchema = z.object({ items: z.array(quantAssetCatalogItemSchema) }).strict();
 
 export type QuantAssetCatalogItem = z.infer<typeof quantAssetCatalogItemSchema>;
 export type QuantAssetCatalog = z.infer<typeof quantAssetCatalogSchema>;
