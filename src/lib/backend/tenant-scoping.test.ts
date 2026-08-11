@@ -45,6 +45,7 @@ vi.mock("@/lib/db/prisma", () => ({
   getPrisma: () => prisma,
 }));
 
+import { createDefaultPortfolioAssumptions } from "@/lib/backtest/contracts";
 import {
   createPortfolioTransaction,
   createQuantRun,
@@ -67,6 +68,7 @@ const viewerContext = {
   role: "viewer" as const,
 };
 const editorContext = { ...viewerContext, role: "editor" as const };
+const defaultAssumptions = createDefaultPortfolioAssumptions(10, 5);
 
 describe("organization-scoped database services", () => {
   beforeEach(() => {
@@ -241,6 +243,7 @@ describe("organization-scoped database services", () => {
       allocationMode: "equal",
       feeBps: 10,
       slippageBps: 5,
+      assumptions: defaultAssumptions,
       from: "2024-01-01",
       to: "2025-01-01",
       legs: [
@@ -289,6 +292,7 @@ describe("organization-scoped database services", () => {
         allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
+        assumptions: defaultAssumptions,
         from: "2024-01-01",
         to: "2025-01-01",
         legs: [
@@ -315,6 +319,7 @@ describe("organization-scoped database services", () => {
         allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
+        assumptions: defaultAssumptions,
         from: "2024-01-01",
         to: "2025-01-01",
         legs: [

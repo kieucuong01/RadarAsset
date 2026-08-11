@@ -15,7 +15,11 @@ import { toast } from "sonner";
 
 import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Progress } from "@/components/ui/progress";
-import { createRollingBacktestRange, type BacktestSubmission } from "@/lib/backtest/contracts";
+import {
+  createDefaultPortfolioAssumptions,
+  createRollingBacktestRange,
+  type BacktestSubmission,
+} from "@/lib/backtest/contracts";
 import { equalAllocationBps } from "@/lib/backtest/allocation";
 import {
   getStrategyCatalog,
@@ -146,6 +150,7 @@ export function BacktestWorkbench() {
       allocationMode: "equal",
       feeBps,
       slippageBps,
+      assumptions: createDefaultPortfolioAssumptions(feeBps, slippageBps),
       from,
       to,
       legs: [

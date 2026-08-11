@@ -7,6 +7,7 @@ import {
   parseBacktestRun,
   submitBacktest,
 } from "./client";
+import { createDefaultPortfolioAssumptions } from "./contracts";
 import { listStrategyCatalog } from "./strategy-catalog";
 
 const submission = {
@@ -15,6 +16,7 @@ const submission = {
   allocationMode: "equal" as const,
   feeBps: 10,
   slippageBps: 5,
+  assumptions: createDefaultPortfolioAssumptions(10, 5),
   from: "2024-01-01",
   to: "2025-01-01",
   legs: [

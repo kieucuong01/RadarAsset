@@ -243,6 +243,34 @@ describe("tenant API authorization", () => {
       allocationMode: "equal",
       feeBps: payload.feeBps,
       slippageBps: payload.slippageBps,
+      assumptions: {
+        cashAllocationBps: 0,
+        rebalanceFrequency: "none",
+        monthlyContribution: 0,
+        dividendMode: "exclude",
+        fxPolicy: "normalized_returns",
+        baseCurrency: "USD",
+        marketCosts: {
+          vn_equity: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+          crypto_spot: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+          metal_spot: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+        },
+      },
       from: payload.from,
       to: payload.to,
       legs: [

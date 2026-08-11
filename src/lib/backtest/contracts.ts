@@ -70,7 +70,10 @@ export const portfolioAssumptionsSchema = z
 
 export type PortfolioAssumptions = z.infer<typeof portfolioAssumptionsSchema>;
 
-function defaultPortfolioAssumptions(feeBps: number, slippageBps: number): PortfolioAssumptions {
+export function createDefaultPortfolioAssumptions(
+  feeBps: number,
+  slippageBps: number,
+): PortfolioAssumptions {
   const cost = {
     commissionBps: feeBps,
     sellTaxBps: 0,
@@ -274,7 +277,7 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
       allocationMode: "equal",
       feeBps: parsed.feeBps,
       slippageBps: parsed.slippageBps,
-      assumptions: defaultPortfolioAssumptions(parsed.feeBps, parsed.slippageBps),
+      assumptions: createDefaultPortfolioAssumptions(parsed.feeBps, parsed.slippageBps),
       legs: parsed.legs.map((leg) => ({
         ...leg,
         allocationBps: allocationBySymbol[leg.symbol],
@@ -287,7 +290,7 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
     ...canonical,
     assumptions:
       canonical.assumptions ??
-      defaultPortfolioAssumptions(canonical.feeBps, canonical.slippageBps),
+      createDefaultPortfolioAssumptions(canonical.feeBps, canonical.slippageBps),
     legs: canonical.legs
       .map((leg) => {
         strategyDefinition(leg.strategyCode, leg.strategyVersion);
