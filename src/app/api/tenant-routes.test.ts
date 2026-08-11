@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   loadResearchRuns: vi.fn(),
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
+  loadQuantAssetCatalog: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/tenant-context", () => ({
@@ -48,6 +49,14 @@ vi.mock("@/lib/backend/worker-context", () => ({
   getWorkerImportContext: mocks.getWorkerImportContext,
 }));
 
+vi.mock("@/lib/backend/quant-assets", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/quant-assets")>();
+  return {
+    ...original,
+    loadQuantAssetCatalog: mocks.loadQuantAssetCatalog,
+  };
+});
+
 import { GET as portfolioGet } from "./portfolio/route";
 import {
   GET as strategyAssignmentsGet,
@@ -59,6 +68,7 @@ import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
+import { GET as quantAssetsGet } from "./quant/assets/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
 
 const viewerContext = {
@@ -82,6 +92,7 @@ describe("tenant API authorization", () => {
     mocks.upsertWatchlistItem.mockResolvedValue([]);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
+    mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -114,6 +125,23 @@ describe("tenant API authorization", () => {
     await expect(response.json()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "ma_crossover", version: "1.0.0" })]),
     );
+  });
+
+  it("allows viewer reads of the system asset catalog with validated query input", async () => {
+    const response = await quantAssetsGet(
+      new Request(
+        "http://localhost/api/quant/assets?q=%20vn%20&timeframe=1d&from=2025-01-01&to=2026-01-01",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
+    expect(mocks.loadQuantAssetCatalog).toHaveBeenCalledWith({
+      q: "vn",
+      timeframe: "1d",
+      from: "2025-01-01",
+      to: "2026-01-01",
+    });
   });
 
   it("allows viewer assignment reads and scopes the service call", async () => {
@@ -210,19 +238,38 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(202);
     expect(mocks.createQuantRun).toHaveBeenCalledWith(editorContext, {
-      strategyCode: "ma_crossover",
-      strategyVersion: "1.0.0",
-      strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
       timeframe: payload.timeframe,
-      initialCapital: payload.initialCapital,
+      totalCapital: payload.initialCapital,
+      allocationMode: "equal",
       feeBps: payload.feeBps,
       slippageBps: payload.slippageBps,
       from: payload.from,
       to: payload.to,
       legs: [
-        { symbol: "BTC", leverage: 1 },
-        { symbol: "FPT", leverage: 2 },
-        { symbol: "XAU", leverage: 1 },
+        {
+          symbol: "BTC",
+          allocationBps: 3334,
+          leverage: 1,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+        {
+          symbol: "FPT",
+          allocationBps: 3333,
+          leverage: 2,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
+        {
+          symbol: "XAU",
+          allocationBps: 3333,
+          leverage: 1,
+          strategyCode: "ma_crossover",
+          strategyVersion: "1.0.0",
+          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
+        },
       ],
     });
   });

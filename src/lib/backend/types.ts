@@ -38,6 +38,27 @@ export type MarketDataHealthItem = {
   freshness: MarketDataFreshness;
 };
 
+export type QuantAssetCatalogItem = {
+  symbol: string;
+  name: string;
+  market: MarketDataMarket;
+  venue: string | null;
+  currency: string;
+  maxLeverage: number;
+  timeframe: MarketDataTimeframe;
+  datasetVersionId: string | null;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  rowCount: number;
+  freshness: MarketDataFreshness;
+  backtestable: boolean;
+  reasonCode: "DATASET_UNAVAILABLE" | "DATASET_RANGE_INSUFFICIENT" | null;
+};
+
+export type QuantAssetCatalogResponse = {
+  items: QuantAssetCatalogItem[];
+};
+
 export type PortfolioTransactionCreateInput = {
   symbol: string;
   type: TransactionType;

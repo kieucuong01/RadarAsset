@@ -1,0 +1,53 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { getQuantAssets, parseQuantAssetCatalog } from "./asset-client";
+
+const validItem = {
+  symbol: "VNM",
+  name: "Vinamilk",
+  market: "vn_equity",
+  venue: "HOSE",
+  currency: "VND",
+  maxLeverage: 2,
+  timeframe: "1d",
+  datasetVersionId: "11111111-1111-4111-8111-111111111111",
+  coverageStart: "2025-01-01T00:00:00.000Z",
+  coverageEnd: "2026-01-01T00:00:00.000Z",
+  rowCount: 250,
+  freshness: "fresh",
+  backtestable: true,
+  reasonCode: null,
+};
+
+describe("Quant asset catalog client", () => {
+  it("encodes the bounded search and validates the complete response", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [validItem] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await getQuantAssets(
+      { q: "VN M", timeframe: "1d", from: "2025-01-01", to: "2026-01-01" },
+      fetcher,
+    );
+
+    expect(result.items).toEqual([validItem]);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/quant/assets?q=VN+M&timeframe=1d&from=2025-01-01&to=2026-01-01",
+      { cache: "no-store" },
+    );
+  });
+
+  it("rejects missing, extra, or internally inconsistent catalog fields", () => {
+    expect(() => parseQuantAssetCatalog({ items: [{ ...validItem, internalProviderKey: "x" }] })).toThrow(
+      "Invalid quant asset catalog response.",
+    );
+    expect(() =>
+      parseQuantAssetCatalog({
+        items: [{ ...validItem, backtestable: false, reasonCode: null }],
+      }),
+    ).toThrow("Invalid quant asset catalog response.");
+  });
+});
