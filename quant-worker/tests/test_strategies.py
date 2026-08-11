@@ -4,7 +4,12 @@ from decimal import Decimal
 import pytest
 
 from backtest.models import Bar
-from backtest.strategies import MovingAverageCrossoverStrategy, StrategySignal
+from backtest.strategies import (
+    MovingAverageCrossoverStrategy,
+    SignalRollingReversalStrategy,
+    StrategySignal,
+    TurtleBreakoutStrategy,
+)
 
 
 def bars_from_closes(closes: list[str]) -> list[Bar]:
@@ -65,3 +70,84 @@ def test_ma_crossover_does_not_read_future_bars() -> None:
 def test_ma_crossover_rejects_invalid_periods(fast_period: int, slow_period: int) -> None:
     with pytest.raises(ValueError, match="periods are invalid"):
         MovingAverageCrossoverStrategy(fast_period=fast_period, slow_period=slow_period)
+
+
+def ohlc_bars(rows: list[tuple[str, str, str, str]]) -> list[Bar]:
+    return [
+        Bar(
+            asset="BTC",
+            timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc) + timedelta(days=index),
+            timeframe="1d",
+            open=Decimal(open_price),
+            high=Decimal(high),
+            low=Decimal(low),
+            close=Decimal(close),
+            volume=Decimal("100"),
+            source="strategy-fixture",
+        )
+        for index, (open_price, high, low, close) in enumerate(rows)
+    ]
+
+
+def test_turtle_breakout_uses_prior_highs_and_lows_only() -> None:
+    bars = ohlc_bars(
+        [
+            ("10", "10.5", "9.5", "10"),
+            ("10", "11.5", "9.5", "11"),
+            ("11", "11", "10", "10.5"),
+            ("10.5", "12.5", "10", "12"),
+            ("12", "12.2", "10.8", "11"),
+            ("11", "11.2", "9", "9.5"),
+        ]
+    )
+    strategy = TurtleBreakoutStrategy(entry_period=3, exit_period=2)
+
+    assert strategy.signal(bars, 2, in_position=False) is None
+    buy = strategy.signal(bars, 3, in_position=False)
+    assert buy is not None
+    assert buy.action == "buy"
+    assert buy.reason == "turtle_entry_breakout"
+    assert strategy.signal(bars, 4, in_position=True) is None
+    sell = strategy.signal(bars, 5, in_position=True)
+    assert sell is not None
+    assert sell.action == "sell"
+    assert sell.reason == "turtle_exit_breakout"
+
+
+def test_turtle_breakout_does_not_read_future_bars() -> None:
+    bars = ohlc_bars(
+        [
+            ("10", "10.5", "9.5", "10"),
+            ("10", "11.5", "9.5", "11"),
+            ("11", "11", "10", "10.5"),
+            ("10.5", "12.5", "10", "12"),
+            ("12", "12.2", "10.8", "11"),
+        ]
+    )
+    strategy = TurtleBreakoutStrategy(entry_period=3, exit_period=2)
+    baseline = strategy.signal(bars, 3, in_position=False)
+    mutated = [*bars]
+    mutated[-1] = Bar(**{**mutated[-1].__dict__, "high": Decimal("1000")})
+    assert strategy.signal(mutated, 3, in_position=False) == baseline
+
+
+def test_signal_rolling_reversal_requires_confirmed_direction() -> None:
+    bars = bars_from_closes(["10", "11", "12", "13", "14", "13", "12", "11"])
+    strategy = SignalRollingReversalStrategy(confirmation_bars=3)
+
+    assert strategy.signal(bars, 2, in_position=False) is None
+    buy = strategy.signal(bars, 3, in_position=False)
+    assert buy is not None
+    assert buy.action == "buy"
+    assert buy.reason == "rolling_up_confirmation"
+    assert strategy.signal(bars, 5, in_position=True) is None
+    sell = strategy.signal(bars, 6, in_position=True)
+    assert sell is not None
+    assert sell.action == "sell"
+    assert sell.reason == "rolling_down_reversal"
+
+
+@pytest.mark.parametrize("confirmation_bars", [1, 21])
+def test_signal_rolling_reversal_rejects_invalid_confirmation_window(confirmation_bars: int) -> None:
+    with pytest.raises(ValueError, match="confirmation bars are invalid"):
+        SignalRollingReversalStrategy(confirmation_bars=confirmation_bars)
