@@ -8,6 +8,7 @@ from typing import Any
 
 from .models import Bar
 from .quality import normalize_bars
+from .strategies import MovingAverageCrossoverStrategy, Strategy
 
 
 ZERO = Decimal("0")
@@ -27,6 +28,7 @@ class EngineConfig:
     market_by_asset: dict[str, str]
     strategy_hash: str
     dataset_checksums: dict[str, str]
+    strategy: Strategy | None = None
 
 
 @dataclass(frozen=True)
@@ -64,11 +66,6 @@ def _maximum_leverage(market: str) -> Decimal:
     raise ValueError(f"Unsupported market: {market}.")
 
 
-def _sma(closes: list[Decimal], end: int, period: int) -> Decimal:
-    window = closes[end - period + 1 : end + 1]
-    return sum(window, ZERO) / Decimal(period)
-
-
 def _simulate_sleeve(
     asset: str,
     bars: list[Bar],
@@ -86,7 +83,6 @@ def _simulate_sleeve(
 
     fee_rate = config.fee_bps / BPS
     slippage_rate = config.slippage_bps / BPS
-    closes = [row.close for row in rows]
     cash = sleeve_capital
     quantity = ZERO
     entry_price = ZERO
@@ -96,12 +92,14 @@ def _simulate_sleeve(
     entry_index: int | None = None
     entry_reference_open = ZERO
     pending: tuple[str, str] | None = None
-    previous_fast: Decimal | None = None
-    previous_slow: Decimal | None = None
     total_fees = ZERO
     total_slippage = ZERO
     trades: list[dict[str, Any]] = []
     points: dict[str, dict[str, Decimal]] = {}
+    strategy = config.strategy or MovingAverageCrossoverStrategy(
+        fast_period=config.fast_period,
+        slow_period=config.slow_period,
+    )
 
     for index, row in enumerate(rows):
         if pending is not None:
@@ -168,17 +166,9 @@ def _simulate_sleeve(
             "equity": cash + market_value,
         }
 
-        if index < config.slow_period - 1:
-            continue
-        fast = _sma(closes, index, config.fast_period)
-        slow = _sma(closes, index, config.slow_period)
-        if previous_fast is not None and previous_slow is not None:
-            if quantity == ZERO and previous_fast <= previous_slow and fast > slow:
-                pending = ("buy", _timestamp(row))
-            elif quantity > ZERO and previous_fast >= previous_slow and fast < slow:
-                pending = ("sell", _timestamp(row))
-        previous_fast = fast
-        previous_slow = slow
+        signal = strategy.signal(rows, index, in_position=quantity > ZERO)
+        if signal is not None:
+            pending = (signal.action, _timestamp(row))
 
     return points, trades, total_fees, total_slippage
 

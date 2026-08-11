@@ -7,6 +7,7 @@ import pytest
 
 from backtest.engine import EngineConfig, artifact_checksum, run_ma_cross
 from backtest.models import Bar
+from backtest.strategies import MovingAverageCrossoverStrategy
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "ma_cross_golden.json"
@@ -98,6 +99,18 @@ def test_engine_is_deterministic_and_artifact_checksums_are_stable() -> None:
     assert first == second
     assert artifact_checksum(first.equity) == artifact_checksum(second.equity)
     assert artifact_checksum(first.trades) == artifact_checksum(second.trades)
+
+
+def test_engine_uses_shared_ma_strategy_without_changing_golden_output() -> None:
+    bars_by_asset, _markets = load_fixture()
+
+    inline_strategy = run_ma_cross(
+        bars_by_asset,
+        base_config(strategy=MovingAverageCrossoverStrategy(fast_period=2, slow_period=3)),
+    )
+    legacy_defaults = run_ma_cross(bars_by_asset, base_config())
+
+    assert inline_strategy == legacy_defaults
 
 
 @pytest.mark.parametrize(
