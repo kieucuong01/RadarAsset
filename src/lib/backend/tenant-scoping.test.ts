@@ -15,7 +15,8 @@ const { prisma } = vi.hoisted(() => {
     },
     asset: { findUnique: vi.fn(), findMany: vi.fn() },
     marketBar: { findMany: vi.fn(), findFirst: vi.fn() },
-    watchlistItem: { findMany: vi.fn(), upsert: vi.fn() },
+    watchlistItem: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
+    marketIngestionRequest: { findMany: vi.fn() },
     aiInsight: { findMany: vi.fn(), create: vi.fn() },
     evidenceItem: { findMany: vi.fn(), create: vi.fn() },
     investmentThesis: { findFirst: vi.fn(), create: vi.fn() },
@@ -58,6 +59,7 @@ import {
   loadResearchRuns,
   loadWatchlist,
   upsertWatchlistItem,
+  removeWatchlistItem,
   upsertStrategyAssignment,
 } from "./db";
 import { getWorkerImportContext } from "./worker-context";
@@ -79,6 +81,7 @@ describe("organization-scoped database services", () => {
     prisma.marketBar.findMany.mockResolvedValue([]);
     prisma.aiInsight.findMany.mockResolvedValue([]);
     prisma.watchlistItem.findMany.mockResolvedValue([]);
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([]);
     prisma.researchRun.findMany.mockResolvedValue([]);
     prisma.quantRun.findMany.mockResolvedValue([]);
     prisma.strategyVersion.findUnique.mockResolvedValue({
@@ -154,6 +157,15 @@ describe("organization-scoped database services", () => {
         }),
       }),
     );
+  });
+
+  it("removes only the tenant and user owned watchlist row", async () => {
+    prisma.watchlistItem.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(removeWatchlistItem(editorContext, "favorite-a")).resolves.toBe(true);
+    expect(prisma.watchlistItem.deleteMany).toHaveBeenCalledWith({
+      where: { id: "favorite-a", organizationId: "org-a", userId: "user-a" },
+    });
   });
 
   it("scopes research listing and worker imports", async () => {

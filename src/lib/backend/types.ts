@@ -71,7 +71,10 @@ export type PortfolioTransactionCreateInput = {
 };
 
 export type WatchlistMutationInput = {
-  symbol: string;
+  symbol?: string;
+  providerCode?: string;
+  providerSymbol?: string;
+  requestedTimeframes?: Array<"1d" | "1h">;
   alert?: number | null;
 };
 
@@ -299,6 +302,9 @@ export type WatchlistItemResponse = {
   chg: number;
   alert: number;
   sentiment: "bull" | "bear" | "neutral";
+  datasetState: "ready" | "stale" | "loading" | "unavailable";
+  ingestionRequestId: string | null;
+  backtestableTimeframes: Array<"1d" | "1h">;
 };
 
 export type QuantRunResponse = {
