@@ -1,11 +1,19 @@
-import { createHash } from "node:crypto";
-
 import { z } from "zod";
 
 const SOURCE_ATTRIBUTION =
   "Adapted from Stock-Prediction-Models agent notebooks (Apache License 2.0).";
 const MODIFICATION_NOTICE =
   "Logic was rewritten for causal, long-only, next-bar execution in RadarAsset.";
+
+// Generated from canonicalDescriptor() with SHA-256. Keeping the catalog module
+// browser-safe allows the Backtest UI to render the same immutable catalog.
+const IMPLEMENTATION_HASHES: Record<string, string> = {
+  "ma_crossover@1.0.0": "0e66f071f42c9ef90aecdf91ddbc5eed69872bcf2dd6d1dc4177240827a9a541",
+  "turtle_breakout@1.0.0": "83fdbb7f003132239ab26a0aefa638ddb0ab7ea973fde49d21cd2391d2494d2f",
+  "signal_rolling_reversal@1.0.0":
+    "059784ca9863c91bd298f0b100c04cc7aa22abb2511a3ca6313a276d3143aca9",
+  "abcd_causal@1.0.0": "ea97244d5e5dad14ed2686d3b913fd7b7605d9c6e5bfbfb683835b55e578ca7b",
+};
 
 type StrategyMarket = "vn_equity" | "crypto_spot" | "metal_spot";
 type StrategyTimeframe = "1d" | "1h";
@@ -219,30 +227,16 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
   }),
 ] as const;
 
-function canonicalDescriptor(definition: StrategyDefinitionInput) {
-  return JSON.stringify({
-    code: definition.code,
-    version: definition.version,
-    name: definition.name,
-    category: definition.category,
-    supportedMarkets: definition.supportedMarkets,
-    supportedTimeframes: definition.supportedTimeframes,
-    requiredWarmup: definition.requiredWarmup,
-    parameterSchema: definition.parameterSchema,
-    defaultParameters: definition.defaultParameters,
-    sourceAttribution: SOURCE_ATTRIBUTION,
-    modificationNotice: MODIFICATION_NOTICE,
-  });
-}
-
 function makeDefinition(input: StrategyDefinitionInput): StrategyDefinition {
+  const implementationHash = IMPLEMENTATION_HASHES[`${input.code}@${input.version}`];
+  if (!implementationHash) {
+    throw new Error(`Missing implementation hash for ${input.code}@${input.version}.`);
+  }
   return {
     ...input,
     sourceAttribution: SOURCE_ATTRIBUTION,
     modificationNotice: MODIFICATION_NOTICE,
-    implementationHash: createHash("sha256")
-      .update(canonicalDescriptor(input), "utf8")
-      .digest("hex"),
+    implementationHash,
   };
 }
 

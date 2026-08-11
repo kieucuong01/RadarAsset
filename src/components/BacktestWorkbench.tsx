@@ -17,10 +17,12 @@ import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Progress } from "@/components/ui/progress";
 import { createRollingBacktestRange, type BacktestSubmission } from "@/lib/backtest/contracts";
 import {
+  getStrategyCatalog,
   getBacktestRun,
   isActiveRun,
   submitBacktest,
   type BacktestRun,
+  type StrategyCatalogItem,
 } from "@/lib/backtest/client";
 
 const ASSETS = [
@@ -46,14 +48,60 @@ export function BacktestWorkbench() {
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [from, setFrom] = useState(() => createRollingBacktestRange().from);
   const [to, setTo] = useState(() => createRollingBacktestRange().to);
-  const [fastPeriod, setFastPeriod] = useState(5);
-  const [slowPeriod, setSlowPeriod] = useState(20);
+  const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
+  const [strategyCode, setStrategyCode] = useState("ma_crossover");
+  const [strategyVersion, setStrategyVersion] = useState("1.0.0");
+  const [strategyParameters, setStrategyParameters] = useState<Record<string, number>>({
+    fastPeriod: 5,
+    slowPeriod: 20,
+  });
   const [initialCapital, setInitialCapital] = useState(100_000);
   const [feeBps, setFeeBps] = useState(10);
   const [slippageBps, setSlippageBps] = useState(5);
   const [fptLeverage, setFptLeverage] = useState(1);
   const [run, setRun] = useState<BacktestRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [applyingToPortfolio, setApplyingToPortfolio] = useState(false);
+
+  useEffect(() => {
+    void getStrategyCatalog()
+      .then((items) => setStrategies(items))
+      .catch(() => toast.error("Không thể tải catalog chiến lược."));
+  }, []);
+
+  const selectedStrategy = strategies.find((strategy) => strategy.code === strategyCode) ?? null;
+  const parameterFields = selectedStrategy?.parameterSchema ?? [
+    {
+      name: "fastPeriod",
+      label: "Fast SMA",
+      type: "integer" as const,
+      min: 2,
+      max: 200,
+      default: 5,
+    },
+    {
+      name: "slowPeriod",
+      label: "Slow SMA",
+      type: "integer" as const,
+      min: 3,
+      max: 400,
+      default: 20,
+    },
+  ];
+
+  useEffect(() => {
+    if (!selectedStrategy) return;
+    setStrategyVersion(selectedStrategy.version);
+    setStrategyParameters(selectedStrategy.defaultParameters);
+  }, [selectedStrategy]);
+
+  const strategyParametersValid =
+    parameterFields.every((field) => {
+      const value = strategyParameters[field.name];
+      return Number.isFinite(value) && value >= field.min && value <= field.max;
+    }) &&
+    (strategyCode !== "ma_crossover" ||
+      strategyParameters.fastPeriod < strategyParameters.slowPeriod);
 
   useEffect(() => {
     if (!run || !isActiveRun(run.status)) return;
@@ -91,9 +139,9 @@ export function BacktestWorkbench() {
 
   async function startBacktest() {
     const submission: BacktestSubmission = {
-      strategyCode: "ma_crossover",
-      strategyVersion: "1.0.0",
-      strategyParameters: { fastPeriod, slowPeriod },
+      strategyCode,
+      strategyVersion,
+      strategyParameters,
       timeframe,
       initialCapital,
       feeBps,
@@ -118,6 +166,59 @@ export function BacktestWorkbench() {
     }
   }
 
+  async function applyRunToPortfolio() {
+    if (!run || run.status !== "succeeded") return;
+    const rawLegs = run.parameters.legs;
+    const legs = Array.isArray(rawLegs)
+      ? rawLegs.filter((leg): leg is { symbol: "FPT" | "BTC" | "XAU" } =>
+          Boolean(
+            leg &&
+            typeof leg === "object" &&
+            "symbol" in leg &&
+            ASSETS.some((asset) => asset.symbol === (leg as { symbol?: unknown }).symbol),
+          ),
+        )
+      : [];
+    const strategyParameters = run.parameters.strategyParameters;
+    if (
+      !strategyParameters ||
+      typeof strategyParameters !== "object" ||
+      Array.isArray(strategyParameters)
+    ) {
+      toast.error("Run parameters không chứa strategy parameters hợp lệ.");
+      return;
+    }
+    setApplyingToPortfolio(true);
+    try {
+      await Promise.all(
+        legs.map(async (leg) => {
+          const response = await fetch("/api/portfolio/strategy-assignments", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              symbol: leg.symbol,
+              strategyCode: run.strategyCode,
+              strategyVersion: run.strategyVersion,
+              strategyParameters,
+              backtestRunId: run.id,
+            }),
+          });
+          if (!response.ok) {
+            const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(payload?.error ?? `Không thể apply ${leg.symbol}.`);
+          }
+        }),
+      );
+      toast.success("Đã nối strategy vào Mock Portfolio. Các điểm BUY/SELL đang chờ review.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Không thể apply strategy vào portfolio.",
+      );
+    } finally {
+      setApplyingToPortfolio(false);
+    }
+  }
+
   const busy = submitting || Boolean(run && isActiveRun(run.status));
   const succeeded = run?.status === "succeeded";
 
@@ -125,7 +226,9 @@ export function BacktestWorkbench() {
     <div className="grid min-w-0 gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
       <aside className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-20 xl:self-start">
         <div>
-          <h2 className="font-semibold">MA Crossover v1</h2>
+          <h2 className="font-semibold">
+            {selectedStrategy?.name ?? "Strategy catalog"} {strategyVersion}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Long-only · signal at close · fill at next bar open
           </p>
@@ -134,6 +237,21 @@ export function BacktestWorkbench() {
         <MarketDataHealthPanel timeframe={timeframe} />
 
         <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Strategy
+            <select
+              value={strategyCode}
+              onChange={(event) => setStrategyCode(event.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {strategies.length === 0 ? <option value="ma_crossover">MA Crossover</option> : null}
+              {strategies.map((strategy) => (
+                <option key={`${strategy.code}@${strategy.version}`} value={strategy.code}>
+                  {strategy.name} · v{strategy.version}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="space-y-1 text-xs text-muted-foreground">
             Timeframe
             <select
@@ -173,28 +291,25 @@ export function BacktestWorkbench() {
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
             />
           </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            Fast SMA
-            <input
-              type="number"
-              min={2}
-              max={200}
-              value={fastPeriod}
-              onChange={(event) => setFastPeriod(Number(event.target.value))}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-            />
-          </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            Slow SMA
-            <input
-              type="number"
-              min={3}
-              max={400}
-              value={slowPeriod}
-              onChange={(event) => setSlowPeriod(Number(event.target.value))}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-            />
-          </label>
+          {parameterFields.map((field) => (
+            <label key={field.name} className="space-y-1 text-xs text-muted-foreground">
+              {field.label}
+              <input
+                type="number"
+                min={field.min}
+                max={field.max}
+                step={field.type === "integer" ? 1 : 0.001}
+                value={strategyParameters[field.name] ?? field.default}
+                onChange={(event) =>
+                  setStrategyParameters((current) => ({
+                    ...current,
+                    [field.name]: Number(event.target.value),
+                  }))
+                }
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+          ))}
           <label className="space-y-1 text-xs text-muted-foreground">
             Fee (bps)
             <input
@@ -251,7 +366,7 @@ export function BacktestWorkbench() {
 
         <button
           type="button"
-          disabled={busy || fastPeriod >= slowPeriod}
+          disabled={busy || !strategyParametersValid}
           onClick={() => void startBacktest()}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -302,8 +417,18 @@ export function BacktestWorkbench() {
               <div className="flex items-center gap-2 text-sm font-semibold text-bull">
                 <CheckCircle2 className="h-5 w-5" /> Worker result verified
               </div>
-              <div className="font-mono text-[10px] text-muted-foreground">
-                {run.engineVersion} · {run.datasetVersionIds.length} datasets · {run.timeframe}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="font-mono text-[10px] text-muted-foreground">
+                  {run.engineVersion} · {run.datasetVersionIds.length} datasets · {run.timeframe}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void applyRunToPortfolio()}
+                  disabled={applyingToPortfolio}
+                  className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-50"
+                >
+                  {applyingToPortfolio ? "Applying…" : "Apply to Mock Portfolio"}
+                </button>
               </div>
             </div>
 

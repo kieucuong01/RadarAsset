@@ -54,11 +54,15 @@ export function PortfolioTransactionDialog({
   disabled,
   timeframe,
   onRecorded,
+  preset,
+  onSignalExecuted,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
+  preset?: { side: Side; symbol: string; price: number; signalId: string; assignmentId: string };
+  onSignalExecuted?: (signalId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -71,6 +75,15 @@ export function PortfolioTransactionDialog({
   const [price, setPrice] = useState("");
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(() => toLocalDateInputValue(new Date()));
+
+  useEffect(() => {
+    if (!open || !preset) return;
+    setSide(preset.side);
+    setSymbol(preset.symbol);
+    setPrice(String(preset.price));
+    setQuantity((current) => current || "1");
+    setFormError(null);
+  }, [open, preset]);
 
   useEffect(() => {
     if (!open || assets !== null) return;
@@ -196,6 +209,17 @@ export function PortfolioTransactionDialog({
 
       const portfolio = (await response.json()) as PortfolioResponse;
       onRecorded(portfolio);
+      if (preset?.signalId) {
+        const signalResponse = await fetch(
+          `/api/portfolio/strategy-assignments/${preset.assignmentId}/signals/${preset.signalId}`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ status: "executed" }),
+          },
+        );
+        if (signalResponse.ok) onSignalExecuted?.(preset.signalId);
+      }
       toast.success(
         `${side === "buy" ? "Bought" : "Sold"} ${numericQuantity} ${symbol} successfully.`,
       );
@@ -217,7 +241,7 @@ export function PortfolioTransactionDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
         <Plus data-icon="inline-start" />
-        Add Transaction
+        {preset ? "Review signal" : "Add Transaction"}
       </Button>
 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-xl">

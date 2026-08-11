@@ -54,6 +54,40 @@ export type WatchlistMutationInput = {
   alert?: number | null;
 };
 
+export type StrategyAssignmentCreateInput = {
+  symbol: string;
+  strategyCode: string;
+  strategyVersion: string;
+  strategyParameters: Record<string, unknown>;
+  backtestRunId?: string;
+};
+
+export type StrategySignalResponse = {
+  id: string;
+  symbol: string;
+  strategyCode: string;
+  strategyVersion: string;
+  signalType: "buy" | "sell";
+  status: "suggested" | "reviewed" | "executed" | "dismissed";
+  signalAt: string;
+  executionAt: string | null;
+  signalPrice: number | null;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type StrategyAssignmentResponse = {
+  id: string;
+  portfolioId: string;
+  symbol: string;
+  strategyCode: string;
+  strategyVersion: string;
+  strategyName: string;
+  parameters: Record<string, unknown>;
+  status: "active" | "paused";
+  signals: StrategySignalResponse[];
+};
+
 export type ResearchRunImportInput = {
   source: string;
   kind: string;

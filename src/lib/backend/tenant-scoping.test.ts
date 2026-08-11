@@ -32,6 +32,8 @@ const { prisma } = vi.hoisted(() => {
       create: vi.fn(),
     },
     strategyVersion: { findUnique: vi.fn() },
+    strategyAssignment: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
+    strategySignal: { createMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -55,6 +57,7 @@ import {
   loadResearchRuns,
   loadWatchlist,
   upsertWatchlistItem,
+  upsertStrategyAssignment,
 } from "./db";
 import { getWorkerImportContext } from "./worker-context";
 
@@ -281,6 +284,54 @@ describe("organization-scoped database services", () => {
     ).rejects.toThrow("not synchronized");
     expect(prisma.asset.findMany).not.toHaveBeenCalled();
     expect(prisma.quantRun.create).not.toHaveBeenCalled();
+  });
+
+  it("upserts one tenant-scoped strategy assignment per portfolio asset", async () => {
+    prisma.portfolio.findFirst.mockResolvedValue({ id: "portfolio-a", organizationId: "org-a" });
+    prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc", symbol: "BTC" });
+    prisma.strategyVersion.findUnique.mockResolvedValue({
+      id: "strategy-version-turtle",
+      code: "turtle_breakout",
+      version: "1.0.0",
+      name: "Turtle Breakout",
+    });
+    prisma.strategyAssignment.upsert.mockResolvedValue({
+      id: "assignment-1",
+      portfolioId: "portfolio-a",
+      assetId: "asset-btc",
+      parameters: { entryPeriod: 20, exitPeriod: 10 },
+      status: "active",
+      asset: { symbol: "BTC" },
+      strategyVersion: {
+        code: "turtle_breakout",
+        version: "1.0.0",
+        name: "Turtle Breakout",
+      },
+      signals: [],
+    });
+    prisma.strategyAssignment.findUnique.mockResolvedValue(
+      await prisma.strategyAssignment.upsert(),
+    );
+
+    const response = await upsertStrategyAssignment(editorContext, {
+      symbol: "BTC",
+      strategyCode: "turtle_breakout",
+      strategyVersion: "1.0.0",
+      strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+    });
+
+    expect(response).toMatchObject({
+      id: "assignment-1",
+      symbol: "BTC",
+      strategyCode: "turtle_breakout",
+      status: "active",
+    });
+    expect(prisma.strategyAssignment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { portfolioId_assetId: { portfolioId: "portfolio-a", assetId: "asset-btc" } },
+        create: expect.objectContaining({ organizationId: "org-a" }),
+      }),
+    );
   });
 
   it("resolves the worker organization only from server configuration", async () => {

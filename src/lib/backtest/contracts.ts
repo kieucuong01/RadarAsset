@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { z } from "zod";
 
 import {
@@ -165,9 +163,4 @@ export function normalizeBacktestSubmission(input: unknown): BacktestSubmission 
     ),
     legs: [...canonical.legs].sort((left, right) => left.symbol.localeCompare(right.symbol)),
   };
-}
-
-export function hashBacktestSubmission(input: BacktestSubmission) {
-  const normalized = normalizeBacktestSubmission(input);
-  return createHash("sha256").update(JSON.stringify(normalized), "utf8").digest("hex");
 }

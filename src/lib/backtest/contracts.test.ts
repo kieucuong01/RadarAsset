@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   backtestSubmissionSchema,
   createRollingBacktestRange,
-  hashBacktestSubmission,
   maximumLeverageForAsset,
   normalizeBacktestSubmission,
 } from "./contracts";
+import { hashBacktestSubmission } from "./hash";
 
 const validSubmission = {
   strategy: "ma_cross",

@@ -29,6 +29,7 @@ import {
 } from "recharts";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
+import { StrategyAssignmentPanel } from "@/components/StrategyAssignmentPanel";
 import { Button } from "@/components/ui/button";
 import type {
   PortfolioHoldingResponse,
@@ -370,6 +371,12 @@ export function MockPortfolio() {
 
       <HoldingsTable holdings={holdings} fmt0={fmt0} fmt2={fmt2} />
       <RiskMetrics metrics={portfolio?.riskMetrics ?? []} />
+      <StrategyAssignmentPanel
+        holdings={holdings}
+        disabled={!portfolio}
+        timeframe={timeframe}
+        onRecorded={setPortfolio}
+      />
       <TransactionLog
         transactions={portfolio?.transactions ?? []}
         holdings={holdings}

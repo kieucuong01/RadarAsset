@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   requireTenantContext: vi.fn(),
   requireTenantCapability: vi.fn(),
   loadPortfolioResponse: vi.fn(),
+  listStrategyAssignments: vi.fn(),
+  upsertStrategyAssignment: vi.fn(),
+  updateStrategySignalStatus: vi.fn(),
   loadWatchlist: vi.fn(),
   upsertWatchlistItem: vi.fn(),
   createQuantRun: vi.fn(),
@@ -27,6 +30,9 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
   return {
     ...original,
     loadPortfolioResponse: mocks.loadPortfolioResponse,
+    listStrategyAssignments: mocks.listStrategyAssignments,
+    upsertStrategyAssignment: mocks.upsertStrategyAssignment,
+    updateStrategySignalStatus: mocks.updateStrategySignalStatus,
     loadWatchlist: mocks.loadWatchlist,
     upsertWatchlistItem: mocks.upsertWatchlistItem,
     createQuantRun: mocks.createQuantRun,
@@ -43,6 +49,11 @@ vi.mock("@/lib/backend/worker-context", () => ({
 }));
 
 import { GET as portfolioGet } from "./portfolio/route";
+import {
+  GET as strategyAssignmentsGet,
+  POST as strategyAssignmentsPost,
+} from "./portfolio/strategy-assignments/route";
+import { PATCH as strategySignalPatch } from "./portfolio/strategy-assignments/[id]/signals/[signalId]/route";
 import { GET as watchlistGet, POST as watchlistPost } from "./watchlist/route";
 import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
@@ -64,6 +75,9 @@ describe("tenant API authorization", () => {
     mocks.requireTenantCapability.mockReset();
     mocks.requireTenantContext.mockResolvedValue(viewerContext);
     mocks.loadPortfolioResponse.mockResolvedValue({ portfolioId: "portfolio-a" });
+    mocks.listStrategyAssignments.mockResolvedValue([]);
+    mocks.upsertStrategyAssignment.mockResolvedValue({ id: "assignment-a" });
+    mocks.updateStrategySignalStatus.mockResolvedValue({ id: "signal-a", status: "reviewed" });
     mocks.loadWatchlist.mockResolvedValue([]);
     mocks.upsertWatchlistItem.mockResolvedValue([]);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
@@ -100,6 +114,53 @@ describe("tenant API authorization", () => {
     await expect(response.json()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "ma_crossover", version: "1.0.0" })]),
     );
+  });
+
+  it("allows viewer assignment reads and scopes the service call", async () => {
+    const response = await strategyAssignmentsGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "portfolio", "read");
+    expect(mocks.listStrategyAssignments).toHaveBeenCalledWith(viewerContext);
+  });
+
+  it("allows editor assignment writes only after canonical validation", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const response = await strategyAssignmentsPost(
+      new Request("http://localhost/api/portfolio/strategy-assignments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbol: "btc",
+          strategyCode: "turtle_breakout",
+          strategyVersion: "1.0.0",
+          strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.upsertStrategyAssignment).toHaveBeenCalledWith(editorContext, {
+      symbol: "BTC",
+      strategyCode: "turtle_breakout",
+      strategyVersion: "1.0.0",
+      strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+    });
+  });
+
+  it("updates a signal status through the tenant-scoped service", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const response = await strategySignalPatch(
+      new Request("http://localhost/api/portfolio/strategy-assignments/a/signals/s", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "reviewed" }),
+      }),
+      { params: Promise.resolve({ id: "a", signalId: "s" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateStrategySignalStatus).toHaveBeenCalledWith(editorContext, "s", "reviewed");
   });
 
   it("denies viewer writes before request validation or persistence", async () => {
