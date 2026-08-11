@@ -266,6 +266,112 @@ describe("database tenant isolation", () => {
     }
   });
 
+  it("cascades tenant run legs and preserves referenced immutable versions", async () => {
+    const providerId = randomUUID();
+    const datasetId = randomUUID();
+    const datasetVersionId = randomUUID();
+    const strategyVersionId = randomUUID();
+    const runId = randomUUID();
+    let legId: string | null = null;
+
+    try {
+      await prisma.dataProvider.create({
+        data: {
+          id: providerId,
+          code: `isolation-provider-${suffix}`,
+          name: "Isolation Provider",
+        },
+      });
+      await prisma.dataset.create({
+        data: {
+          id: datasetId,
+          assetId: fixtures.assetId,
+          timeframe: "1d",
+          adjustmentPolicy: `integration-${suffix}`,
+        },
+      });
+      await prisma.datasetVersion.create({
+        data: {
+          id: datasetVersionId,
+          datasetId,
+          providerId,
+          version: 1,
+          checksum: "c".repeat(64),
+          coverageStart: new Date("2025-01-01T00:00:00.000Z"),
+          coverageEnd: new Date("2026-01-01T00:00:00.000Z"),
+          rowCount: 250,
+          isActive: true,
+        },
+      });
+      await prisma.strategyVersion.create({
+        data: {
+          id: strategyVersionId,
+          code: `integration_ma_${suffix}`,
+          version: "1.0.0",
+          name: "Integration MA",
+          category: "rule_based",
+          parameterSchema: {},
+          defaultParameters: {},
+          supportedMarkets: ["vn_equity"],
+          supportedTimeframes: ["1d"],
+          implementationHash: "d".repeat(64),
+        },
+      });
+      await prisma.quantRun.create({
+        data: {
+          id: runId,
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          strategyName: "Portfolio backtest",
+        },
+      });
+      const leg = await prisma.quantRunLeg.create({
+        data: {
+          quantRunId: runId,
+          assetId: fixtures.assetId,
+          datasetVersionId,
+          strategyVersionId,
+          symbolSnapshot: fixtures.assetSymbol,
+          marketSnapshot: "vn_equity",
+          currencySnapshot: "USD",
+          allocationBps: 10_000,
+          initialNotional: "100000",
+          leverage: "1",
+          parameters: {},
+          implementationHash: "d".repeat(64),
+        },
+      });
+      legId = leg.id;
+      await prisma.quantRunArtifact.create({
+        data: {
+          organizationId: fixtures.organizationAId,
+          quantRunId: runId,
+          quantRunLegId: leg.id,
+          scopeKey: `leg:${leg.id}`,
+          kind: "manifest",
+          checksum: "a".repeat(64),
+          payload: {},
+        },
+      });
+
+      await prisma.quantRun.delete({ where: { id: runId } });
+
+      await expect(prisma.quantRunLeg.findUnique({ where: { id: leg.id } })).resolves.toBeNull();
+      await expect(
+        prisma.datasetVersion.findUnique({ where: { id: datasetVersionId } }),
+      ).resolves.not.toBeNull();
+      await expect(
+        prisma.strategyVersion.findUnique({ where: { id: strategyVersionId } }),
+      ).resolves.not.toBeNull();
+    } finally {
+      await prisma.quantRun.deleteMany({ where: { id: runId } });
+      if (legId) await prisma.quantRunLeg.deleteMany({ where: { id: legId } });
+      await prisma.dataset.deleteMany({ where: { id: datasetId } });
+      await prisma.dataProvider.deleteMany({ where: { id: providerId } });
+      await prisma.strategyVersion.deleteMany({ where: { id: strategyVersionId } });
+    }
+  });
+
   it("hides another organization's quant id like a random id", async () => {
     const ownRun = await getQuantRun(contextB, fixtures.quantRunBId);
     expect(ownRun.artifacts).toEqual([

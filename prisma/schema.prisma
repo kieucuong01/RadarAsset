@@ -155,6 +155,7 @@ model Asset {
   evaluations         ModelEvaluation[]
   providerInstruments ProviderInstrument[]
   datasets            Dataset[]
+  quantRunLegs        QuantRunLeg[]
   strategyAssignments StrategyAssignment[]
   strategySignals     StrategySignal[]
 
@@ -439,6 +440,7 @@ model QuantRun {
   user              AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   strategyVersion   StrategyVersion?   @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
   artifacts         QuantRunArtifact[]
+  legs              QuantRunLeg[]
 
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -463,6 +465,7 @@ model StrategyVersion {
   modificationNotice  String?              @map("modification_notice") @db.Text
   createdAt           DateTime             @default(now()) @map("created_at")
   quantRuns           QuantRun[]
+  quantRunLegs        QuantRunLeg[]
   assignments         StrategyAssignment[]
   signals             StrategySignal[]
 
@@ -583,6 +586,7 @@ model DatasetVersion {
   bars            DatasetBar[]
   issues          DataQualityIssue[]
   ingestionRuns   MarketIngestionRun[]
+  quantRunLegs    QuantRunLeg[]
 
   @@unique([datasetId, version])
   @@index([datasetId, isActive])
@@ -650,6 +654,8 @@ model QuantRunArtifact {
   id             String       @id @default(uuid()) @db.Uuid
   organizationId String       @map("organization_id") @db.Uuid
   quantRunId     String       @map("quant_run_id") @db.Uuid
+  quantRunLegId  String?      @map("quant_run_leg_id") @db.Uuid
+  scopeKey       String       @default("aggregate") @map("scope_key")
   kind           String
   checksum       String
   payload        Json
@@ -658,8 +664,42 @@ model QuantRunArtifact {
   createdAt      DateTime     @default(now()) @map("created_at")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quantRun       QuantRun     @relation(fields: [quantRunId], references: [id], onDelete: Cascade)
+  quantRunLeg    QuantRunLeg? @relation(fields: [quantRunLegId], references: [id], onDelete: Cascade)
 
-  @@unique([quantRunId, kind])
+  @@unique([quantRunId, scopeKey, kind])
   @@index([organizationId, createdAt(sort: Desc)])
+  @@index([quantRunLegId])
   @@map("quant_run_artifacts")
+}
+
+model QuantRunLeg {
+  id                 String             @id @default(uuid()) @db.Uuid
+  quantRunId         String             @map("quant_run_id") @db.Uuid
+  assetId            String             @map("asset_id") @db.Uuid
+  datasetVersionId   String             @map("dataset_version_id") @db.Uuid
+  strategyVersionId  String             @map("strategy_version_id") @db.Uuid
+  symbolSnapshot     String             @map("symbol_snapshot")
+  marketSnapshot     String             @map("market_snapshot")
+  currencySnapshot   String             @map("currency_snapshot")
+  allocationBps      Int                @map("allocation_bps")
+  initialNotional    Decimal            @map("initial_notional") @db.Decimal(24, 8)
+  leverage           Decimal            @db.Decimal(5, 2)
+  parameters         Json               @default("{}")
+  implementationHash String             @map("implementation_hash")
+  status             String             @default("queued")
+  progress           Int                @default(0)
+  metrics            Json?
+  errorCode          String?            @map("error_code")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  quantRun           QuantRun           @relation(fields: [quantRunId], references: [id], onDelete: Cascade)
+  asset              Asset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  datasetVersion     DatasetVersion     @relation(fields: [datasetVersionId], references: [id], onDelete: Restrict)
+  strategyVersion    StrategyVersion    @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
+  artifacts          QuantRunArtifact[]
+
+  @@unique([quantRunId, assetId])
+  @@index([assetId])
+  @@index([datasetVersionId])
+  @@index([strategyVersionId])
+  @@map("quant_run_legs")
 }
