@@ -13,6 +13,7 @@ import {
   loadWatchlist,
 } from "./db";
 import { resetDemoIdentity } from "./seed-safety";
+import { listMarketIngestionRequests, requestMarketIngestion } from "./ingestion-requests";
 
 const prisma = getPrisma();
 const suffix = randomUUID().slice(0, 8);
@@ -103,7 +104,8 @@ describe("database tenant isolation", () => {
         id: fixtures.assetId,
         symbol: fixtures.assetSymbol,
         name: "Isolation Asset",
-        assetClass: "equity",
+        assetClass: "crypto",
+        market: "crypto_spot",
         currency: "USD",
         provider: "integration-test",
       },
@@ -395,6 +397,68 @@ describe("database tenant isolation", () => {
     expect(watchlistB).toEqual([
       expect.objectContaining({ sym: fixtures.assetSymbol, sentiment: "bear" }),
     ]);
+  });
+
+  it("isolates ingestion requests for the same provider instrument by tenant", async () => {
+    let providerId = "";
+    let createdProvider = false;
+    const instrumentId = randomUUID();
+    try {
+      const existingProvider = await prisma.dataProvider.findUnique({
+        where: { code: "binance-public" },
+      });
+      if (existingProvider) {
+        providerId = existingProvider.id;
+      } else {
+        providerId = randomUUID();
+        createdProvider = true;
+        await prisma.dataProvider.create({
+          data: {
+            id: providerId,
+            code: "binance-public",
+            name: "Binance Public Spot",
+            status: "active",
+          },
+        });
+      }
+      await prisma.providerInstrument.create({
+        data: {
+          id: instrumentId,
+          providerId,
+          assetId: fixtures.assetId,
+          providerSymbol: `${fixtures.assetSymbol}USDT`,
+        },
+      });
+
+      const [requestA, requestB] = await Promise.all([
+        requestMarketIngestion(contextA, {
+          providerCode: "binance-public",
+          providerSymbol: `${fixtures.assetSymbol}USDT`,
+          timeframe: "1h",
+        }),
+        requestMarketIngestion(contextB, {
+          providerCode: "binance-public",
+          providerSymbol: `${fixtures.assetSymbol}USDT`,
+          timeframe: "1h",
+        }),
+      ]);
+      const [visibleA, visibleB] = await Promise.all([
+        listMarketIngestionRequests(contextA),
+        listMarketIngestionRequests(contextB),
+      ]);
+
+      expect(requestA.id).not.toBe(requestB.id);
+      expect(visibleA.map((item) => item.id)).toContain(requestA.id);
+      expect(visibleA.map((item) => item.id)).not.toContain(requestB.id);
+      expect(visibleB.map((item) => item.id)).toContain(requestB.id);
+      expect(visibleB.map((item) => item.id)).not.toContain(requestA.id);
+    } finally {
+      await prisma.marketIngestionRequest.deleteMany({
+        where: { providerInstrumentId: instrumentId },
+      });
+      await prisma.providerInstrument.deleteMany({ where: { id: instrumentId } });
+      if (createdProvider) await prisma.dataProvider.deleteMany({ where: { id: providerId } });
+    }
   });
 
   it("resets a named demo identity without deleting another tenant", async () => {

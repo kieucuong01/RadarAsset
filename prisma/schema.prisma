@@ -22,6 +22,7 @@ model AppUser {
   watchlistItems  WatchlistItem[]
   quantRuns       QuantRun[]
   researchRuns    ResearchRun[]
+  marketIngestionRequests MarketIngestionRequest[]
 
   @@map("app_users")
 }
@@ -92,6 +93,7 @@ model Organization {
   quantRunArtifacts   QuantRunArtifact[]
   strategyAssignments StrategyAssignment[]
   strategySignals     StrategySignal[]
+  marketIngestionRequests MarketIngestionRequest[]
 
   @@map("organizations")
 }
@@ -545,6 +547,7 @@ model ProviderInstrument {
   createdAt      DateTime     @default(now()) @map("created_at")
   provider       DataProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  ingestionRequests MarketIngestionRequest[]
 
   @@unique([providerId, providerSymbol])
   @@unique([providerId, assetId])
@@ -587,6 +590,7 @@ model DatasetVersion {
   issues          DataQualityIssue[]
   ingestionRuns   MarketIngestionRun[]
   quantRunLegs    QuantRunLeg[]
+  ingestionRequests MarketIngestionRequest[]
 
   @@unique([datasetId, version])
   @@index([datasetId, isActive])
@@ -648,6 +652,34 @@ model MarketIngestionRun {
   @@index([status, startedAt])
   @@index([datasetVersionId])
   @@map("market_ingestion_runs")
+}
+
+model MarketIngestionRequest {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organizationId       String             @map("organization_id") @db.Uuid
+  userId               String             @map("user_id") @db.Uuid
+  providerInstrumentId String             @map("provider_instrument_id") @db.Uuid
+  timeframe            String
+  status               String             @default("queued")
+  attemptCount         Int                @default(0) @map("attempt_count")
+  availableAt          DateTime           @default(now()) @map("available_at") @db.Timestamptz(3)
+  workerId             String?            @map("worker_id")
+  leaseExpiresAt       DateTime?          @map("lease_expires_at") @db.Timestamptz(3)
+  datasetVersionId     String?            @map("dataset_version_id") @db.Uuid
+  errorCode            String?            @map("error_code")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                 AppUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerInstrument   ProviderInstrument @relation(fields: [providerInstrumentId], references: [id], onDelete: Restrict)
+  datasetVersion       DatasetVersion?    @relation(fields: [datasetVersionId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, status])
+  @@index([providerInstrumentId])
+  @@index([datasetVersionId])
+  @@index([status, availableAt])
+  @@map("market_ingestion_requests")
 }
 
 model QuantRunArtifact {
