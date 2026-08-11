@@ -7,6 +7,7 @@ import {
   parseBacktestRun,
   submitBacktest,
 } from "./client";
+import { listStrategyCatalog } from "./strategy-catalog";
 
 const submission = {
   timeframe: "1d" as const,
@@ -49,6 +50,14 @@ const queuedRun = {
 };
 
 describe("backtest API client", () => {
+  it("accepts the catalog payload produced by the strategy API", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(listStrategyCatalog()), { status: 200 }));
+
+    await expect(getStrategyCatalog(fetcher)).resolves.toHaveLength(4);
+  });
+
   it("loads and validates the versioned strategy catalog", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
