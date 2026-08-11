@@ -81,6 +81,7 @@ export type StrategyAssignmentCreateInput = {
   strategyVersion: string;
   strategyParameters: Record<string, unknown>;
   backtestRunId?: string;
+  backtestRunLegId?: string;
 };
 
 export type StrategySignalResponse = {

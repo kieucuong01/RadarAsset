@@ -5,6 +5,7 @@ import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PortfolioBacktestBuilder } from "@/components/PortfolioBacktestBuilder";
+import { BacktestResults } from "@/components/BacktestResults";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,7 @@ export function BacktestWorkbench({ initialSymbols = [] }: { initialSymbols?: st
           </CardContent>
         </Card>
       ) : null}
+      {run?.status === "succeeded" ? <BacktestResults run={run} /> : null}
     </div>
   );
 }

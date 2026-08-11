@@ -1,13 +1,11 @@
 import { z } from "zod";
 
+import { backtestSymbolSchema } from "./contracts";
 import { normalizeStrategyParameters, strategyDefinition } from "./strategy-catalog";
 
 const assignmentSchema = z
   .object({
-    symbol: z
-      .string()
-      .transform((value) => value.toUpperCase())
-      .pipe(z.enum(["FPT", "BTC", "XAU"])),
+    symbol: backtestSymbolSchema,
     strategyCode: z.enum([
       "ma_crossover",
       "turtle_breakout",
@@ -17,9 +15,17 @@ const assignmentSchema = z
     strategyVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
     strategyParameters: z.record(z.string(), z.unknown()),
     backtestRunId: z.string().uuid().optional(),
+    backtestRunLegId: z.string().uuid().optional(),
   })
   .strict()
   .superRefine((value, context) => {
+    if (Boolean(value.backtestRunId) !== Boolean(value.backtestRunLegId)) {
+      context.addIssue({
+        code: "custom",
+        path: [value.backtestRunId ? "backtestRunLegId" : "backtestRunId"],
+        message: "Backtest run and leg IDs must be provided together.",
+      });
+    }
     try {
       strategyDefinition(value.strategyCode, value.strategyVersion);
       normalizeStrategyParameters(value.strategyCode, value.strategyParameters);

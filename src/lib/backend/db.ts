@@ -932,6 +932,7 @@ function positiveNumber(value: unknown, field: string): number {
 function signalsFromBacktestArtifact(
   symbol: string,
   runId: string,
+  runLegId: string,
   payload: unknown,
   assetId: string,
   strategyVersionId: string,
@@ -947,7 +948,7 @@ function signalsFromBacktestArtifact(
     const entryPrice = positiveNumber(row.entryPrice, "entryPrice");
     const exitSignalAt = isoDate(row.exitSignalAt, "exitSignalAt");
     const exitPrice = positiveNumber(row.exitPrice, "exitPrice");
-    const metadata = { source: "backtest", runId };
+    const metadata = { source: "backtest", runId, runLegId };
     return [
       {
         assetId,
@@ -1001,30 +1002,57 @@ export async function upsertStrategyAssignment(
   }
 
   let signalRows: Array<Record<string, unknown>> = [];
-  if (normalized.backtestRunId) {
+  if (normalized.backtestRunId && normalized.backtestRunLegId) {
     const run = await prisma.quantRun.findFirst({
       where: {
         id: normalized.backtestRunId,
         organizationId: context.organizationId,
         status: "succeeded",
+        legs: {
+          some: {
+            id: normalized.backtestRunLegId,
+            assetId: asset.id,
+            strategyVersionId: strategyVersion.id,
+          },
+        },
       },
-      include: {
-        strategyVersion: { select: { code: true, version: true } },
-        artifacts: { where: { organizationId: context.organizationId, kind: "trades" } },
+      select: {
+        legs: {
+          where: { id: normalized.backtestRunLegId },
+          select: {
+            id: true,
+            symbolSnapshot: true,
+            parameters: true,
+            strategyVersion: { select: { code: true, version: true } },
+            artifacts: {
+              where: {
+                organizationId: context.organizationId,
+                kind: "trades",
+                scopeKey: `leg:${normalized.backtestRunLegId}`,
+              },
+              select: { payload: true },
+            },
+          },
+        },
       },
     });
     if (!run) throw new Error("Backtest run not found or not succeeded.");
+    const leg = run.legs[0];
     if (
-      run.strategyVersion?.code !== normalized.strategyCode ||
-      run.strategyVersion?.version !== normalized.strategyVersion
+      !leg ||
+      leg.symbolSnapshot !== normalized.symbol ||
+      leg.strategyVersion.code !== normalized.strategyCode ||
+      leg.strategyVersion.version !== normalized.strategyVersion ||
+      JSON.stringify(objectJson(leg.parameters)) !== JSON.stringify(normalized.strategyParameters)
     ) {
-      throw new Error("Backtest strategy does not match the assignment strategy.");
+      throw new Error("Backtest leg does not match the requested strategy assignment.");
     }
-    const tradesArtifact = run.artifacts[0];
-    if (!tradesArtifact) throw new Error("Backtest run has no trades artifact.");
+    const tradesArtifact = leg.artifacts[0];
+    if (!tradesArtifact) throw new Error("Backtest leg has no trades artifact.");
     signalRows = signalsFromBacktestArtifact(
       normalized.symbol,
       normalized.backtestRunId,
+      normalized.backtestRunLegId,
       tradesArtifact.payload,
       asset.id,
       strategyVersion.id,

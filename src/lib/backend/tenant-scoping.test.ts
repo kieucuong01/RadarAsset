@@ -394,6 +394,85 @@ describe("organization-scoped database services", () => {
     );
   });
 
+  it("loads signals only from the exact tenant-owned portfolio run leg", async () => {
+    const runId = "00000000-0000-4000-8000-000000000001";
+    const legId = "00000000-0000-4000-8000-000000000002";
+    prisma.portfolio.findFirst.mockResolvedValue({ id: "portfolio-a", organizationId: "org-a" });
+    prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc", symbol: "BTC" });
+    prisma.strategyVersion.findUnique.mockResolvedValue({
+      id: "strategy-version-turtle",
+      code: "turtle_breakout",
+      version: "1.0.0",
+      name: "Turtle Breakout",
+    });
+    prisma.quantRun.findFirst.mockResolvedValue({
+      legs: [
+        {
+          id: legId,
+          symbolSnapshot: "BTC",
+          parameters: { entryPeriod: 20, exitPeriod: 10 },
+          strategyVersion: { code: "turtle_breakout", version: "1.0.0" },
+          artifacts: [{ payload: [] }],
+        },
+      ],
+    });
+    prisma.strategyAssignment.upsert.mockResolvedValue({
+      id: "assignment-1",
+      portfolioId: "portfolio-a",
+      parameters: { entryPeriod: 20, exitPeriod: 10 },
+      status: "active",
+      asset: { symbol: "BTC" },
+      strategyVersion: {
+        code: "turtle_breakout",
+        version: "1.0.0",
+        name: "Turtle Breakout",
+      },
+      signals: [],
+    });
+    prisma.strategyAssignment.findUnique.mockResolvedValue(
+      await prisma.strategyAssignment.upsert(),
+    );
+
+    await upsertStrategyAssignment(editorContext, {
+      symbol: "BTC",
+      strategyCode: "turtle_breakout",
+      strategyVersion: "1.0.0",
+      strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+      backtestRunId: runId,
+      backtestRunLegId: legId,
+    });
+
+    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: runId,
+        organizationId: "org-a",
+        status: "succeeded",
+        legs: {
+          some: {
+            id: legId,
+            assetId: "asset-btc",
+            strategyVersionId: "strategy-version-turtle",
+          },
+        },
+      },
+      select: {
+        legs: {
+          where: { id: legId },
+          select: expect.objectContaining({
+            artifacts: {
+              where: {
+                organizationId: "org-a",
+                kind: "trades",
+                scopeKey: `leg:${legId}`,
+              },
+              select: { payload: true },
+            },
+          }),
+        },
+      },
+    });
+  });
+
   it("resolves the worker organization only from server configuration", async () => {
     vi.stubEnv("QUANT_WORKER_ORGANIZATION_SLUG", "service-workspace");
     prisma.organization.findUnique.mockResolvedValue({ id: "service-org" });
