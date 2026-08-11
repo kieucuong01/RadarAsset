@@ -18,6 +18,7 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
+    "strategy:sync": "node --import tsx scripts/sync-strategy-catalog.ts",
     "quant:worker": "python quant-worker/worker.py",
     "market:ingest": "python quant-worker/ingest_market_data.py"
   },
