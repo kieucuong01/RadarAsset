@@ -6,7 +6,13 @@ import pytest
 
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
-from worker import DatasetInput, QueuedRun, bars_in_run_range, process_next_run
+from worker import (
+    DatasetInput,
+    PostgresWorkerRepository,
+    QueuedRun,
+    bars_in_run_range,
+    process_next_run,
+)
 
 
 def golden_bars() -> list[Bar]:
@@ -288,3 +294,12 @@ def test_worker_filters_dataset_rows_to_the_inclusive_requested_date_range() -> 
         "2024-01-08",
         "2024-01-09",
     ]
+
+
+def test_postgres_worker_lease_configuration_is_explicit_and_positive() -> None:
+    repository = PostgresWorkerRepository(object(), worker_id="worker-a", lease_seconds=60)
+    assert repository.worker_id == "worker-a"
+    assert repository.lease_seconds == 60
+
+    with pytest.raises(ValueError, match="lease"):
+        PostgresWorkerRepository(object(), worker_id="worker-a", lease_seconds=0)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -26,6 +28,8 @@ from backtest.strategies import (
 DEFAULT_DATABASE_URL = (
     "postgresql://postgres:postgres@localhost:5432/quant_insight_radar?schema=public"
 )
+DEFAULT_LEASE_SECONDS = 300
+MAX_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,8 @@ class QueuedRun:
     strategy_hash: str
     parameters: dict[str, Any]
     dataset_version_ids: tuple[str, ...]
+    worker_id: str = ""
+    attempt_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -297,8 +303,20 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
 
 
 class PostgresWorkerRepository:
-    def __init__(self, connection: psycopg.Connection[Any]) -> None:
+    def __init__(
+        self,
+        connection: psycopg.Connection[Any],
+        *,
+        worker_id: str | None = None,
+        lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    ) -> None:
+        if lease_seconds < 1:
+            raise ValueError("Worker lease seconds must be positive.")
         self.connection = connection
+        self.worker_id = worker_id or os.getenv(
+            "QUANT_WORKER_ID", f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
+        )
+        self.lease_seconds = lease_seconds
 
     def claim_next_run(self) -> QueuedRun | None:
         with self.connection.cursor(row_factory=dict_row) as cursor:
@@ -307,22 +325,36 @@ class PostgresWorkerRepository:
                 WITH next_run AS (
                   SELECT id
                   FROM quant_runs
-                  WHERE status = 'queued'
-                    AND (strategy_version_id IS NOT NULL OR strategy_name = 'MA Crossover Backtest')
+                  WHERE (
+                    status = 'queued'
+                    OR (
+                      status = 'running'
+                      AND lease_expires_at IS NOT NULL
+                      AND lease_expires_at <= NOW()
+                      AND attempt_count < %s
+                    )
+                  )
+                  AND (strategy_version_id IS NOT NULL OR strategy_name = 'MA Crossover Backtest')
                   ORDER BY created_at ASC
                   FOR UPDATE SKIP LOCKED
                   LIMIT 1
                 )
                 UPDATE quant_runs AS run
                 SET status = 'running',
-                    progress = 5,
-                    started_at = NOW(),
-                    error_message = NULL
+                    progress = GREATEST(progress, 5),
+                    started_at = COALESCE(started_at, NOW()),
+                    error_message = NULL,
+                    worker_id = %s,
+                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    attempt_count = attempt_count + 1
                 FROM next_run
                 WHERE run.id = next_run.id
                 RETURNING run.id, run.organization_id, run.strategy_hash,
-                          run.parameters, run.dataset_version_ids
+                          run.parameters, run.dataset_version_ids,
+                          run.worker_id, run.attempt_count
                 """
+                ,
+                (MAX_ATTEMPTS, self.worker_id, self.lease_seconds),
             )
             row = cursor.fetchone()
         if row is None:
@@ -333,6 +365,8 @@ class PostgresWorkerRepository:
             strategy_hash=str(row["strategy_hash"] or ""),
             parameters=dict(row["parameters"] or {}),
             dataset_version_ids=tuple(str(value) for value in (row["dataset_version_ids"] or [])),
+            worker_id=str(row["worker_id"] or ""),
+            attempt_count=int(row["attempt_count"] or 0),
         )
 
     def load_datasets(self, run: QueuedRun) -> list[DatasetInput]:
@@ -390,6 +424,24 @@ class PostgresWorkerRepository:
     ) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(
+                """
+                UPDATE quant_runs
+                SET status = 'succeeded', progress = 100, metrics = %s::jsonb,
+                    error_message = NULL, finished_at = NOW(), lease_expires_at = NULL
+                WHERE id = %s AND organization_id = %s AND status = 'running'
+                  AND worker_id = %s AND lease_expires_at > NOW()
+                RETURNING id
+                """,
+                (
+                    json.dumps(summary, separators=(",", ":")),
+                    run.id,
+                    run.organization_id,
+                    run.worker_id,
+                ),
+            )
+            if cursor.fetchone() is None:
+                return
+            cursor.execute(
                 "DELETE FROM quant_run_artifacts WHERE quant_run_id = %s AND organization_id = %s",
                 (run.id, run.organization_id),
             )
@@ -413,25 +465,17 @@ class PostgresWorkerRepository:
                         artifact["schemaVersion"],
                     ),
                 )
-            cursor.execute(
-                """
-                UPDATE quant_runs
-                SET status = 'succeeded', progress = 100, metrics = %s::jsonb,
-                    error_message = NULL, finished_at = NOW()
-                WHERE id = %s AND organization_id = %s AND status = 'running'
-                """,
-                (json.dumps(summary, separators=(",", ":")), run.id, run.organization_id),
-            )
-
     def fail_run(self, run: QueuedRun, code: str, message: str) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE quant_runs
-                SET status = 'failed', progress = 100, error_message = %s, finished_at = NOW()
+                SET status = 'failed', progress = 100, error_message = %s,
+                    finished_at = NOW(), lease_expires_at = NULL
                 WHERE id = %s AND organization_id = %s AND status = 'running'
+                  AND worker_id = %s AND lease_expires_at > NOW()
                 """,
-                (f"{code}: {message}", run.id, run.organization_id),
+                (f"{code}: {message}", run.id, run.organization_id, run.worker_id),
             )
 
 
