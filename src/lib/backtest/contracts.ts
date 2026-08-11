@@ -41,6 +41,57 @@ const strategyVersionSchema = z
   .string()
   .regex(/^\d+\.\d+\.\d+$/, "Expected semantic strategy version.");
 
+const marketCostSchema = z
+  .object({
+    commissionBps: z.number().min(0).max(1000),
+    sellTaxBps: z.number().min(0).max(1000),
+    slippageBps: z.number().min(0).max(2000),
+    financingBpsAnnual: z.number().min(0).max(10_000),
+  })
+  .strict();
+
+export const portfolioAssumptionsSchema = z
+  .object({
+    cashAllocationBps: z.number().int().min(0).max(TOTAL_ALLOCATION_BPS),
+    rebalanceFrequency: z.enum(["none", "monthly", "quarterly", "yearly"]),
+    monthlyContribution: z.number().min(0).max(100_000_000_000),
+    dividendMode: z.enum(["exclude", "adjusted_prices"]),
+    fxPolicy: z.literal("normalized_returns"),
+    baseCurrency: z.enum(["USD", "VND"]),
+    marketCosts: z
+      .object({
+        vn_equity: marketCostSchema,
+        crypto_spot: marketCostSchema,
+        metal_spot: marketCostSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export type PortfolioAssumptions = z.infer<typeof portfolioAssumptionsSchema>;
+
+function defaultPortfolioAssumptions(feeBps: number, slippageBps: number): PortfolioAssumptions {
+  const cost = {
+    commissionBps: feeBps,
+    sellTaxBps: 0,
+    slippageBps,
+    financingBpsAnnual: 0,
+  };
+  return {
+    cashAllocationBps: 0,
+    rebalanceFrequency: "none",
+    monthlyContribution: 0,
+    dividendMode: "exclude",
+    fxPolicy: "normalized_returns",
+    baseCurrency: "USD",
+    marketCosts: {
+      vn_equity: { ...cost },
+      crypto_spot: { ...cost },
+      metal_spot: { ...cost },
+    },
+  };
+}
+
 export const portfolioBacktestLegSchema = z
   .object({
     symbol: backtestSymbolSchema,
@@ -82,13 +133,16 @@ export const canonicalBacktestSubmissionSchema = z
     allocationMode: z.enum(["equal", "custom", "optimized"]),
     feeBps: z.number().min(0).max(100),
     slippageBps: z.number().min(0).max(200),
+    assumptions: portfolioAssumptionsSchema.optional(),
     legs: z.array(portfolioBacktestLegSchema).min(1).max(MAX_PORTFOLIO_LEGS),
   })
   .strict()
   .superRefine((submission, context) => {
     validateRangeAndUniqueLegs(submission, context);
     if (
-      submission.legs.reduce((total, leg) => total + leg.allocationBps, 0) !== TOTAL_ALLOCATION_BPS
+      submission.legs.reduce((total, leg) => total + leg.allocationBps, 0) +
+        (submission.assumptions?.cashAllocationBps ?? 0) !==
+      TOTAL_ALLOCATION_BPS
     ) {
       context.addIssue({
         code: "custom",
@@ -178,7 +232,11 @@ export type PortfolioBacktestLeg = Omit<CanonicalPortfolioLeg, "strategyCode"> &
   strategyCode: StrategyCode;
 };
 
-export type PortfolioBacktestSubmission = Omit<CanonicalPortfolioSubmission, "legs"> & {
+export type PortfolioBacktestSubmission = Omit<
+  CanonicalPortfolioSubmission,
+  "legs" | "assumptions"
+> & {
+  assumptions: PortfolioAssumptions;
   legs: PortfolioBacktestLeg[];
 };
 
@@ -216,6 +274,7 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
       allocationMode: "equal",
       feeBps: parsed.feeBps,
       slippageBps: parsed.slippageBps,
+      assumptions: defaultPortfolioAssumptions(parsed.feeBps, parsed.slippageBps),
       legs: parsed.legs.map((leg) => ({
         ...leg,
         allocationBps: allocationBySymbol[leg.symbol],
@@ -226,6 +285,9 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
 
   return {
     ...canonical,
+    assumptions:
+      canonical.assumptions ??
+      defaultPortfolioAssumptions(canonical.feeBps, canonical.slippageBps),
     legs: canonical.legs
       .map((leg) => {
         strategyDefinition(leg.strategyCode, leg.strategyVersion);

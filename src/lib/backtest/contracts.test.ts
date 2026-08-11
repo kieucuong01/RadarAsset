@@ -35,6 +35,35 @@ const validPortfolioSubmission = {
   ],
 };
 
+const defaultAssumptions = {
+  cashAllocationBps: 0,
+  rebalanceFrequency: "none",
+  monthlyContribution: 0,
+  dividendMode: "exclude",
+  fxPolicy: "normalized_returns",
+  baseCurrency: "USD",
+  marketCosts: {
+    vn_equity: {
+      commissionBps: 10,
+      sellTaxBps: 0,
+      slippageBps: 5,
+      financingBpsAnnual: 0,
+    },
+    crypto_spot: {
+      commissionBps: 10,
+      sellTaxBps: 0,
+      slippageBps: 5,
+      financingBpsAnnual: 0,
+    },
+    metal_spot: {
+      commissionBps: 10,
+      sellTaxBps: 0,
+      slippageBps: 5,
+      financingBpsAnnual: 0,
+    },
+  },
+} as const;
+
 describe("portfolio backtest submission contract", () => {
   it("normalizes every leg independently and sorts the canonical portfolio", () => {
     expect(normalizeBacktestSubmission(validPortfolioSubmission)).toEqual({
@@ -45,6 +74,7 @@ describe("portfolio backtest submission contract", () => {
       allocationMode: "custom",
       feeBps: 10,
       slippageBps: 5,
+      assumptions: defaultAssumptions,
       legs: [
         {
           symbol: "BTC",
@@ -78,6 +108,52 @@ describe("portfolio backtest submission contract", () => {
 
     expect(second).toBe(first);
     expect(hashBacktestSubmission({ ...validPortfolioSubmission, feeBps: 11 })).not.toBe(first);
+    expect(
+      hashBacktestSubmission({
+        ...validPortfolioSubmission,
+        assumptions: { ...defaultAssumptions, monthlyContribution: 500 },
+      }),
+    ).not.toBe(first);
+  });
+
+  it("accepts an explicit cash reserve and market-specific assumptions", () => {
+    const normalized = normalizeBacktestSubmission({
+      ...validPortfolioSubmission,
+      legs: validPortfolioSubmission.legs.map((leg, index) => ({
+        ...leg,
+        allocationBps: index === 0 ? 2000 : 6000,
+      })),
+      assumptions: {
+        ...defaultAssumptions,
+        cashAllocationBps: 2000,
+        rebalanceFrequency: "quarterly",
+        monthlyContribution: 1000,
+        baseCurrency: "VND",
+        marketCosts: {
+          ...defaultAssumptions.marketCosts,
+          vn_equity: {
+            commissionBps: 15,
+            sellTaxBps: 10,
+            slippageBps: 8,
+            financingBpsAnnual: 600,
+          },
+        },
+      },
+    });
+
+    expect(normalized.assumptions).toMatchObject({
+      cashAllocationBps: 2000,
+      rebalanceFrequency: "quarterly",
+      monthlyContribution: 1000,
+      baseCurrency: "VND",
+      marketCosts: {
+        vn_equity: { commissionBps: 15, sellTaxBps: 10, slippageBps: 8 },
+      },
+    });
+    expect(
+      normalized.legs.reduce((total, leg) => total + leg.allocationBps, 0) +
+        normalized.assumptions.cashAllocationBps,
+    ).toBe(10_000);
   });
 
   it("maps the legacy shared-strategy payload to equal independent legs", () => {
@@ -100,6 +176,7 @@ describe("portfolio backtest submission contract", () => {
     ).toMatchObject({
       totalCapital: 10_000,
       allocationMode: "equal",
+      assumptions: defaultAssumptions,
       legs: [
         {
           symbol: "BTC",
@@ -133,6 +210,33 @@ describe("portfolio backtest submission contract", () => {
           ...leg,
           allocationBps: index === 0 ? 2999 : leg.allocationBps,
         })),
+      },
+    ],
+    [
+      "combined asset and cash allocation below 10,000 bps",
+      {
+        ...validPortfolioSubmission,
+        legs: validPortfolioSubmission.legs.map((leg, index) => ({
+          ...leg,
+          allocationBps: index === 0 ? 2999 : 6000,
+        })),
+        assumptions: { ...defaultAssumptions, cashAllocationBps: 1000 },
+      },
+    ],
+    [
+      "unbounded market costs",
+      {
+        ...validPortfolioSubmission,
+        assumptions: {
+          ...defaultAssumptions,
+          marketCosts: {
+            ...defaultAssumptions.marketCosts,
+            crypto_spot: {
+              ...defaultAssumptions.marketCosts.crypto_spot,
+              slippageBps: 2001,
+            },
+          },
+        },
       },
     ],
     [
