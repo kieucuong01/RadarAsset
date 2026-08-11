@@ -61,7 +61,7 @@ export async function loadQuantAssetCatalog(
         ? {
             OR: [
               { symbol: { contains: query.q, mode: "insensitive" as const } },
-              { name: { contains: query.q, mode: "insensitive" as const } },
+              { name: { startsWith: query.q, mode: "insensitive" as const } },
             ],
           }
         : {}),

@@ -15,6 +15,11 @@ from psycopg.rows import dict_row
 
 from backtest.engine import EngineConfig, artifact_checksum, run_strategy
 from backtest.models import Bar
+from backtest.portfolio import (
+    PortfolioAssumptions,
+    PortfolioLegInput,
+    run_portfolio,
+)
 from backtest.quality import canonical_bar_checksum
 from backtest.strategies import (
     AbcdCausalStrategy,
@@ -33,6 +38,20 @@ MAX_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
+class QueuedRunLeg:
+    id: str
+    asset: str
+    market: str
+    dataset_version_id: str
+    allocation_bps: int
+    initial_notional: Decimal
+    leverage: Decimal
+    strategy_code: str
+    strategy_version: str
+    strategy_parameters: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class QueuedRun:
     id: str
     organization_id: str
@@ -41,6 +60,7 @@ class QueuedRun:
     dataset_version_ids: tuple[str, ...]
     worker_id: str = ""
     attempt_count: int = 0
+    legs: tuple[QueuedRunLeg, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -50,6 +70,7 @@ class DatasetInput:
     market: str
     checksum: str
     bars: list[Bar]
+    adjustment_policy: str = "raw"
 
 
 class WorkerRepository(Protocol):
@@ -234,6 +255,214 @@ def bars_in_run_range(bars: list[Bar], run: QueuedRun) -> list[Bar]:
     return [row for row in bars if start_date <= row.timestamp.date() <= end_date]
 
 
+def _portfolio_assumptions(parameters: dict[str, Any]) -> PortfolioAssumptions:
+    raw = parameters.get("assumptions")
+    if not isinstance(raw, dict) or set(raw) != {
+        "cashAllocationBps",
+        "rebalanceFrequency",
+        "monthlyContribution",
+        "dividendMode",
+        "fxPolicy",
+        "baseCurrency",
+        "marketCosts",
+    }:
+        raise ValueError("Portfolio assumptions are invalid.")
+    costs = raw.get("marketCosts")
+    if not isinstance(costs, dict) or set(costs) != {
+        "vn_equity",
+        "crypto_spot",
+        "metal_spot",
+    }:
+        raise ValueError("Portfolio market costs are invalid.")
+    parsed_costs: dict[str, dict[str, Decimal]] = {}
+    required_costs = {
+        "commissionBps",
+        "sellTaxBps",
+        "slippageBps",
+        "financingBpsAnnual",
+    }
+    for market, raw_cost in costs.items():
+        if not isinstance(raw_cost, dict) or set(raw_cost) != required_costs:
+            raise ValueError("Portfolio market costs are invalid.")
+        parsed_costs[market] = {
+            key: _strict_decimal(value, key, "0", "10000")
+            for key, value in raw_cost.items()
+        }
+    cash_bps = raw.get("cashAllocationBps")
+    if isinstance(cash_bps, bool) or not isinstance(cash_bps, int) or not 0 <= cash_bps <= 10_000:
+        raise ValueError("Portfolio cash allocation is invalid.")
+    contribution = raw.get("monthlyContribution")
+    if isinstance(contribution, bool) or not isinstance(contribution, (int, float)):
+        raise ValueError("Portfolio contribution is invalid.")
+    return PortfolioAssumptions(
+        cash_allocation_bps=cash_bps,
+        rebalance_frequency=str(raw.get("rebalanceFrequency")),
+        monthly_contribution=Decimal(str(contribution)),
+        dividend_mode=str(raw.get("dividendMode")),
+        fx_policy=str(raw.get("fxPolicy")),
+        base_currency=str(raw.get("baseCurrency")),
+        market_costs=parsed_costs,
+    )
+
+
+def _artifact(
+    kind: str,
+    payload: object,
+    *,
+    scope_key: str = "aggregate",
+    leg_id: str | None = None,
+    metrics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "checksum": artifact_checksum(payload),
+        "payload": payload,
+        "rowCount": len(payload) if isinstance(payload, list) else 1,
+        "schemaVersion": 1,
+        "scopeKey": scope_key,
+        "quantRunLegId": leg_id,
+        "metrics": metrics,
+    }
+
+
+def _process_portfolio_run(
+    run: QueuedRun, datasets: list[DatasetInput]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    parameters = run.parameters
+    if set(parameters) != {
+        "timeframe",
+        "from",
+        "to",
+        "totalCapital",
+        "allocationMode",
+        "feeBps",
+        "slippageBps",
+        "assumptions",
+        "legs",
+    }:
+        raise ValueError("Portfolio parameters do not match the allow-listed contract.")
+    total_capital = _strict_decimal(parameters["totalCapital"], "totalCapital", "0.00000001", "100000000000")
+    assumptions = _portfolio_assumptions(parameters)
+    timeframe = parameters.get("timeframe")
+    if timeframe not in {"1d", "1h"}:
+        raise ValueError("Unsupported timeframe.")
+    raw_legs = parameters.get("legs")
+    if not isinstance(raw_legs, list) or not 1 <= len(raw_legs) <= 10:
+        raise ValueError("Portfolio legs are invalid.")
+    request_by_symbol = {
+        str(item.get("symbol")): item for item in raw_legs if isinstance(item, dict)
+    }
+    if len(request_by_symbol) != len(raw_legs) or len(run.legs) != len(raw_legs):
+        raise ValueError("Portfolio legs are invalid or duplicated.")
+    dataset_by_id = {dataset.version_id: dataset for dataset in datasets}
+    portfolio_legs: list[PortfolioLegInput] = []
+    artifacts: list[dict[str, Any]] = []
+    for leg in sorted(run.legs, key=lambda item: item.asset):
+        requested = request_by_symbol.get(leg.asset)
+        dataset = dataset_by_id.get(leg.dataset_version_id)
+        if requested is None or dataset is None or dataset.asset != leg.asset or dataset.market != leg.market:
+            raise ValueError("Resolved portfolio leg does not match immutable data.")
+        expected_keys = {
+            "symbol",
+            "allocationBps",
+            "leverage",
+            "strategyCode",
+            "strategyVersion",
+            "strategyParameters",
+        }
+        if set(requested) != expected_keys:
+            raise ValueError("Portfolio leg parameters are invalid.")
+        if (
+            requested["allocationBps"] != leg.allocation_bps
+            or Decimal(str(requested["leverage"])) != leg.leverage
+            or requested["strategyCode"] != leg.strategy_code
+            or requested["strategyVersion"] != leg.strategy_version
+            or requested["strategyParameters"] != leg.strategy_parameters
+        ):
+            raise ValueError("Portfolio leg metadata mismatch.")
+        if leg.strategy_version != "1.0.0":
+            raise ValueError("Unsupported strategy version.")
+        strategy, fast_period, slow_period = _catalog_strategy(
+            leg.strategy_code, leg.strategy_parameters
+        )
+        cost = assumptions.market_costs[leg.market]
+        execution_capital = leg.initial_notional if leg.initial_notional > 0 else Decimal("1")
+        result = run_strategy(
+            {leg.asset: dataset.bars},
+            EngineConfig(
+                initial_capital=execution_capital,
+                fast_period=fast_period,
+                slow_period=slow_period,
+                fee_bps=cost["commissionBps"],
+                slippage_bps=cost["slippageBps"],
+                leverage_by_asset={leg.asset: leg.leverage},
+                market_by_asset={leg.asset: leg.market},
+                strategy_hash=run.strategy_hash,
+                dataset_checksums={leg.asset: dataset.checksum},
+                strategy=strategy,
+                sell_tax_bps=cost["sellTaxBps"],
+                financing_bps_annual=cost["financingBpsAnnual"],
+            ),
+            strategy=strategy,
+        )
+        leg_manifest = {
+            **result.manifest,
+            "runId": run.id,
+            "legId": leg.id,
+            "datasetVersionId": dataset.version_id,
+            "adjustmentPolicy": dataset.adjustment_policy,
+        }
+        scope_key = f"leg:{leg.id}"
+        for kind, payload in (
+            ("equity", result.equity),
+            ("drawdown", result.drawdown),
+            ("trades", result.trades),
+            ("manifest", leg_manifest),
+        ):
+            artifacts.append(
+                _artifact(
+                    kind,
+                    payload,
+                    scope_key=scope_key,
+                    leg_id=leg.id,
+                    metrics=result.summary if kind == "manifest" else None,
+                )
+            )
+        portfolio_legs.append(
+            PortfolioLegInput(
+                id=leg.id,
+                symbol=leg.asset,
+                market=leg.market,
+                allocation_bps=leg.allocation_bps,
+                initial_notional=leg.initial_notional,
+                dataset_checksum=dataset.checksum,
+                adjustment_policy=dataset.adjustment_policy,
+                result=result,
+            )
+        )
+    portfolio = run_portfolio(
+        portfolio_legs,
+        total_capital=total_capital,
+        assumptions=assumptions,
+        portfolio_hash=run.strategy_hash,
+    )
+    aggregate_manifest = {
+        **portfolio.manifest,
+        "runId": run.id,
+        "datasetVersionIds": list(run.dataset_version_ids),
+    }
+    for kind, payload in (
+        ("equity", portfolio.equity),
+        ("drawdown", portfolio.drawdown),
+        ("contribution", portfolio.contribution),
+        ("cash_flow", portfolio.cash_flow),
+        ("rebalance", portfolio.rebalance),
+        ("manifest", aggregate_manifest),
+    ):
+        artifacts.append(_artifact(kind, payload))
+    return portfolio.summary, artifacts
+
+
 def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
     run = repository.claim_next_run()
     if run is None:
@@ -262,38 +491,36 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
                 market=dataset.market,
                 checksum=dataset.checksum,
                 bars=bars_in_run_range(dataset.bars, run),
+                adjustment_policy=dataset.adjustment_policy,
             )
             for dataset in datasets
         ]
-        config = _engine_config(run, execution_datasets)
-        result = run_strategy(
-            {dataset.asset: dataset.bars for dataset in execution_datasets},
-            config,
-            strategy=config.strategy,
-        )
-        manifest = {
-            **result.manifest,
-            "runId": run.id,
-            "datasetVersionIds": list(run.dataset_version_ids),
-        }
-        artifact_payloads = [
-            ("equity", result.equity),
-            ("drawdown", result.drawdown),
-            ("trades", result.trades),
-            ("manifest", manifest),
-        ]
-        artifacts = [
-            {
-                "kind": kind,
-                "checksum": artifact_checksum(payload),
-                "payload": payload,
-                "rowCount": len(payload) if isinstance(payload, list) else 1,
-                "schemaVersion": 1,
+        if run.legs:
+            summary, artifacts = _process_portfolio_run(run, execution_datasets)
+        else:
+            config = _engine_config(run, execution_datasets)
+            result = run_strategy(
+                {dataset.asset: dataset.bars for dataset in execution_datasets},
+                config,
+                strategy=config.strategy,
+            )
+            manifest = {
+                **result.manifest,
+                "runId": run.id,
+                "datasetVersionIds": list(run.dataset_version_ids),
             }
-            for kind, payload in artifact_payloads
-        ]
-        repository.complete_run(run, result.summary, artifacts)
-        return {"status": "succeeded", "id": run.id, "metrics": result.summary}
+            artifacts = [
+                _artifact(kind, payload)
+                for kind, payload in (
+                    ("equity", result.equity),
+                    ("drawdown", result.drawdown),
+                    ("trades", result.trades),
+                    ("manifest", manifest),
+                )
+            ]
+            summary = result.summary
+        repository.complete_run(run, summary, artifacts)
+        return {"status": "succeeded", "id": run.id, "metrics": summary}
     except ValueError:
         repository.fail_run(run, "DSL_INVALID", "Backtest configuration is invalid.")
         return {"status": "failed", "id": run.id, "code": "DSL_INVALID"}
@@ -334,7 +561,13 @@ class PostgresWorkerRepository:
                       AND attempt_count < %s
                     )
                   )
-                  AND (strategy_version_id IS NOT NULL OR strategy_name = 'MA Crossover Backtest')
+                  AND (
+                    strategy_version_id IS NOT NULL
+                    OR strategy_name = 'MA Crossover Backtest'
+                    OR EXISTS (
+                      SELECT 1 FROM quant_run_legs AS leg WHERE leg.quant_run_id = quant_runs.id
+                    )
+                  )
                   ORDER BY created_at ASC
                   FOR UPDATE SKIP LOCKED
                   LIMIT 1
@@ -359,6 +592,22 @@ class PostgresWorkerRepository:
             row = cursor.fetchone()
         if row is None:
             return None
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT leg.id, asset.symbol, asset.market, leg.dataset_version_id,
+                       leg.allocation_bps, leg.initial_notional, leg.leverage,
+                       strategy.code AS strategy_code, strategy.version AS strategy_version,
+                       leg.parameters
+                FROM quant_run_legs AS leg
+                JOIN assets AS asset ON asset.id = leg.asset_id
+                JOIN strategy_versions AS strategy ON strategy.id = leg.strategy_version_id
+                WHERE leg.quant_run_id = %s
+                ORDER BY asset.symbol ASC
+                """,
+                (row["id"],),
+            )
+            leg_rows = cursor.fetchall()
         return QueuedRun(
             id=str(row["id"]),
             organization_id=str(row["organization_id"]),
@@ -367,6 +616,21 @@ class PostgresWorkerRepository:
             dataset_version_ids=tuple(str(value) for value in (row["dataset_version_ids"] or [])),
             worker_id=str(row["worker_id"] or ""),
             attempt_count=int(row["attempt_count"] or 0),
+            legs=tuple(
+                QueuedRunLeg(
+                    id=str(leg["id"]),
+                    asset=str(leg["symbol"]),
+                    market=str(leg["market"]),
+                    dataset_version_id=str(leg["dataset_version_id"]),
+                    allocation_bps=int(leg["allocation_bps"]),
+                    initial_notional=Decimal(str(leg["initial_notional"])),
+                    leverage=Decimal(str(leg["leverage"])),
+                    strategy_code=str(leg["strategy_code"]),
+                    strategy_version=str(leg["strategy_version"]),
+                    strategy_parameters=dict(leg["parameters"] or {}),
+                )
+                for leg in leg_rows
+            ),
         )
 
     def load_datasets(self, run: QueuedRun) -> list[DatasetInput]:
@@ -378,7 +642,7 @@ class PostgresWorkerRepository:
                 SELECT version.id AS version_id, version.checksum,
                        asset.symbol, asset.market,
                        bar.ts, bar.open, bar.high, bar.low, bar.close, bar.volume,
-                       bar.source, dataset.timeframe
+                       bar.source, dataset.timeframe, dataset.adjustment_policy
                 FROM dataset_versions AS version
                 JOIN datasets AS dataset ON dataset.id = version.dataset_id
                 JOIN assets AS asset ON asset.id = dataset.asset_id
@@ -411,6 +675,7 @@ class PostgresWorkerRepository:
                     market=str(row["market"]),
                     checksum=str(row["checksum"]),
                     bars=[bar],
+                    adjustment_policy=str(row["adjustment_policy"]),
                 )
             else:
                 existing.bars.append(bar)
@@ -446,18 +711,35 @@ class PostgresWorkerRepository:
                 (run.id, run.organization_id),
             )
             for artifact in artifacts:
+                leg_id = artifact.get("quantRunLegId")
+                metrics = artifact.get("metrics")
+                if leg_id is not None and metrics is not None:
+                    cursor.execute(
+                        """
+                        UPDATE quant_run_legs
+                        SET status = 'succeeded', progress = 100, metrics = %s::jsonb,
+                            error_code = NULL
+                        WHERE id = %s AND quant_run_id = %s
+                        """,
+                        (json.dumps(metrics, separators=(",", ":")), leg_id, run.id),
+                    )
+            for artifact in artifacts:
                 cursor.execute(
                     """
                     INSERT INTO quant_run_artifacts (
-                        id, organization_id, quant_run_id, kind, checksum,
-                        payload, row_count, schema_version, created_at
+                        id, organization_id, quant_run_id, quant_run_leg_id,
+                        scope_key, kind, checksum, payload, row_count,
+                        schema_version, created_at
                     ) VALUES (
-                        gen_random_uuid(), %s, %s, %s, %s, %s::jsonb, %s, %s, NOW()
+                        gen_random_uuid(), %s, %s, %s, %s, %s, %s,
+                        %s::jsonb, %s, %s, NOW()
                     )
                     """,
                     (
                         run.organization_id,
                         run.id,
+                        artifact.get("quantRunLegId"),
+                        artifact.get("scopeKey", "aggregate"),
                         artifact["kind"],
                         artifact["checksum"],
                         json.dumps(artifact["payload"], separators=(",", ":")),
@@ -476,6 +758,14 @@ class PostgresWorkerRepository:
                   AND worker_id = %s AND lease_expires_at > NOW()
                 """,
                 (f"{code}: {message}", run.id, run.organization_id, run.worker_id),
+            )
+            cursor.execute(
+                """
+                UPDATE quant_run_legs
+                SET status = 'failed', progress = 100, error_code = %s
+                WHERE quant_run_id = %s AND status IN ('queued', 'running')
+                """,
+                (code, run.id),
             )
 
 

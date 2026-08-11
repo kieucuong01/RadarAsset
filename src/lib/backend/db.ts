@@ -43,6 +43,8 @@ import { hashBacktestSubmission } from "@/lib/backtest/hash";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import { calculateFreshness } from "@/lib/market-data/health";
 import type { WorkerImportContext } from "./worker-context";
+import { resolveProviderInstrument } from "./provider-catalog";
+import { requestMarketIngestion } from "./ingestion-requests";
 
 const TIMEFRAME_LIMITS = {
   "1W": 7,
@@ -540,13 +542,28 @@ export async function loadEvents() {
 
 export async function loadWatchlist(context: TenantContext) {
   const prisma = getPrisma();
-  const [items, tickers, insights] = await Promise.all([
+  const [items, tickers, insights, ingestionRequests] = await Promise.all([
     prisma.watchlistItem.findMany({
       where: {
         organizationId: context.organizationId,
         userId: context.userId,
       },
-      include: { asset: true },
+      include: {
+        asset: {
+          include: {
+            datasets: {
+              select: {
+                timeframe: true,
+                versions: {
+                  where: { isActive: true, qualityStatus: "passed" },
+                  select: { id: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: "asc" },
     }),
     loadTickerResponse(),
@@ -557,10 +574,30 @@ export async function loadWatchlist(context: TenantContext) {
       include: { asset: true },
       orderBy: { publishedAt: "desc" },
     }),
+    prisma.marketIngestionRequest.findMany({
+      where: {
+        organizationId: context.organizationId,
+        userId: context.userId,
+        status: { in: ["queued", "running"] },
+      },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        providerInstrument: { select: { assetId: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   const tickerBySymbol = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
   const sentimentBySymbol = new Map<string, string>();
+  const activeRequestByAsset = new Map<string, (typeof ingestionRequests)[number]>();
+  for (const request of ingestionRequests) {
+    if (!activeRequestByAsset.has(request.providerInstrument.assetId)) {
+      activeRequestByAsset.set(request.providerInstrument.assetId, request);
+    }
+  }
   for (const insight of insights) {
     if (insight.asset?.symbol && !sentimentBySymbol.has(insight.asset.symbol)) {
       sentimentBySymbol.set(insight.asset.symbol, insight.sentiment);
@@ -569,6 +606,19 @@ export async function loadWatchlist(context: TenantContext) {
 
   return items.map((item) => {
     const ticker = tickerBySymbol.get(item.asset.symbol);
+    const backtestableTimeframes = item.asset.datasets
+      .filter((dataset) => dataset.versions.length > 0)
+      .map((dataset) => dataset.timeframe)
+      .filter((timeframe): timeframe is "1d" | "1h" => timeframe === "1d" || timeframe === "1h")
+      .sort();
+    const activeRequest = activeRequestByAsset.get(item.asset.id);
+    const datasetState = activeRequest
+      ? "loading"
+      : backtestableTimeframes.length > 0
+        ? "ready"
+        : item.asset.datasets.length > 0
+          ? "stale"
+          : "unavailable";
     return {
       id: item.id,
       sym: item.asset.symbol,
@@ -577,6 +627,9 @@ export async function loadWatchlist(context: TenantContext) {
       chg: ticker?.changePercent ?? 0,
       alert: item.alert === null ? 0 : numberFromDecimal(item.alert),
       sentiment: sentimentBySymbol.get(item.asset.symbol) ?? "neutral",
+      datasetState,
+      ingestionRequestId: activeRequest?.id ?? null,
+      backtestableTimeframes,
     };
   });
 }
@@ -719,8 +772,15 @@ export async function importResearchRun(
 
 export async function upsertWatchlistItem(context: TenantContext, input: WatchlistMutationInput) {
   const prisma = getPrisma();
-  const symbol = input.symbol.trim().toUpperCase();
-  const asset = await prisma.asset.findUnique({ where: { symbol }, select: { id: true } });
+  const instrument =
+    input.providerCode && input.providerSymbol
+      ? await resolveProviderInstrument(input.providerCode, input.providerSymbol)
+      : null;
+  const symbol = instrument?.symbol ?? input.symbol?.trim().toUpperCase();
+  if (!symbol) throw new Error("A system asset or provider instrument is required.");
+  const asset = instrument
+    ? { id: instrument.assetId }
+    : await prisma.asset.findUnique({ where: { symbol }, select: { id: true } });
   if (!asset) throw new Error(`Asset ${symbol} not found.`);
 
   await prisma.watchlistItem.upsert({
@@ -742,7 +802,42 @@ export async function upsertWatchlistItem(context: TenantContext, input: Watchli
     },
   });
 
+  if (instrument) {
+    const requested = [...new Set(input.requestedTimeframes ?? instrument.supportedTimeframes)];
+    const supported = requested.filter((timeframe) =>
+      instrument.supportedTimeframes.includes(timeframe),
+    );
+    const ready = await prisma.dataset.findMany({
+      where: {
+        assetId: instrument.assetId,
+        timeframe: { in: supported },
+        adjustmentPolicy: "raw",
+        versions: { some: { isActive: true, qualityStatus: "passed" } },
+      },
+      select: { timeframe: true },
+    });
+    const readyTimeframes = new Set(ready.map((dataset) => dataset.timeframe));
+    await Promise.all(
+      supported
+        .filter((timeframe) => !readyTimeframes.has(timeframe))
+        .map((timeframe) =>
+          requestMarketIngestion(context, {
+            providerCode: instrument.providerCode,
+            providerSymbol: instrument.providerSymbol,
+            timeframe,
+          }),
+        ),
+    );
+  }
+
   return loadWatchlist(context);
+}
+
+export async function removeWatchlistItem(context: TenantContext, id: string) {
+  const result = await getPrisma().watchlistItem.deleteMany({
+    where: { id, organizationId: context.organizationId, userId: context.userId },
+  });
+  return result.count === 1;
 }
 
 export async function loadMarketDataHealth(now = new Date()): Promise<MarketDataHealthItem[]> {
@@ -932,6 +1027,7 @@ function positiveNumber(value: unknown, field: string): number {
 function signalsFromBacktestArtifact(
   symbol: string,
   runId: string,
+  runLegId: string,
   payload: unknown,
   assetId: string,
   strategyVersionId: string,
@@ -947,7 +1043,7 @@ function signalsFromBacktestArtifact(
     const entryPrice = positiveNumber(row.entryPrice, "entryPrice");
     const exitSignalAt = isoDate(row.exitSignalAt, "exitSignalAt");
     const exitPrice = positiveNumber(row.exitPrice, "exitPrice");
-    const metadata = { source: "backtest", runId };
+    const metadata = { source: "backtest", runId, runLegId };
     return [
       {
         assetId,
@@ -1001,30 +1097,57 @@ export async function upsertStrategyAssignment(
   }
 
   let signalRows: Array<Record<string, unknown>> = [];
-  if (normalized.backtestRunId) {
+  if (normalized.backtestRunId && normalized.backtestRunLegId) {
     const run = await prisma.quantRun.findFirst({
       where: {
         id: normalized.backtestRunId,
         organizationId: context.organizationId,
         status: "succeeded",
+        legs: {
+          some: {
+            id: normalized.backtestRunLegId,
+            assetId: asset.id,
+            strategyVersionId: strategyVersion.id,
+          },
+        },
       },
-      include: {
-        strategyVersion: { select: { code: true, version: true } },
-        artifacts: { where: { organizationId: context.organizationId, kind: "trades" } },
+      select: {
+        legs: {
+          where: { id: normalized.backtestRunLegId },
+          select: {
+            id: true,
+            symbolSnapshot: true,
+            parameters: true,
+            strategyVersion: { select: { code: true, version: true } },
+            artifacts: {
+              where: {
+                organizationId: context.organizationId,
+                kind: "trades",
+                scopeKey: `leg:${normalized.backtestRunLegId}`,
+              },
+              select: { payload: true },
+            },
+          },
+        },
       },
     });
     if (!run) throw new Error("Backtest run not found or not succeeded.");
+    const leg = run.legs[0];
     if (
-      run.strategyVersion?.code !== normalized.strategyCode ||
-      run.strategyVersion?.version !== normalized.strategyVersion
+      !leg ||
+      leg.symbolSnapshot !== normalized.symbol ||
+      leg.strategyVersion.code !== normalized.strategyCode ||
+      leg.strategyVersion.version !== normalized.strategyVersion ||
+      JSON.stringify(objectJson(leg.parameters)) !== JSON.stringify(normalized.strategyParameters)
     ) {
-      throw new Error("Backtest strategy does not match the assignment strategy.");
+      throw new Error("Backtest leg does not match the requested strategy assignment.");
     }
-    const tradesArtifact = run.artifacts[0];
-    if (!tradesArtifact) throw new Error("Backtest run has no trades artifact.");
+    const tradesArtifact = leg.artifacts[0];
+    if (!tradesArtifact) throw new Error("Backtest leg has no trades artifact.");
     signalRows = signalsFromBacktestArtifact(
       normalized.symbol,
       normalized.backtestRunId,
+      normalized.backtestRunLegId,
       tradesArtifact.payload,
       asset.id,
       strategyVersion.id,
@@ -1263,6 +1386,8 @@ function quantRunToResponse(run: {
   createdAt?: Date;
   artifacts?: Array<{
     id: string;
+    quantRunLegId?: string | null;
+    scopeKey?: string;
     kind: string;
     checksum: string;
     payload: unknown;
@@ -1291,8 +1416,11 @@ function quantRunToResponse(run: {
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     createdAt: run.createdAt?.toISOString() ?? new Date(0).toISOString(),
+    legs: [],
     artifacts: (run.artifacts ?? []).map((artifact) => ({
       id: artifact.id,
+      quantRunLegId: artifact.quantRunLegId ?? null,
+      scopeKey: artifact.scopeKey ?? "aggregate",
       kind:
         artifact.kind === "equity" || artifact.kind === "drawdown" || artifact.kind === "trades"
           ? artifact.kind

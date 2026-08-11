@@ -15,7 +15,8 @@ const { prisma } = vi.hoisted(() => {
     },
     asset: { findUnique: vi.fn(), findMany: vi.fn() },
     marketBar: { findMany: vi.fn(), findFirst: vi.fn() },
-    watchlistItem: { findMany: vi.fn(), upsert: vi.fn() },
+    watchlistItem: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
+    marketIngestionRequest: { findMany: vi.fn() },
     aiInsight: { findMany: vi.fn(), create: vi.fn() },
     evidenceItem: { findMany: vi.fn(), create: vi.fn() },
     investmentThesis: { findFirst: vi.fn(), create: vi.fn() },
@@ -45,6 +46,7 @@ vi.mock("@/lib/db/prisma", () => ({
   getPrisma: () => prisma,
 }));
 
+import { createDefaultPortfolioAssumptions } from "@/lib/backtest/contracts";
 import {
   createPortfolioTransaction,
   createQuantRun,
@@ -57,6 +59,7 @@ import {
   loadResearchRuns,
   loadWatchlist,
   upsertWatchlistItem,
+  removeWatchlistItem,
   upsertStrategyAssignment,
 } from "./db";
 import { getWorkerImportContext } from "./worker-context";
@@ -67,6 +70,7 @@ const viewerContext = {
   role: "viewer" as const,
 };
 const editorContext = { ...viewerContext, role: "editor" as const };
+const defaultAssumptions = createDefaultPortfolioAssumptions(10, 5);
 
 describe("organization-scoped database services", () => {
   beforeEach(() => {
@@ -77,6 +81,7 @@ describe("organization-scoped database services", () => {
     prisma.marketBar.findMany.mockResolvedValue([]);
     prisma.aiInsight.findMany.mockResolvedValue([]);
     prisma.watchlistItem.findMany.mockResolvedValue([]);
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([]);
     prisma.researchRun.findMany.mockResolvedValue([]);
     prisma.quantRun.findMany.mockResolvedValue([]);
     prisma.strategyVersion.findUnique.mockResolvedValue({
@@ -152,6 +157,50 @@ describe("organization-scoped database services", () => {
         }),
       }),
     );
+  });
+
+  it("keeps polling while another requested timeframe is still active", async () => {
+    prisma.watchlistItem.findMany.mockResolvedValue([
+      {
+        id: "watch-eth",
+        alert: null,
+        asset: {
+          id: "asset-eth",
+          symbol: "ETH",
+          name: "Ethereum",
+          datasets: [
+            { timeframe: "1d", versions: [{ id: "eth-1d" }] },
+            { timeframe: "1h", versions: [] },
+          ],
+        },
+      },
+    ]);
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([
+      {
+        id: "request-eth-1h",
+        status: "running",
+        createdAt: new Date("2026-08-11T00:00:00Z"),
+        providerInstrument: { assetId: "asset-eth" },
+      },
+    ]);
+
+    await expect(loadWatchlist(viewerContext)).resolves.toEqual([
+      expect.objectContaining({
+        sym: "ETH",
+        datasetState: "loading",
+        ingestionRequestId: "request-eth-1h",
+        backtestableTimeframes: ["1d"],
+      }),
+    ]);
+  });
+
+  it("removes only the tenant and user owned watchlist row", async () => {
+    prisma.watchlistItem.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(removeWatchlistItem(editorContext, "favorite-a")).resolves.toBe(true);
+    expect(prisma.watchlistItem.deleteMany).toHaveBeenCalledWith({
+      where: { id: "favorite-a", organizationId: "org-a", userId: "user-a" },
+    });
   });
 
   it("scopes research listing and worker imports", async () => {
@@ -241,6 +290,7 @@ describe("organization-scoped database services", () => {
       allocationMode: "equal",
       feeBps: 10,
       slippageBps: 5,
+      assumptions: defaultAssumptions,
       from: "2024-01-01",
       to: "2025-01-01",
       legs: [
@@ -289,6 +339,7 @@ describe("organization-scoped database services", () => {
         allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
+        assumptions: defaultAssumptions,
         from: "2024-01-01",
         to: "2025-01-01",
         legs: [
@@ -315,6 +366,7 @@ describe("organization-scoped database services", () => {
         allocationMode: "equal",
         feeBps: 10,
         slippageBps: 5,
+        assumptions: defaultAssumptions,
         from: "2024-01-01",
         to: "2025-01-01",
         legs: [
@@ -387,6 +439,85 @@ describe("organization-scoped database services", () => {
         create: expect.objectContaining({ organizationId: "org-a" }),
       }),
     );
+  });
+
+  it("loads signals only from the exact tenant-owned portfolio run leg", async () => {
+    const runId = "00000000-0000-4000-8000-000000000001";
+    const legId = "00000000-0000-4000-8000-000000000002";
+    prisma.portfolio.findFirst.mockResolvedValue({ id: "portfolio-a", organizationId: "org-a" });
+    prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc", symbol: "BTC" });
+    prisma.strategyVersion.findUnique.mockResolvedValue({
+      id: "strategy-version-turtle",
+      code: "turtle_breakout",
+      version: "1.0.0",
+      name: "Turtle Breakout",
+    });
+    prisma.quantRun.findFirst.mockResolvedValue({
+      legs: [
+        {
+          id: legId,
+          symbolSnapshot: "BTC",
+          parameters: { entryPeriod: 20, exitPeriod: 10 },
+          strategyVersion: { code: "turtle_breakout", version: "1.0.0" },
+          artifacts: [{ payload: [] }],
+        },
+      ],
+    });
+    prisma.strategyAssignment.upsert.mockResolvedValue({
+      id: "assignment-1",
+      portfolioId: "portfolio-a",
+      parameters: { entryPeriod: 20, exitPeriod: 10 },
+      status: "active",
+      asset: { symbol: "BTC" },
+      strategyVersion: {
+        code: "turtle_breakout",
+        version: "1.0.0",
+        name: "Turtle Breakout",
+      },
+      signals: [],
+    });
+    prisma.strategyAssignment.findUnique.mockResolvedValue(
+      await prisma.strategyAssignment.upsert(),
+    );
+
+    await upsertStrategyAssignment(editorContext, {
+      symbol: "BTC",
+      strategyCode: "turtle_breakout",
+      strategyVersion: "1.0.0",
+      strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+      backtestRunId: runId,
+      backtestRunLegId: legId,
+    });
+
+    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: runId,
+        organizationId: "org-a",
+        status: "succeeded",
+        legs: {
+          some: {
+            id: legId,
+            assetId: "asset-btc",
+            strategyVersionId: "strategy-version-turtle",
+          },
+        },
+      },
+      select: {
+        legs: {
+          where: { id: legId },
+          select: expect.objectContaining({
+            artifacts: {
+              where: {
+                organizationId: "org-a",
+                kind: "trades",
+                scopeKey: `leg:${legId}`,
+              },
+              select: { payload: true },
+            },
+          }),
+        },
+      },
+    });
   });
 
   it("resolves the worker organization only from server configuration", async () => {

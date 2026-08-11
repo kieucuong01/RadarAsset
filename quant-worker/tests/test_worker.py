@@ -10,6 +10,7 @@ from worker import (
     DatasetInput,
     PostgresWorkerRepository,
     QueuedRun,
+    QueuedRunLeg,
     bars_in_run_range,
     process_next_run,
 )
@@ -57,7 +58,11 @@ def queued_run() -> QueuedRun:
 
 
 class FakeRepository:
-    def __init__(self, run: QueuedRun | None, dataset: DatasetInput | None = None) -> None:
+    def __init__(
+        self,
+        run: QueuedRun | None,
+        dataset: DatasetInput | list[DatasetInput] | None = None,
+    ) -> None:
         self.run = run
         self.dataset = dataset
         self.completed: tuple[str, dict[str, Any], list[dict[str, Any]]] | None = None
@@ -69,7 +74,7 @@ class FakeRepository:
 
     def load_datasets(self, _run: QueuedRun) -> list[DatasetInput]:
         assert self.dataset is not None
-        return [self.dataset]
+        return self.dataset if isinstance(self.dataset, list) else [self.dataset]
 
     def complete_run(
         self,
@@ -303,3 +308,148 @@ def test_postgres_worker_lease_configuration_is_explicit_and_positive() -> None:
 
     with pytest.raises(ValueError, match="lease"):
         PostgresWorkerRepository(object(), worker_id="worker-a", lease_seconds=0)
+
+
+def test_process_next_run_executes_portfolio_legs_and_emits_scoped_artifacts() -> None:
+    btc_bars = golden_bars()
+    xau_bars = [
+        Bar(
+            asset="XAU",
+            timestamp=bar.timestamp,
+            timeframe=bar.timeframe,
+            open=bar.open,
+            high=bar.high,
+            low=bar.low,
+            close=bar.close,
+            volume=bar.volume,
+            source=bar.source,
+        )
+        for bar in btc_bars
+    ]
+    market_cost = {
+        "commissionBps": 10,
+        "sellTaxBps": 0,
+        "slippageBps": 5,
+        "financingBpsAnnual": 0,
+    }
+    run = QueuedRun(
+        id="portfolio-run",
+        organization_id="org-1",
+        strategy_hash="portfolio-hash",
+        parameters={
+            "timeframe": "1d",
+            "from": "2024-01-01",
+            "to": "2024-01-31",
+            "totalCapital": 1000,
+            "allocationMode": "custom",
+            "feeBps": 10,
+            "slippageBps": 5,
+            "assumptions": {
+                "cashAllocationBps": 1000,
+                "rebalanceFrequency": "monthly",
+                "monthlyContribution": 100,
+                "dividendMode": "exclude",
+                "fxPolicy": "normalized_returns",
+                "baseCurrency": "USD",
+                "marketCosts": {
+                    "vn_equity": market_cost,
+                    "crypto_spot": market_cost,
+                    "metal_spot": market_cost,
+                },
+            },
+            "legs": [
+                {
+                    "symbol": "BTC",
+                    "allocationBps": 6000,
+                    "leverage": 1,
+                    "strategyCode": "ma_crossover",
+                    "strategyVersion": "1.0.0",
+                    "strategyParameters": {"fastPeriod": 2, "slowPeriod": 3},
+                },
+                {
+                    "symbol": "XAU",
+                    "allocationBps": 3000,
+                    "leverage": 1,
+                    "strategyCode": "turtle_breakout",
+                    "strategyVersion": "1.0.0",
+                    "strategyParameters": {"entryPeriod": 2, "exitPeriod": 2},
+                },
+            ],
+        },
+        dataset_version_ids=("dataset-btc", "dataset-xau"),
+        legs=(
+            QueuedRunLeg(
+                id="leg-btc",
+                asset="BTC",
+                market="crypto_spot",
+                dataset_version_id="dataset-btc",
+                allocation_bps=6000,
+                initial_notional=Decimal("600"),
+                leverage=Decimal("1"),
+                strategy_code="ma_crossover",
+                strategy_version="1.0.0",
+                strategy_parameters={"fastPeriod": 2, "slowPeriod": 3},
+            ),
+            QueuedRunLeg(
+                id="leg-xau",
+                asset="XAU",
+                market="metal_spot",
+                dataset_version_id="dataset-xau",
+                allocation_bps=3000,
+                initial_notional=Decimal("300"),
+                leverage=Decimal("1"),
+                strategy_code="turtle_breakout",
+                strategy_version="1.0.0",
+                strategy_parameters={"entryPeriod": 2, "exitPeriod": 2},
+            ),
+        ),
+    )
+    repository = FakeRepository(
+        run,
+        [
+            DatasetInput(
+                "dataset-btc",
+                "BTC",
+                "crypto_spot",
+                canonical_bar_checksum(btc_bars),
+                btc_bars,
+                "raw",
+            ),
+            DatasetInput(
+                "dataset-xau",
+                "XAU",
+                "metal_spot",
+                canonical_bar_checksum(xau_bars),
+                xau_bars,
+                "raw",
+            ),
+        ],
+    )
+
+    response = process_next_run(repository)
+
+    assert response["status"] == "succeeded"
+    assert repository.completed is not None
+    artifacts = repository.completed[2]
+    assert {artifact["scopeKey"] for artifact in artifacts} == {
+        "aggregate",
+        "leg:leg-btc",
+        "leg:leg-xau",
+    }
+    assert {artifact["kind"] for artifact in artifacts if artifact["scopeKey"] == "aggregate"} == {
+        "equity",
+        "drawdown",
+        "contribution",
+        "cash_flow",
+        "rebalance",
+        "manifest",
+    }
+    leg_manifests = [
+        artifact
+        for artifact in artifacts
+        if artifact["kind"] == "manifest" and artifact["quantRunLegId"] is not None
+    ]
+    assert {item["payload"]["strategyCode"] for item in leg_manifests} == {
+        "ma_crossover",
+        "turtle_breakout",
+    }

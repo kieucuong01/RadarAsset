@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -26,6 +27,16 @@ class ProviderUnavailableError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+@dataclass(frozen=True)
+class ProviderInstrumentDescriptor:
+    provider_symbol: str
+    canonical_symbol: str
+    name: str
+    market: str
+    venue: str | None
+    currency: str
 
 
 @dataclass(frozen=True)
@@ -102,6 +113,10 @@ def only_closed_bars(
 
 class BinanceSpotAdapter:
     base_url = "https://data-api.binance.vision/api/v3/klines"
+    exchange_info_url = (
+        "https://data-api.binance.vision/api/v3/exchangeInfo"
+        "?symbolStatus=TRADING&showPermissionSets=false"
+    )
 
     def __init__(
         self,
@@ -123,6 +138,51 @@ class BinanceSpotAdapter:
         self.max_pages = max_pages
         self.max_rows = max_rows
         self.timeout_seconds = timeout_seconds
+
+    @staticmethod
+    def normalize_symbol(asset: str, provider_symbol: str) -> tuple[str, str]:
+        canonical = asset.strip().upper()
+        symbol = provider_symbol.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9]{2,15}", canonical) or symbol != f"{canonical}USDT":
+            raise ValueError("Binance symbol is not a canonical USDT spot pair.")
+        return canonical, symbol
+
+    def list_instruments(self) -> list[ProviderInstrumentDescriptor]:
+        response = self.transport.get_json(
+            self.exchange_info_url, timeout_seconds=self.timeout_seconds
+        )
+        if response.status != 200 or not isinstance(response.payload, dict):
+            raise ProviderUnavailableError("provider_unavailable", "Provider catalog request failed.")
+        rows = response.payload.get("symbols")
+        if not isinstance(rows, list) or len(rows) > 5_000:
+            raise ProviderUnavailableError("invalid_response", "Provider catalog response is invalid.")
+        instruments: list[ProviderInstrumentDescriptor] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if (
+                row.get("status") != "TRADING"
+                or row.get("quoteAsset") != "USDT"
+                or row.get("isSpotTradingAllowed") is not True
+            ):
+                continue
+            base = str(row.get("baseAsset", "")).upper()
+            symbol = str(row.get("symbol", "")).upper()
+            try:
+                canonical, provider_symbol = self.normalize_symbol(base, symbol)
+            except ValueError:
+                continue
+            instruments.append(
+                ProviderInstrumentDescriptor(
+                    provider_symbol=provider_symbol,
+                    canonical_symbol=canonical,
+                    name=f"{canonical} / Tether",
+                    market="crypto_spot",
+                    venue="BINANCE",
+                    currency="USDT",
+                )
+            )
+        return sorted(instruments, key=lambda item: item.canonical_symbol)
 
     @staticmethod
     def parse_klines(
@@ -202,8 +262,7 @@ class BinanceSpotAdapter:
         end: datetime,
         now: datetime | None = None,
     ) -> list[Bar]:
-        if symbol != FEEDS["BTC"].provider_symbol or asset != "BTC":
-            raise ValueError("Binance adapter received a symbol outside its allowlist.")
+        asset, symbol = self.normalize_symbol(asset, symbol)
         if timeframe not in INTERVAL_MILLISECONDS:
             raise ValueError("Unsupported Binance timeframe.")
         if start.tzinfo is None or end.tzinfo is None or start >= end:
@@ -306,6 +365,30 @@ class VnstockAdapter:
         self.max_rows = max_rows
 
     @staticmethod
+    def normalize_symbol(asset: str, provider_symbol: str) -> tuple[str, str]:
+        canonical = asset.strip().upper()
+        symbol = provider_symbol.strip().upper()
+        if canonical == "XAU" and symbol == "XAUUSD":
+            return canonical, symbol
+        if not re.fullmatch(r"[A-Z][A-Z0-9]{1,9}", canonical) or symbol != canonical:
+            raise ValueError("Vnstock symbol is not a supported canonical instrument.")
+        return canonical, symbol
+
+    def list_instruments(self) -> list[ProviderInstrumentDescriptor]:
+        return [
+            ProviderInstrumentDescriptor(
+                provider_symbol=feed.provider_symbol,
+                canonical_symbol=feed.symbol,
+                name=feed.asset_name,
+                market=feed.market,
+                venue=feed.venue,
+                currency=feed.currency,
+            )
+            for feed in sorted(FEEDS.values(), key=lambda item: item.symbol)
+            if feed.provider_code in {"vnstock-vci-free", "msn-via-vnstock"}
+        ]
+
+    @staticmethod
     def parse_records(
         records: Iterable[dict[str, Any]],
         *,
@@ -355,11 +438,11 @@ class VnstockAdapter:
         end: datetime,
         now: datetime | None = None,
     ) -> list[Bar]:
-        if asset not in {"FPT", "XAU"} or symbol != FEEDS[asset].provider_symbol:
-            raise ValueError("Vnstock adapter received a symbol outside its allowlist.")
+        asset, symbol = self.normalize_symbol(asset, symbol)
         if timeframe not in INTERVALS:
             raise ValueError("Unsupported Vnstock timeframe.")
-        if asset == "XAU" and timeframe == "1h":
+        is_metal = asset == "XAU" and symbol == "XAUUSD"
+        if is_metal and timeframe == "1h":
             raise ProviderUnavailableError(
                 "unsupported_timeframe",
                 "The free XAU/USD provider does not supply hourly candles.",
@@ -370,9 +453,9 @@ class VnstockAdapter:
         try:
             market = self.market_factory()
             instrument = (
-                market.equity(symbol, source="VCI")
-                if asset == "FPT"
-                else market.commodity(symbol)
+                market.commodity(symbol)
+                if is_metal
+                else market.equity(symbol, source="VCI")
             )
             frame = instrument.ohlcv(
                 start=start.date().isoformat(),
@@ -426,17 +509,16 @@ class VnstockAdapter:
                 "invalid_response", "Provider returned no valid market bars."
             )
 
-        feed = FEEDS[asset]
-        source = (
-            "vnstock-vci-free" if asset == "FPT" else "msn-via-vnstock"
-        )
+        feed = FEEDS.get(asset)
+        source = "msn-via-vnstock" if is_metal else "vnstock-vci-free"
+        naive_timezone = feed.naive_timezone if feed is not None else "Asia/Ho_Chi_Minh"
         try:
             normalized = self.parse_records(
                 sanitized_records,
                 asset=asset,
                 timeframe=timeframe,
                 source=source,
-                naive_timezone=feed.naive_timezone,
+                naive_timezone=naive_timezone,
             )
         except (ArithmeticError, KeyError, TypeError, ValueError) as error:
             raise ProviderUnavailableError(

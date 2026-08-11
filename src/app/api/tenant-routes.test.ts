@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   updateStrategySignalStatus: vi.fn(),
   loadWatchlist: vi.fn(),
   upsertWatchlistItem: vi.fn(),
+  removeWatchlistItem: vi.fn(),
   createQuantRun: vi.fn(),
   listQuantRuns: vi.fn(),
   getQuantRun: vi.fn(),
@@ -19,6 +20,11 @@ const mocks = vi.hoisted(() => ({
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
   loadQuantAssetCatalog: vi.fn(),
+  optimizeQuantAllocation: vi.fn(),
+  searchProviderInstruments: vi.fn(),
+  resolveProviderInstrument: vi.fn(),
+  requestMarketIngestion: vi.fn(),
+  listMarketIngestionRequests: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/tenant-context", () => ({
@@ -36,6 +42,7 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
     updateStrategySignalStatus: mocks.updateStrategySignalStatus,
     loadWatchlist: mocks.loadWatchlist,
     upsertWatchlistItem: mocks.upsertWatchlistItem,
+    removeWatchlistItem: mocks.removeWatchlistItem,
     createQuantRun: mocks.createQuantRun,
     listQuantRuns: mocks.listQuantRuns,
     getQuantRun: mocks.getQuantRun,
@@ -57,6 +64,32 @@ vi.mock("@/lib/backend/quant-assets", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/backend/quant-runs", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/quant-runs")>();
+  return {
+    ...original,
+    createPortfolioQuantRun: mocks.createQuantRun,
+    listPortfolioQuantRuns: mocks.listQuantRuns,
+    loadPortfolioQuantRun: mocks.getQuantRun,
+  };
+});
+
+vi.mock("@/lib/backend/quant-optimizer", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/quant-optimizer")>();
+  return { ...original, optimizeQuantAllocation: mocks.optimizeQuantAllocation };
+});
+
+vi.mock("@/lib/backend/provider-catalog", () => ({
+  searchProviderInstruments: mocks.searchProviderInstruments,
+  resolveProviderInstrument: mocks.resolveProviderInstrument,
+}));
+
+vi.mock("@/lib/backend/ingestion-requests", () => ({
+  IngestionRateLimitError: class IngestionRateLimitError extends Error {},
+  requestMarketIngestion: mocks.requestMarketIngestion,
+  listMarketIngestionRequests: mocks.listMarketIngestionRequests,
+}));
+
 import { GET as portfolioGet } from "./portfolio/route";
 import {
   GET as strategyAssignmentsGet,
@@ -64,12 +97,20 @@ import {
 } from "./portfolio/strategy-assignments/route";
 import { PATCH as strategySignalPatch } from "./portfolio/strategy-assignments/[id]/signals/[signalId]/route";
 import { GET as watchlistGet, POST as watchlistPost } from "./watchlist/route";
+import { DELETE as watchlistDelete } from "./watchlist/[id]/route";
 import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { GET as quantAssetsGet } from "./quant/assets/route";
+import { POST as quantOptimizePost } from "./quant/allocations/optimize/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
+import { PortfolioRunEligibilityError } from "@/lib/backend/quant-runs";
+import { GET as marketInstrumentsGet } from "./market/instruments/route";
+import {
+  GET as ingestionRequestsGet,
+  POST as ingestionRequestsPost,
+} from "./market/ingestion-requests/route";
 
 const viewerContext = {
   userId: "user-a",
@@ -90,9 +131,23 @@ describe("tenant API authorization", () => {
     mocks.updateStrategySignalStatus.mockResolvedValue({ id: "signal-a", status: "reviewed" });
     mocks.loadWatchlist.mockResolvedValue([]);
     mocks.upsertWatchlistItem.mockResolvedValue([]);
+    mocks.removeWatchlistItem.mockResolvedValue(true);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
+    mocks.optimizeQuantAllocation.mockResolvedValue({
+      weightsBps: { BTC: 10_000 },
+      totalWeightBps: 10_000,
+      expectedReturnPct: 10,
+      volatilityPct: 20,
+      sharpe: 0.5,
+      observationCount: 40,
+      datasetVersionIds: { BTC: "dataset-btc" },
+      warnings: [],
+    });
+    mocks.searchProviderInstruments.mockResolvedValue({ items: [] });
+    mocks.requestMarketIngestion.mockResolvedValue({ id: "request-a", created: true });
+    mocks.listMarketIngestionRequests.mockResolvedValue([]);
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -115,6 +170,52 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "watchlist", "read");
     expect(mocks.loadWatchlist).toHaveBeenCalledWith(viewerContext);
+  });
+
+  it("searches only the local provider catalog under watchlist read capability", async () => {
+    const response = await marketInstrumentsGet(
+      new Request("http://localhost/api/market/instruments?q=eth&limit=10"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "watchlist", "read");
+    expect(mocks.searchProviderInstruments).toHaveBeenCalledWith({ q: "eth", limit: 10 });
+  });
+
+  it("queues ingestion only after backtest create authorization and strict validation", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const response = await ingestionRequestsPost(
+      new Request("http://localhost/api/market/ingestion-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          providerCode: "binance-public",
+          providerSymbol: "ETHUSDT",
+          timeframe: "1h",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(202);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "backtest", "create");
+    expect(mocks.requestMarketIngestion).toHaveBeenCalledWith(editorContext, {
+      providerCode: "binance-public",
+      providerSymbol: "ETHUSDT",
+      timeframe: "1h",
+    });
+    await expect(ingestionRequestsGet()).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("deletes only the requested tenant favorite", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const response = await watchlistDelete(
+      new Request("http://localhost/api/watchlist/favorite-a", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "favorite-a" }) },
+    );
+
+    expect(response.status).toBe(204);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "watchlist", "write");
+    expect(mocks.removeWatchlistItem).toHaveBeenCalledWith(editorContext, "favorite-a");
   });
 
   it("allows viewer reads of the versioned strategy catalog", async () => {
@@ -243,6 +344,34 @@ describe("tenant API authorization", () => {
       allocationMode: "equal",
       feeBps: payload.feeBps,
       slippageBps: payload.slippageBps,
+      assumptions: {
+        cashAllocationBps: 0,
+        rebalanceFrequency: "none",
+        monthlyContribution: 0,
+        dividendMode: "exclude",
+        fxPolicy: "normalized_returns",
+        baseCurrency: "USD",
+        marketCosts: {
+          vn_equity: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+          crypto_spot: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+          metal_spot: {
+            commissionBps: 10,
+            sellTaxBps: 0,
+            slippageBps: 5,
+            financingBpsAnnual: 0,
+          },
+        },
+      },
       from: payload.from,
       to: payload.to,
       legs: [
@@ -287,6 +416,60 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.createQuantRun).not.toHaveBeenCalled();
+  });
+
+  it("allows editors to optimize an authenticated portfolio allocation", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const payload = {
+      symbols: ["BTC"],
+      timeframe: "1d",
+      from: "2025-01-01",
+      to: "2025-12-31",
+      riskAversion: 4,
+      maxWeightBps: 10_000,
+      totalWeightBps: 10_000,
+      dividendMode: "exclude",
+    };
+
+    const response = await quantOptimizePost(
+      new Request("http://localhost/api/quant/allocations/optimize", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "backtest", "create");
+    expect(mocks.optimizeQuantAllocation).toHaveBeenCalledWith(editorContext, payload);
+  });
+
+  it("maps deterministic portfolio eligibility failures to conflict", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    mocks.createQuantRun.mockRejectedValue(
+      new PortfolioRunEligibilityError("DATASET_UNAVAILABLE", "BTC is unavailable."),
+    );
+
+    const response = await quantPost(
+      new Request("http://localhost/api/quant/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          strategy: "ma_cross",
+          timeframe: "1d",
+          fastPeriod: 5,
+          slowPeriod: 20,
+          initialCapital: 100_000,
+          feeBps: 10,
+          slippageBps: 5,
+          from: "2024-01-01",
+          to: "2025-01-01",
+          legs: [{ symbol: "BTC", leverage: 1 }],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
   });
 
   it("denies viewer backtest submission before persistence", async () => {

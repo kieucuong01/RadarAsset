@@ -6,10 +6,31 @@ import { loadWatchlist, upsertWatchlistItem } from "@/lib/backend/db";
 
 export const dynamic = "force-dynamic";
 
-const watchlistSchema = z.object({
-  symbol: z.string().min(1),
-  alert: z.coerce.number().positive().optional().nullable(),
-});
+const watchlistSchema = z
+  .object({
+    symbol: z.string().trim().min(1).max(20).optional(),
+    providerCode: z.string().trim().min(1).max(40).optional(),
+    providerSymbol: z.string().trim().min(1).max(80).optional(),
+    requestedTimeframes: z
+      .array(z.enum(["1d", "1h"]))
+      .max(2)
+      .optional(),
+    alert: z.coerce.number().positive().optional().nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const hasProvider = Boolean(value.providerCode || value.providerSymbol);
+    if (!value.symbol && !hasProvider) {
+      context.addIssue({ code: "custom", path: ["symbol"], message: "Asset is required." });
+    }
+    if (Boolean(value.providerCode) !== Boolean(value.providerSymbol)) {
+      context.addIssue({
+        code: "custom",
+        path: [value.providerCode ? "providerSymbol" : "providerCode"],
+        message: "Provider code and symbol must be provided together.",
+      });
+    }
+  });
 
 export async function GET() {
   try {

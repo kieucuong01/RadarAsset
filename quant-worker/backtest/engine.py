@@ -29,6 +29,8 @@ class EngineConfig:
     strategy_hash: str
     dataset_checksums: dict[str, str]
     strategy: Strategy | None = None
+    sell_tax_bps: Decimal = ZERO
+    financing_bps_annual: Decimal = ZERO
 
 
 @dataclass(frozen=True)
@@ -73,7 +75,13 @@ def _simulate_sleeve(
     sleeve_capital: Decimal,
     config: EngineConfig,
     strategy: Strategy,
-) -> tuple[dict[str, dict[str, Decimal]], list[dict[str, Any]], Decimal, Decimal]:
+) -> tuple[
+    dict[str, dict[str, Decimal]],
+    list[dict[str, Any]],
+    Decimal,
+    Decimal,
+    Decimal,
+]:
     rows = normalize_bars(bars)
     if len(rows) < strategy.warmup_bars + 2:
         raise ValueError(f"Insufficient bars for {asset}.")
@@ -83,7 +91,9 @@ def _simulate_sleeve(
         raise ValueError(f"{asset} leverage maximum is {maximum.normalize()}x.")
 
     fee_rate = config.fee_bps / BPS
+    sell_tax_rate = config.sell_tax_bps / BPS
     slippage_rate = config.slippage_bps / BPS
+    financing_rate = config.financing_bps_annual / BPS
     cash = sleeve_capital
     quantity = ZERO
     entry_price = ZERO
@@ -95,9 +105,19 @@ def _simulate_sleeve(
     pending: tuple[str, str] | None = None
     total_fees = ZERO
     total_slippage = ZERO
+    total_financing = ZERO
+    borrowed_principal = ZERO
+    previous_timestamp = None
     trades: list[dict[str, Any]] = []
     points: dict[str, dict[str, Decimal]] = {}
     for index, row in enumerate(rows):
+        if previous_timestamp is not None and quantity > ZERO and borrowed_principal > ZERO:
+            elapsed_days = Decimal(str((row.timestamp - previous_timestamp).total_seconds())) / Decimal(
+                "86400"
+            )
+            financing_cost = borrowed_principal * financing_rate * elapsed_days / Decimal("365")
+            cash -= financing_cost
+            total_financing += financing_cost
         if pending is not None:
             action, signal_at = pending
             if action == "buy" and quantity == ZERO:
@@ -106,6 +126,9 @@ def _simulate_sleeve(
                 quantity = purchasing_power / (fill_price * (ONE + fee_rate))
                 entry_fee = quantity * fill_price * fee_rate
                 cash -= quantity * fill_price + entry_fee
+                borrowed_principal = max(
+                    ZERO, quantity * fill_price + entry_fee - sleeve_capital
+                )
                 entry_price = fill_price
                 entry_signal_at = signal_at
                 entry_at = _timestamp(row)
@@ -115,7 +138,7 @@ def _simulate_sleeve(
                 total_slippage += quantity * (fill_price - row.open)
             elif action == "sell" and quantity > ZERO:
                 fill_price = row.open * (ONE - slippage_rate)
-                exit_fee = quantity * fill_price * fee_rate
+                exit_fee = quantity * fill_price * (fee_rate + sell_tax_rate)
                 proceeds = quantity * fill_price - exit_fee
                 cash += proceeds
                 total_fees += exit_fee
@@ -152,6 +175,7 @@ def _simulate_sleeve(
                 entry_at = None
                 entry_index = None
                 entry_reference_open = ZERO
+                borrowed_principal = ZERO
             pending = None
 
         market_value = quantity * row.close
@@ -165,8 +189,9 @@ def _simulate_sleeve(
         signal = strategy.signal(rows, index, in_position=quantity > ZERO)
         if signal is not None:
             pending = (signal.action, _timestamp(row))
+        previous_timestamp = row.timestamp
 
-    return points, trades, total_fees, total_slippage
+    return points, trades, total_fees, total_slippage, total_financing
 
 
 def run_strategy(
@@ -191,8 +216,9 @@ def run_strategy(
     trades: list[dict[str, Any]] = []
     total_fees = ZERO
     total_slippage = ZERO
+    total_financing = ZERO
     for asset in assets:
-        points, asset_trades, fees, slippage = _simulate_sleeve(
+        points, asset_trades, fees, slippage, financing = _simulate_sleeve(
             asset,
             bars_by_asset[asset],
             sleeve_capital=sleeve_capital,
@@ -203,6 +229,7 @@ def run_strategy(
         trades.extend(asset_trades)
         total_fees += fees
         total_slippage += slippage
+        total_financing += financing
 
     timestamps = sorted({timestamp for points in sleeve_points.values() for timestamp in points})
     last_by_asset = {
@@ -258,6 +285,8 @@ def run_strategy(
         "totalFees": _number(total_fees),
         "slippageCost": _number(total_slippage),
     }
+    if total_financing > ZERO:
+        summary["financingCost"] = _number(total_financing)
     trades.sort(key=lambda trade: (str(trade["exitAt"]), str(trade["asset"])))
     manifest = {
         "engineVersion": f"{selected_strategy.code}-v1",
@@ -272,6 +301,8 @@ def run_strategy(
             "positionSide": "long-only",
             "slippageBps": _number(config.slippage_bps),
             "feeBps": _number(config.fee_bps),
+            "sellTaxBps": _number(config.sell_tax_bps),
+            "financingBpsAnnual": _number(config.financing_bps_annual),
         },
     }
     return BacktestResult(

@@ -244,6 +244,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: 2.5,
     alert: 70000,
     sentiment: "bull",
+    datasetState: "ready",
+    ingestionRequestId: null,
+    backtestableTimeframes: ["1d", "1h"],
   },
   {
     id: "sample-eth",
@@ -253,6 +256,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: 1.8,
     alert: 3800,
     sentiment: "bull",
+    datasetState: "unavailable",
+    ingestionRequestId: null,
+    backtestableTimeframes: [],
   },
   {
     id: "sample-nvda",
@@ -262,6 +268,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: 3.4,
     alert: 1200,
     sentiment: "bull",
+    datasetState: "unavailable",
+    ingestionRequestId: null,
+    backtestableTimeframes: [],
   },
   {
     id: "sample-tsla",
@@ -271,6 +280,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: -1.8,
     alert: 165,
     sentiment: "bear",
+    datasetState: "unavailable",
+    ingestionRequestId: null,
+    backtestableTimeframes: [],
   },
   {
     id: "sample-gold",
@@ -280,6 +292,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: 0.7,
     alert: 2450,
     sentiment: "bull",
+    datasetState: "unavailable",
+    ingestionRequestId: null,
+    backtestableTimeframes: [],
   },
   {
     id: "sample-vn30",
@@ -289,6 +304,9 @@ const WATCHLIST: WatchlistItemResponse[] = [
     chg: 1.2,
     alert: 1350,
     sentiment: "neutral",
+    datasetState: "unavailable",
+    ingestionRequestId: null,
+    backtestableTimeframes: [],
   },
 ];
 

@@ -71,7 +71,10 @@ export type PortfolioTransactionCreateInput = {
 };
 
 export type WatchlistMutationInput = {
-  symbol: string;
+  symbol?: string;
+  providerCode?: string;
+  providerSymbol?: string;
+  requestedTimeframes?: Array<"1d" | "1h">;
   alert?: number | null;
 };
 
@@ -81,6 +84,7 @@ export type StrategyAssignmentCreateInput = {
   strategyVersion: string;
   strategyParameters: Record<string, unknown>;
   backtestRunId?: string;
+  backtestRunLegId?: string;
 };
 
 export type StrategySignalResponse = {
@@ -298,13 +302,16 @@ export type WatchlistItemResponse = {
   chg: number;
   alert: number;
   sentiment: "bull" | "bear" | "neutral";
+  datasetState: "ready" | "stale" | "loading" | "unavailable";
+  ingestionRequestId: string | null;
+  backtestableTimeframes: Array<"1d" | "1h">;
 };
 
 export type QuantRunResponse = {
   id: string;
   strategyName: string;
-  strategyCode: string;
-  strategyVersion: string;
+  strategyCode: string | null;
+  strategyVersion: string | null;
   status: QuantRunStatus;
   timeframe: "1d" | "1h";
   progress: number;
@@ -317,9 +324,38 @@ export type QuantRunResponse = {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  legs: Array<{
+    id: string;
+    symbol: string;
+    market: MarketDataMarket;
+    currency: string;
+    allocationBps: number;
+    initialNotional: number;
+    leverage: number;
+    strategyCode: string;
+    strategyVersion: string;
+    strategyName: string;
+    strategyParameters: Record<string, unknown>;
+    implementationHash: string;
+    datasetVersionId: string;
+    status: QuantRunStatus;
+    progress: number;
+    metrics: Record<string, unknown> | null;
+    errorCode: string | null;
+  }>;
   artifacts: Array<{
     id: string;
-    kind: "equity" | "drawdown" | "trades" | "manifest";
+    quantRunLegId: string | null;
+    scopeKey: string;
+    kind:
+      | "equity"
+      | "drawdown"
+      | "trades"
+      | "manifest"
+      | "benchmark"
+      | "contribution"
+      | "cash_flow"
+      | "rebalance";
     checksum: string;
     payload: unknown;
     rowCount: number;

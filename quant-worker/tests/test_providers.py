@@ -11,6 +11,7 @@ from backtest.catalog import FEEDS
 from backtest.providers import (
     BinanceSpotAdapter,
     HttpJsonResponse,
+    ProviderInstrumentDescriptor,
     ProviderUnavailableError,
     VnstockAdapter,
     _load_vnstock_market,
@@ -460,3 +461,43 @@ def test_feed_catalog_records_xauusd_msn_provenance() -> None:
     assert FEEDS["XAU"].provider_symbol == "XAUUSD"
     assert FEEDS["XAU"].client_provider == "vnstock"
     assert FEEDS["XAU"].upstream_provider == "msn"
+
+
+def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
+    transport = SequenceTransport(
+        [
+            HttpJsonResponse(
+                200,
+                {},
+                {
+                    "symbols": [
+                        {"symbol": "ETHUSDT", "baseAsset": "ETH", "quoteAsset": "USDT", "status": "TRADING", "isSpotTradingAllowed": True},
+                        {"symbol": "OLDUSDT", "baseAsset": "OLD", "quoteAsset": "USDT", "status": "BREAK", "isSpotTradingAllowed": True},
+                        {"symbol": "ETHBTC", "baseAsset": "ETH", "quoteAsset": "BTC", "status": "TRADING", "isSpotTradingAllowed": True},
+                    ]
+                },
+            )
+        ]
+    )
+
+    assert BinanceSpotAdapter(transport=transport).list_instruments() == [
+        ProviderInstrumentDescriptor(
+            provider_symbol="ETHUSDT",
+            canonical_symbol="ETH",
+            name="ETH / Tether",
+            market="crypto_spot",
+            venue="BINANCE",
+            currency="USDT",
+        )
+    ]
+    assert transport.urls == [
+        "https://data-api.binance.vision/api/v3/exchangeInfo"
+        "?symbolStatus=TRADING&showPermissionSets=false"
+    ]
+
+
+def test_arbitrary_adapter_symbols_are_normalized_without_accepting_urls() -> None:
+    assert BinanceSpotAdapter.normalize_symbol("eth", "ETHUSDT") == ("ETH", "ETHUSDT")
+    assert VnstockAdapter.normalize_symbol("vnm", "VNM") == ("VNM", "VNM")
+    with pytest.raises(ValueError):
+        BinanceSpotAdapter.normalize_symbol("ETH", "https://evil.invalid")

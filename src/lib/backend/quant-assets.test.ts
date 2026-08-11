@@ -74,6 +74,10 @@ describe("supported Quant asset catalog", () => {
         take: 50,
         where: expect.objectContaining({
           market: { in: ["vn_equity", "crypto_spot", "metal_spot"] },
+          OR: [
+            { symbol: { contains: "VN", mode: "insensitive" } },
+            { name: { startsWith: "VN", mode: "insensitive" } },
+          ],
         }),
       }),
     );

@@ -56,13 +56,21 @@ export function PortfolioTransactionDialog({
   onRecorded,
   preset,
   onSignalExecuted,
+  triggerLabel,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
-  preset?: { side: Side; symbol: string; price: number; signalId: string; assignmentId: string };
+  preset?: {
+    side: Side;
+    symbol: string;
+    price: number;
+    signalId?: string;
+    assignmentId?: string;
+  };
   onSignalExecuted?: (signalId: string) => void;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -209,7 +217,7 @@ export function PortfolioTransactionDialog({
 
       const portfolio = (await response.json()) as PortfolioResponse;
       onRecorded(portfolio);
-      if (preset?.signalId) {
+      if (preset?.signalId && preset.assignmentId) {
         const signalResponse = await fetch(
           `/api/portfolio/strategy-assignments/${preset.assignmentId}/signals/${preset.signalId}`,
           {
@@ -241,7 +249,7 @@ export function PortfolioTransactionDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
         <Plus data-icon="inline-start" />
-        {preset ? "Review signal" : "Add Transaction"}
+        {triggerLabel ?? (preset ? "Review signal" : "Add Transaction")}
       </Button>
 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-xl">

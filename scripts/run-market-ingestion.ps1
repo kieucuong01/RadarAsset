@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
 $taskCliPath = Join-Path $taskRepositoryRoot "quant-worker\ingest_market_data.py"
+$taskRequestCliPath = Join-Path $taskRepositoryRoot "quant-worker\process_ingestion_requests.py"
 $taskEnvPath = Join-Path $taskRepositoryRoot ".env.local"
 $taskPython = (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
 $taskRuntimeDirectory = Join-Path ([IO.Path]::GetTempPath()) "radarasset-market-ingestion"
@@ -29,6 +30,19 @@ try {
 }
 finally {
     Pop-Location
+}
+
+if ($taskExitCode -eq 0 -and -not $DryRun) {
+    Push-Location $taskRuntimeDirectory
+    try {
+        & $taskPython $taskRequestCliPath "--limit" "20" "--env-file" $taskEnvPath
+        if ($null -ne $LASTEXITCODE) {
+            $taskExitCode = $LASTEXITCODE
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 exit $taskExitCode
