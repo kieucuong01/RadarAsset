@@ -413,6 +413,7 @@ model QuantRun {
   id                String             @id @default(uuid()) @db.Uuid
   organizationId    String             @map("organization_id") @db.Uuid
   userId            String?            @map("user_id") @db.Uuid
+  strategyVersionId String?            @map("strategy_version_id") @db.Uuid
   strategyName      String             @map("strategy_name")
   status            String             @default("queued")
   timeframe         String             @default("1d")
@@ -423,17 +424,44 @@ model QuantRun {
   parameters        Json               @default("{}")
   metrics           Json?
   errorMessage      String?            @map("error_message")
+  workerId          String?            @map("worker_id")
+  leaseExpiresAt    DateTime?          @map("lease_expires_at")
+  attemptCount      Int                @default(0) @map("attempt_count")
   startedAt         DateTime?          @map("started_at")
   finishedAt        DateTime?          @map("finished_at")
   createdAt         DateTime           @default(now()) @map("created_at")
   organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user              AppUser?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  strategyVersion   StrategyVersion?   @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
   artifacts         QuantRunArtifact[]
 
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([strategyVersionId])
   @@index([status, createdAt])
   @@map("quant_runs")
+}
+
+model StrategyVersion {
+  id                  String     @id @default(uuid()) @db.Uuid
+  code                String
+  version             String
+  name                String
+  category            String
+  status              String     @default("active")
+  parameterSchema     Json       @map("parameter_schema")
+  defaultParameters   Json       @map("default_parameters")
+  supportedMarkets    Json       @map("supported_markets")
+  supportedTimeframes Json       @map("supported_timeframes")
+  implementationHash  String     @map("implementation_hash")
+  sourceAttribution   String?    @map("source_attribution") @db.Text
+  modificationNotice  String?    @map("modification_notice") @db.Text
+  createdAt           DateTime   @default(now()) @map("created_at")
+  quantRuns           QuantRun[]
+
+  @@unique([code, version])
+  @@index([status, code])
+  @@map("strategy_versions")
 }
 
 model DataProvider {

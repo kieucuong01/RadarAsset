@@ -225,6 +225,47 @@ describe("database tenant isolation", () => {
     expect(runsB.map((run) => run.id)).toEqual([fixtures.quantRunBId]);
   });
 
+  it("persists an immutable strategy version link on a tenant quant run", async () => {
+    const strategyId = randomUUID();
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO "strategy_versions" (
+          "id", "code", "version", "name", "category", "status",
+          "parameter_schema", "default_parameters", "supported_markets",
+          "supported_timeframes", "implementation_hash", "created_at"
+        ) VALUES (
+          ${strategyId}::uuid, 'ma_crossover', '1.0.0', 'MA Crossover', 'rule_based', 'active',
+          '{"type":"object"}'::jsonb, '{"fastPeriod":5,"slowPeriod":20}'::jsonb,
+          '["vn_equity","crypto_spot","metal_spot"]'::jsonb, '["1d","1h"]'::jsonb,
+          ${"a".repeat(64)}, NOW()
+        )
+      `;
+      await prisma.$executeRaw`
+        UPDATE "quant_runs"
+        SET "strategy_version_id" = ${strategyId}::uuid
+        WHERE "id" = ${fixtures.quantRunAId}::uuid
+          AND "organization_id" = ${fixtures.organizationAId}::uuid
+      `;
+
+      const linked = await prisma.$queryRaw<Array<{ strategy_version_id: string | null }>>`
+        SELECT "strategy_version_id"
+        FROM "quant_runs"
+        WHERE "id" = ${fixtures.quantRunAId}::uuid
+      `;
+      expect(linked[0]?.strategy_version_id).toBe(strategyId);
+    } finally {
+      await prisma.$executeRaw`
+        UPDATE "quant_runs"
+        SET "strategy_version_id" = NULL
+        WHERE "id" = ${fixtures.quantRunAId}::uuid
+      `;
+      await prisma.$executeRaw`
+        DELETE FROM "strategy_versions"
+        WHERE "id" = ${strategyId}::uuid
+      `;
+    }
+  });
+
   it("hides another organization's quant id like a random id", async () => {
     const ownRun = await getQuantRun(contextB, fixtures.quantRunBId);
     expect(ownRun.artifacts).toEqual([
