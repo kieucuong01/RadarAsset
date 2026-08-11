@@ -490,6 +490,10 @@ def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
             currency="USDT",
         )
     ]
+    assert transport.urls == [
+        "https://data-api.binance.vision/api/v3/exchangeInfo"
+        "?symbolStatus=TRADING&showPermissionSets=false"
+    ]
 
 
 def test_arbitrary_adapter_symbols_are_normalized_without_accepting_urls() -> None:

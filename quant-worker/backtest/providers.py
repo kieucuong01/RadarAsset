@@ -113,7 +113,10 @@ def only_closed_bars(
 
 class BinanceSpotAdapter:
     base_url = "https://data-api.binance.vision/api/v3/klines"
-    exchange_info_url = "https://data-api.binance.vision/api/v3/exchangeInfo"
+    exchange_info_url = (
+        "https://data-api.binance.vision/api/v3/exchangeInfo"
+        "?symbolStatus=TRADING&showPermissionSets=false"
+    )
 
     def __init__(
         self,
