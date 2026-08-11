@@ -2,6 +2,22 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+const DEFAULT_BACKTEST_WINDOW_DAYS = 120;
+
+function toUtcDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+export function createRollingBacktestRange(now = new Date()) {
+  const from = new Date(now);
+  from.setUTCDate(from.getUTCDate() - DEFAULT_BACKTEST_WINDOW_DAYS);
+
+  return {
+    from: toUtcDate(from),
+    to: toUtcDate(now),
+  };
+}
+
 export const backtestAssetSchema = z.enum(["FPT", "BTC", "XAU"]);
 export type BacktestAsset = z.infer<typeof backtestAssetSchema>;
 

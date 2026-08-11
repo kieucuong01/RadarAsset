@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Progress } from "@/components/ui/progress";
-import type { BacktestSubmission } from "@/lib/backtest/contracts";
+import { createRollingBacktestRange, type BacktestSubmission } from "@/lib/backtest/contracts";
 import {
   getBacktestRun,
   isActiveRun,
@@ -44,8 +44,8 @@ function money(value: number) {
 
 export function BacktestWorkbench() {
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
-  const [from, setFrom] = useState("2024-01-01");
-  const [to, setTo] = useState("2025-01-01");
+  const [from, setFrom] = useState(() => createRollingBacktestRange().from);
+  const [to, setTo] = useState(() => createRollingBacktestRange().to);
   const [fastPeriod, setFastPeriod] = useState(5);
   const [slowPeriod, setSlowPeriod] = useState(20);
   const [initialCapital, setInitialCapital] = useState(100_000);
