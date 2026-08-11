@@ -5,6 +5,7 @@ import pytest
 
 from backtest.models import Bar
 from backtest.strategies import (
+    AbcdCausalStrategy,
     MovingAverageCrossoverStrategy,
     SignalRollingReversalStrategy,
     StrategySignal,
@@ -151,3 +152,69 @@ def test_signal_rolling_reversal_requires_confirmed_direction() -> None:
 def test_signal_rolling_reversal_rejects_invalid_confirmation_window(confirmation_bars: int) -> None:
     with pytest.raises(ValueError, match="confirmation bars are invalid"):
         SignalRollingReversalStrategy(confirmation_bars=confirmation_bars)
+
+
+def test_abcd_causal_enters_on_confirmed_c_and_exits_at_extension_target() -> None:
+    bars = ohlc_bars(
+        [
+            ("10", "11", "9", "10"),
+            ("9", "10", "8", "9"),
+            ("12", "14", "11", "13"),
+            ("11", "12", "10.5", "11"),
+            ("12", "13", "11.5", "12"),
+            ("17", "18", "15", "17.5"),
+        ]
+    )
+    strategy = AbcdCausalStrategy(
+        pivot_left_bars=1,
+        pivot_right_bars=1,
+        retracement_min=Decimal("0.382"),
+        retracement_max=Decimal("0.886"),
+        extension_min=Decimal("1.13"),
+        extension_max=Decimal("1.618"),
+    )
+
+    assert strategy.signal(bars, 3, in_position=False) is None
+    buy = strategy.signal(bars, 4, in_position=False)
+    assert buy is not None
+    assert buy.action == "buy"
+    assert buy.reason == "abcd_c_confirmed"
+    assert buy.signal_at == bars[4].timestamp
+
+    sell = strategy.signal(bars, 5, in_position=True)
+    assert sell is not None
+    assert sell.action == "sell"
+    assert sell.reason == "abcd_d_target"
+    assert sell.metadata["target"] == "17.28"
+
+
+def test_abcd_causal_does_not_use_unconfirmed_future_pivots() -> None:
+    bars = ohlc_bars(
+        [
+            ("10", "11", "9", "10"),
+            ("9", "10", "8", "9"),
+            ("12", "14", "11", "13"),
+            ("11", "12", "10.5", "11"),
+            ("12", "13", "11.5", "12"),
+        ]
+    )
+    bars.append(
+        Bar(
+            **{
+                **bars[-1].__dict__,
+                "timestamp": datetime(2024, 1, 6, tzinfo=timezone.utc),
+                "high": Decimal("18"),
+                "low": Decimal("10"),
+            }
+        )
+    )
+    strategy = AbcdCausalStrategy(1, 1, Decimal("0.382"), Decimal("0.886"), Decimal("1.13"), Decimal("1.618"))
+    baseline = strategy.signal(bars, 4, in_position=False)
+    mutated = [*bars]
+    mutated[-1] = Bar(**{**mutated[-1].__dict__, "low": Decimal("1")})
+    assert strategy.signal(mutated, 4, in_position=False) == baseline
+
+
+def test_abcd_causal_rejects_invalid_ranges() -> None:
+    with pytest.raises(ValueError, match="ABCD ranges are invalid"):
+        AbcdCausalStrategy(1, 1, Decimal("0.9"), Decimal("0.5"), Decimal("1.1"), Decimal("1.6"))

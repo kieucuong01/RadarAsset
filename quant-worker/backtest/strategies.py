@@ -162,3 +162,120 @@ class SignalRollingReversalStrategy:
                 {"confirmationBars": str(self.confirmation_bars)},
             )
         return None
+
+
+@dataclass(frozen=True)
+class _Pivot:
+    index: int
+    kind: Literal["high", "low"]
+    price: Decimal
+
+
+@dataclass(frozen=True)
+class _AbcdPattern:
+    a: _Pivot
+    b: _Pivot
+    c: _Pivot
+    target: Decimal
+    target_max: Decimal
+
+
+@dataclass(frozen=True)
+class AbcdCausalStrategy:
+    pivot_left_bars: int
+    pivot_right_bars: int
+    retracement_min: Decimal
+    retracement_max: Decimal
+    extension_min: Decimal
+    extension_max: Decimal
+    code: str = "abcd_causal"
+    version: str = "1.0.0"
+
+    def __post_init__(self) -> None:
+        if (
+            self.pivot_left_bars < 1
+            or self.pivot_right_bars < 1
+            or self.retracement_min <= 0
+            or self.retracement_min >= self.retracement_max
+            or self.extension_min <= 0
+            or self.extension_min >= self.extension_max
+        ):
+            raise ValueError("ABCD ranges are invalid.")
+
+    def _confirmed_pivots(self, bars: Sequence[Bar], index: int) -> list[_Pivot]:
+        rows = bars[: index + 1]
+        last_candidate = index - self.pivot_right_bars
+        if last_candidate < self.pivot_left_bars:
+            return []
+
+        pivots: list[_Pivot] = []
+        for candidate in range(self.pivot_left_bars, last_candidate + 1):
+            current = rows[candidate]
+            left = rows[candidate - self.pivot_left_bars : candidate]
+            right = rows[candidate + 1 : candidate + self.pivot_right_bars + 1]
+            neighbors = [*left, *right]
+            if all(current.low < row.low for row in neighbors):
+                pivots.append(_Pivot(candidate, "low", current.low))
+            elif all(current.high > row.high for row in neighbors):
+                pivots.append(_Pivot(candidate, "high", current.high))
+        return pivots
+
+    def _latest_pattern(self, pivots: Sequence[_Pivot]) -> _AbcdPattern | None:
+        latest: _AbcdPattern | None = None
+        for offset in range(len(pivots) - 2):
+            a, b, c = pivots[offset : offset + 3]
+            if (a.kind, b.kind, c.kind) != ("low", "high", "low"):
+                continue
+            ab = b.price - a.price
+            if ab <= 0:
+                continue
+            retracement = (b.price - c.price) / ab
+            if not self.retracement_min <= retracement <= self.retracement_max:
+                continue
+            pattern = _AbcdPattern(
+                a=a,
+                b=b,
+                c=c,
+                target=c.price + ab * self.extension_min,
+                target_max=c.price + ab * self.extension_max,
+            )
+            if latest is None or pattern.c.index > latest.c.index:
+                latest = pattern
+        return latest
+
+    def signal(
+        self,
+        bars: Sequence[Bar],
+        index: int,
+        *,
+        in_position: bool,
+    ) -> StrategySignal | None:
+        if index < 0 or index >= len(bars):
+            raise ValueError("Strategy bar index is invalid.")
+        pattern = self._latest_pattern(self._confirmed_pivots(bars, index))
+        if pattern is None:
+            return None
+        confirmation_index = pattern.c.index + self.pivot_right_bars
+        if not in_position and confirmation_index == index:
+            return StrategySignal(
+                "buy",
+                bars[index].timestamp,
+                "abcd_c_confirmed",
+                {
+                    "retracement": str(
+                        (pattern.b.price - pattern.c.price) / (pattern.b.price - pattern.a.price)
+                    ),
+                    "target": str(pattern.target.normalize()),
+                },
+            )
+        if in_position and index > confirmation_index and bars[index].close >= pattern.target:
+            return StrategySignal(
+                "sell",
+                bars[index].timestamp,
+                "abcd_d_target",
+                {
+                    "target": str(pattern.target.normalize()),
+                    "targetMax": str(pattern.target_max.normalize()),
+                },
+            )
+        return None
