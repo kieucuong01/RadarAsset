@@ -17,6 +17,13 @@ from psycopg.rows import dict_row
 
 from backtest.engine import EngineConfig, artifact_checksum, run_strategy
 from backtest.analytics import build_performance_analytics
+from backtest.custom_execution import run_price_threshold, run_scheduled_dca
+from backtest.custom_rules import (
+    PriceThresholdRule,
+    ScheduledDcaRule,
+    custom_rule_implementation_hash,
+    parse_custom_rule,
+)
 from backtest.models import Bar
 from backtest.portfolio import (
     PortfolioAssumptions,
@@ -47,6 +54,7 @@ class QueuedRunLeg:
     strategy_code: str
     strategy_version: str
     strategy_parameters: dict[str, Any]
+    implementation_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -356,29 +364,66 @@ def _process_portfolio_run(
             raise ValueError("Portfolio leg metadata mismatch.")
         if leg.strategy_version != "1.0.0":
             raise ValueError("Unsupported strategy version.")
-        strategy, fast_period, slow_period = _catalog_strategy(
-            leg.strategy_code, leg.strategy_parameters
-        )
         cost = assumptions.market_costs[leg.market]
         execution_capital = leg.initial_notional if leg.initial_notional > 0 else Decimal("1")
-        result = run_strategy(
-            {leg.asset: dataset.bars},
-            EngineConfig(
-                initial_capital=execution_capital,
-                fast_period=fast_period,
-                slow_period=slow_period,
-                fee_bps=cost["commissionBps"],
-                slippage_bps=cost["slippageBps"],
-                leverage_by_asset={leg.asset: leg.leverage},
-                market_by_asset={leg.asset: leg.market},
-                strategy_hash=run.strategy_hash,
-                dataset_checksums={leg.asset: dataset.checksum},
+        custom_contributions: list[dict[str, Any]] = []
+        custom_cash_flow: list[dict[str, Any]] = []
+        if leg.strategy_code.startswith("custom:"):
+            if custom_rule_implementation_hash(leg.strategy_parameters) != leg.implementation_hash:
+                raise ValueError("Custom strategy hash mismatch.")
+            rule = parse_custom_rule(leg.strategy_parameters)
+            if isinstance(rule, PriceThresholdRule):
+                result = run_price_threshold(
+                    leg.asset,
+                    dataset.bars,
+                    initial_capital=execution_capital,
+                    rule=rule,
+                    fee_bps=cost["commissionBps"],
+                    sell_tax_bps=cost["sellTaxBps"],
+                    slippage_bps=cost["slippageBps"],
+                    strategy_hash=run.strategy_hash,
+                    dataset_checksum=dataset.checksum,
+                )
+            elif isinstance(rule, ScheduledDcaRule):
+                custom = run_scheduled_dca(
+                    leg.asset,
+                    dataset.bars,
+                    initial_capital=execution_capital,
+                    rule=rule,
+                    fee_bps=cost["commissionBps"],
+                    slippage_bps=cost["slippageBps"],
+                    strategy_hash=run.strategy_hash,
+                    dataset_checksum=dataset.checksum,
+                )
+                result = custom.result
+                custom_contributions = custom.contributions
+                custom_cash_flow = custom.cash_flow
+            else:
+                raise ValueError("Unsupported custom strategy.")
+            result.manifest["strategyCode"] = leg.strategy_code
+            result.manifest["strategyVersion"] = leg.strategy_version
+        else:
+            strategy, fast_period, slow_period = _catalog_strategy(
+                leg.strategy_code, leg.strategy_parameters
+            )
+            result = run_strategy(
+                {leg.asset: dataset.bars},
+                EngineConfig(
+                    initial_capital=execution_capital,
+                    fast_period=fast_period,
+                    slow_period=slow_period,
+                    fee_bps=cost["commissionBps"],
+                    slippage_bps=cost["slippageBps"],
+                    leverage_by_asset={leg.asset: leg.leverage},
+                    market_by_asset={leg.asset: leg.market},
+                    strategy_hash=run.strategy_hash,
+                    dataset_checksums={leg.asset: dataset.checksum},
+                    strategy=strategy,
+                    sell_tax_bps=cost["sellTaxBps"],
+                    financing_bps_annual=cost["financingBpsAnnual"],
+                ),
                 strategy=strategy,
-                sell_tax_bps=cost["sellTaxBps"],
-                financing_bps_annual=cost["financingBpsAnnual"],
-            ),
-            strategy=strategy,
-        )
+            )
         leg_manifest = {
             **result.manifest,
             "runId": run.id,
@@ -387,12 +432,17 @@ def _process_portfolio_run(
             "adjustmentPolicy": dataset.adjustment_policy,
         }
         scope_key = f"leg:{leg.id}"
-        for kind, payload in (
+        leg_payloads = [
             ("equity", result.equity),
             ("drawdown", result.drawdown),
             ("trades", result.trades),
             ("manifest", leg_manifest),
-        ):
+        ]
+        if custom_contributions:
+            leg_payloads.append(("contribution", custom_contributions))
+        if custom_cash_flow:
+            leg_payloads.append(("cash_flow", custom_cash_flow))
+        for kind, payload in leg_payloads:
             artifacts.append(
                 _artifact(
                     kind,
@@ -588,7 +638,7 @@ class PostgresWorkerRepository:
                 SELECT leg.id, asset.symbol, asset.market, leg.dataset_version_id,
                        leg.allocation_bps, leg.initial_notional, leg.leverage,
                        strategy.code AS strategy_code, strategy.version AS strategy_version,
-                       leg.parameters
+                       leg.parameters, leg.implementation_hash
                 FROM quant_run_legs AS leg
                 JOIN assets AS asset ON asset.id = leg.asset_id
                 JOIN strategy_versions AS strategy ON strategy.id = leg.strategy_version_id
@@ -618,6 +668,7 @@ class PostgresWorkerRepository:
                     strategy_code=str(leg["strategy_code"]),
                     strategy_version=str(leg["strategy_version"]),
                     strategy_parameters=dict(leg["parameters"] or {}),
+                    implementation_hash=str(leg["implementation_hash"] or ""),
                 )
                 for leg in leg_rows
             ),

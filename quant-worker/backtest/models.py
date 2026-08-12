@@ -32,3 +32,12 @@ class QualityReport:
     status: str
     missing_bar_count: int
     issues: tuple[QualityIssue, ...]
+
+
+@dataclass(frozen=True)
+class BacktestResult:
+    summary: dict[str, float | int | None]
+    equity: list[dict[str, Any]]
+    drawdown: list[dict[str, Any]]
+    trades: list[dict[str, Any]]
+    manifest: dict[str, Any]

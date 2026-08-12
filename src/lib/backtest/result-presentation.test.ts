@@ -131,6 +131,31 @@ describe("backtest result presentation", () => {
     expect(filterPortfolioTradeRows(rows, "all")).toBe(rows);
   });
 
+  it("normalizes custom fills into the same trade-list surface", () => {
+    const model = modelWithTrades();
+    model.legs[0]!.trades = [
+      {
+        asset: "BTC",
+        action: "buy",
+        signalAt: "2026-01-02T00:00:00Z",
+        executedAt: "2026-01-03T00:00:00Z",
+        referenceOpen: 100,
+        fillPrice: 100.05,
+        quantity: 2.49,
+        fees: 0.25,
+        sizePct: 25,
+        reason: "price_crosses_above",
+      },
+    ];
+
+    expect(buildPortfolioTradeRows(model).find((row) => row.action === "buy")).toMatchObject({
+      action: "buy",
+      executedAt: "2026-01-03T00:00:00Z",
+      price: 100.05,
+      realizedPnl: null,
+    });
+  });
+
   it("selects only explicit finite aggregate KPIs", () => {
     const model = modelWithTrades();
     model.aggregate.metrics = {

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from .models import Bar
+from .models import BacktestResult, Bar
 from .quality import normalize_bars
 from .strategies import MovingAverageCrossoverStrategy, Strategy
 
@@ -31,15 +31,6 @@ class EngineConfig:
     strategy: Strategy | None = None
     sell_tax_bps: Decimal = ZERO
     financing_bps_annual: Decimal = ZERO
-
-
-@dataclass(frozen=True)
-class BacktestResult:
-    summary: dict[str, float | int | None]
-    equity: list[dict[str, Any]]
-    drawdown: list[dict[str, Any]]
-    trades: list[dict[str, Any]]
-    manifest: dict[str, Any]
 
 
 def _number(value: Decimal) -> float:

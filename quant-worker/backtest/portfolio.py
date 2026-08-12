@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from .engine import BacktestResult
+from .models import BacktestResult
 
 
 ZERO = Decimal("0")

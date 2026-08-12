@@ -6,6 +6,7 @@ import pytest
 
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
+from backtest.custom_rules import custom_rule_implementation_hash
 import worker
 from worker import (
     DatasetInput,
@@ -497,3 +498,100 @@ def test_process_next_run_executes_portfolio_legs_and_emits_scoped_artifacts() -
         "ma_crossover",
         "turtle_breakout",
     }
+
+
+def test_process_next_run_dispatches_frozen_custom_price_rule() -> None:
+    custom_rule = {
+        "schemaVersion": 1,
+        "kind": "price_threshold",
+        "operator": "crosses_above",
+        "threshold": 10,
+        "currency": "USD",
+        "action": "buy",
+        "sizePct": 25,
+    }
+    market_cost = {
+        "commissionBps": 10,
+        "sellTaxBps": 0,
+        "slippageBps": 5,
+        "financingBpsAnnual": 0,
+    }
+    bars = golden_bars()
+    run = QueuedRun(
+        id="custom-run",
+        organization_id="org-1",
+        strategy_hash="portfolio-hash",
+        parameters={
+            "timeframe": "1d",
+            "from": "2024-01-01",
+            "to": "2024-01-31",
+            "totalCapital": 1000,
+            "allocationMode": "custom",
+            "feeBps": 10,
+            "slippageBps": 5,
+            "assumptions": {
+                "cashAllocationBps": 0,
+                "rebalanceFrequency": "none",
+                "monthlyContribution": 0,
+                "dividendMode": "exclude",
+                "fxPolicy": "normalized_returns",
+                "baseCurrency": "USD",
+                "marketCosts": {
+                    "vn_equity": market_cost,
+                    "crypto_spot": market_cost,
+                    "metal_spot": market_cost,
+                },
+            },
+            "legs": [
+                {
+                    "symbol": "BTC",
+                    "allocationBps": 10000,
+                    "leverage": 1,
+                    "strategyCode": "custom:11111111-1111-1111-1111-111111111111",
+                    "strategyVersion": "1.0.0",
+                    "strategyParameters": custom_rule,
+                }
+            ],
+        },
+        dataset_version_ids=("dataset-btc",),
+        legs=(
+            QueuedRunLeg(
+                id="leg-btc",
+                asset="BTC",
+                market="crypto_spot",
+                dataset_version_id="dataset-btc",
+                allocation_bps=10000,
+                initial_notional=Decimal("1000"),
+                leverage=Decimal("1"),
+                strategy_code="custom:11111111-1111-1111-1111-111111111111",
+                strategy_version="1.0.0",
+                strategy_parameters=custom_rule,
+                implementation_hash=custom_rule_implementation_hash(custom_rule),
+            ),
+        ),
+    )
+    repository = FakeRepository(
+        run,
+        DatasetInput(
+            "dataset-btc",
+            "BTC",
+            "crypto_spot",
+            canonical_bar_checksum(bars),
+            bars,
+            "raw",
+        ),
+    )
+
+    response = process_next_run(repository)
+
+    assert response["status"] == "succeeded"
+    assert repository.completed is not None
+    leg_artifacts = [
+        item for item in repository.completed[2] if item["scopeKey"] == "leg:leg-btc"
+    ]
+    assert next(item for item in leg_artifacts if item["kind"] == "manifest")["payload"][
+        "strategyCode"
+    ] == "custom:11111111-1111-1111-1111-111111111111"
+    assert next(item for item in leg_artifacts if item["kind"] == "trades")["payload"][0][
+        "action"
+    ] == "buy"

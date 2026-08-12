@@ -47,7 +47,9 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <CardTitle>Trade List</CardTitle>
-          <CardDescription>Completed entries and exits, newest first.</CardDescription>
+          <CardDescription>
+            Execution fills and completed round trips, newest first.
+          </CardDescription>
         </div>
         <Select value={symbol} onValueChange={setSymbol}>
           <SelectTrigger className="w-full sm:w-44" aria-label="Filter trades by asset">
@@ -67,18 +69,18 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
       </CardHeader>
       <CardContent className="min-w-0">
         {visibleRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No completed trades for this selection.</p>
+          <p className="text-sm text-muted-foreground">No execution fills for this selection.</p>
         ) : (
-          <Table className="min-w-[1080px]">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Entry</TableHead>
-                <TableHead>Exit</TableHead>
+                <TableHead>Signal</TableHead>
+                <TableHead>Execution</TableHead>
                 <TableHead>Asset</TableHead>
                 <TableHead>Strategy</TableHead>
-                <TableHead>Side</TableHead>
-                <TableHead className="text-right">Entry price</TableHead>
-                <TableHead className="text-right">Exit price</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Quantity</TableHead>
                 <TableHead className="text-right">Bars</TableHead>
                 <TableHead className="text-right">Fees</TableHead>
                 <TableHead className="text-right">PnL</TableHead>
@@ -87,29 +89,29 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
             </TableHeader>
             <TableBody>
               {visibleRows.map((trade) => (
-                <TableRow key={`${trade.legId}-${trade.entryAt}-${trade.exitAt}`}>
-                  <TableCell>{trade.entryAt.slice(0, 10)}</TableCell>
-                  <TableCell>{trade.exitAt.slice(0, 10)}</TableCell>
+                <TableRow key={`${trade.legId}-${trade.executedAt}-${trade.action}`}>
+                  <TableCell>{trade.signalAt.slice(0, 10)}</TableCell>
+                  <TableCell>{trade.executedAt.slice(0, 10)}</TableCell>
                   <TableCell className="font-medium">{trade.asset}</TableCell>
                   <TableCell>{trade.strategyCode}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{trade.side.toUpperCase()}</Badge>
+                    <Badge variant="outline">{trade.action.toUpperCase()}</Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.entryPrice.toLocaleString()}
+                    {trade.price.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.exitPrice.toLocaleString()}
+                    {trade.quantity.toLocaleString()}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{trade.barsHeld}</TableCell>
+                  <TableCell className="text-right tabular-nums">{trade.barsHeld ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {money.format(trade.fees)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {money.format(trade.realizedPnl)}
+                    {trade.realizedPnl === null ? "-" : money.format(trade.realizedPnl)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.returnPct.toFixed(2)}%
+                    {trade.returnPct === null ? "-" : `${trade.returnPct.toFixed(2)}%`}
                   </TableCell>
                 </TableRow>
               ))}

@@ -16,21 +16,61 @@ export function alignEquityAndDrawdown(
   }));
 }
 
-export type PortfolioTradeRow = BacktestResultModel["legs"][number]["trades"][number] & {
+export type PortfolioTradeRow = {
   legId: string;
   strategyCode: string;
+  asset: string;
+  action: "long" | "buy" | "sell";
+  signalAt: string;
+  executedAt: string;
+  price: number;
+  quantity: number;
+  fees: number;
+  realizedPnl: number | null;
+  returnPct: number | null;
+  barsHeld: number | null;
+  reason: string;
 };
 
 export function buildPortfolioTradeRows(model: BacktestResultModel): PortfolioTradeRow[] {
   return model.legs
     .flatMap((leg) =>
-      leg.trades.map((trade) => ({
-        ...trade,
-        legId: leg.id,
-        strategyCode: leg.strategyCode,
-      })),
+      leg.trades.map(
+        (trade): PortfolioTradeRow =>
+          "action" in trade
+            ? {
+                legId: leg.id,
+                strategyCode: leg.strategyCode,
+                asset: trade.asset,
+                action: trade.action,
+                signalAt: trade.signalAt,
+                executedAt: trade.executedAt,
+                price: trade.fillPrice,
+                quantity: trade.quantity,
+                fees: trade.fees,
+                realizedPnl: null,
+                returnPct: null,
+                barsHeld: null,
+                reason: trade.reason,
+              }
+            : {
+                legId: leg.id,
+                strategyCode: leg.strategyCode,
+                asset: trade.asset,
+                action: "long",
+                signalAt: trade.entrySignalAt,
+                executedAt: trade.exitAt,
+                price: trade.exitPrice,
+                quantity: trade.quantity,
+                fees: trade.fees,
+                realizedPnl: trade.realizedPnl,
+                returnPct: trade.returnPct,
+                barsHeld: trade.barsHeld,
+                reason: trade.exitReason,
+              },
+      ),
     )
-    .sort((left, right) => right.exitAt.localeCompare(left.exitAt));
+    .sort((left, right) => right.executedAt.localeCompare(left.executedAt));
 }
 
 export function filterPortfolioTradeRows(rows: PortfolioTradeRow[], symbol: string) {

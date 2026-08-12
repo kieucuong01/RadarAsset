@@ -165,6 +165,41 @@ describe("backtest API client", () => {
     expect(parsed.artifacts[0]).toMatchObject({ scopeKey: "leg:leg-btc" });
   });
 
+  it("accepts strict custom execution fills without treating them as round trips", () => {
+    const parsed = parseBacktestRun({
+      ...queuedRun,
+      artifacts: [
+        {
+          id: "fill-1",
+          quantRunLegId: "leg-btc",
+          scopeKey: "leg:leg-btc",
+          kind: "trades",
+          checksum: "c".repeat(64),
+          payload: [
+            {
+              asset: "BTC",
+              action: "buy",
+              signalAt: "2026-01-02T00:00:00Z",
+              executedAt: "2026-01-03T00:00:00Z",
+              referenceOpen: 100,
+              fillPrice: 100.05,
+              quantity: 2.49,
+              fees: 0.25,
+              sizePct: 25,
+              reason: "price_crosses_above",
+            },
+          ],
+          rowCount: 1,
+          schemaVersion: 1,
+        },
+      ],
+    });
+
+    expect(parsed.artifacts[0]?.payload).toEqual([
+      expect.objectContaining({ action: "buy", fillPrice: 100.05 }),
+    ]);
+  });
+
   it("classifies only queued and running states as active", () => {
     expect(isActiveRun("queued")).toBe(true);
     expect(isActiveRun("running")).toBe(true);

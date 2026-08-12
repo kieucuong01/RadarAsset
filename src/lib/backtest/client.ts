@@ -21,7 +21,7 @@ const drawdownPointSchema = z
   })
   .strict();
 
-const tradeSchema = z
+const roundTripTradeSchema = z
   .object({
     asset: backtestSymbolSchema,
     side: z.literal("long"),
@@ -40,6 +40,23 @@ const tradeSchema = z
     exitReason: z.literal("signal"),
   })
   .strict();
+
+const executionFillSchema = z
+  .object({
+    asset: backtestSymbolSchema,
+    action: z.enum(["buy", "sell"]),
+    signalAt: z.string(),
+    executedAt: z.string(),
+    referenceOpen: z.number().positive(),
+    fillPrice: z.number().positive(),
+    quantity: z.number().positive(),
+    fees: z.number().nonnegative(),
+    sizePct: z.number().positive().max(100),
+    reason: z.string().min(1),
+  })
+  .strict();
+
+const tradeSchema = z.union([roundTripTradeSchema, executionFillSchema]);
 
 const artifactBase = {
   id: z.string(),
