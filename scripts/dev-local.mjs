@@ -46,6 +46,21 @@ export function childSpecs(repoRoot, pythonExecutable) {
       args: [path.join(repoRoot, "quant-worker", "worker.py")],
     },
     {
+      name: "quant-engine",
+      command: pythonExecutable,
+      args: [
+        "-m",
+        "uvicorn",
+        "service:app",
+        "--app-dir",
+        path.join(repoRoot, "quant-worker"),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8100",
+      ],
+    },
+    {
       name: "ingestion-worker",
       command: pythonExecutable,
       args: [

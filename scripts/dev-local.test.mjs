@@ -16,6 +16,21 @@ test("starts Next.js on the fixed local port and the continuous quant worker", (
       args: ["C:\\repo\\quant-worker\\worker.py"],
     },
     {
+      name: "quant-engine",
+      command: "C:\\Python\\python.exe",
+      args: [
+        "-m",
+        "uvicorn",
+        "service:app",
+        "--app-dir",
+        "C:\\repo\\quant-worker",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8100",
+      ],
+    },
+    {
       name: "ingestion-worker",
       command: "C:\\Python\\python.exe",
       args: [
