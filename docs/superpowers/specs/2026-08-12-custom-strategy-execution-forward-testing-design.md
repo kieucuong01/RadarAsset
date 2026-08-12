@@ -1,7 +1,7 @@
 # Custom Strategy Execution and Forward Testing Design
 
 **Date:** 2026-08-12
-**Status:** Approved in conversation; awaiting written-spec review
+**Status:** Approved for implementation
 **Scope:** Executable Price Rule and DCA strategies, tenant persistence, Mock Portfolio forward testing, and in-app notifications
 
 ## 1. Goal
