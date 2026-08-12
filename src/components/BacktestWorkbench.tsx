@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getBacktestRun, isActiveRun, type BacktestRun } from "@/lib/backtest/client";
-import { backtestOutputState } from "@/lib/backtest/result-presentation";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
+import { backtestOutputState } from "@/lib/backtest/result-presentation";
 
 export function BacktestWorkbench({
   initialSymbols = [],
@@ -43,48 +43,56 @@ export function BacktestWorkbench({
   }, [run]);
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <PortfolioBacktestBuilder
-        onRunCreated={setRun}
-        initialSymbols={initialSymbols}
-        strategyPreset={strategyPreset}
-      />
+    <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+      <aside
+        aria-label="Backtest configuration"
+        className="min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2"
+      >
+        <PortfolioBacktestBuilder
+          onRunCreated={setRun}
+          initialSymbols={initialSymbols}
+          strategyPreset={strategyPreset}
+          layout="sidebar"
+        />
+      </aside>
 
-      {outputState === "empty" ? <BacktestResultsEmpty /> : null}
+      <main aria-label="Backtest output" className="min-w-0 space-y-5">
+        {outputState === "empty" ? <BacktestResultsEmpty /> : null}
 
-      {run && outputState === "active" ? (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity />
-                  Run {run.id.slice(0, 8)}
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  {run.legs.length} legs · {run.timeframe} · normalized portfolio simulation
-                </CardDescription>
+        {run && outputState === "active" ? (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity />
+                    Run {run.id.slice(0, 8)}
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {run.legs.length} legs · {run.timeframe} · normalized portfolio simulation
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary">{run.status}</Badge>
               </div>
-              <Badge variant="secondary">{run.status}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Progress value={run.progress} />
-          </CardContent>
-        </Card>
-      ) : null}
+            </CardHeader>
+            <CardContent>
+              <Progress value={run.progress} />
+            </CardContent>
+          </Card>
+        ) : null}
 
-      {run && outputState === "failed" ? (
-        <Alert variant="destructive">
-          <AlertCircle />
-          <AlertTitle>Backtest thất bại</AlertTitle>
-          <AlertDescription>
-            Worker không thể hoàn tất run này. Hãy kiểm tra dữ liệu đầu vào và thử lại.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        {run && outputState === "failed" ? (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>Backtest failed</AlertTitle>
+            <AlertDescription>
+              Worker could not finish this run. Check the selected data and try again.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-      {run && outputState === "results" ? <BacktestResults run={run} /> : null}
+        {run && outputState === "results" ? <BacktestResults run={run} /> : null}
+      </main>
     </div>
   );
 }

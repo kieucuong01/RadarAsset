@@ -65,11 +65,13 @@ import {
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
+import { cn } from "@/lib/utils";
 
 type PortfolioBacktestBuilderProps = {
   onRunCreated: (run: BacktestRun) => void;
   initialSymbols?: string[];
   strategyPreset?: BacktestStrategyPreset | null;
+  layout?: "stacked" | "sidebar";
 };
 
 const MARKET_LABELS = {
@@ -89,6 +91,7 @@ export function PortfolioBacktestBuilder({
   onRunCreated,
   initialSymbols = [],
   strategyPreset = null,
+  layout = "stacked",
 }: PortfolioBacktestBuilderProps) {
   const [state, dispatch] = useReducer(reduceBuilder, undefined, () => createInitialBuilderState());
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
@@ -212,6 +215,7 @@ export function PortfolioBacktestBuilder({
     state.assumptions.cashAllocationBps +
     state.legs.reduce((total, leg) => total + leg.allocationBps, 0);
   const investableBps = 10_000 - state.assumptions.cashAllocationBps;
+  const isSidebar = layout === "sidebar";
 
   function defaultStrategyFor(market: string) {
     const selectedPreset = strategyPreset
@@ -277,17 +281,28 @@ export function PortfolioBacktestBuilder({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Portfolio Backtest Builder</CardTitle>
-          <CardDescription>
-            Chọn 1–10 mã trong hệ thống, gán chiến lược riêng cho từng mã và kiểm soát cash flow.
-          </CardDescription>
+    <div className={cn("flex min-w-0 flex-col gap-5", isSidebar && "gap-4")}>
+      <Card className={cn(isSidebar && "rounded-2xl border-border/80 shadow-sm")}>
+        <CardHeader className={cn(isSidebar && "pb-3")}>
+          <CardTitle
+            className={cn(isSidebar && "text-xs uppercase tracking-wider text-muted-foreground")}
+          >
+            {isSidebar ? "Strategy" : "Portfolio Backtest Builder"}
+          </CardTitle>
+          {!isSidebar ? (
+            <CardDescription>
+              Chọn 1–10 mã trong hệ thống, gán chiến lược riêng cho từng mã và kiểm soát cash flow.
+            </CardDescription>
+          ) : null}
         </CardHeader>
-        <CardContent>
+        <CardContent className={cn(isSidebar && "pb-5")}>
           <FieldGroup>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div
+              className={cn(
+                "grid gap-4 sm:grid-cols-2 lg:grid-cols-5",
+                isSidebar && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
+              )}
+            >
               <Field>
                 <FieldLabel htmlFor="portfolio-capital">Tổng vốn</FieldLabel>
                 <Input
@@ -369,15 +384,23 @@ export function PortfolioBacktestBuilder({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className={cn(isSidebar && "rounded-2xl border-border/80 shadow-sm")}>
+        <CardHeader className={cn(isSidebar && "pb-3")}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Phân bổ tài sản</CardTitle>
-              <CardDescription className="mt-1">
-                Equal chia đều phần vốn sau cash; Custom cho phép sửa từng mã; Optimized dùng engine
-                dữ liệu thật.
-              </CardDescription>
+              <CardTitle
+                className={cn(
+                  isSidebar && "text-xs uppercase tracking-wider text-muted-foreground",
+                )}
+              >
+                {isSidebar ? "Portfolio Legs" : "Phân bổ tài sản"}
+              </CardTitle>
+              {!isSidebar ? (
+                <CardDescription className="mt-1">
+                  Equal chia đều phần vốn sau cash; Custom cho phép sửa từng mã; Optimized dùng
+                  engine dữ liệu thật.
+                </CardDescription>
+              ) : null}
             </div>
             <QuantAssetPickerDialog
               timeframe={state.timeframe}
@@ -396,8 +419,13 @@ export function PortfolioBacktestBuilder({
             />
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+        <CardContent className={cn("flex flex-col gap-5", isSidebar && "gap-4")}>
+          <div
+            className={cn(
+              "flex flex-wrap items-end justify-between gap-4",
+              isSidebar && "flex-col items-stretch",
+            )}
+          >
             <Field>
               <FieldLabel>Chế độ phân bổ</FieldLabel>
               <ToggleGroup
@@ -414,8 +442,13 @@ export function PortfolioBacktestBuilder({
                 <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
               </ToggleGroup>
             </Field>
-            <div className="flex flex-wrap items-end gap-3">
-              <Field className="w-64">
+            <div
+              className={cn(
+                "flex flex-wrap items-end gap-3",
+                isSidebar && "flex-col items-stretch",
+              )}
+            >
+              <Field className={cn("w-64", isSidebar && "w-full")}>
                 <FieldLabel htmlFor="backtest-optimizer-method">Optimization method</FieldLabel>
                 <Select
                   value={optimizerMethod}
@@ -439,7 +472,7 @@ export function PortfolioBacktestBuilder({
                 </FieldDescription>
               </Field>
               {optimizerMethod === "target_return" ? (
-                <Field className="w-40">
+                <Field className={cn("w-40", isSidebar && "w-full")}>
                   <FieldLabel htmlFor="backtest-target-return">Target return/năm</FieldLabel>
                   <Input
                     id="backtest-target-return"
@@ -454,7 +487,7 @@ export function PortfolioBacktestBuilder({
                 </Field>
               ) : null}
               {optimizerMethod === "target_volatility" ? (
-                <Field className="w-40">
+                <Field className={cn("w-40", isSidebar && "w-full")}>
                   <FieldLabel htmlFor="backtest-target-volatility">Target vol/năm</FieldLabel>
                   <Input
                     id="backtest-target-volatility"
@@ -469,7 +502,7 @@ export function PortfolioBacktestBuilder({
                 </Field>
               ) : null}
               {optimizerMethod === "risk_tolerance" ? (
-                <Field className="w-40">
+                <Field className={cn("w-40", isSidebar && "w-full")}>
                   <FieldLabel>Risk tolerance: {markowitzRiskTolerance}</FieldLabel>
                   <Slider
                     value={[markowitzRiskTolerance]}
@@ -481,7 +514,7 @@ export function PortfolioBacktestBuilder({
                   />
                 </Field>
               ) : null}
-              <Field className="w-40">
+              <Field className={cn("w-40", isSidebar && "w-full")}>
                 <FieldLabel>Max/mã: {maxWeightPct}%</FieldLabel>
                 <Slider
                   value={[maxWeightPct]}
@@ -508,7 +541,12 @@ export function PortfolioBacktestBuilder({
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div
+            className={cn(
+              "grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]",
+              isSidebar && "lg:grid-cols-1",
+            )}
+          >
             <div className="flex min-w-0 flex-col gap-4">
               {state.legs.length === 0 ? (
                 <Alert>
@@ -527,17 +565,25 @@ export function PortfolioBacktestBuilder({
                   timeframe={state.timeframe}
                   totalCapital={state.totalCapital}
                   baseCurrency={state.assumptions.baseCurrency}
+                  compact={isSidebar}
                   dispatch={dispatch}
                 />
               ))}
             </div>
 
-            <Card className="h-fit lg:sticky lg:top-20">
-              <CardHeader>
-                <CardTitle>Cash</CardTitle>
-                <CardDescription>
-                  Giữ tiền mặt trong đồng tiền báo cáo, lãi suất 0% ở MVP.
-                </CardDescription>
+            <Card
+              className={cn(
+                "h-fit lg:sticky lg:top-20",
+                isSidebar && "rounded-xl shadow-none lg:static",
+              )}
+            >
+              <CardHeader className={cn(isSidebar && "pb-3")}>
+                <CardTitle className={cn(isSidebar && "text-sm")}>Cash</CardTitle>
+                {!isSidebar ? (
+                  <CardDescription>
+                    Giữ tiền mặt trong đồng tiền báo cáo, lãi suất 0% ở MVP.
+                  </CardDescription>
+                ) : null}
               </CardHeader>
               <CardContent>
                 <FieldGroup>
@@ -608,15 +654,26 @@ export function PortfolioBacktestBuilder({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Rebalancing & cash-flow assumptions</CardTitle>
-          <CardDescription>
-            Các giả định này được chuẩn hóa, lưu trong run hash và hiển thị lại ở kết quả.
-          </CardDescription>
+      <Card className={cn(isSidebar && "rounded-2xl border-border/80 shadow-sm")}>
+        <CardHeader className={cn(isSidebar && "pb-3")}>
+          <CardTitle
+            className={cn(isSidebar && "text-xs uppercase tracking-wider text-muted-foreground")}
+          >
+            Assumptions
+          </CardTitle>
+          {!isSidebar ? (
+            <CardDescription>
+              Các giả định này được chuẩn hóa, lưu trong run hash và hiển thị lại ở kết quả.
+            </CardDescription>
+          ) : null}
         </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className={cn("flex flex-col gap-5", isSidebar && "gap-4")}>
+          <div
+            className={cn(
+              "grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
+              isSidebar && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
+            )}
+          >
             <Field>
               <FieldLabel htmlFor="rebalance-frequency">Chu kỳ tái cân bằng</FieldLabel>
               <Select
@@ -697,7 +754,12 @@ export function PortfolioBacktestBuilder({
                 <AccordionContent>
                   <FieldSet>
                     <FieldLegend variant="label">Cost model theo thị trường</FieldLegend>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div
+                      className={cn(
+                        "grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
+                        isSidebar && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
+                      )}
+                    >
                       {Object.entries(COST_FIELDS).map(([key, fieldLabel]) => (
                         <Field key={key}>
                           <FieldLabel htmlFor={`${market}-${key}`}>{fieldLabel}</FieldLabel>
@@ -745,14 +807,22 @@ export function PortfolioBacktestBuilder({
         </Alert>
       ) : null}
 
-      <Card>
-        <CardFooter className="flex-col justify-between gap-3 pt-6 sm:flex-row">
-          <p className="text-sm text-muted-foreground">
-            Kết quả là normalized simulation capital, không phải số dư hoặc lệnh tại broker.
-          </p>
+      <Card className={cn(isSidebar && "rounded-2xl border-border/80 bg-transparent shadow-none")}>
+        <CardFooter
+          className={cn(
+            "flex-col justify-between gap-3 pt-6 sm:flex-row",
+            isSidebar && "items-stretch p-0 sm:flex-col",
+          )}
+        >
+          {!isSidebar ? (
+            <p className="text-sm text-muted-foreground">
+              Kết quả là normalized simulation capital, không phải số dư hoặc lệnh tại broker.
+            </p>
+          ) : null}
           <Button
             type="button"
             size="lg"
+            className={cn(isSidebar && "h-14 w-full rounded-2xl text-base font-semibold")}
             disabled={submitting || reasons.length > 0}
             onClick={() => void submitPortfolio()}
           >
@@ -761,7 +831,7 @@ export function PortfolioBacktestBuilder({
             ) : (
               <Play data-icon="inline-start" />
             )}
-            Chạy Portfolio Backtest
+            Run Portfolio Backtest
           </Button>
         </CardFooter>
       </Card>

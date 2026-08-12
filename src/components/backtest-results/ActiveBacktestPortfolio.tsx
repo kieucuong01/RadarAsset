@@ -17,7 +17,7 @@ function money(value: number, currency: "USD" | "VND") {
 }
 
 function shortDate(value: string | undefined) {
-  return value ? value.slice(0, 10) : "—";
+  return value ? value.slice(0, 10) : "-";
 }
 
 export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioProps) {
@@ -26,31 +26,40 @@ export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioP
   const currency = model.aggregate.assumptions.baseCurrency;
 
   return (
-    <Card className="min-w-0 max-w-full">
+    <Card className="min-w-0 max-w-full rounded-2xl shadow-sm">
       <CardHeader>
-        <CardTitle>Active Portfolio</CardTitle>
-        <CardDescription>
-          {shortDate(firstPoint?.timestamp)} – {shortDate(lastPoint?.timestamp)} · {run.timeframe} ·
-          dataset versions {run.datasetVersionIds.length}
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <CardTitle>Active Portfolio</CardTitle>
+          <CardDescription className="font-mono text-xs uppercase tracking-wider">
+            {model.legs.length} legs · {shortDate(firstPoint?.timestamp)} -{" "}
+            {shortDate(lastPoint?.timestamp)} · {run.timeframe}
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3">
-        {model.legs.map((leg) => {
+        {model.legs.map((leg, index) => {
           const submittedLeg = run.legs.find((item) => item.id === leg.id);
+          const leverage = submittedLeg?.leverage ?? 1;
+
           return (
-            <div key={leg.id} className="min-w-0 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">{leg.symbol}</span>
-                <Badge variant="secondary">
-                  {submittedLeg?.strategyName ?? leg.strategyCode} v{leg.strategyVersion}
-                </Badge>
+            <div key={leg.id} className="min-w-0 rounded-xl border bg-muted/50 px-4 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                <span className="font-semibold text-primary">#{index + 1}</span>
+                <span className="font-semibold text-foreground">{leg.symbol}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">
+                  {submittedLeg?.strategyName ?? leg.strategyCode}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-primary">{(leg.allocationBps / 100).toFixed(2)}%</span>
+                {leverage > 1 ? (
+                  <>
+                    <span className="text-muted-foreground">·</span>
+                    <Badge variant="outline">{leverage.toFixed(1)}x</Badge>
+                  </>
+                ) : null}
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{(leg.allocationBps / 100).toFixed(2)}%</span>
-                <span>{money(leg.initialNotional, currency)}</span>
-                <span>{(submittedLeg?.leverage ?? 1).toFixed(1)}×</span>
-                <span>dataset {leg.datasetVersionId.slice(0, 8)}</span>
-              </div>
+              <span className="sr-only">{money(leg.initialNotional, currency)}</span>
             </div>
           );
         })}

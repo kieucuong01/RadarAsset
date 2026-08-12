@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { BuilderAction, DraftBacktestLeg } from "@/lib/backtest/builder-state";
 import type { StrategyCatalogItem } from "@/lib/backtest/client";
+import { cn } from "@/lib/utils";
 
 type BacktestLegCardProps = {
   leg: DraftBacktestLeg;
@@ -31,6 +32,7 @@ type BacktestLegCardProps = {
   timeframe: "1d" | "1h";
   totalCapital: number;
   baseCurrency: "USD" | "VND";
+  compact?: boolean;
   dispatch: (action: BuilderAction) => void;
 };
 
@@ -48,22 +50,27 @@ export function BacktestLegCard({
   timeframe,
   totalCapital,
   baseCurrency,
+  compact = false,
   dispatch,
 }: BacktestLegCardProps) {
   const notional = (totalCapital * leg.allocationBps) / 10_000;
   const leverageOptions = [1, 1.5, 2].filter((value) => value <= leg.maxLeverage);
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className={cn(compact && "rounded-2xl border-border/80 shadow-sm")}>
+      <CardHeader className={cn(compact && "pb-3")}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <CardTitle className="flex flex-wrap items-center gap-2">
-              <span>{leg.symbol}</span>
-              <Badge variant="secondary">{leg.market}</Badge>
+              <span
+                className={cn(compact && "font-mono text-xs uppercase tracking-wider text-primary")}
+              >
+                {compact ? `Leg #${leg.symbol}` : leg.symbol}
+              </span>
+              {!compact ? <Badge variant="secondary">{leg.market}</Badge> : null}
               <Badge variant="outline">{leg.freshness}</Badge>
             </CardTitle>
-            <CardDescription className="mt-1 truncate">
+            <CardDescription className={cn("mt-1", compact ? "line-clamp-2" : "truncate")}>
               {leg.name} · {leg.currency} · {leg.rowCount.toLocaleString()} bars
             </CardDescription>
           </div>
@@ -79,9 +86,14 @@ export function BacktestLegCard({
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className={cn(compact && "pb-4")}>
         <FieldGroup>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            className={cn(
+              "grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
+              compact && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
+            )}
+          >
             <Field>
               <FieldLabel htmlFor={`${leg.symbol}-weight`}>Trọng số (%)</FieldLabel>
               <Input
@@ -180,7 +192,12 @@ export function BacktestLegCard({
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            className={cn(
+              "grid gap-4 sm:grid-cols-2 lg:grid-cols-3",
+              compact && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
+            )}
+          >
             {leg.strategyParameterSchema.map((parameter) => {
               const configuredValue = leg.strategyParameters[parameter.name];
               return (
