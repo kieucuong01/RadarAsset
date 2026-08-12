@@ -33,7 +33,13 @@ const { prisma } = vi.hoisted(() => {
       create: vi.fn(),
     },
     strategyVersion: { findUnique: vi.fn() },
-    strategyAssignment: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
+    strategyAssignment: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     strategySignal: { createMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
@@ -459,7 +465,8 @@ describe("organization-scoped database services", () => {
       version: "1.0.0",
       name: "Turtle Breakout",
     });
-    prisma.strategyAssignment.upsert.mockResolvedValue({
+    prisma.strategyAssignment.findFirst.mockResolvedValue(null);
+    prisma.strategyAssignment.create.mockResolvedValue({
       id: "assignment-1",
       portfolioId: "portfolio-a",
       assetId: "asset-btc",
@@ -474,7 +481,7 @@ describe("organization-scoped database services", () => {
       signals: [],
     });
     prisma.strategyAssignment.findUnique.mockResolvedValue(
-      await prisma.strategyAssignment.upsert(),
+      await prisma.strategyAssignment.create(),
     );
 
     const response = await upsertStrategyAssignment(editorContext, {
@@ -490,10 +497,13 @@ describe("organization-scoped database services", () => {
       strategyCode: "turtle_breakout",
       status: "active",
     });
-    expect(prisma.strategyAssignment.upsert).toHaveBeenCalledWith(
+    expect(prisma.strategyAssignment.findFirst).toHaveBeenCalledWith({
+      where: { portfolioId: "portfolio-a", assetId: "asset-btc", status: "active" },
+      select: { id: true },
+    });
+    expect(prisma.strategyAssignment.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { portfolioId_assetId: { portfolioId: "portfolio-a", assetId: "asset-btc" } },
-        create: expect.objectContaining({ organizationId: "org-a" }),
+        data: expect.objectContaining({ organizationId: "org-a" }),
       }),
     );
   });
@@ -520,7 +530,8 @@ describe("organization-scoped database services", () => {
         },
       ],
     });
-    prisma.strategyAssignment.upsert.mockResolvedValue({
+    prisma.strategyAssignment.findFirst.mockResolvedValue(null);
+    prisma.strategyAssignment.create.mockResolvedValue({
       id: "assignment-1",
       portfolioId: "portfolio-a",
       parameters: { entryPeriod: 20, exitPeriod: 10 },
@@ -534,7 +545,7 @@ describe("organization-scoped database services", () => {
       signals: [],
     });
     prisma.strategyAssignment.findUnique.mockResolvedValue(
-      await prisma.strategyAssignment.upsert(),
+      await prisma.strategyAssignment.create(),
     );
 
     await upsertStrategyAssignment(editorContext, {

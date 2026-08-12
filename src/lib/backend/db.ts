@@ -53,7 +53,17 @@ const TIMEFRAME_LIMITS = {
   "1Y": 252,
 } as const;
 
-const MARKET_DATA_SYMBOLS = ["FPT", "VCB", "HPG", "VNM", "MWG", "SSI", "VIC", "BTC", "XAU"] as const;
+const MARKET_DATA_SYMBOLS = [
+  "FPT",
+  "VCB",
+  "HPG",
+  "VNM",
+  "MWG",
+  "SSI",
+  "VIC",
+  "BTC",
+  "XAU",
+] as const;
 const MARKET_DATA_TIMEFRAMES = ["1d", "1h"] as const;
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 const PUBLIC_MARKET_ERROR_CODES = new Set([
@@ -848,7 +858,9 @@ export async function upsertWatchlistItem(context: TenantContext, input: Watchli
         assetId: instrument.assetId,
         timeframe: { in: supported },
         adjustmentPolicy: "raw",
-        versions: { some: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } } },
+        versions: {
+          some: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
+        },
       },
       select: { timeframe: true },
     });
@@ -1190,30 +1202,45 @@ export async function upsertStrategyAssignment(
     );
   }
 
-  const assignment = await prisma.strategyAssignment.upsert({
-    where: { portfolioId_assetId: { portfolioId: portfolio.id, assetId: asset.id } },
-    create: {
-      organizationId: context.organizationId,
-      portfolioId: portfolio.id,
-      assetId: asset.id,
-      strategyVersionId: strategyVersion.id,
-      parameters: normalized.strategyParameters as Prisma.InputJsonValue,
-      status: "active",
-    },
-    update: {
-      strategyVersionId: strategyVersion.id,
-      parameters: normalized.strategyParameters as Prisma.InputJsonValue,
-      status: "active",
-    },
-    include: {
-      asset: true,
-      strategyVersion: { select: { code: true, version: true, name: true } },
-      signals: {
-        orderBy: { signalAt: "desc" },
-        include: { asset: true, strategyVersion: { select: { code: true, version: true } } },
-      },
-    },
+  const existingAssignment = await prisma.strategyAssignment.findFirst({
+    where: { portfolioId: portfolio.id, assetId: asset.id, status: "active" },
+    select: { id: true },
   });
+  const assignment = existingAssignment
+    ? await prisma.strategyAssignment.update({
+        where: { id: existingAssignment.id },
+        data: {
+          strategyVersionId: strategyVersion.id,
+          parameters: normalized.strategyParameters as Prisma.InputJsonValue,
+          status: "active",
+        },
+        include: {
+          asset: true,
+          strategyVersion: { select: { code: true, version: true, name: true } },
+          signals: {
+            orderBy: { signalAt: "desc" },
+            include: { asset: true, strategyVersion: { select: { code: true, version: true } } },
+          },
+        },
+      })
+    : await prisma.strategyAssignment.create({
+        data: {
+          organizationId: context.organizationId,
+          portfolioId: portfolio.id,
+          assetId: asset.id,
+          strategyVersionId: strategyVersion.id,
+          parameters: normalized.strategyParameters as Prisma.InputJsonValue,
+          status: "active",
+        },
+        include: {
+          asset: true,
+          strategyVersion: { select: { code: true, version: true, name: true } },
+          signals: {
+            orderBy: { signalAt: "desc" },
+            include: { asset: true, strategyVersion: { select: { code: true, version: true } } },
+          },
+        },
+      });
   if (signalRows.length) {
     await prisma.strategySignal.createMany({
       data: signalRows.map((row) => ({

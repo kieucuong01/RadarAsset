@@ -551,7 +551,9 @@ model StrategyAssignment {
   forwardSnapshots              StrategyForwardSnapshot[]
   notifications                 Notification[]
 
-  @@unique([portfolioId, assetId])
+  // The database enforces one active assignment per portfolio asset with a
+  // partial unique index. Archived assignments remain available for audit.
+  @@index([portfolioId, assetId])
   @@index([organizationId, status])
   @@index([strategyVersionId])
   @@map("strategy_assignments")
