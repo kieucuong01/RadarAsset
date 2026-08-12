@@ -628,6 +628,78 @@ describe("database tenant isolation", () => {
     }
   });
 
+  it("cascades a custom strategy only inside its organization", async () => {
+    const userAId = randomUUID();
+    const userBId = randomUUID();
+    const organizationAId = randomUUID();
+    const organizationBId = randomUUID();
+    const strategyAId = randomUUID();
+    const strategyBId = randomUUID();
+    const versionAId = randomUUID();
+    const versionBId = randomUUID();
+    try {
+      await prisma.appUser.createMany({
+        data: [
+          { id: userAId, email: `custom-a-${suffix}@example.test`, name: "Custom A" },
+          { id: userBId, email: `custom-b-${suffix}@example.test`, name: "Custom B" },
+        ],
+      });
+      await prisma.organization.create({
+        data: {
+          id: organizationAId,
+          name: "Custom strategy A",
+          slug: `custom-strategy-a-${suffix}`,
+          memberships: { create: { userId: userAId, role: "owner" } },
+        },
+      });
+      await prisma.organization.create({
+        data: {
+          id: organizationBId,
+          name: "Custom strategy B",
+          slug: `custom-strategy-b-${suffix}`,
+          memberships: { create: { userId: userBId, role: "owner" } },
+        },
+      });
+
+      for (const strategy of [
+        { strategyId: strategyAId, versionId: versionAId, organizationId: organizationAId, userId: userAId },
+        { strategyId: strategyBId, versionId: versionBId, organizationId: organizationBId, userId: userBId },
+      ]) {
+        await prisma.$executeRaw`
+          INSERT INTO custom_strategies (
+            id, organization_id, created_by_user_id, name, family, status, created_at, updated_at
+          ) VALUES (
+            ${strategy.strategyId}::uuid, ${strategy.organizationId}::uuid, ${strategy.userId}::uuid,
+            'Tenant DCA', 'systematic', 'active', NOW(), NOW()
+          )
+        `;
+        await prisma.$executeRaw`
+          INSERT INTO custom_strategy_versions (
+            id, custom_strategy_id, version, kind, rule_definition, implementation_hash, status, created_at
+          ) VALUES (
+            ${strategy.versionId}::uuid, ${strategy.strategyId}::uuid, '1.0.0', 'scheduled_dca',
+            '{"schemaVersion":1,"kind":"scheduled_dca","contributionAmount":400,"currency":"USD","frequency":"monthly","dayOfMonth":1}'::jsonb,
+            ${"c".repeat(64)}, 'active', NOW()
+          )
+        `;
+      }
+
+      await prisma.organization.delete({ where: { id: organizationAId } });
+
+      const survivingVersion = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM custom_strategy_versions WHERE id = ${versionBId}::uuid
+      `;
+      const removedVersion = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM custom_strategy_versions WHERE id = ${versionAId}::uuid
+      `;
+      expect(survivingVersion).toEqual([{ id: versionBId }]);
+      expect(removedVersion).toEqual([]);
+    } finally {
+      await prisma.organization.deleteMany({ where: { id: { in: [organizationAId, organizationBId] } } });
+      await prisma.appUser.deleteMany({ where: { id: { in: [userAId, userBId] } } });
+    }
+  });
+
   it("never writes an organization A transaction into organization B", async () => {
     const portfolioB = await prisma.portfolio.findUniqueOrThrow({
       where: {

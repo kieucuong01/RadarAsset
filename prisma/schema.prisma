@@ -7,21 +7,23 @@ datasource db {
 }
 
 model AppUser {
-  id              String          @id @default(uuid()) @db.Uuid
-  email           String          @unique
-  emailVerified   Boolean         @default(false) @map("email_verified")
-  name            String
-  image           String?
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  sessions        Session[]
-  accounts        Account[]
-  memberships     Membership[]
-  invitationsSent Invitation[]    @relation("InvitationInviter")
-  portfolios      Portfolio[]
-  watchlistItems  WatchlistItem[]
-  quantRuns       QuantRun[]
-  researchRuns    ResearchRun[]
+  id                      String                   @id @default(uuid()) @db.Uuid
+  email                   String                   @unique
+  emailVerified           Boolean                  @default(false) @map("email_verified")
+  name                    String
+  image                   String?
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  sessions                Session[]
+  accounts                Account[]
+  memberships             Membership[]
+  invitationsSent         Invitation[]             @relation("InvitationInviter")
+  portfolios              Portfolio[]
+  watchlistItems          WatchlistItem[]
+  quantRuns               QuantRun[]
+  researchRuns            ResearchRun[]
+  customStrategies        CustomStrategy[]         @relation("CustomStrategyCreator")
+  notifications           Notification[]
   marketIngestionRequests MarketIngestionRequest[]
 
   @@map("app_users")
@@ -78,22 +80,27 @@ model Verification {
 }
 
 model Organization {
-  id                  String               @id @default(uuid()) @db.Uuid
-  name                String
-  slug                String               @unique
-  logo                String?
-  metadata            String?              @db.Text
-  createdAt           DateTime             @default(now()) @map("created_at")
-  memberships         Membership[]
-  invitations         Invitation[]
-  portfolios          Portfolio[]
-  watchlistItems      WatchlistItem[]
-  researchRuns        ResearchRun[]
-  quantRuns           QuantRun[]
-  quantRunArtifacts   QuantRunArtifact[]
-  strategyAssignments StrategyAssignment[]
-  strategySignals     StrategySignal[]
-  marketIngestionRequests MarketIngestionRequest[]
+  id                       String                    @id @default(uuid()) @db.Uuid
+  name                     String
+  slug                     String                    @unique
+  logo                     String?
+  metadata                 String?                   @db.Text
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  memberships              Membership[]
+  invitations              Invitation[]
+  portfolios               Portfolio[]
+  watchlistItems           WatchlistItem[]
+  researchRuns             ResearchRun[]
+  quantRuns                QuantRun[]
+  quantRunArtifacts        QuantRunArtifact[]
+  customStrategies         CustomStrategy[]
+  customStrategyVersions   StrategyVersion[]         @relation("StrategyVersionOrganization")
+  strategyAssignments      StrategyAssignment[]
+  strategySignals          StrategySignal[]
+  strategyEvaluationJobs   StrategyEvaluationJob[]
+  strategyForwardSnapshots StrategyForwardSnapshot[]
+  notifications            Notification[]
+  marketIngestionRequests  MarketIngestionRequest[]
 
   @@map("organizations")
 }
@@ -221,18 +228,20 @@ model PortfolioPosition {
 }
 
 model PortfolioTransaction {
-  id          String    @id @default(uuid()) @db.Uuid
-  portfolioId String    @map("portfolio_id") @db.Uuid
-  assetId     String    @map("asset_id") @db.Uuid
-  type        String
-  quantity    Decimal   @db.Decimal(28, 10)
-  price       Decimal   @db.Decimal(20, 8)
-  fee         Decimal   @default(0) @db.Decimal(20, 8)
-  note        String?
-  executedAt  DateTime  @map("executed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  id             String          @id @default(uuid()) @db.Uuid
+  portfolioId    String          @map("portfolio_id") @db.Uuid
+  assetId        String          @map("asset_id") @db.Uuid
+  sourceSignalId String?         @unique @map("source_signal_id") @db.Uuid
+  type           String
+  quantity       Decimal         @db.Decimal(28, 10)
+  price          Decimal         @db.Decimal(20, 8)
+  fee            Decimal         @default(0) @db.Decimal(20, 8)
+  note           String?
+  executedAt     DateTime        @map("executed_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  portfolio      Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  sourceSignal   StrategySignal? @relation(fields: [sourceSignalId], references: [id], onDelete: Restrict)
 
   @@index([portfolioId, executedAt(sort: Desc)])
   @@index([assetId])
@@ -452,75 +461,195 @@ model QuantRun {
 }
 
 model StrategyVersion {
-  id                  String               @id @default(uuid()) @db.Uuid
-  code                String
-  version             String
-  name                String
-  category            String
-  status              String               @default("active")
-  parameterSchema     Json                 @map("parameter_schema")
-  defaultParameters   Json                 @map("default_parameters")
-  supportedMarkets    Json                 @map("supported_markets")
-  supportedTimeframes Json                 @map("supported_timeframes")
-  implementationHash  String               @map("implementation_hash")
-  sourceAttribution   String?              @map("source_attribution") @db.Text
-  modificationNotice  String?              @map("modification_notice") @db.Text
-  createdAt           DateTime             @default(now()) @map("created_at")
-  quantRuns           QuantRun[]
-  quantRunLegs        QuantRunLeg[]
-  assignments         StrategyAssignment[]
-  signals             StrategySignal[]
+  id                      String                 @id @default(uuid()) @db.Uuid
+  code                    String
+  version                 String
+  name                    String
+  category                String
+  organizationId          String?                @map("organization_id") @db.Uuid
+  customStrategyVersionId String?                @unique @map("custom_strategy_version_id") @db.Uuid
+  status                  String                 @default("active")
+  parameterSchema         Json                   @map("parameter_schema")
+  defaultParameters       Json                   @map("default_parameters")
+  supportedMarkets        Json                   @map("supported_markets")
+  supportedTimeframes     Json                   @map("supported_timeframes")
+  implementationHash      String                 @map("implementation_hash")
+  sourceAttribution       String?                @map("source_attribution") @db.Text
+  modificationNotice      String?                @map("modification_notice") @db.Text
+  createdAt               DateTime               @default(now()) @map("created_at")
+  organization            Organization?          @relation("StrategyVersionOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  customStrategyVersion   CustomStrategyVersion? @relation(fields: [customStrategyVersionId], references: [id], onDelete: Restrict)
+  quantRuns               QuantRun[]
+  quantRunLegs            QuantRunLeg[]
+  assignments             StrategyAssignment[]
+  signals                 StrategySignal[]
 
   @@unique([code, version])
+  @@index([organizationId, status])
   @@index([status, code])
   @@map("strategy_versions")
 }
 
-model StrategyAssignment {
-  id                String           @id @default(uuid()) @db.Uuid
-  organizationId    String           @map("organization_id") @db.Uuid
-  portfolioId       String           @map("portfolio_id") @db.Uuid
-  assetId           String           @map("asset_id") @db.Uuid
-  strategyVersionId String           @map("strategy_version_id") @db.Uuid
-  parameters        Json             @default("{}")
-  status            String           @default("active")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
-  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  portfolio         Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  asset             Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  strategyVersion   StrategyVersion  @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
-  signals           StrategySignal[]
+model CustomStrategy {
+  id              String                  @id @default(uuid()) @db.Uuid
+  organizationId  String                  @map("organization_id") @db.Uuid
+  createdByUserId String?                 @map("created_by_user_id") @db.Uuid
+  name            String
+  description     String?                 @db.Text
+  family          String
+  status          String                  @default("active")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       AppUser?                @relation("CustomStrategyCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  versions        CustomStrategyVersion[]
 
-  @@unique([portfolioId, assetId])
+  @@index([organizationId, status, updatedAt(sort: Desc)])
+  @@map("custom_strategies")
+}
+
+model CustomStrategyVersion {
+  id                 String           @id @default(uuid()) @db.Uuid
+  customStrategyId   String           @map("custom_strategy_id") @db.Uuid
+  version            String
+  kind               String
+  ruleDefinition     Json             @map("rule_definition")
+  implementationHash String           @map("implementation_hash")
+  status             String           @default("active")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  customStrategy     CustomStrategy   @relation(fields: [customStrategyId], references: [id], onDelete: Cascade)
+  executionVersion   StrategyVersion?
+
+  @@unique([customStrategyId, version])
+  @@unique([customStrategyId, implementationHash])
+  @@map("custom_strategy_versions")
+}
+
+model StrategyAssignment {
+  id                            String                    @id @default(uuid()) @db.Uuid
+  organizationId                String                    @map("organization_id") @db.Uuid
+  portfolioId                   String                    @map("portfolio_id") @db.Uuid
+  assetId                       String                    @map("asset_id") @db.Uuid
+  strategyVersionId             String                    @map("strategy_version_id") @db.Uuid
+  parameters                    Json                      @default("{}")
+  status                        String                    @default("active")
+  activatedAt                   DateTime?                 @map("activated_at")
+  lastEvaluatedAt               DateTime?                 @map("last_evaluated_at")
+  lastEvaluatedDatasetVersionId String?                   @map("last_evaluated_dataset_version_id") @db.Uuid
+  lastEvaluatedBarAt            DateTime?                 @map("last_evaluated_bar_at") @db.Timestamptz(3)
+  state                         Json                      @default("{}")
+  sourceQuantRunId              String?                   @map("source_quant_run_id") @db.Uuid
+  sourceQuantRunLegId           String?                   @map("source_quant_run_leg_id") @db.Uuid
+  createdAt                     DateTime                  @default(now()) @map("created_at")
+  updatedAt                     DateTime                  @updatedAt @map("updated_at")
+  organization                  Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  portfolio                     Portfolio                 @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  asset                         Asset                     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  strategyVersion               StrategyVersion           @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
+  signals                       StrategySignal[]
+  evaluationJobs                StrategyEvaluationJob[]
+  forwardSnapshots              StrategyForwardSnapshot[]
+  notifications                 Notification[]
+
   @@index([organizationId, status])
   @@index([strategyVersionId])
   @@map("strategy_assignments")
 }
 
 model StrategySignal {
-  id                String             @id @default(uuid()) @db.Uuid
-  organizationId    String             @map("organization_id") @db.Uuid
-  assignmentId      String             @map("assignment_id") @db.Uuid
-  assetId           String             @map("asset_id") @db.Uuid
-  strategyVersionId String             @map("strategy_version_id") @db.Uuid
-  signalType        String             @map("signal_type")
-  status            String             @default("suggested")
-  signalAt          DateTime           @map("signal_at")
-  executionAt       DateTime?          @map("execution_at")
-  signalPrice       Decimal?           @map("signal_price") @db.Decimal(20, 8)
-  reason            String?
-  metadata          Json               @default("{}")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignment        StrategyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  asset             Asset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  strategyVersion   StrategyVersion    @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  organizationId        String                 @map("organization_id") @db.Uuid
+  assignmentId          String                 @map("assignment_id") @db.Uuid
+  assetId               String                 @map("asset_id") @db.Uuid
+  strategyVersionId     String                 @map("strategy_version_id") @db.Uuid
+  datasetVersionId      String?                @map("dataset_version_id") @db.Uuid
+  signalType            String                 @map("signal_type")
+  eventType             String                 @default("signal") @map("event_type")
+  status                String                 @default("suggested")
+  signalAt              DateTime               @map("signal_at")
+  executionAt           DateTime?              @map("execution_at")
+  signalPrice           Decimal?               @map("signal_price") @db.Decimal(20, 8)
+  reason                String?
+  metadata              Json                   @default("{}")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment            StrategyAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  asset                 Asset                  @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  strategyVersion       StrategyVersion        @relation(fields: [strategyVersionId], references: [id], onDelete: Restrict)
+  datasetVersion        DatasetVersion?        @relation(fields: [datasetVersionId], references: [id], onDelete: Restrict)
+  notifications         Notification[]
+  portfolioTransactions PortfolioTransaction[]
 
-  @@unique([assignmentId, signalType, signalAt])
   @@index([organizationId, status, signalAt(sort: Desc)])
   @@index([assetId, signalAt(sort: Desc)])
+  @@index([datasetVersionId])
   @@map("strategy_signals")
+}
+
+model StrategyEvaluationJob {
+  id               String             @id @default(uuid()) @db.Uuid
+  organizationId   String             @map("organization_id") @db.Uuid
+  assignmentId     String             @map("assignment_id") @db.Uuid
+  datasetVersionId String             @map("dataset_version_id") @db.Uuid
+  status           String             @default("queued")
+  attemptCount     Int                @default(0) @map("attempt_count")
+  workerId         String?            @map("worker_id")
+  leaseExpiresAt   DateTime?          @map("lease_expires_at")
+  errorCode        String?            @map("error_code")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  finishedAt       DateTime?          @map("finished_at")
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment       StrategyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  datasetVersion   DatasetVersion     @relation(fields: [datasetVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentId, datasetVersionId])
+  @@index([status, createdAt])
+  @@map("strategy_evaluation_jobs")
+}
+
+model StrategyForwardSnapshot {
+  id                        String             @id @default(uuid()) @db.Uuid
+  organizationId            String             @map("organization_id") @db.Uuid
+  assignmentId              String             @map("assignment_id") @db.Uuid
+  datasetVersionId          String             @map("dataset_version_id") @db.Uuid
+  barAt                     DateTime           @map("bar_at") @db.Timestamptz(3)
+  simulatedCash             Decimal            @map("simulated_cash") @db.Decimal(24, 8)
+  simulatedQuantity         Decimal            @map("simulated_quantity") @db.Decimal(28, 10)
+  marketValue               Decimal            @map("market_value") @db.Decimal(24, 8)
+  equity                    Decimal            @db.Decimal(24, 8)
+  cumulativeContributions   Decimal            @map("cumulative_contributions") @db.Decimal(24, 8)
+  cumulativeFees            Decimal            @map("cumulative_fees") @db.Decimal(24, 8)
+  pnlExcludingContributions Decimal            @map("pnl_excluding_contributions") @db.Decimal(24, 8)
+  benchmarkEquity           Decimal            @map("benchmark_equity") @db.Decimal(24, 8)
+  createdAt                 DateTime           @default(now()) @map("created_at")
+  organization              Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment                StrategyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  datasetVersion            DatasetVersion     @relation(fields: [datasetVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentId, datasetVersionId, barAt])
+  @@index([organizationId, assignmentId, barAt])
+  @@map("strategy_forward_snapshots")
+}
+
+model Notification {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  assignmentId   String             @map("assignment_id") @db.Uuid
+  signalId       String             @map("signal_id") @db.Uuid
+  type           String
+  title          String
+  body           String
+  readAt         DateTime?          @map("read_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment     StrategyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  signal         StrategySignal     @relation(fields: [signalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, signalId])
+  @@index([organizationId, userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }
 
 model DataProvider {
@@ -539,14 +668,14 @@ model DataProvider {
 }
 
 model ProviderInstrument {
-  id             String       @id @default(uuid()) @db.Uuid
-  providerId     String       @map("provider_id") @db.Uuid
-  assetId        String       @map("asset_id") @db.Uuid
-  providerSymbol String       @map("provider_symbol")
-  metadata       Json         @default("{}")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  provider       DataProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(uuid()) @db.Uuid
+  providerId        String                   @map("provider_id") @db.Uuid
+  assetId           String                   @map("asset_id") @db.Uuid
+  providerSymbol    String                   @map("provider_symbol")
+  metadata          Json                     @default("{}")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  provider          DataProvider             @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  asset             Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
   ingestionRequests MarketIngestionRequest[]
 
   @@unique([providerId, providerSymbol])
@@ -570,27 +699,30 @@ model Dataset {
 }
 
 model DatasetVersion {
-  id              String               @id @default(uuid()) @db.Uuid
-  datasetId       String               @map("dataset_id") @db.Uuid
-  providerId      String               @map("provider_id") @db.Uuid
-  version         Int
-  checksum        String
-  coverageStart   DateTime             @map("coverage_start")
-  coverageEnd     DateTime             @map("coverage_end")
-  rowCount        Int                  @map("row_count")
-  missingBarCount Int                  @default(0) @map("missing_bar_count")
-  qualityStatus   String               @default("passed") @map("quality_status")
-  qualitySummary  Json                 @default("{}") @map("quality_summary")
-  sourceMetadata  Json                 @default("{}") @map("source_metadata")
-  isActive        Boolean              @default(false) @map("is_active")
-  publishedAt     DateTime             @default(now()) @map("published_at")
-  dataset         Dataset              @relation(fields: [datasetId], references: [id], onDelete: Cascade)
-  provider        DataProvider         @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  bars            DatasetBar[]
-  issues          DataQualityIssue[]
-  ingestionRuns   MarketIngestionRun[]
-  quantRunLegs    QuantRunLeg[]
-  ingestionRequests MarketIngestionRequest[]
+  id                       String                    @id @default(uuid()) @db.Uuid
+  datasetId                String                    @map("dataset_id") @db.Uuid
+  providerId               String                    @map("provider_id") @db.Uuid
+  version                  Int
+  checksum                 String
+  coverageStart            DateTime                  @map("coverage_start")
+  coverageEnd              DateTime                  @map("coverage_end")
+  rowCount                 Int                       @map("row_count")
+  missingBarCount          Int                       @default(0) @map("missing_bar_count")
+  qualityStatus            String                    @default("passed") @map("quality_status")
+  qualitySummary           Json                      @default("{}") @map("quality_summary")
+  sourceMetadata           Json                      @default("{}") @map("source_metadata")
+  isActive                 Boolean                   @default(false) @map("is_active")
+  publishedAt              DateTime                  @default(now()) @map("published_at")
+  dataset                  Dataset                   @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  provider                 DataProvider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  bars                     DatasetBar[]
+  issues                   DataQualityIssue[]
+  ingestionRuns            MarketIngestionRun[]
+  quantRunLegs             QuantRunLeg[]
+  ingestionRequests        MarketIngestionRequest[]
+  strategySignals          StrategySignal[]
+  strategyEvaluationJobs   StrategyEvaluationJob[]
+  strategyForwardSnapshots StrategyForwardSnapshot[]
 
   @@unique([datasetId, version])
   @@index([datasetId, isActive])
