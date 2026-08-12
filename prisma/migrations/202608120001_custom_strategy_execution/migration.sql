@@ -101,12 +101,8 @@ UPDATE "strategy_assignments"
 SET "activated_at" = "created_at"
 WHERE "activated_at" IS NULL;
 
-DROP INDEX "strategy_assignments_portfolio_id_asset_id_key";
 DROP INDEX "strategy_signals_assignment_id_signal_type_signal_at_key";
 
-CREATE UNIQUE INDEX "strategy_assignments_one_active_per_asset"
-  ON "strategy_assignments"("portfolio_id", "asset_id")
-  WHERE "status" = 'active';
 CREATE UNIQUE INDEX "strategy_signals_forward_event_idempotency"
   ON "strategy_signals"("assignment_id", "dataset_version_id", "signal_at", "event_type")
   WHERE "dataset_version_id" IS NOT NULL;
