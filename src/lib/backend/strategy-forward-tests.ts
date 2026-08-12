@@ -201,6 +201,7 @@ export async function applyStrategyAssignment(
           cumulativeContributions: 0,
           cumulativeFees: 0,
           startingEquity: initialNotional,
+          benchmarkQuantity: price > 0 ? initialNotional / price : 0,
         },
       },
       select: { id: true },

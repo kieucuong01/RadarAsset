@@ -24,6 +24,7 @@ from backtest.custom_rules import (
     custom_rule_implementation_hash,
     parse_custom_rule,
 )
+from backtest.forward_evaluator import PostgresEvaluationRepository, process_next_evaluation
 from backtest.models import Bar
 from backtest.portfolio import (
     PortfolioAssumptions,
@@ -813,9 +814,14 @@ class PostgresWorkerRepository:
 def run_once() -> dict[str, Any]:
     with psycopg.connect(database_url(), autocommit=False) as connection:
         repository = PostgresWorkerRepository(connection)
-        result = process_next_run(repository)
+        run_result = process_next_run(repository)
+        evaluation_result = process_next_evaluation(
+            PostgresEvaluationRepository(connection, worker_id=repository.worker_id)
+        )
         connection.commit()
-        return result
+        if run_result.get("status") == "idle" and evaluation_result.get("status") == "idle":
+            return {"status": "idle", "message": "No queued backtests or strategy evaluations."}
+        return {"status": "processed", "backtest": run_result, "evaluation": evaluation_result}
 
 
 def run_forever(

@@ -194,6 +194,24 @@ def test_main_once_processes_exactly_one_queue_item(monkeypatch: pytest.MonkeyPa
     assert calls == 1
 
 
+def test_run_once_processes_backtest_and_forward_job_fairly(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def commit(self): calls.append("commit")
+
+    monkeypatch.setattr(worker.psycopg, "connect", lambda *_args, **_kwargs: Connection())
+    monkeypatch.setattr(worker, "PostgresWorkerRepository", lambda _connection: type("Repo", (), {"worker_id": "worker-a"})())
+    monkeypatch.setattr(worker, "PostgresEvaluationRepository", lambda _connection, worker_id: object())
+    monkeypatch.setattr(worker, "process_next_run", lambda _repo: calls.append("backtest") or {"status": "idle"})
+    monkeypatch.setattr(worker, "process_next_evaluation", lambda _repo: calls.append("evaluation") or {"status": "succeeded", "id": "job-a"})
+
+    assert worker.run_once()["status"] == "processed"
+    assert calls == ["backtest", "evaluation", "commit"]
+
+
 def test_process_next_run_accepts_versioned_catalog_ma_parameters() -> None:
     run = queued_run()
     run = QueuedRun(
