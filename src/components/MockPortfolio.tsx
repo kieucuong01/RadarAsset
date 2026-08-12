@@ -31,6 +31,7 @@ import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { FavoriteAssetsPanel } from "@/components/FavoriteAssetsPanel";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import { StrategyAssignmentPanel } from "@/components/StrategyAssignmentPanel";
+import { PortfolioStrategyForwardTests } from "@/components/PortfolioStrategyForwardTests";
 import { Button } from "@/components/ui/button";
 import type {
   PortfolioHoldingResponse,
@@ -379,6 +380,7 @@ export function MockPortfolio() {
         timeframe={timeframe}
         onRecorded={setPortfolio}
       />
+      <PortfolioStrategyForwardTests />
       <TransactionLog
         transactions={portfolio?.transactions ?? []}
         holdings={holdings}

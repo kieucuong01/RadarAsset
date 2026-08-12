@@ -388,18 +388,20 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {leg.trades.map((trade) => (
-                          <TableRow key={`${trade.entryAt}-${trade.exitAt}`}>
-                            <TableCell>{dateLabel(trade.entryAt)}</TableCell>
-                            <TableCell>{dateLabel(trade.exitAt)}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {money(trade.realizedPnl, currency)}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {trade.returnPct.toFixed(2)}%
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {leg.trades
+                          .filter((trade) => "entryAt" in trade)
+                          .map((trade) => (
+                            <TableRow key={`${trade.entryAt}-${trade.exitAt}`}>
+                              <TableCell>{dateLabel(trade.entryAt)}</TableCell>
+                              <TableCell>{dateLabel(trade.exitAt)}</TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {money(trade.realizedPnl, currency)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {trade.returnPct.toFixed(2)}%
+                              </TableCell>
+                            </TableRow>
+                          ))}
                       </TableBody>
                     </Table>
                   )}

@@ -7,7 +7,12 @@ import {
 } from "@/lib/backtest/assignment-contracts";
 import { getPrisma } from "@/lib/db/prisma";
 
-import type { StrategyAssignmentResponse, StrategySignalResponse } from "./types";
+import type {
+  NotificationResponse,
+  StrategyAssignmentResponse,
+  StrategyForwardTestResponse,
+  StrategySignalResponse,
+} from "./types";
 
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"];
 
@@ -254,4 +259,128 @@ export async function applyStrategyAssignment(
     if (!refreshed) throw new Error("Strategy assignment could not be loaded.");
     return assignmentResponse(refreshed);
   });
+}
+
+export async function loadStrategyForwardTests(
+  context: TenantContext,
+): Promise<StrategyForwardTestResponse[]> {
+  const rows = await getPrisma().strategyAssignment.findMany({
+    where: {
+      organizationId: context.organizationId,
+      status: { in: ["active", "paused", "evaluation_failed"] },
+    },
+    orderBy: { activatedAt: "desc" },
+    take: 100,
+    select: {
+      id: true,
+      portfolioId: true,
+      status: true,
+      activatedAt: true,
+      lastEvaluatedAt: true,
+      lastEvaluatedBarAt: true,
+      asset: { select: { symbol: true } },
+      strategyVersion: { select: { code: true, version: true, name: true, category: true } },
+      signals: {
+        where: { eventType: { not: "INITIAL_SNAPSHOT" } },
+        orderBy: { signalAt: "desc" },
+        take: 1,
+        include: { asset: true, strategyVersion: { select: { code: true, version: true } } },
+      },
+      forwardSnapshots: {
+        orderBy: { barAt: "desc" },
+        take: 365,
+        select: {
+          barAt: true,
+          equity: true,
+          benchmarkEquity: true,
+          pnlExcludingContributions: true,
+          cumulativeContributions: true,
+          cumulativeFees: true,
+        },
+      },
+    },
+  });
+  return rows.map((row) => ({
+    assignmentId: row.id,
+    portfolioId: row.portfolioId,
+    symbol: row.asset.symbol,
+    strategy: {
+      code: row.strategyVersion.code,
+      version: row.strategyVersion.version,
+      name: row.strategyVersion.name,
+      kind: row.strategyVersion.category,
+    },
+    status: row.status === "paused" || row.status === "evaluation_failed" ? row.status : "active",
+    activatedAt: (row.activatedAt ?? new Date(0)).toISOString(),
+    lastEvaluatedAt: row.lastEvaluatedAt?.toISOString() ?? null,
+    lastEvaluatedBarAt: row.lastEvaluatedBarAt?.toISOString() ?? null,
+    latestSignal: row.signals.length
+      ? (assignmentResponse({
+          id: row.id,
+          portfolioId: row.portfolioId,
+          parameters: {},
+          status: row.status,
+          asset: row.asset,
+          strategyVersion: row.strategyVersion,
+          signals: row.signals,
+        }).signals[0] ?? null)
+      : null,
+    snapshots: [...row.forwardSnapshots].reverse().map((s) => ({
+      timestamp: s.barAt.toISOString(),
+      equity: numberFromDecimal(s.equity),
+      benchmarkEquity: numberFromDecimal(s.benchmarkEquity),
+      pnlExcludingContributions: numberFromDecimal(s.pnlExcludingContributions),
+      cumulativeContributions: numberFromDecimal(s.cumulativeContributions),
+      cumulativeFees: numberFromDecimal(s.cumulativeFees),
+    })),
+  }));
+}
+
+export async function loadNotifications(
+  context: TenantContext,
+  cursor?: string,
+): Promise<{ items: NotificationResponse[]; nextCursor: string | null; unreadCount: number }> {
+  const prisma = getPrisma();
+  const where = { organizationId: context.organizationId, userId: context.userId };
+  const [rows, unreadCount] = await Promise.all([
+    prisma.notification.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 26,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        assignmentId: true,
+        signalId: true,
+        type: true,
+        title: true,
+        body: true,
+        readAt: true,
+        createdAt: true,
+      },
+    }),
+    prisma.notification.count({ where: { ...where, readAt: null } }),
+  ]);
+  return {
+    items: rows.slice(0, 25).map((row) => ({
+      id: row.id,
+      assignmentId: row.assignmentId,
+      signalId: row.signalId,
+      type: row.type === "strategy_sell" ? "strategy_sell" : "strategy_buy",
+      title: row.title.slice(0, 120),
+      body: row.body.slice(0, 500),
+      readAt: row.readAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    nextCursor: rows.length > 25 ? rows[24].id : null,
+    unreadCount,
+  };
+}
+
+export async function markNotificationRead(context: TenantContext, id: string): Promise<void> {
+  const result = await getPrisma().notification.updateMany({
+    where: { id, organizationId: context.organizationId, userId: context.userId },
+    data: { readAt: new Date() },
+  });
+  if (result.count === 0) throw new Error("Notification not found.");
 }

@@ -16,6 +16,7 @@ import {
 
 import { CommandPaletteTrigger } from "@/components/CommandPalette";
 import { AccountMenu } from "@/components/AccountMenu";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -78,6 +79,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <CommandPaletteTrigger />
+          <NotificationCenter />
           <Button
             type="button"
             variant="ghost"

@@ -17,7 +17,7 @@ describe("MVP UI contracts", () => {
     expect(isFeatureAvailable("listenBriefing")).toBe(false);
     expect(isFeatureAvailable("applyPortfolio")).toBe(false);
     expect(isFeatureAvailable("alertEdit")).toBe(false);
-    expect(isFeatureAvailable("notifications")).toBe(false);
+    expect(isFeatureAvailable("notifications")).toBe(true);
     expect(Object.keys(MVP_FEATURES)).toHaveLength(5);
   });
 

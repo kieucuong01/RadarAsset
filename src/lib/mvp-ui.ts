@@ -39,7 +39,7 @@ export const MVP_FEATURES = {
   applyPortfolio: { available: false },
   watchlistAdd: { available: true },
   alertEdit: { available: false },
-  notifications: { available: false },
+  notifications: { available: true },
 } as const;
 
 export type MvpFeature = keyof typeof MVP_FEATURES;

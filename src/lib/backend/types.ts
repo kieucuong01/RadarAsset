@@ -113,6 +113,37 @@ export type StrategyAssignmentResponse = {
   signals: StrategySignalResponse[];
 };
 
+export type StrategyForwardTestResponse = {
+  assignmentId: string;
+  portfolioId: string;
+  symbol: string;
+  strategy: { code: string; version: string; name: string; kind: string };
+  status: "active" | "paused" | "evaluation_failed";
+  activatedAt: string;
+  lastEvaluatedAt: string | null;
+  lastEvaluatedBarAt: string | null;
+  latestSignal: StrategySignalResponse | null;
+  snapshots: Array<{
+    timestamp: string;
+    equity: number;
+    benchmarkEquity: number;
+    pnlExcludingContributions: number;
+    cumulativeContributions: number;
+    cumulativeFees: number;
+  }>;
+};
+
+export type NotificationResponse = {
+  id: string;
+  assignmentId: string;
+  signalId: string;
+  type: "strategy_buy" | "strategy_sell";
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
 export type ResearchRunImportInput = {
   source: string;
   kind: string;

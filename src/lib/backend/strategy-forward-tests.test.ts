@@ -5,17 +5,27 @@ const { prisma } = vi.hoisted(() => {
     portfolio: { findFirst: vi.fn() },
     quantRun: { findFirst: vi.fn() },
     portfolioPosition: { findUnique: vi.fn() },
-    strategyAssignment: { updateMany: vi.fn(), create: vi.fn(), findUnique: vi.fn() },
+    strategyAssignment: {
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
     strategySignal: { create: vi.fn() },
     strategyForwardSnapshot: { create: vi.fn() },
-    notification: { count: vi.fn() },
+    notification: { count: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
   };
   return { prisma: { ...tx, $transaction: vi.fn() } };
 });
 
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
 
-import { applyStrategyAssignment } from "./strategy-forward-tests";
+import {
+  applyStrategyAssignment,
+  loadNotifications,
+  loadStrategyForwardTests,
+  markNotificationRead,
+} from "./strategy-forward-tests";
 
 const context = { organizationId: "org-a", userId: "user-a", role: "editor" as const };
 const input = {
@@ -115,5 +125,82 @@ describe("strategy forward activation", () => {
 
     await expect(applyStrategyAssignment(context, input)).rejects.toThrow("SOURCE_RUN_MISMATCH");
     expect(prisma.strategyAssignment.create).not.toHaveBeenCalled();
+  });
+
+  it("loads bounded tenant forward snapshots newest first", async () => {
+    prisma.strategyAssignment.findMany = vi.fn().mockResolvedValue([
+      {
+        id: "assignment-a",
+        portfolioId: "portfolio-a",
+        status: "active",
+        activatedAt: new Date("2026-08-01T00:00:00Z"),
+        lastEvaluatedAt: new Date("2026-08-12T00:00:00Z"),
+        lastEvaluatedBarAt: new Date("2026-08-11T00:00:00Z"),
+        asset: { symbol: "BTC" },
+        strategyVersion: {
+          code: input.strategyCode,
+          version: "1.0.0",
+          name: "BTC entry",
+          category: "custom_rule",
+        },
+        signals: [],
+        forwardSnapshots: [
+          {
+            barAt: new Date("2026-08-11T00:00:00Z"),
+            equity: 1020,
+            benchmarkEquity: 1010,
+            pnlExcludingContributions: 20,
+            cumulativeContributions: 0,
+            cumulativeFees: 1,
+          },
+        ],
+      },
+    ]);
+
+    const result = await loadStrategyForwardTests(context);
+
+    expect(prisma.strategyAssignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: "org-a",
+          status: { in: ["active", "paused", "evaluation_failed"] },
+        },
+      }),
+    );
+    expect(result[0]).toMatchObject({
+      assignmentId: "assignment-a",
+      symbol: "BTC",
+      status: "active",
+    });
+    expect(result[0].snapshots[0].equity).toBe(1020);
+  });
+
+  it("loads and marks only the current user's tenant notifications", async () => {
+    prisma.notification.count.mockResolvedValue(1);
+    prisma.notification.findMany.mockResolvedValue([
+      {
+        id: "notice-a",
+        type: "strategy_buy",
+        title: "BUY BTC",
+        body: "price_crosses_above",
+        readAt: null,
+        createdAt: new Date("2026-08-12T00:00:00Z"),
+        signalId: "signal-a",
+        assignmentId: "assignment-a",
+      },
+    ]);
+    prisma.notification.updateMany.mockResolvedValue({ count: 1 });
+
+    const page = await loadNotifications(context);
+    await markNotificationRead(context, "notice-a");
+
+    expect(prisma.notification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: "org-a", userId: "user-a" }, take: 26 }),
+    );
+    expect(page).toMatchObject({ unreadCount: 1, nextCursor: null });
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+      where: { id: "notice-a", organizationId: "org-a", userId: "user-a" },
+      data: { readAt: expect.any(Date) },
+    });
   });
 });
