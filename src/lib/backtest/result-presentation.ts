@@ -50,3 +50,13 @@ export function buildBacktestKpis(model: BacktestResultModel) {
     profitFactor: finiteMetric(model.aggregate.metrics, "profitFactor"),
   };
 }
+
+export function advancedAnalysisAvailability(model: BacktestResultModel) {
+  return {
+    quantStats: model.aggregate.analytics !== null || model.aggregate.reportHtml !== null,
+    contribution: model.aggregate.contribution.length > 0,
+    cashFlowOrRebalance:
+      model.aggregate.cashFlow.length > 0 || model.aggregate.rebalance.length > 0,
+    perLeg: model.legs.length > 0,
+  };
+}

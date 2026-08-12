@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BacktestResultModel } from "./result-model";
 import {
+  advancedAnalysisAvailability,
   alignEquityAndDrawdown,
   buildBacktestKpis,
   buildPortfolioTradeRows,
@@ -145,6 +146,30 @@ describe("backtest result presentation", () => {
       sharpe: 1.4,
       winRatePct: null,
       profitFactor: null,
+    });
+  });
+
+  it("reports which advanced artifact sections are available", () => {
+    const model = modelWithTrades();
+    model.aggregate.analytics = { sharpe: 1.4 };
+    model.aggregate.reportHtml = "<html><body>QuantStats</body></html>";
+    model.aggregate.contribution = [
+      { timestamp: "2026-01-01T00:00:00Z", equity: 1000, components: { BTC: 500 } },
+    ];
+    model.aggregate.cashFlow = [
+      {
+        timestamp: "2026-01-02T00:00:00Z",
+        type: "contribution",
+        amount: 100,
+        cashAmount: 50,
+      },
+    ];
+
+    expect(advancedAnalysisAvailability(model)).toEqual({
+      quantStats: true,
+      contribution: true,
+      cashFlowOrRebalance: true,
+      perLeg: true,
     });
   });
 });
