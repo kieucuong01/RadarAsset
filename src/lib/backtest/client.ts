@@ -119,12 +119,13 @@ const strategyCatalogItemSchema = z
         })
         .strict(),
     ),
-    defaultParameters: z.record(z.string(), z.number()),
+    defaultParameters: z.record(z.string(), z.unknown()),
     supportedMarkets: z.array(z.string()),
     supportedTimeframes: z.array(z.enum(["1d", "1h"])),
     implementationHash: z.string().length(64),
     sourceAttribution: z.string().nullable(),
     modificationNotice: z.string().nullable(),
+    origin: z.enum(["built_in", "custom"]),
   })
   .strict();
 

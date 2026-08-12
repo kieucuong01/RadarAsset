@@ -274,6 +274,66 @@ describe("portfolio quant run persistence", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it("resolves an owned custom strategy as an immutable rule rather than caller parameters", async () => {
+    const rule = {
+      schemaVersion: 1,
+      kind: "price_threshold" as const,
+      operator: "crosses_above" as const,
+      threshold: 50_000,
+      currency: "USD" as const,
+      action: "buy" as const,
+      sizePct: 25,
+    };
+    const customCode = "custom:3b3e1f9d-84bc-4ce7-8f0a-f3594930b6b8";
+    prisma.strategyVersion.findMany.mockResolvedValueOnce([
+      {
+        id: "custom-execution-a",
+        code: customCode,
+        version: "1.0.0",
+        name: "BTC entry",
+        status: "active",
+        organizationId: "organization-a",
+        implementationHash: "c".repeat(64),
+        supportedMarkets: ["crypto_spot"],
+        supportedTimeframes: ["1d"],
+        customStrategyVersion: {
+          status: "active",
+          ruleDefinition: rule,
+          customStrategy: { status: "active" },
+        },
+      },
+    ]);
+    prisma.asset.findMany.mockResolvedValueOnce([assets[0]]);
+    const customSubmission: PortfolioBacktestSubmission = {
+      ...submission,
+      assumptions: { ...submission.assumptions, cashAllocationBps: 0 },
+      legs: [
+        {
+          ...submission.legs[0],
+          allocationBps: 10_000,
+          strategyCode: customCode,
+          strategyVersion: "1.0.0",
+          strategyParameters: {},
+        },
+      ],
+    };
+
+    await createPortfolioQuantRun(context, customSubmission);
+
+    expect(prisma.strategyVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: [{ OR: [{ organizationId: null }, { organizationId: "organization-a" }] }],
+        }),
+      }),
+    );
+    expect(prisma.quantRunLeg.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ strategyVersionId: "custom-execution-a", parameters: rule }),
+      ],
+    });
+  });
+
   it("scopes list and detail reads including artifacts to the active organization", async () => {
     await listPortfolioQuantRuns({ ...context, role: "viewer" });
     await loadPortfolioQuantRun({ ...context, role: "viewer" }, "run-1");

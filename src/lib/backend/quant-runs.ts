@@ -2,7 +2,11 @@ import type { Prisma } from "@prisma/client";
 
 import type { TenantContext } from "@/lib/auth/tenant-context";
 import { notionalFromBps } from "@/lib/backtest/allocation";
-import type { PortfolioBacktestSubmission } from "@/lib/backtest/contracts";
+import {
+  normalizeBacktestSubmission,
+  type PortfolioBacktestSubmission,
+} from "@/lib/backtest/contracts";
+import { normalizeExecutableRule } from "@/lib/custom-strategies/contracts";
 import { hashResolvedPortfolioRun, type ResolvedPortfolioHashLeg } from "@/lib/backtest/hash";
 import { getPrisma } from "@/lib/db/prisma";
 
@@ -59,6 +63,10 @@ function storedMarket(value: string): SupportedMarket {
   return market;
 }
 
+function currencyMatchesRule(assetCurrency: string, ruleCurrency: string) {
+  return assetCurrency === ruleCurrency || (ruleCurrency === "USD" && assetCurrency === "USDT");
+}
+
 function artifactKind(value: string): ArtifactKind {
   const kinds: ArtifactKind[] = [
     "equity",
@@ -78,23 +86,37 @@ function dateBoundary(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-async function resolvePortfolioLegs(input: PortfolioBacktestSubmission): Promise<ResolvedLeg[]> {
+async function resolvePortfolioLegs(
+  context: TenantContext,
+  input: PortfolioBacktestSubmission,
+): Promise<ResolvedLeg[]> {
   const prisma = getPrisma();
   const strategyKeys = input.legs.map((leg) => ({
     code: leg.strategyCode,
     version: leg.strategyVersion,
   }));
   const strategies = await prisma.strategyVersion.findMany({
-    where: { OR: strategyKeys },
+    where: {
+      OR: strategyKeys,
+      AND: [{ OR: [{ organizationId: null }, { organizationId: context.organizationId }] }],
+    },
     select: {
       id: true,
       code: true,
       version: true,
       name: true,
       status: true,
+      organizationId: true,
       implementationHash: true,
       supportedMarkets: true,
       supportedTimeframes: true,
+      customStrategyVersion: {
+        select: {
+          status: true,
+          ruleDefinition: true,
+          customStrategy: { select: { status: true } },
+        },
+      },
     },
   });
   const strategyByKey = new Map(
@@ -175,6 +197,25 @@ async function resolvePortfolioLegs(input: PortfolioBacktestSubmission): Promise
         `${leg.strategyCode}@${leg.strategyVersion} is not active.`,
       );
     }
+    const customRule = strategy.customStrategyVersion
+      ? normalizeExecutableRule(strategy.customStrategyVersion.ruleDefinition)
+      : null;
+    if (
+      strategy.customStrategyVersion &&
+      (strategy.customStrategyVersion.status !== "active" ||
+        strategy.customStrategyVersion.customStrategy.status !== "active")
+    ) {
+      throw new PortfolioRunEligibilityError(
+        "STRATEGY_UNAVAILABLE",
+        `${leg.strategyCode}@${leg.strategyVersion} is not active.`,
+      );
+    }
+    if (customRule && !currencyMatchesRule(asset.currency, customRule.currency)) {
+      throw new PortfolioRunEligibilityError(
+        "STRATEGY_UNSUPPORTED",
+        `${leg.strategyCode}@${leg.strategyVersion} expects ${customRule.currency} market data.`,
+      );
+    }
     const strategyMarkets = stringArray(strategy.supportedMarkets);
     const strategyTimeframes = stringArray(strategy.supportedTimeframes);
     if (!strategyMarkets.includes(market) || !strategyTimeframes.includes(input.timeframe)) {
@@ -200,7 +241,7 @@ async function resolvePortfolioLegs(input: PortfolioBacktestSubmission): Promise
       implementationHash: strategy.implementationHash,
       allocationBps: leg.allocationBps,
       leverage: leg.leverage,
-      strategyParameters: leg.strategyParameters,
+      strategyParameters: customRule ?? leg.strategyParameters,
       initialNotional: notionalFromBps(input.totalCapital, leg.allocationBps),
       market,
       currency: asset.currency,
@@ -242,8 +283,9 @@ export async function createPortfolioQuantRun(
   context: TenantContext,
   input: PortfolioBacktestSubmission,
 ) {
-  const resolvedLegs = await resolvePortfolioLegs(input);
-  const portfolioHash = hashResolvedPortfolioRun(input, resolvedLegs);
+  const normalizedInput = normalizeBacktestSubmission(input);
+  const resolvedLegs = await resolvePortfolioLegs(context, normalizedInput);
+  const portfolioHash = hashResolvedPortfolioRun(normalizedInput, resolvedLegs);
   const datasetVersionIds = resolvedLegs.map((leg) => leg.datasetVersionId);
 
   return getPrisma().$transaction(async (tx) => {
@@ -254,12 +296,12 @@ export async function createPortfolioQuantRun(
         strategyVersionId: null,
         strategyName: "Portfolio Backtest",
         status: "queued",
-        timeframe: input.timeframe,
+        timeframe: normalizedInput.timeframe,
         progress: 0,
         strategyHash: portfolioHash,
         datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
         engineVersion: "portfolio-v1",
-        parameters: input as Prisma.InputJsonValue,
+        parameters: normalizedInput as Prisma.InputJsonValue,
       },
       select: { id: true },
     });

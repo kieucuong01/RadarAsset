@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   resolveProviderInstrument: vi.fn(),
   requestMarketIngestion: vi.fn(),
   listMarketIngestionRequests: vi.fn(),
+  listTenantCustomStrategyCatalog: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/tenant-context", () => ({
@@ -73,6 +74,10 @@ vi.mock("@/lib/backend/quant-runs", async (importOriginal) => {
     loadPortfolioQuantRun: mocks.getQuantRun,
   };
 });
+
+vi.mock("@/lib/backend/custom-strategies", () => ({
+  listTenantCustomStrategyCatalog: mocks.listTenantCustomStrategyCatalog,
+}));
 
 vi.mock("@/lib/backend/quant-optimizer", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/backend/quant-optimizer")>();
@@ -156,6 +161,7 @@ describe("tenant API authorization", () => {
     mocks.searchProviderInstruments.mockResolvedValue({ items: [] });
     mocks.requestMarketIngestion.mockResolvedValue({ id: "request-a", created: true });
     mocks.listMarketIngestionRequests.mockResolvedValue([]);
+    mocks.listTenantCustomStrategyCatalog.mockResolvedValue([]);
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -231,6 +237,7 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
+    expect(mocks.listTenantCustomStrategyCatalog).toHaveBeenCalledWith(viewerContext);
     await expect(response.json()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "ma_crossover", version: "1.0.0" })]),
     );

@@ -87,6 +87,7 @@ describe("backtest API client", () => {
             implementationHash: "a".repeat(64),
             sourceAttribution: "Apache License 2.0",
             modificationNotice: "Causal rewrite",
+            origin: "built_in",
           },
         ]),
         { status: 200 },

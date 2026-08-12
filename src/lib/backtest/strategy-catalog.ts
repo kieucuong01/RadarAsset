@@ -409,6 +409,7 @@ export function listStrategyCatalog() {
     ({ validator: _validator, requiredWarmup: _requiredWarmup, ...definition }) => ({
       ...definition,
       status: "active" as const,
+      origin: "built_in" as const,
     }),
   );
 }

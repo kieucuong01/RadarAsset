@@ -28,7 +28,7 @@ export type DraftBacktestLeg = QuantAssetCatalogItem & {
   strategyCode: string;
   strategyVersion: string;
   strategyName: string;
-  strategyParameters: Record<string, number>;
+  strategyParameters: Record<string, unknown>;
   strategyParameterSchema: StrategyCatalogItem["parameterSchema"];
   supportedMarkets: string[];
   supportedTimeframes: Array<"1d" | "1h">;
@@ -103,7 +103,9 @@ function strategyFields(strategy: BuilderStrategyInput) {
     strategyCode: strategy.code,
     strategyVersion: strategy.version,
     strategyName: strategy.name,
-    strategyParameters: { ...strategy.defaultParameters },
+    strategyParameters: strategy.code.startsWith("custom:")
+      ? {}
+      : { ...strategy.defaultParameters },
     strategyParameterSchema: [...strategy.parameterSchema],
     supportedMarkets: [...strategy.supportedMarkets],
     supportedTimeframes: [...strategy.supportedTimeframes],

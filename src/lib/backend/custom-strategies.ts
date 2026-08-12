@@ -34,6 +34,22 @@ export type CustomStrategySummary = {
   versions: CustomStrategyVersionSummary[];
 };
 
+export type TenantStrategyCatalogItem = {
+  code: string;
+  version: string;
+  name: string;
+  category: string;
+  status: "active";
+  parameterSchema: [];
+  defaultParameters: Record<string, unknown>;
+  supportedMarkets: string[];
+  supportedTimeframes: Array<"1d" | "1h">;
+  implementationHash: string;
+  sourceAttribution: null;
+  modificationNotice: null;
+  origin: "custom";
+};
+
 type CustomStrategyRecord = {
   id: string;
   name: string;
@@ -217,6 +233,62 @@ export async function listCustomStrategies(context: TenantContext) {
     include: strategyInclude,
   });
   return strategies.map(customStrategySummary);
+}
+
+export async function listTenantCustomStrategyCatalog(
+  context: TenantContext,
+): Promise<TenantStrategyCatalogItem[]> {
+  const versions = await getPrisma().strategyVersion.findMany({
+    where: {
+      organizationId: context.organizationId,
+      status: "active",
+      customStrategyVersion: { customStrategy: { status: "active" } },
+    },
+    orderBy: [{ name: "asc" }, { version: "desc" }],
+    select: {
+      code: true,
+      version: true,
+      name: true,
+      category: true,
+      status: true,
+      parameterSchema: true,
+      defaultParameters: true,
+      supportedMarkets: true,
+      supportedTimeframes: true,
+      implementationHash: true,
+    },
+  });
+
+  return versions.map((version) => {
+    const defaultParameters = normalizeExecutableRule(version.defaultParameters);
+    const supportedTimeframes = stringArray(version.supportedTimeframes).filter(
+      (timeframe): timeframe is "1d" | "1h" => timeframe === "1d" || timeframe === "1h",
+    );
+    if (version.status !== "active" || !Array.isArray(version.parameterSchema)) {
+      throw new Error("Custom strategy execution registry is invalid.");
+    }
+    return {
+      code: version.code,
+      version: version.version,
+      name: version.name,
+      category: version.category,
+      status: "active",
+      parameterSchema: [],
+      defaultParameters,
+      supportedMarkets: stringArray(version.supportedMarkets),
+      supportedTimeframes,
+      implementationHash: version.implementationHash,
+      sourceAttribution: null,
+      modificationNotice: null,
+      origin: "custom",
+    };
+  });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export async function archiveCustomStrategy(context: TenantContext, id: string) {

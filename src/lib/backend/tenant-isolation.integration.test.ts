@@ -637,6 +637,8 @@ describe("database tenant isolation", () => {
     const strategyBId = randomUUID();
     const versionAId = randomUUID();
     const versionBId = randomUUID();
+    const executionAId = randomUUID();
+    const executionBId = randomUUID();
     try {
       await prisma.appUser.createMany({
         data: [
@@ -662,8 +664,20 @@ describe("database tenant isolation", () => {
       });
 
       for (const strategy of [
-        { strategyId: strategyAId, versionId: versionAId, organizationId: organizationAId, userId: userAId },
-        { strategyId: strategyBId, versionId: versionBId, organizationId: organizationBId, userId: userBId },
+        {
+          strategyId: strategyAId,
+          versionId: versionAId,
+          executionId: executionAId,
+          organizationId: organizationAId,
+          userId: userAId,
+        },
+        {
+          strategyId: strategyBId,
+          versionId: versionBId,
+          executionId: executionBId,
+          organizationId: organizationBId,
+          userId: userBId,
+        },
       ]) {
         await prisma.$executeRaw`
           INSERT INTO custom_strategies (
@@ -682,9 +696,21 @@ describe("database tenant isolation", () => {
             ${"c".repeat(64)}, 'active', NOW()
           )
         `;
+        await prisma.$executeRaw`
+          INSERT INTO strategy_versions (
+            id, code, version, name, category, organization_id, custom_strategy_version_id,
+            status, parameter_schema, default_parameters, supported_markets, supported_timeframes,
+            implementation_hash, created_at
+          ) VALUES (
+            ${strategy.executionId}::uuid, ${`custom:${strategy.versionId}`}, '1.0.0', 'Tenant DCA',
+            'custom_rule', ${strategy.organizationId}::uuid, ${strategy.versionId}::uuid, 'active',
+            '[]'::jsonb, '{}'::jsonb, '["crypto_spot"]'::jsonb, '["1d"]'::jsonb,
+            ${"d".repeat(64)}, NOW()
+          )
+        `;
       }
 
-      await prisma.organization.delete({ where: { id: organizationAId } });
+      await prisma.customStrategy.delete({ where: { id: strategyAId } });
 
       const survivingVersion = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM custom_strategy_versions WHERE id = ${versionBId}::uuid
@@ -692,10 +718,20 @@ describe("database tenant isolation", () => {
       const removedVersion = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM custom_strategy_versions WHERE id = ${versionAId}::uuid
       `;
+      const survivingExecution = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM strategy_versions WHERE id = ${executionBId}::uuid
+      `;
+      const removedExecution = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM strategy_versions WHERE id = ${executionAId}::uuid
+      `;
       expect(survivingVersion).toEqual([{ id: versionBId }]);
       expect(removedVersion).toEqual([]);
+      expect(survivingExecution).toEqual([{ id: executionBId }]);
+      expect(removedExecution).toEqual([]);
     } finally {
-      await prisma.organization.deleteMany({ where: { id: { in: [organizationAId, organizationBId] } } });
+      await prisma.organization.deleteMany({
+        where: { id: { in: [organizationAId, organizationBId] } },
+      });
       await prisma.appUser.deleteMany({ where: { id: { in: [userAId, userBId] } } });
     }
   });

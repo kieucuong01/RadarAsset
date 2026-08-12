@@ -68,7 +68,7 @@ export function StrategyAssignmentPanel({
         setAssignments(nextAssignments);
         if (catalog[0]) {
           setStrategyCode(catalog[0].code);
-          setParameters(catalog[0].defaultParameters);
+          setParameters(numericParameters(catalog[0].defaultParameters));
         }
       })
       .catch((loadError: unknown) => {
@@ -154,7 +154,7 @@ export function StrategyAssignmentPanel({
                 onChange={(event) => {
                   const next = strategies.find((item) => item.code === event.target.value);
                   setStrategyCode(event.target.value);
-                  setParameters(next?.defaultParameters ?? {});
+                  setParameters(numericParameters(next?.defaultParameters ?? {}));
                 }}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
               >
@@ -274,5 +274,13 @@ export function StrategyAssignmentPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function numericParameters(parameters: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(parameters).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number",
+    ),
   );
 }

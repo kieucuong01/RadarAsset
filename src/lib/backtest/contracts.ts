@@ -38,6 +38,8 @@ const isoDateSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.")
   .refine(isRealIsoDate, "Expected a real calendar date.");
 
+const customStrategyCodePattern =
+  /^custom:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const strategyCodeSchema = z.string().trim().min(1).max(64);
 const strategyVersionSchema = z
   .string()
@@ -108,6 +110,24 @@ export const portfolioBacktestLegSchema = z
   })
   .strict();
 
+function isCustomStrategyCode(code: string) {
+  return customStrategyCodePattern.test(code);
+}
+
+function normalizeLegStrategyParameters(code: string, input: unknown) {
+  if (!isCustomStrategyCode(code)) return normalizeStrategyParameters(code, input);
+  const parameters = z.record(z.string(), z.unknown()).parse(input);
+  if (Object.keys(parameters).length > 0) {
+    throw new Error("Custom strategy parameters are frozen by its immutable version.");
+  }
+  return {};
+}
+
+function validateLegStrategy(code: string, version: string, parameters: unknown) {
+  if (!isCustomStrategyCode(code)) strategyDefinition(code, version);
+  return normalizeLegStrategyParameters(code, parameters);
+}
+
 function validateRangeAndUniqueLegs(
   submission: { from: string; to: string; legs: Array<{ symbol: string }> },
   context: z.RefinementCtx,
@@ -157,8 +177,7 @@ export const canonicalBacktestSubmissionSchema = z
     }
     submission.legs.forEach((leg, index) => {
       try {
-        strategyDefinition(leg.strategyCode, leg.strategyVersion);
-        normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters);
+        validateLegStrategy(leg.strategyCode, leg.strategyVersion, leg.strategyParameters);
       } catch (error) {
         context.addIssue({
           code: "custom",
@@ -194,8 +213,11 @@ const legacyCatalogSubmissionSchema = z
   .superRefine((submission, context) => {
     validateRangeAndUniqueLegs(submission, context);
     try {
-      strategyDefinition(submission.strategyCode, submission.strategyVersion);
-      normalizeStrategyParameters(submission.strategyCode, submission.strategyParameters);
+      validateLegStrategy(
+        submission.strategyCode,
+        submission.strategyVersion,
+        submission.strategyParameters,
+      );
     } catch (error) {
       context.addIssue({
         code: "custom",
@@ -234,7 +256,7 @@ type CanonicalPortfolioSubmission = z.infer<typeof canonicalBacktestSubmissionSc
 type CanonicalPortfolioLeg = CanonicalPortfolioSubmission["legs"][number];
 
 export type PortfolioBacktestLeg = Omit<CanonicalPortfolioLeg, "strategyCode"> & {
-  strategyCode: StrategyCode;
+  strategyCode: StrategyCode | `custom:${string}`;
 };
 
 export type PortfolioBacktestSubmission = Omit<
@@ -295,10 +317,12 @@ export function normalizeBacktestSubmission(input: unknown): PortfolioBacktestSu
       createDefaultPortfolioAssumptions(canonical.feeBps, canonical.slippageBps),
     legs: canonical.legs
       .map((leg) => {
-        strategyDefinition(leg.strategyCode, leg.strategyVersion);
         return {
           ...leg,
-          strategyParameters: normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters),
+          strategyParameters: normalizeLegStrategyParameters(
+            leg.strategyCode,
+            leg.strategyParameters,
+          ),
         };
       })
       .sort((left, right) => left.symbol.localeCompare(right.symbol)),

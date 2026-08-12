@@ -156,6 +156,37 @@ describe("portfolio backtest submission contract", () => {
     ).toBe(10_000);
   });
 
+  it("accepts a frozen custom strategy reference only with empty caller parameters", () => {
+    const custom = normalizeBacktestSubmission({
+      ...validPortfolioSubmission,
+      legs: validPortfolioSubmission.legs.map((leg, index) => ({
+        ...leg,
+        allocationBps: index === 0 ? 10_000 : 0,
+        strategyCode: "custom:3b3e1f9d-84bc-4ce7-8f0a-f3594930b6b8",
+        strategyVersion: "1.0.0",
+        strategyParameters: {},
+      })),
+    });
+
+    expect(
+      custom.legs.every(
+        (leg) => leg.strategyParameters && Object.keys(leg.strategyParameters).length === 0,
+      ),
+    ).toBe(true);
+    expect(() =>
+      normalizeBacktestSubmission({
+        ...validPortfolioSubmission,
+        legs: validPortfolioSubmission.legs.map((leg, index) => ({
+          ...leg,
+          allocationBps: index === 0 ? 10_000 : 0,
+          strategyCode: "custom:3b3e1f9d-84bc-4ce7-8f0a-f3594930b6b8",
+          strategyVersion: "1.0.0",
+          strategyParameters: { threshold: 50_000 },
+        })),
+      }),
+    ).toThrow("Custom strategy parameters are frozen");
+  });
+
   it("maps the legacy shared-strategy payload to equal independent legs", () => {
     expect(
       normalizeBacktestSubmission({

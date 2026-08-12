@@ -478,7 +478,7 @@ model StrategyVersion {
   modificationNotice      String?                @map("modification_notice") @db.Text
   createdAt               DateTime               @default(now()) @map("created_at")
   organization            Organization?          @relation("StrategyVersionOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
-  customStrategyVersion   CustomStrategyVersion? @relation(fields: [customStrategyVersionId], references: [id], onDelete: Restrict)
+  customStrategyVersion   CustomStrategyVersion? @relation(fields: [customStrategyVersionId], references: [id], onDelete: Cascade)
   quantRuns               QuantRun[]
   quantRunLegs            QuantRunLeg[]
   assignments             StrategyAssignment[]

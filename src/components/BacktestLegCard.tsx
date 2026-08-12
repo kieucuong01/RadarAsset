@@ -181,30 +181,35 @@ export function BacktestLegCard({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {leg.strategyParameterSchema.map((parameter) => (
-              <Field key={parameter.name}>
-                <FieldLabel htmlFor={`${leg.symbol}-${parameter.name}`}>
-                  {parameter.label}
-                </FieldLabel>
-                <Input
-                  id={`${leg.symbol}-${parameter.name}`}
-                  type="number"
-                  inputMode="decimal"
-                  min={parameter.min}
-                  max={parameter.max}
-                  step={parameter.type === "integer" ? 1 : 0.01}
-                  value={leg.strategyParameters[parameter.name] ?? parameter.default}
-                  onChange={(event) =>
-                    dispatch({
-                      type: "strategyParameterEdited",
-                      symbol: leg.symbol,
-                      parameter: parameter.name,
-                      value: Number(event.target.value),
-                    })
-                  }
-                />
-              </Field>
-            ))}
+            {leg.strategyParameterSchema.map((parameter) => {
+              const configuredValue = leg.strategyParameters[parameter.name];
+              return (
+                <Field key={parameter.name}>
+                  <FieldLabel htmlFor={`${leg.symbol}-${parameter.name}`}>
+                    {parameter.label}
+                  </FieldLabel>
+                  <Input
+                    id={`${leg.symbol}-${parameter.name}`}
+                    type="number"
+                    inputMode="decimal"
+                    min={parameter.min}
+                    max={parameter.max}
+                    step={parameter.type === "integer" ? 1 : 0.01}
+                    value={
+                      typeof configuredValue === "number" ? configuredValue : parameter.default
+                    }
+                    onChange={(event) =>
+                      dispatch({
+                        type: "strategyParameterEdited",
+                        symbol: leg.symbol,
+                        parameter: parameter.name,
+                        value: Number(event.target.value),
+                      })
+                    }
+                  />
+                </Field>
+              );
+            })}
           </div>
         </FieldGroup>
       </CardContent>
