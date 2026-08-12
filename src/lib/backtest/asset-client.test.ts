@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getQuantAssets, parseQuantAssetCatalog } from "./asset-client";
+import { assetReadinessLabel, getQuantAssets, parseQuantAssetCatalog } from "./asset-client";
+import type { QuantAssetCatalogItem } from "./asset-client";
 
 const validItem = {
   symbol: "VNM",
@@ -17,7 +18,7 @@ const validItem = {
   freshness: "fresh",
   backtestable: true,
   reasonCode: null,
-};
+} satisfies QuantAssetCatalogItem;
 
 describe("Quant asset catalog client", () => {
   it("encodes the bounded search and validates the complete response", async () => {
@@ -49,5 +50,33 @@ describe("Quant asset catalog client", () => {
         items: [{ ...validItem, backtestable: false, reasonCode: null }],
       }),
     ).toThrow("Invalid quant asset catalog response.");
+  });
+
+  it("explains range-insufficient assets separately from missing datasets", () => {
+    expect(
+      assetReadinessLabel({
+        ...validItem,
+        backtestable: false,
+        reasonCode: "DATASET_RANGE_INSUFFICIENT",
+        coverageStart: "2024-08-12T00:00:00.000Z",
+        coverageEnd: "2026-08-10T00:00:00.000Z",
+        rowCount: 497,
+      }),
+    ).toEqual({
+      badge: "Ngoài khoảng dữ liệu",
+      detail: "497 bars, 2024-08-12 đến 2026-08-10",
+    });
+
+    expect(
+      assetReadinessLabel({
+        ...validItem,
+        backtestable: false,
+        reasonCode: "DATASET_UNAVAILABLE",
+        datasetVersionId: null,
+        coverageStart: null,
+        coverageEnd: null,
+        rowCount: 0,
+      }).badge,
+    ).toBe("Chưa có dataset");
   });
 });

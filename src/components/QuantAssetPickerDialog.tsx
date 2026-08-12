@@ -17,7 +17,11 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getQuantAssets, type QuantAssetCatalogItem } from "@/lib/backtest/asset-client";
+import {
+  assetReadinessLabel,
+  getQuantAssets,
+  type QuantAssetCatalogItem,
+} from "@/lib/backtest/asset-client";
 
 type QuantAssetPickerDialogProps = {
   timeframe: "1d" | "1h";
@@ -125,6 +129,7 @@ export function QuantAssetPickerDialog({
             {items.map((item) => {
               const selected = selectedSymbols.includes(item.symbol);
               const unavailable = !item.backtestable;
+              const readiness = assetReadinessLabel(item);
               return (
                 <Button
                   key={item.symbol}
@@ -145,10 +150,10 @@ export function QuantAssetPickerDialog({
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Badge variant={item.backtestable ? "secondary" : "outline"}>
-                      {selected ? "Đã thêm" : item.backtestable ? "Sẵn sàng" : "Thiếu dữ liệu"}
+                      {selected ? "Đã thêm" : readiness.badge}
                     </Badge>
                     <span className="text-xs font-normal text-muted-foreground">
-                      {item.rowCount.toLocaleString()} bars
+                      {readiness.detail}
                     </span>
                   </span>
                 </Button>

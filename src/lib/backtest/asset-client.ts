@@ -44,6 +44,28 @@ const quantAssetCatalogSchema = z.object({ items: z.array(quantAssetCatalogItemS
 export type QuantAssetCatalogItem = z.infer<typeof quantAssetCatalogItemSchema>;
 export type QuantAssetCatalog = z.infer<typeof quantAssetCatalogSchema>;
 
+function isoDay(value: string | null) {
+  return value ? value.slice(0, 10) : null;
+}
+
+export function assetReadinessLabel(item: QuantAssetCatalogItem) {
+  if (item.backtestable) {
+    return { badge: "Sẵn sàng", detail: `${item.rowCount.toLocaleString()} bars` };
+  }
+  if (item.reasonCode === "DATASET_RANGE_INSUFFICIENT") {
+    const start = isoDay(item.coverageStart);
+    const end = isoDay(item.coverageEnd);
+    return {
+      badge: "Ngoài khoảng dữ liệu",
+      detail:
+        start && end
+          ? `${item.rowCount.toLocaleString()} bars, ${start} đến ${end}`
+          : `${item.rowCount.toLocaleString()} bars`,
+    };
+  }
+  return { badge: "Chưa có dataset", detail: `${item.rowCount.toLocaleString()} bars` };
+}
+
 export function parseQuantAssetCatalog(input: unknown): QuantAssetCatalog {
   const parsed = quantAssetCatalogSchema.safeParse(input);
   if (!parsed.success) throw new Error("Invalid quant asset catalog response.");

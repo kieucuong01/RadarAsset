@@ -45,6 +45,16 @@ export function childSpecs(repoRoot, pythonExecutable) {
       command: pythonExecutable,
       args: [path.join(repoRoot, "quant-worker", "worker.py")],
     },
+    {
+      name: "ingestion-worker",
+      command: pythonExecutable,
+      args: [
+        path.join(repoRoot, "quant-worker", "process_ingestion_requests.py"),
+        "--watch",
+        "--poll-seconds",
+        "5",
+      ],
+    },
   ];
 }
 

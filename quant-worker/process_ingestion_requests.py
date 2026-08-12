@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -161,6 +162,8 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Process queued market ingestion requests.")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--env-file", default=".env.local")
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--poll-seconds", type=float, default=5.0)
     return parser
 
 
@@ -170,7 +173,7 @@ def main(
     connection_factory: Callable[..., Any] = psycopg.connect,
 ) -> int:
     args = _argument_parser().parse_args(argv)
-    if not 1 <= args.limit <= 20:
+    if not 1 <= args.limit <= 20 or args.poll_seconds <= 0 or args.poll_seconds > 60:
         print(json.dumps({"status": "fatal", "errorCode": "configuration_error"}))
         return 2
     try:
@@ -186,13 +189,20 @@ def main(
         failed = 0
         with connection_factory(database_url, autocommit=True) as connection:
             repository = PostgresRequestRepository(connection)
-            for _ in range(args.limit):
-                outcome = process_next_ingestion_request(repository, factory)
-                if outcome["status"] == "idle":
+            while True:
+                batch_processed = 0
+                for _ in range(args.limit):
+                    outcome = process_next_ingestion_request(repository, factory)
+                    if outcome["status"] == "idle":
+                        break
+                    batch_processed += 1
+                    processed += 1
+                    failed += outcome["status"] != "succeeded"
+                    print(json.dumps(outcome, separators=(",", ":"), sort_keys=True))
+                if not args.watch:
                     break
-                processed += 1
-                failed += outcome["status"] != "succeeded"
-                print(json.dumps(outcome, separators=(",", ":"), sort_keys=True))
+                if batch_processed == 0:
+                    time.sleep(args.poll_seconds)
         print(
             json.dumps(
                 {
@@ -204,6 +214,8 @@ def main(
             )
         )
         return 0 if failed == 0 else 1
+    except KeyboardInterrupt:
+        return 0
     except (OSError, ValueError):
         print(json.dumps({"status": "fatal", "errorCode": "configuration_error"}))
         return 2
