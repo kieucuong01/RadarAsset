@@ -90,7 +90,7 @@ const artifactSchema = z.discriminatedUnion("kind", [
       payload: z.record(z.string(), z.unknown()),
     })
     .strict(),
-  ...(["benchmark", "contribution", "cash_flow", "rebalance"] as const).map((kind) =>
+  ...(["benchmark", "contribution", "cash_flow", "rebalance", "robustness"] as const).map((kind) =>
     z.object({ ...artifactBase, kind: z.literal(kind), payload: z.unknown() }).strict(),
   ),
 ]);

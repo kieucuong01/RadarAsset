@@ -29,6 +29,45 @@ const rebalancePointSchema = z
   })
   .strict();
 
+const robustnessFoldSchema = z
+  .object({
+    fold: z.number().int().positive(),
+    trainStart: z.string(),
+    trainEnd: z.string(),
+    testStart: z.string(),
+    testEnd: z.string(),
+    trainObservationCount: z.number().int().positive(),
+    testObservationCount: z.number().int().positive(),
+    referenceReturnPct: z.number(),
+    outOfSampleReturnPct: z.number(),
+    degradationPctPoints: z.number(),
+  })
+  .strict();
+
+const parameterStabilitySchema = z
+  .object({
+    status: z.enum(["stable", "mixed", "fragile", "not_evaluated"]),
+    score: z.number().min(0).max(100).nullable(),
+    neighborCount: z.number().int().nonnegative().optional(),
+    warnings: z.array(z.string()),
+  })
+  .strict();
+
+const robustnessSchema = z
+  .object({
+    method: z.literal("anchored_temporal_holdout"),
+    foldCount: z.number().int().min(2).max(10),
+    folds: z.array(robustnessFoldSchema).min(2),
+    outOfSampleMeanReturnPct: z.number(),
+    outOfSampleReturnStdPct: z.number().nonnegative(),
+    outOfSamplePositiveFoldPct: z.number().min(0).max(100),
+    sampleAdequacy: z.enum(["adequate", "insufficient"]),
+    warnings: z.array(z.string()),
+    disclaimer: z.string().min(1),
+    parameterStability: parameterStabilitySchema,
+  })
+  .strict();
+
 const displayedAssumptionsSchema = z
   .object({
     cashAllocationBps: z.number().int().min(0).max(10_000),
@@ -94,6 +133,7 @@ function validateScopes(run: BacktestRun) {
 export type ContributionPoint = z.infer<typeof contributionPointSchema>;
 export type CashFlowPoint = z.infer<typeof cashFlowPointSchema>;
 export type RebalancePoint = z.infer<typeof rebalancePointSchema>;
+export type RobustnessDiagnostics = z.infer<typeof robustnessSchema>;
 
 export type BacktestResultModel = {
   aggregate: {
@@ -107,6 +147,7 @@ export type BacktestResultModel = {
     assumptions: z.infer<typeof displayedAssumptionsSchema>;
     analytics: Record<string, unknown> | null;
     reportHtml: string | null;
+    robustness: RobustnessDiagnostics | null;
   };
   legs: Array<{
     id: string;
@@ -137,6 +178,7 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
   const manifestArtifact = artifactByKind(aggregateArtifacts, "manifest");
   const analyticsArtifact = artifactByKind(aggregateArtifacts, "analytics", false);
   const reportArtifact = artifactByKind(aggregateArtifacts, "report_html", false);
+  const robustnessArtifact = artifactByKind(aggregateArtifacts, "robustness", false);
   if (
     equityArtifact?.kind !== "equity" ||
     drawdownArtifact?.kind !== "drawdown" ||
@@ -219,6 +261,10 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
           ? parsePayload(z.record(z.string(), z.unknown()), analyticsArtifact.payload, "analytics")
           : null,
       reportHtml: reportArtifact?.kind === "report_html" ? reportArtifact.payload : null,
+      robustness:
+        robustnessArtifact?.kind === "robustness"
+          ? parsePayload(robustnessSchema, robustnessArtifact.payload, "robustness")
+          : null,
     },
     legs,
   };

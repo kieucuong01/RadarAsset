@@ -203,6 +203,94 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
           </Card>
         ) : null}
 
+        {model.aggregate.robustness ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Temporal holdout &amp; overfitting checks</CardTitle>
+              <CardDescription>
+                Expanding chronological windows. Each out-of-sample segment uses only information
+                available before that segment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">OOS mean return</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">
+                    {model.aggregate.robustness.outOfSampleMeanReturnPct.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">Positive folds</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">
+                    {model.aggregate.robustness.outOfSamplePositiveFoldPct.toFixed(0)}%
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">OOS dispersion</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">
+                    {model.aggregate.robustness.outOfSampleReturnStdPct.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">Sample</p>
+                  <p className="mt-1 text-xl font-semibold capitalize">
+                    {model.aggregate.robustness.sampleAdequacy}
+                  </p>
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fold</TableHead>
+                    <TableHead>Out-of-sample period</TableHead>
+                    <TableHead className="text-right">Reference return</TableHead>
+                    <TableHead className="text-right">OOS return</TableHead>
+                    <TableHead className="text-right">Degradation</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {model.aggregate.robustness.folds.map((fold) => (
+                    <TableRow key={fold.fold}>
+                      <TableCell>{fold.fold}</TableCell>
+                      <TableCell>
+                        {dateLabel(fold.testStart)} → {dateLabel(fold.testEnd)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fold.referenceReturnPct.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fold.outOfSampleReturnPct.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fold.degradationPctPoints.toFixed(2)} pp
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">Parameter robustness</p>
+                <p className="mt-1 text-muted-foreground">
+                  {model.aggregate.robustness.parameterStability.status === "not_evaluated"
+                    ? "Not evaluated: this run did not execute neighboring parameter sets."
+                    : `${model.aggregate.robustness.parameterStability.status} · score ${model.aggregate.robustness.parameterStability.score?.toFixed(1) ?? "—"}/100`}
+                </p>
+                {model.aggregate.robustness.warnings.length > 0 ? (
+                  <p className="mt-2 text-amber-600 dark:text-amber-400">
+                    Warnings: {model.aggregate.robustness.warnings.join(", ")}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {model.aggregate.robustness.disclaimer}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Tabs defaultValue="aggregate" className="min-w-0">
           <div className="max-w-full overflow-x-auto pb-1">
             <TabsList className="w-max justify-start">

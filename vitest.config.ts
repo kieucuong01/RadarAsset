@@ -9,6 +9,12 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, ".worktrees/**", "**/.worktrees/**", "**/*.integration.test.ts"],
+    exclude: [
+      ...configDefaults.exclude,
+      ".worktrees/**",
+      "**/.worktrees/**",
+      "**/*.integration.test.ts",
+      "scripts/dev-local.test.mjs",
+    ],
   },
 });

@@ -48,6 +48,7 @@ function modelWithTrades(): BacktestResultModel {
       },
       analytics: null,
       reportHtml: null,
+      robustness: null,
     },
     legs: [
       {
@@ -190,11 +191,54 @@ describe("backtest result presentation", () => {
         cashAmount: 50,
       },
     ];
+    model.aggregate.robustness = {
+      method: "anchored_temporal_holdout",
+      foldCount: 2,
+      folds: [
+        {
+          fold: 1,
+          trainStart: "2026-01-01T00:00:00Z",
+          trainEnd: "2026-01-20T00:00:00Z",
+          testStart: "2026-01-21T00:00:00Z",
+          testEnd: "2026-02-10T00:00:00Z",
+          trainObservationCount: 19,
+          testObservationCount: 20,
+          referenceReturnPct: 4,
+          outOfSampleReturnPct: 2,
+          degradationPctPoints: -2,
+        },
+        {
+          fold: 2,
+          trainStart: "2026-01-01T00:00:00Z",
+          trainEnd: "2026-02-10T00:00:00Z",
+          testStart: "2026-02-11T00:00:00Z",
+          testEnd: "2026-03-03T00:00:00Z",
+          trainObservationCount: 39,
+          testObservationCount: 20,
+          referenceReturnPct: 6,
+          outOfSampleReturnPct: 1,
+          degradationPctPoints: -5,
+        },
+      ],
+      outOfSampleMeanReturnPct: 1.5,
+      outOfSampleReturnStdPct: 0.5,
+      outOfSamplePositiveFoldPct: 100,
+      sampleAdequacy: "adequate",
+      warnings: [],
+      disclaimer:
+        "Temporal holdout diagnostic; it does not fit or select parameters inside each fold.",
+      parameterStability: {
+        status: "not_evaluated",
+        score: null,
+        warnings: ["NO_PARAMETER_NEIGHBORS"],
+      },
+    };
 
     expect(advancedAnalysisAvailability(model)).toEqual({
       quantStats: true,
       contribution: true,
       cashFlowOrRebalance: true,
+      robustness: true,
       perLeg: true,
     });
   });

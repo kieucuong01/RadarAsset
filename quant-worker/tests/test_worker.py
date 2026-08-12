@@ -506,7 +506,19 @@ def test_process_next_run_executes_portfolio_legs_and_emits_scoped_artifacts() -
         "cash_flow",
         "rebalance",
         "manifest",
+        "robustness",
     }
+    robustness = next(
+        artifact for artifact in artifacts
+        if artifact["scopeKey"] == "aggregate" and artifact["kind"] == "robustness"
+    )
+    assert robustness["payload"]["method"] == "anchored_temporal_holdout"
+    assert robustness["payload"]["parameterStability"]["status"] in {
+        "stable",
+        "mixed",
+        "fragile",
+    }
+    assert robustness["payload"]["parameterStability"]["neighborCount"] > 0
     leg_manifests = [
         artifact
         for artifact in artifacts

@@ -98,6 +98,7 @@ export function advancedAnalysisAvailability(model: BacktestResultModel) {
     contribution: model.aggregate.contribution.length > 0,
     cashFlowOrRebalance:
       model.aggregate.cashFlow.length > 0 || model.aggregate.rebalance.length > 0,
+    robustness: model.aggregate.robustness !== null,
     perLeg: model.legs.length > 0,
   };
 }

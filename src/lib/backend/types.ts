@@ -388,7 +388,8 @@ export type QuantRunResponse = {
       | "benchmark"
       | "contribution"
       | "cash_flow"
-      | "rebalance";
+      | "rebalance"
+      | "robustness";
     checksum: string;
     payload: unknown;
     rowCount: number;

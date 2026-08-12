@@ -170,7 +170,52 @@ describe("portfolio backtest result model", () => {
     expect(model.aggregate.label).toBe("Normalized portfolio simulation");
     expect(model.aggregate.contribution[0]?.components).toEqual({ BTC: 800, cash: 200 });
     expect(model.aggregate.cashFlow[0]?.amount).toBe(100);
+    expect(model.aggregate.robustness).toBeNull();
     expect(model.legs.map((leg) => leg.label)).toEqual(["BTC · MA Crossover"]);
+  });
+
+  it("parses immutable walk-forward diagnostics without claiming parameter testing", () => {
+    const run = successfulRun();
+    run.artifacts.push({
+      id: "aggregate-robustness",
+      quantRunLegId: null,
+      scopeKey: "aggregate",
+      kind: "robustness",
+      payload: {
+        method: "anchored_temporal_holdout",
+        foldCount: 2,
+        folds: [1, 2].map((fold) => ({
+          fold,
+          trainStart: "2024-01-01T00:00:00Z",
+          trainEnd: "2024-02-01T00:00:00Z",
+          testStart: "2024-02-02T00:00:00Z",
+          testEnd: "2024-03-01T00:00:00Z",
+          trainObservationCount: 31,
+          testObservationCount: 28,
+          referenceReturnPct: 5,
+          outOfSampleReturnPct: 2,
+          degradationPctPoints: -3,
+        })),
+        outOfSampleMeanReturnPct: 2,
+        outOfSampleReturnStdPct: 0,
+        outOfSamplePositiveFoldPct: 100,
+        sampleAdequacy: "adequate",
+        warnings: [],
+        disclaimer:
+          "Temporal holdout diagnostic; it does not fit or select parameters inside each fold.",
+        parameterStability: {
+          status: "not_evaluated",
+          score: null,
+          warnings: ["NO_PARAMETER_NEIGHBORS"],
+        },
+      },
+      ...baseArtifact,
+    });
+
+    expect(buildBacktestResultModel(run).aggregate.robustness).toMatchObject({
+      foldCount: 2,
+      parameterStability: { status: "not_evaluated" },
+    });
   });
 
   it("rejects cross-leg scopes before unchecked JSON reaches React", () => {

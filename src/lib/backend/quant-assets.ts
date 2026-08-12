@@ -113,49 +113,52 @@ export async function loadQuantAssetCatalog(
   const requestedEnd = rangeBoundary(query.to);
 
   return {
-    items: assets.map((asset) => {
-      const market = supportedMarket(asset.market);
-      const version = asset.datasets[0]?.versions[0] ?? null;
-      const rangeCovered = Boolean(
-        version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
-      );
-      const reasonCode: QuantAssetReasonCode = !version
-        ? "DATASET_UNAVAILABLE"
-        : !rangeCovered
-          ? "DATASET_RANGE_INSUFFICIENT"
-          : null;
+    items: assets
+      .map((asset) => {
+        const market = supportedMarket(asset.market);
+        const version = asset.datasets[0]?.versions[0] ?? null;
+        const rangeCovered = Boolean(
+          version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
+        );
+        const reasonCode: QuantAssetReasonCode = !version
+          ? "DATASET_UNAVAILABLE"
+          : !rangeCovered
+            ? "DATASET_RANGE_INSUFFICIENT"
+            : null;
 
-      return {
-        symbol: asset.symbol,
-        name: asset.name,
-        market,
-        venue: asset.venue,
-        currency: asset.currency,
-        maxLeverage: Number(asset.maxLeverage),
-        timeframe: query.timeframe as MarketDataTimeframe,
-        datasetVersionId: version?.id ?? null,
-        coverageStart: version?.coverageStart.toISOString() ?? null,
-        coverageEnd: version?.coverageEnd.toISOString() ?? null,
-        rowCount: version?.rowCount ?? 0,
-        freshness: calculateFreshness({
+        return {
+          symbol: asset.symbol,
+          name: asset.name,
           market,
-          timeframe: query.timeframe,
-          coverageEnd: version?.coverageEnd ?? null,
-          source: version?.bars[0]?.source ?? null,
-          lastStatus: null,
-          now,
-        }),
-        backtestable: reasonCode === null,
-        reasonCode,
-      };
-    }).sort((left, right) => {
-      const readiness = Number(right.backtestable) - Number(left.backtestable);
-      if (readiness !== 0) return readiness;
-      const market = MARKET_PRIORITY[left.market] - MARKET_PRIORITY[right.market];
-      if (market !== 0) return market;
-      const rows = right.rowCount - left.rowCount;
-      if (rows !== 0) return rows;
-      return left.symbol.localeCompare(right.symbol);
-    }).slice(0, CATALOG_RESPONSE_LIMIT),
+          venue: asset.venue,
+          currency: asset.currency,
+          maxLeverage: Number(asset.maxLeverage),
+          timeframe: query.timeframe as MarketDataTimeframe,
+          datasetVersionId: version?.id ?? null,
+          coverageStart: version?.coverageStart.toISOString() ?? null,
+          coverageEnd: version?.coverageEnd.toISOString() ?? null,
+          rowCount: version?.rowCount ?? 0,
+          freshness: calculateFreshness({
+            market,
+            timeframe: query.timeframe,
+            coverageEnd: version?.coverageEnd ?? null,
+            source: version?.bars[0]?.source ?? null,
+            lastStatus: null,
+            now,
+          }),
+          backtestable: reasonCode === null,
+          reasonCode,
+        };
+      })
+      .sort((left, right) => {
+        const readiness = Number(right.backtestable) - Number(left.backtestable);
+        if (readiness !== 0) return readiness;
+        const market = MARKET_PRIORITY[left.market] - MARKET_PRIORITY[right.market];
+        if (market !== 0) return market;
+        const rows = right.rowCount - left.rowCount;
+        if (rows !== 0) return rows;
+        return left.symbol.localeCompare(right.symbol);
+      })
+      .slice(0, CATALOG_RESPONSE_LIMIT),
   };
 }

@@ -66,6 +66,31 @@ function optimizerProposal(
     volatilityPct: 18,
     sharpe: 0.67,
     observationCount: 252,
+    assetMetrics: [
+      { symbol: "BTC", expectedReturnPct: 14, volatilityPct: 22 },
+      { symbol: "VNM", expectedReturnPct: 10, volatilityPct: 15 },
+    ],
+    correlationMatrix: [
+      { symbol: "BTC", correlations: { BTC: 1, VNM: 0.25 } },
+      { symbol: "VNM", correlations: { BTC: 0.25, VNM: 1 } },
+    ],
+    validation: {
+      split: "chronological_70_30" as const,
+      trainObservationCount: 176,
+      testObservationCount: 76,
+      inSample: {
+        expectedReturnPct: 12,
+        volatilityPct: 18,
+        sharpe: 0.67,
+        maxDrawdownPct: -10,
+      },
+      outOfSample: {
+        expectedReturnPct: 8,
+        volatilityPct: 20,
+        sharpe: 0.4,
+        maxDrawdownPct: -14,
+      },
+    },
     datasetVersionIds,
     warnings: [],
   };

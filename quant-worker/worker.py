@@ -6,7 +6,7 @@ import socket
 import time
 import uuid
 from argparse import ArgumentParser
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Protocol, Sequence
@@ -32,6 +32,12 @@ from backtest.portfolio import (
     run_portfolio,
 )
 from backtest.quality import canonical_bar_checksum
+from backtest.robustness import (
+    build_walk_forward_diagnostics,
+    out_of_sample_return,
+    parameter_neighbors,
+    parameter_stability,
+)
 from backtest.strategies import MovingAverageCrossoverStrategy, Strategy
 from backtest.strategy_factory import strategy_from_catalog
 
@@ -339,6 +345,7 @@ def _process_portfolio_run(
         raise ValueError("Portfolio legs are invalid or duplicated.")
     dataset_by_id = {dataset.version_id: dataset for dataset in datasets}
     portfolio_legs: list[PortfolioLegInput] = []
+    neighbor_leg_results: list[tuple[str, Any]] = []
     artifacts: list[dict[str, Any]] = []
     for leg in sorted(run.legs, key=lambda item: item.asset):
         requested = request_by_symbol.get(leg.asset)
@@ -407,24 +414,47 @@ def _process_portfolio_run(
             strategy, fast_period, slow_period = _catalog_strategy(
                 leg.strategy_code, leg.strategy_parameters
             )
-            result = run_strategy(
-                {leg.asset: dataset.bars},
-                EngineConfig(
-                    initial_capital=execution_capital,
-                    fast_period=fast_period,
-                    slow_period=slow_period,
-                    fee_bps=cost["commissionBps"],
-                    slippage_bps=cost["slippageBps"],
-                    leverage_by_asset={leg.asset: leg.leverage},
-                    market_by_asset={leg.asset: leg.market},
-                    strategy_hash=run.strategy_hash,
-                    dataset_checksums={leg.asset: dataset.checksum},
-                    strategy=strategy,
-                    sell_tax_bps=cost["sellTaxBps"],
-                    financing_bps_annual=cost["financingBpsAnnual"],
-                ),
-                strategy=strategy,
-            )
+            def execute_catalog(candidate: Strategy, candidate_fast: int, candidate_slow: int):
+                return run_strategy(
+                    {leg.asset: dataset.bars},
+                    EngineConfig(
+                        initial_capital=execution_capital,
+                        fast_period=candidate_fast,
+                        slow_period=candidate_slow,
+                        fee_bps=cost["commissionBps"],
+                        slippage_bps=cost["slippageBps"],
+                        leverage_by_asset={leg.asset: leg.leverage},
+                        market_by_asset={leg.asset: leg.market},
+                        strategy_hash=run.strategy_hash,
+                        dataset_checksums={leg.asset: dataset.checksum},
+                        strategy=candidate,
+                        sell_tax_bps=cost["sellTaxBps"],
+                        financing_bps_annual=cost["financingBpsAnnual"],
+                    ),
+                    strategy=candidate,
+                )
+
+            result = execute_catalog(strategy, fast_period, slow_period)
+            remaining_neighbors = 8 - len(neighbor_leg_results)
+            if len(result.equity) >= 8 and remaining_neighbors > 0:
+                def validate_neighbor(candidate: dict[str, Any]) -> None:
+                    _catalog_strategy(leg.strategy_code, candidate)
+
+                for candidate_parameters in parameter_neighbors(
+                    leg.strategy_parameters,
+                    validator=validate_neighbor,
+                    limit=min(2, remaining_neighbors),
+                ):
+                    candidate_strategy, candidate_fast, candidate_slow = _catalog_strategy(
+                        leg.strategy_code,
+                        candidate_parameters,
+                    )
+                    neighbor_leg_results.append(
+                        (
+                            leg.id,
+                            execute_catalog(candidate_strategy, candidate_fast, candidate_slow),
+                        )
+                    )
         leg_manifest = {
             **result.manifest,
             "runId": run.id,
@@ -485,6 +515,31 @@ def _process_portfolio_run(
         ("manifest", aggregate_manifest),
     ):
         artifacts.append(_artifact(kind, payload))
+    if len(portfolio.equity) >= 8:
+        diagnostics = build_walk_forward_diagnostics(
+            portfolio.equity,
+            folds=min(3, len(portfolio.equity) // 4),
+        )
+        base_oos_return = out_of_sample_return(portfolio.equity)
+        neighbor_oos_returns = []
+        for changed_leg_id, changed_result in neighbor_leg_results:
+            candidate_portfolio = run_portfolio(
+                [
+                    replace(item, result=changed_result)
+                    if item.id == changed_leg_id
+                    else item
+                    for item in portfolio_legs
+                ],
+                total_capital=total_capital,
+                assumptions=assumptions,
+                portfolio_hash=run.strategy_hash,
+            )
+            neighbor_oos_returns.append(out_of_sample_return(candidate_portfolio.equity))
+        diagnostics["parameterStability"] = parameter_stability(
+            base_oos_return=base_oos_return,
+            neighbor_oos_returns=neighbor_oos_returns,
+        )
+        artifacts.append(_artifact("robustness", diagnostics))
     artifacts.extend(
         _performance_artifacts(
             portfolio.equity,

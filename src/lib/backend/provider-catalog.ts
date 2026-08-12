@@ -132,7 +132,8 @@ export async function searchProviderInstruments(input: { q: string; limit?: numb
   const ranked = [...rows].sort((left, right) => {
     const readiness = readyRank(left) - readyRank(right);
     if (readiness !== 0) return readiness;
-    const marketRank = MARKET_PRIORITY[market(left.asset.market)] - MARKET_PRIORITY[market(right.asset.market)];
+    const marketRank =
+      MARKET_PRIORITY[market(left.asset.market)] - MARKET_PRIORITY[market(right.asset.market)];
     if (marketRank !== 0) return marketRank;
     const rows = rowCount(right) - rowCount(left);
     if (rows !== 0) return rows;

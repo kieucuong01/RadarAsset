@@ -79,6 +79,7 @@ function artifactKind(value: string): ArtifactKind {
     "contribution",
     "cash_flow",
     "rebalance",
+    "robustness",
   ];
   if (kinds.includes(value as ArtifactKind)) return value as ArtifactKind;
   throw new Error("Unsupported Quant artifact kind returned from storage.");
