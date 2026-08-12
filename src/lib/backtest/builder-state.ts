@@ -8,6 +8,7 @@ import {
   type PortfolioBacktestSubmission,
 } from "./contracts";
 import type { OptimizerProposal } from "./optimizer-client";
+import type { BacktestStrategyPreset } from "./preselection";
 import { normalizeStrategyParameters } from "./strategy-catalog";
 
 export type AllocationMode = "equal" | "custom" | "optimized";
@@ -106,6 +107,22 @@ function strategyFields(strategy: BuilderStrategyInput) {
     strategyParameterSchema: [...strategy.parameterSchema],
     supportedMarkets: [...strategy.supportedMarkets],
     supportedTimeframes: [...strategy.supportedTimeframes],
+  };
+}
+
+export function strategyInputWithPreset(
+  strategy: BuilderStrategyInput,
+  preset: BacktestStrategyPreset,
+): BuilderStrategyInput {
+  if (strategy.code !== preset.strategyCode || strategy.version !== preset.strategyVersion) {
+    return strategy;
+  }
+  return {
+    ...strategy,
+    defaultParameters: normalizeStrategyParameters(
+      preset.strategyCode,
+      preset.strategyParameters,
+    ) as Record<string, number>,
   };
 }
 

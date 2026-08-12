@@ -48,6 +48,7 @@ import {
   builderValidationReasons,
   createInitialBuilderState,
   reduceBuilder,
+  strategyInputWithPreset,
   toPortfolioBacktestSubmission,
 } from "@/lib/backtest/builder-state";
 import {
@@ -63,10 +64,12 @@ import {
   OPTIMIZER_METHODS,
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
+import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
 
 type PortfolioBacktestBuilderProps = {
   onRunCreated: (run: BacktestRun) => void;
   initialSymbols?: string[];
+  strategyPreset?: BacktestStrategyPreset | null;
 };
 
 const MARKET_LABELS = {
@@ -85,6 +88,7 @@ const COST_FIELDS = {
 export function PortfolioBacktestBuilder({
   onRunCreated,
   initialSymbols = [],
+  strategyPreset = null,
 }: PortfolioBacktestBuilderProps) {
   const [state, dispatch] = useReducer(reduceBuilder, undefined, () => createInitialBuilderState());
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
@@ -128,12 +132,32 @@ export function PortfolioBacktestBuilder({
         catalogs.forEach((catalog, index) => {
           const asset = catalog.items.find((item) => item.symbol === symbols[index]);
           if (!asset?.backtestable) return;
-          const strategy = strategies.find(
-            (item) =>
-              item.supportedMarkets.includes(asset.market) &&
-              item.supportedTimeframes.includes(state.timeframe),
-          );
-          if (strategy) dispatch({ type: "assetAdded", asset, strategy });
+          const selectedPreset = strategyPreset
+            ? strategies.find(
+                (item) =>
+                  item.code === strategyPreset.strategyCode &&
+                  item.version === strategyPreset.strategyVersion &&
+                  item.supportedMarkets.includes(asset.market) &&
+                  item.supportedTimeframes.includes(state.timeframe),
+              )
+            : null;
+          const strategy =
+            selectedPreset ??
+            strategies.find(
+              (item) =>
+                item.supportedMarkets.includes(asset.market) &&
+                item.supportedTimeframes.includes(state.timeframe),
+            );
+          if (strategy) {
+            dispatch({
+              type: "assetAdded",
+              asset,
+              strategy:
+                selectedPreset && strategyPreset
+                  ? strategyInputWithPreset(strategy, strategyPreset)
+                  : strategy,
+            });
+          }
         });
       })
       .catch((caught: unknown) => {
@@ -141,7 +165,7 @@ export function PortfolioBacktestBuilder({
         toast.warning("Không thể nạp toàn bộ mã được chuyển từ Mock Portfolio.");
       });
     return () => controller.abort();
-  }, [initialSymbolKey, state.from, state.timeframe, state.to, strategies]);
+  }, [initialSymbolKey, state.from, state.timeframe, state.to, strategies, strategyPreset]);
 
   const selectedKey = state.legs
     .map((leg) => leg.symbol)
@@ -190,6 +214,18 @@ export function PortfolioBacktestBuilder({
   const investableBps = 10_000 - state.assumptions.cashAllocationBps;
 
   function defaultStrategyFor(market: string) {
+    const selectedPreset = strategyPreset
+      ? strategies.find(
+          (strategy) =>
+            strategy.code === strategyPreset.strategyCode &&
+            strategy.version === strategyPreset.strategyVersion &&
+            strategy.supportedMarkets.includes(market) &&
+            strategy.supportedTimeframes.includes(state.timeframe),
+        )
+      : null;
+    if (selectedPreset && strategyPreset) {
+      return strategyInputWithPreset(selectedPreset, strategyPreset);
+    }
     return (
       strategies.find(
         (strategy) =>

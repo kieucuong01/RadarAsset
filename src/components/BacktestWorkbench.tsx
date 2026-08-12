@@ -13,8 +13,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { getBacktestRun, isActiveRun, type BacktestRun } from "@/lib/backtest/client";
 import { backtestOutputState } from "@/lib/backtest/result-presentation";
+import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
 
-export function BacktestWorkbench({ initialSymbols = [] }: { initialSymbols?: string[] }) {
+export function BacktestWorkbench({
+  initialSymbols = [],
+  strategyPreset = null,
+}: {
+  initialSymbols?: string[];
+  strategyPreset?: BacktestStrategyPreset | null;
+}) {
   const [run, setRun] = useState<BacktestRun | null>(null);
   const outputState = backtestOutputState(run?.status ?? null);
 
@@ -37,7 +44,11 @@ export function BacktestWorkbench({ initialSymbols = [] }: { initialSymbols?: st
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PortfolioBacktestBuilder onRunCreated={setRun} initialSymbols={initialSymbols} />
+      <PortfolioBacktestBuilder
+        onRunCreated={setRun}
+        initialSymbols={initialSymbols}
+        strategyPreset={strategyPreset}
+      />
 
       {outputState === "empty" ? <BacktestResultsEmpty /> : null}
 

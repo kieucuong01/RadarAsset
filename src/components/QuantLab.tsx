@@ -2,13 +2,18 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { Activity, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
+import { Activity, BookOpen, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { initialQuantLabTab } from "@/lib/backtest/preselection";
+import {
+  initialQuantLabTab,
+  normalizeQuantLabTab,
+  type BacktestStrategyPreset,
+  type QuantLabTab,
+} from "@/lib/backtest/preselection";
 
 const PortfolioOptimizerWorkbench = dynamic(
   () =>
@@ -23,15 +28,20 @@ const BacktestWorkbench = dynamic(
   { ssr: false, loading: () => <WorkbenchSkeleton /> },
 );
 
+const StrategyLab = dynamic(
+  () => import("@/components/StrategyLab").then((module) => module.StrategyLab),
+  { ssr: false, loading: () => <WorkbenchSkeleton /> },
+);
+
 const FactorLab = dynamic(
   () => import("@/components/FactorLab").then((module) => module.FactorLab),
   { ssr: false, loading: () => <WorkbenchSkeleton /> },
 );
 
-type TabKey = "optimizer" | "predict" | "backtest" | "factors";
-
 export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] }) {
-  const [tab, setTab] = useState<TabKey>(() => initialQuantLabTab(initialSymbols));
+  const [tab, setTab] = useState<QuantLabTab>(() => initialQuantLabTab(initialSymbols));
+  const [strategyPreset, setStrategyPreset] = useState<BacktestStrategyPreset | null>(null);
+  const [strategySymbols, setStrategySymbols] = useState<string[]>([]);
 
   return (
     <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">
@@ -57,12 +67,16 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
         />
       </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
+      <Tabs value={tab} onValueChange={(value) => setTab(normalizeQuantLabTab(value))}>
         <div className="mb-6 overflow-x-auto pb-1">
           <TabsList className="min-w-max">
             <TabsTrigger value="optimizer">
               <Sliders />
               Portfolio Optimizer
+            </TabsTrigger>
+            <TabsTrigger value="strategies">
+              <BookOpen />
+              Strategy Lab
             </TabsTrigger>
             <TabsTrigger value="backtest">
               <FlaskConical />
@@ -82,8 +96,20 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
         <TabsContent value="optimizer">
           <PortfolioOptimizerWorkbench initialSymbols={initialSymbols} />
         </TabsContent>
+        <TabsContent value="strategies">
+          <StrategyLab
+            onUsePreset={({ preset, symbols }) => {
+              setStrategyPreset(preset);
+              setStrategySymbols(symbols);
+              setTab("backtest");
+            }}
+          />
+        </TabsContent>
         <TabsContent value="backtest">
-          <BacktestWorkbench initialSymbols={initialSymbols} />
+          <BacktestWorkbench
+            initialSymbols={strategySymbols.length > 0 ? strategySymbols : initialSymbols}
+            strategyPreset={strategyPreset}
+          />
         </TabsContent>
         <TabsContent value="factors">
           <FactorLab />

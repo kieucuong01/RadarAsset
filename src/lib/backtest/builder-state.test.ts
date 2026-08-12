@@ -5,6 +5,7 @@ import {
   applyOptimizerProposal,
   builderValidationReasons,
   createInitialBuilderState,
+  strategyInputWithPreset,
   reduceBuilder,
   toPortfolioBacktestSubmission,
 } from "./builder-state";
@@ -162,6 +163,26 @@ describe("portfolio backtest builder state", () => {
     expect(parameterEdited.legs.find((leg) => leg.symbol === "BTC")).toMatchObject({
       strategyCode: "turtle_breakout",
       strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
+    });
+  });
+
+  it("applies a normalized Strategy Lab preset when adding a compatible asset", () => {
+    const strategy = strategyInputWithPreset(ma, {
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyParameters: { fastPeriod: 8, slowPeriod: 34 },
+    });
+    const state = reduceBuilder(createInitialBuilderState(), {
+      type: "assetAdded",
+      asset: vnm,
+      strategy,
+    });
+
+    expect(state.legs[0]).toMatchObject({
+      strategyCode: "ma_crossover",
+      strategyVersion: "1.0.0",
+      strategyName: "MA Crossover",
+      strategyParameters: { fastPeriod: 8, slowPeriod: 34 },
     });
   });
 
