@@ -350,4 +350,39 @@ describe("portfolio quant run persistence", () => {
       }),
     );
   });
+
+  it("returns QuantStats artifacts published by a completed worker run", async () => {
+    prisma.quantRun.findFirst.mockResolvedValueOnce(
+      runRecord({
+        status: "succeeded",
+        progress: 100,
+        artifacts: [
+          {
+            id: "artifact-analytics",
+            quantRunLegId: null,
+            scopeKey: "aggregate",
+            kind: "analytics",
+            checksum: "a".repeat(64),
+            payload: { sharpe: 1.2 },
+            rowCount: 1,
+            schemaVersion: 1,
+          },
+          {
+            id: "artifact-report",
+            quantRunLegId: null,
+            scopeKey: "aggregate",
+            kind: "report_html",
+            checksum: "b".repeat(64),
+            payload: "<html></html>",
+            rowCount: 1,
+            schemaVersion: 1,
+          },
+        ],
+      }),
+    );
+
+    const result = await loadPortfolioQuantRun(context, "run-1");
+
+    expect(result.artifacts.map((artifact) => artifact.kind)).toEqual(["analytics", "report_html"]);
+  });
 });

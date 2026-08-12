@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import os
 import socket
+import time
 import uuid
+from argparse import ArgumentParser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
@@ -765,10 +767,41 @@ def run_once() -> dict[str, Any]:
         return result
 
 
-def main() -> None:
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Quant worker booting")
-    print(json.dumps(run_once(), indent=2))
+def run_forever(
+    *,
+    poll_seconds: float = 2.0,
+    run_once_fn: Callable[[], dict[str, Any]] = run_once,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    output_fn: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    if poll_seconds <= 0:
+        raise ValueError("Worker poll seconds must be positive.")
+    emit = output_fn or (lambda result: print(json.dumps(result, indent=2), flush=True))
+    while True:
+        result = run_once_fn()
+        if result.get("status") == "idle":
+            sleep_fn(poll_seconds)
+        else:
+            emit(result)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = ArgumentParser(description="Process queued portfolio backtests.")
+    parser.add_argument("--once", action="store_true", help="Process at most one queued run.")
+    parser.add_argument("--poll-seconds", type=float, default=2.0)
+    args = parser.parse_args(argv)
+    if args.poll_seconds <= 0:
+        parser.error("--poll-seconds must be positive")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Quant worker booting", flush=True)
+    if args.once:
+        print(json.dumps(run_once(), indent=2), flush=True)
+        return 0
+    try:
+        run_forever(poll_seconds=args.poll_seconds)
+    except KeyboardInterrupt:
+        print("Quant worker stopped.", flush=True)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

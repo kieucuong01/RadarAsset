@@ -352,6 +352,8 @@ export type QuantRunResponse = {
       | "drawdown"
       | "trades"
       | "manifest"
+      | "analytics"
+      | "report_html"
       | "benchmark"
       | "contribution"
       | "cash_flow"

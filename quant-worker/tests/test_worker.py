@@ -6,6 +6,7 @@ import pytest
 
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
+import worker
 from worker import (
     DatasetInput,
     PostgresWorkerRepository,
@@ -13,6 +14,7 @@ from worker import (
     QueuedRunLeg,
     bars_in_run_range,
     process_next_run,
+    run_forever,
 )
 
 
@@ -147,6 +149,48 @@ def test_process_next_run_is_idle_when_no_queued_backtest_exists() -> None:
     repository = FakeRepository(None)
 
     assert process_next_run(repository) == {"status": "idle", "message": "No queued backtest runs."}
+
+
+def test_run_forever_waits_only_when_queue_is_idle() -> None:
+    responses = iter(
+        [
+            {"status": "idle", "message": "No queued backtest runs."},
+            {"status": "succeeded", "id": "run-1"},
+        ]
+    )
+    sleeps: list[float] = []
+    outputs: list[dict[str, Any]] = []
+
+    def fake_run_once() -> dict[str, Any]:
+        try:
+            return next(responses)
+        except StopIteration as error:
+            raise KeyboardInterrupt from error
+
+    with pytest.raises(KeyboardInterrupt):
+        run_forever(
+            poll_seconds=0.25,
+            run_once_fn=fake_run_once,
+            sleep_fn=sleeps.append,
+            output_fn=outputs.append,
+        )
+
+    assert sleeps == [0.25]
+    assert outputs == [{"status": "succeeded", "id": "run-1"}]
+
+
+def test_main_once_processes_exactly_one_queue_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def fake_run_once() -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"status": "idle", "message": "No queued backtest runs."}
+
+    monkeypatch.setattr(worker, "run_once", fake_run_once)
+
+    assert worker.main(["--once"]) == 0
+    assert calls == 1
 
 
 def test_process_next_run_accepts_versioned_catalog_ma_parameters() -> None:

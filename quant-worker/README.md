@@ -11,6 +11,17 @@ $env:DATABASE_URL="postgresql://postgres:postgres@localhost:5432/quant_insight_r
 python quant-worker\worker.py
 ```
 
+From the repository root, `npm run dev` starts Next.js on port `3100` and the continuously polling
+Quant worker together. Set `PYTHON_EXECUTABLE` when the project virtual environment is outside the
+current worktree. Use `npm run dev:web` only when intentionally debugging the web process without
+executing queued backtests.
+
+The worker polls continuously by default. For a scheduler, smoke test, or one-off queue drain, run:
+
+```powershell
+python quant-worker\worker.py --once
+```
+
 Environment:
 
 - `DATABASE_URL` points at the same local PostgreSQL database used by Prisma.
