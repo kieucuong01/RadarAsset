@@ -1,22 +1,26 @@
 import { z } from "zod";
 
 import { backtestSymbolSchema } from "./contracts";
+import { normalizeExecutableRule } from "@/lib/custom-strategies/contracts";
 import { normalizeStrategyParameters, strategyDefinition } from "./strategy-catalog";
+
+const builtInStrategyCodeSchema = z.enum([
+  "ma_crossover",
+  "turtle_breakout",
+  "signal_rolling_reversal",
+  "abcd_causal",
+  "ema_trend",
+  "rsi_mean_reversion",
+  "bollinger_mean_reversion",
+  "macd_momentum",
+  "atr_breakout",
+]);
+const customStrategyCodeSchema = z.string().regex(/^custom:[0-9a-f-]{36}$/i);
 
 const assignmentSchema = z
   .object({
     symbol: backtestSymbolSchema,
-    strategyCode: z.enum([
-      "ma_crossover",
-      "turtle_breakout",
-      "signal_rolling_reversal",
-      "abcd_causal",
-      "ema_trend",
-      "rsi_mean_reversion",
-      "bollinger_mean_reversion",
-      "macd_momentum",
-      "atr_breakout",
-    ]),
+    strategyCode: z.union([builtInStrategyCodeSchema, customStrategyCodeSchema]),
     strategyVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
     strategyParameters: z.record(z.string(), z.unknown()),
     backtestRunId: z.string().uuid().optional(),
@@ -32,8 +36,12 @@ const assignmentSchema = z
       });
     }
     try {
-      strategyDefinition(value.strategyCode, value.strategyVersion);
-      normalizeStrategyParameters(value.strategyCode, value.strategyParameters);
+      if (value.strategyCode.startsWith("custom:")) {
+        normalizeExecutableRule(value.strategyParameters);
+      } else {
+        strategyDefinition(value.strategyCode, value.strategyVersion);
+        normalizeStrategyParameters(value.strategyCode, value.strategyParameters);
+      }
     } catch (error) {
       context.addIssue({
         code: "custom",
@@ -50,6 +58,8 @@ export function normalizeStrategyAssignment(input: unknown): StrategyAssignmentI
   return {
     ...parsed,
     symbol: parsed.symbol,
-    strategyParameters: normalizeStrategyParameters(parsed.strategyCode, parsed.strategyParameters),
+    strategyParameters: parsed.strategyCode.startsWith("custom:")
+      ? normalizeExecutableRule(parsed.strategyParameters)
+      : normalizeStrategyParameters(parsed.strategyCode, parsed.strategyParameters),
   };
 }

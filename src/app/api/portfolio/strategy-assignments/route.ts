@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { listStrategyAssignments, upsertStrategyAssignment } from "@/lib/backend/db";
+import { listStrategyAssignments } from "@/lib/backend/db";
+import { applyStrategyAssignment } from "@/lib/backend/strategy-forward-tests";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
     const context = await requireTenantContext();
     requireTenantCapability(context, "portfolio", "write");
     const input = normalizeStrategyAssignment(await request.json());
-    return NextResponse.json(await upsertStrategyAssignment(context, input), { status: 201 });
+    requireTenantCapability(context, "backtest", "read");
+    return NextResponse.json(await applyStrategyAssignment(context, input), { status: 201 });
   } catch (error) {
     return apiError(error, error instanceof z.ZodError ? 400 : 503);
   }

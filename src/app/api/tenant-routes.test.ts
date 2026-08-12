@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   requireTenantCapability: vi.fn(),
   loadPortfolioResponse: vi.fn(),
   listStrategyAssignments: vi.fn(),
-  upsertStrategyAssignment: vi.fn(),
+  applyStrategyAssignment: vi.fn(),
   updateStrategySignalStatus: vi.fn(),
   loadWatchlist: vi.fn(),
   upsertWatchlistItem: vi.fn(),
@@ -39,7 +39,6 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
     ...original,
     loadPortfolioResponse: mocks.loadPortfolioResponse,
     listStrategyAssignments: mocks.listStrategyAssignments,
-    upsertStrategyAssignment: mocks.upsertStrategyAssignment,
     updateStrategySignalStatus: mocks.updateStrategySignalStatus,
     loadWatchlist: mocks.loadWatchlist,
     upsertWatchlistItem: mocks.upsertWatchlistItem,
@@ -55,6 +54,10 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
 
 vi.mock("@/lib/backend/worker-context", () => ({
   getWorkerImportContext: mocks.getWorkerImportContext,
+}));
+
+vi.mock("@/lib/backend/strategy-forward-tests", () => ({
+  applyStrategyAssignment: mocks.applyStrategyAssignment,
 }));
 
 vi.mock("@/lib/backend/quant-assets", async (importOriginal) => {
@@ -132,7 +135,7 @@ describe("tenant API authorization", () => {
     mocks.requireTenantContext.mockResolvedValue(viewerContext);
     mocks.loadPortfolioResponse.mockResolvedValue({ portfolioId: "portfolio-a" });
     mocks.listStrategyAssignments.mockResolvedValue([]);
-    mocks.upsertStrategyAssignment.mockResolvedValue({ id: "assignment-a" });
+    mocks.applyStrategyAssignment.mockResolvedValue({ id: "assignment-a" });
     mocks.updateStrategySignalStatus.mockResolvedValue({ id: "signal-a", status: "reviewed" });
     mocks.loadWatchlist.mockResolvedValue([]);
     mocks.upsertWatchlistItem.mockResolvedValue([]);
@@ -284,12 +287,13 @@ describe("tenant API authorization", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(mocks.upsertStrategyAssignment).toHaveBeenCalledWith(editorContext, {
+    expect(mocks.applyStrategyAssignment).toHaveBeenCalledWith(editorContext, {
       symbol: "BTC",
       strategyCode: "turtle_breakout",
       strategyVersion: "1.0.0",
       strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
     });
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "backtest", "read");
   });
 
   it("updates a signal status through the tenant-scoped service", async () => {

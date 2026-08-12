@@ -61,4 +61,25 @@ describe("portfolio strategy assignment contract", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts an allow-listed frozen custom rule with a source run", () => {
+    expect(
+      normalizeStrategyAssignment({
+        symbol: "BTC",
+        strategyCode: "custom:11111111-1111-4111-8111-111111111111",
+        strategyVersion: "1.0.0",
+        strategyParameters: {
+          schemaVersion: 1,
+          kind: "price_threshold",
+          operator: "crosses_above",
+          threshold: 50000,
+          currency: "USD",
+          action: "buy",
+          sizePct: 25,
+        },
+        backtestRunId: "00000000-0000-4000-8000-000000000001",
+        backtestRunLegId: "00000000-0000-4000-8000-000000000002",
+      }).strategyCode,
+    ).toBe("custom:11111111-1111-4111-8111-111111111111");
+  });
 });
