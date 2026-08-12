@@ -127,7 +127,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
           amount: event.turnover,
           detail: `Cost ${money(event.cost, currency)}`,
         })),
-      ].toSorted((left, right) => left.timestamp.localeCompare(right.timestamp)),
+      ].sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
     [currency, model.aggregate.cashFlow, model.aggregate.rebalance],
   );
 

@@ -1,3 +1,4 @@
+import type { BacktestRun } from "./client";
 import type { BacktestResultModel } from "./result-model";
 
 export function alignEquityAndDrawdown(
@@ -29,7 +30,7 @@ export function buildPortfolioTradeRows(model: BacktestResultModel): PortfolioTr
         strategyCode: leg.strategyCode,
       })),
     )
-    .toSorted((left, right) => right.exitAt.localeCompare(left.exitAt));
+    .sort((left, right) => right.exitAt.localeCompare(left.exitAt));
 }
 
 export function filterPortfolioTradeRows(rows: PortfolioTradeRow[], symbol: string) {
@@ -59,4 +60,11 @@ export function advancedAnalysisAvailability(model: BacktestResultModel) {
       model.aggregate.cashFlow.length > 0 || model.aggregate.rebalance.length > 0,
     perLeg: model.legs.length > 0,
   };
+}
+
+export function backtestOutputState(status: BacktestRun["status"] | null) {
+  if (status === null) return "empty" as const;
+  if (status === "queued" || status === "running") return "active" as const;
+  if (status === "failed") return "failed" as const;
+  return "results" as const;
 }

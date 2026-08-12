@@ -4,6 +4,7 @@ import type { BacktestResultModel } from "./result-model";
 import {
   advancedAnalysisAvailability,
   alignEquityAndDrawdown,
+  backtestOutputState,
   buildBacktestKpis,
   buildPortfolioTradeRows,
   filterPortfolioTradeRows,
@@ -171,5 +172,13 @@ describe("backtest result presentation", () => {
       cashFlowOrRebalance: true,
       perLeg: true,
     });
+  });
+
+  it("maps run status to a single output surface", () => {
+    expect(backtestOutputState(null)).toBe("empty");
+    expect(backtestOutputState("queued")).toBe("active");
+    expect(backtestOutputState("running")).toBe("active");
+    expect(backtestOutputState("failed")).toBe("failed");
+    expect(backtestOutputState("succeeded")).toBe("results");
   });
 });
