@@ -18,6 +18,7 @@ class Market(StrEnum):
 class CollectionMode(StrEnum):
     API = "api"
     CRAWL4AI = "crawl4ai"
+    SCRAPLING = "scrapling"
     MANUAL = "manual"
     DISABLED = "disabled"
 

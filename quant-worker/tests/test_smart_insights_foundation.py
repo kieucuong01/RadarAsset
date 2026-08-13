@@ -374,10 +374,136 @@ def _crawl4ai_client_class():
     ).Crawl4AIClient
 
 
+def _scrapling_client_module():
+    return importlib.import_module("smart_insights.scrapling_client")
+
+
+def _scrapling_response(**overrides: object) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "url": "https://farside.co.uk/btc/",
+        "status": 200,
+        "body": b"<html><table><tr><td>flow</td></tr></table></html>",
+        "headers": {"content-type": "text/html; charset=utf-8"},
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_scrapling_creates_bounded_private_html_snapshot() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response()
+    client = module.ScraplingClient(
+        fetcher=lambda _url: response,
+        clock=lambda: NOW,
+    )
+
+    result = client.scrape(
+        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+    )
+
+    assert json.loads(result.content) == {
+        "metadata": {
+            "sourceURL": "https://farside.co.uk/btc/",
+            "statusCode": 200,
+        },
+        "rawHtml": response.body.decode(),
+    }
+    assert result.observed_at == NOW
+    assert result.metadata == {
+        "collector": "scrapling",
+        "parser_version": "farside-btc-v1",
+    }
+
+
+def test_scrapling_rejects_outside_url_before_fetch() -> None:
+    module = _scrapling_client_module()
+    calls: list[str] = []
+    client = module.ScraplingClient(fetcher=lambda url: calls.append(url))
+
+    with pytest.raises(ValueError, match="allow-listed"):
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://evil.invalid/source"
+        )
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("response", "expected_code"),
+    (
+        (_scrapling_response(url="https://evil.invalid/source"), "REDIRECT_REJECTED"),
+        (_scrapling_response(status=403), "HTTP_ERROR"),
+        (
+            _scrapling_response(headers={"content-type": "application/json"}),
+            "INVALID_RESPONSE",
+        ),
+    ),
+)
+def test_scrapling_rejects_invalid_html_responses(
+    response: SimpleNamespace, expected_code: str
+) -> None:
+    module = _scrapling_client_module()
+    client = module.ScraplingClient(fetcher=lambda _url: response)
+
+    with pytest.raises(SourceFetchError) as error:
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+
+    assert error.value.code == expected_code
+
+
+def test_scrapling_caps_html_and_download_bytes() -> None:
+    module = _scrapling_client_module()
+    html_client = module.ScraplingClient(
+        fetcher=lambda _url: _scrapling_response(body=b"x" * 101),
+        max_html_bytes=100,
+    )
+    with pytest.raises(SourceFetchError) as html_error:
+        html_client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+    assert html_error.value.code == "RESPONSE_TOO_LARGE"
+
+    image_client = module.ScraplingClient(
+        fetcher=lambda _url: _scrapling_response(
+            body=b"x" * 101,
+            headers={"content-type": "image/png"},
+        ),
+        max_image_bytes=100,
+    )
+    with pytest.raises(SourceFetchError) as image_error:
+        image_client.download(
+            source_for_code("farside-btc-etf"),
+            "https://farside.co.uk/btc/",
+            content_types=frozenset({"image/png"}),
+        )
+    assert image_error.value.code == "RESPONSE_TOO_LARGE"
+
+
+def test_scrapling_download_requires_allowlisted_image_content_type() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response(
+        body=b"png-bytes", headers={"content-type": "image/png"}
+    )
+    client = module.ScraplingClient(fetcher=lambda _url: response, clock=lambda: NOW)
+
+    asset = client.download(
+        source_for_code("farside-btc-etf"),
+        "https://farside.co.uk/btc/",
+        content_types=frozenset({"image/png", "image/jpeg", "image/webp"}),
+    )
+
+    assert asset.content == b"png-bytes"
+    assert asset.content_type == "image/png"
+    assert asset.source_url == "https://farside.co.uk/btc/"
+    assert asset.observed_at == NOW
+
+
 def _crawl4ai_result(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
         "success": True,
-        "url": "https://farside.co.uk/btc/",
+        "url": "https://www.cryptocraft.com/calendar?week=this",
         "status_code": 200,
         "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
         "html": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
@@ -392,7 +518,7 @@ def test_crawl4ai_rejects_url_outside_source_allowlist_before_browser_run() -> N
     client = _crawl4ai_client_class()(runner=lambda url: calls.append(url))
     with pytest.raises(ValueError, match="allow-listed"):
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://evil.invalid/source"
+            source_for_code("cryptocraft"), "https://evil.invalid/source"
         )
     assert calls == []
 
@@ -402,22 +528,23 @@ def test_crawl4ai_creates_private_snapshot_for_matching_source_url() -> None:
     client = _crawl4ai_client_class()(runner=lambda _url: response, clock=lambda: NOW)
 
     result = client.scrape(
-        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        source_for_code("cryptocraft"),
+        "https://www.cryptocraft.com/calendar?week=this",
     )
 
-    assert result.source_url == "https://farside.co.uk/btc/"
+    assert result.source_url == "https://www.cryptocraft.com/calendar?week=this"
     assert result.observed_at == NOW
     assert json.loads(result.content) == {
         "markdown": response.markdown,
         "metadata": {
-            "sourceURL": "https://farside.co.uk/btc/",
+            "sourceURL": "https://www.cryptocraft.com/calendar?week=this",
             "statusCode": 200,
         },
         "rawHtml": response.html,
     }
     assert result.metadata == {
         "collector": "crawl4ai",
-        "parser_version": "farside-btc-v1",
+        "parser_version": "cryptocraft-v1",
     }
 
 
@@ -428,7 +555,8 @@ def test_crawl4ai_rejects_changed_final_url() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         mismatched.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "REDIRECT_REJECTED"
 
@@ -440,7 +568,8 @@ def test_crawl4ai_rejects_empty_extraction() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "INVALID_RESPONSE"
 
@@ -453,7 +582,8 @@ def test_crawl4ai_caps_serialized_snapshot_size() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "RESPONSE_TOO_LARGE"
 
