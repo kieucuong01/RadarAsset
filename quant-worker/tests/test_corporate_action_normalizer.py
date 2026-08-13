@@ -134,3 +134,47 @@ def test_vci_adapter_normalizes_raw_camel_case_provider_fields() -> None:
     assert result.actions[0].action_type == "stock_dividend"
     assert result.actions[0].status == "verified"
     assert result.actions[0].ex_right_date == date(2025, 5, 20)
+
+
+def test_normalizes_percentage_ratio_and_split_label() -> None:
+    stock = normalize_vci_event(
+        "FPT",
+        {
+            "id": "bonus-percent",
+            "event_code": "ISS",
+            "event_title_en": "Bonus issue",
+            "exright_date": "2025-05-20",
+            "exercise_ratio": "20%",
+        },
+    )
+    split = normalize_vci_event(
+        "FPT",
+        {
+            "id": "split-ratio",
+            "event_code": "ISS",
+            "event_title_en": "Stock split",
+            "exright_date": "2025-06-20",
+            "exercise_ratio": "2:1",
+        },
+    )
+
+    assert stock is not None and stock.distribution_ratio == Decimal("0.2")
+    assert stock.status == "verified"
+    assert split is not None and split.distribution_ratio == Decimal("1")
+    assert split.status == "verified"
+
+
+def test_unknown_issuance_terms_remain_unverified() -> None:
+    action = normalize_vci_event(
+        "FPT",
+        {
+            "id": "unknown-iss",
+            "event_code": "ISS",
+            "event_title_en": "Other issuance",
+            "exright_date": "2025-06-20",
+            "exercise_ratio": "10%",
+        },
+    )
+
+    assert action is not None
+    assert action.status == "unverified"

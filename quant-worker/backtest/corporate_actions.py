@@ -58,6 +58,24 @@ def _positive_decimal(value: Any) -> Decimal | None:
     return parsed if parsed is not None and parsed > 0 else None
 
 
+def _share_ratio(value: Any, *, total_after_split: bool = False) -> Decimal | None:
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return None
+    if text.endswith("%"):
+        parsed = _positive_decimal(text[:-1])
+        return None if parsed is None else parsed / Decimal(100)
+    match = re.fullmatch(r"\s*([0-9.,]+)\s*[:/]\s*([0-9.,]+)\s*", text)
+    if match:
+        numerator = _positive_decimal(match.group(1))
+        denominator = _positive_decimal(match.group(2))
+        if numerator is None or denominator is None:
+            return None
+        ratio = numerator / denominator
+        return ratio - Decimal(1) if total_after_split else ratio
+    return _positive_decimal(value)
+
+
 def _search_text(record: dict[str, Any]) -> str:
     raw = " ".join(
         str(record.get(key, ""))
@@ -159,7 +177,7 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
     if not event_id:
         return None
 
-    ratio = _positive_decimal(event.get("exercise_ratio"))
+    raw_ratio = event.get("exercise_ratio")
     value = _positive_decimal(event.get("value_per_share"))
     action_type: CorporateActionType | None = None
     cash_per_share: Decimal | None = None
@@ -169,11 +187,11 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
 
     if "quyen mua" in text or "rights issue" in text or "subscription" in text:
         action_type = "rights_issue"
-        subscription_ratio = ratio
+        subscription_ratio = _share_ratio(raw_ratio)
         subscription_price = value
     elif "tach co phieu" in text or "stock split" in text:
         action_type = "split"
-        distribution_ratio = ratio
+        distribution_ratio = _share_ratio(raw_ratio, total_after_split=True)
     elif (
         "co tuc bang co phieu" in text
         or "stock dividend" in text
@@ -182,7 +200,7 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
         or "bonus issue" in text
     ):
         action_type = "stock_dividend"
-        distribution_ratio = ratio
+        distribution_ratio = _share_ratio(raw_ratio)
     elif event_code == "DIV" or "co tuc bang tien" in text or "cash dividend" in text:
         action_type = "cash_dividend"
         cash_per_share = value
@@ -193,7 +211,7 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
     else:
         # An unclassified issuance must never silently affect adjusted prices.
         action_type = "rights_issue"
-        subscription_ratio = ratio
+        subscription_ratio = _share_ratio(raw_ratio)
         subscription_price = value
 
     ex_right_date = _date_value(event.get("exright_date"))
