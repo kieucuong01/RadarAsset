@@ -111,9 +111,24 @@ Install the two Windows Task Scheduler jobs explicitly in the selected deploymen
 
 ```powershell
 powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Install
+powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Verify
 ```
 
-The installer registers exactly one hourly and one daily task and ignores overlapping instances.
+The installer registers exactly one hourly and one daily task, ignores overlapping instances, and
+restarts failed tasks up to three times. `-Verify` is read-only. Quant Lab reports missing/stale
+datasets, missing bars, backlog age, grouped provider failures, and the latest scheduler terminal
+result. `readyForBacktest` is intentionally strict: any missing/stale dataset, active backlog,
+provider failure, failed scheduler, or scheduler older than 25 hours keeps readiness degraded.
+
+Vietnam total-return datasets remain inactive when corporate-action coverage does not contain the
+raw dataset range, a price-affecting action is unverified, or quality checks fail. Raw versions stay
+immutable; the publisher reports `coverage`, `unverified`, and `quality` block counts.
+
+Strategy Lab stores DCA and price-threshold rules in the active tenant workspace with immutable
+versions. Re-saving an unchanged rule reuses its latest version; a changed rule creates the next
+patch version. The first authenticated load imports executable rules from the legacy browser store
+and removes that store only after all imports succeed. Catalog presets continue directly to
+Backtest, while fundamental rules remain unavailable until point-in-time financial data exists.
 
 ## Smart Insights Collection
 

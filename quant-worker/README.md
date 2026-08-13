@@ -111,7 +111,18 @@ On a Windows deployment host, register the two versioned tasks explicitly:
 
 ```powershell
 powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Install
+powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Verify
 ```
+
+The wrapper records one terminal scheduler row with queued/retried/processed/failed counts. An
+advisory lock plus the database partial unique index prevents overlapping runs for the same
+command; abandoned rows are recovered before the next run. `-Verify` checks the two task
+definitions without mutating Task Scheduler.
+
+Adjusted publication is fail-closed. Corporate-action coverage must fully contain the active raw
+dataset range and every price-affecting action in that range must be verified. Blocked publications
+deactivate unsafe adjusted versions without changing raw history and expose `coverage`,
+`unverified`, or `quality` in the publisher summary.
 
 `MARKET_INGEST_MAX_PAGES` defaults to `128` (`1..512`) and
 `MARKET_INGEST_MAX_ROWS` defaults to `250000` (`100..250000`). The CLI accepts only code-owned
