@@ -22,6 +22,7 @@ import {
   getQuantAssets,
   type QuantAssetCatalogItem,
 } from "@/lib/backtest/asset-client";
+import { useI18n } from "@/lib/i18n/context";
 
 type QuantAssetPickerDialogProps = {
   timeframe: "1d" | "1h";
@@ -46,6 +47,7 @@ export function QuantAssetPickerDialog({
   const [items, setItems] = useState<QuantAssetCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +61,7 @@ export function QuantAssetPickerDialog({
         .then((catalog) => setItems(catalog.items))
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          setError("Không thể tải danh mục tài sản lúc này.");
+          setError(t("backtest.builder.assetPicker.loadError"));
         })
         .finally(() => setLoading(false));
     }, 250);
@@ -67,26 +69,28 @@ export function QuantAssetPickerDialog({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [deferredQuery, from, open, timeframe, to]);
+  }, [deferredQuery, from, open, timeframe, t, to]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" disabled={disabled}>
           <Plus data-icon="inline-start" />
-          Thêm mã
+          {t("backtest.builder.assetPicker.trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Chọn tài sản để backtest</DialogTitle>
+          <DialogTitle>{t("backtest.builder.assetPicker.title")}</DialogTitle>
           <DialogDescription>
-            Tìm trong toàn bộ mã hệ thống có dataset {timeframe} phủ đủ khoảng đã chọn.
+            {t("backtest.builder.assetPicker.description", { timeframe })}
           </DialogDescription>
         </DialogHeader>
 
         <Field data-invalid={Boolean(error)}>
-          <FieldLabel htmlFor="quant-asset-search">Mã hoặc tên tài sản</FieldLabel>
+          <FieldLabel htmlFor="quant-asset-search">
+            {t("backtest.builder.assetPicker.searchLabel")}
+          </FieldLabel>
           <div className="relative">
             <Search
               aria-hidden="true"
@@ -96,13 +100,13 @@ export function QuantAssetPickerDialog({
               id="quant-asset-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ví dụ: FPT, BTC, XAU"
+              placeholder={t("backtest.builder.assetPicker.placeholder")}
               className="pl-9"
               aria-invalid={Boolean(error)}
               autoComplete="off"
             />
           </div>
-          <FieldDescription>Tối đa 10 mã trong một portfolio backtest.</FieldDescription>
+          <FieldDescription>{t("backtest.builder.assetPicker.maxDescription")}</FieldDescription>
           {error ? <FieldError>{error}</FieldError> : null}
         </Field>
 
@@ -111,18 +115,18 @@ export function QuantAssetPickerDialog({
             {loading ? (
               <Alert>
                 <AlertCircle />
-                <AlertTitle>Đang kiểm tra dataset</AlertTitle>
+                <AlertTitle>{t("backtest.builder.assetPicker.loadingTitle")}</AlertTitle>
                 <AlertDescription>
-                  Danh sách sẽ cập nhật sau khi tìm kiếm hoàn tất.
+                  {t("backtest.builder.assetPicker.loadingDescription")}
                 </AlertDescription>
               </Alert>
             ) : null}
             {!loading && !error && items.length === 0 ? (
               <Alert>
                 <Search />
-                <AlertTitle>Không tìm thấy mã phù hợp</AlertTitle>
+                <AlertTitle>{t("backtest.builder.assetPicker.emptyTitle")}</AlertTitle>
                 <AlertDescription>
-                  Thử từ khóa khác hoặc điều chỉnh khoảng thời gian.
+                  {t("backtest.builder.assetPicker.emptyDescription")}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -150,7 +154,7 @@ export function QuantAssetPickerDialog({
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Badge variant={item.backtestable ? "secondary" : "outline"}>
-                      {selected ? "Đã thêm" : readiness.badge}
+                      {selected ? t("backtest.builder.assetPicker.selected") : readiness.badge}
                     </Badge>
                     <span className="text-xs font-normal text-muted-foreground">
                       {readiness.detail}

@@ -26,6 +26,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { LOCALES } from "@/lib/i18n/dictionary";
+import { useI18n } from "@/lib/i18n/context";
 import { APP_ROUTES, type AppRouteId } from "@/lib/navigation";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -39,6 +41,7 @@ const routeIcons: Record<AppRouteId, LucideIcon> = {
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggle } = useTheme();
+  const { locale, setLocale, t } = useI18n();
   const path = usePathname();
 
   return (
@@ -52,7 +55,7 @@ export function Header() {
         </Link>
 
         <nav
-          aria-label="Điều hướng chính"
+          aria-label={t("header.mainNav")}
           className="hidden items-center gap-1 rounded-full bg-muted/60 p-1 lg:flex"
         >
           {APP_ROUTES.map((route) => {
@@ -71,7 +74,7 @@ export function Header() {
                 )}
               >
                 <Icon className="size-4" />
-                {route.label}
+                {t(`routes.${route.id}`)}
               </Link>
             );
           })}
@@ -80,12 +83,30 @@ export function Header() {
         <div className="flex items-center gap-2">
           <CommandPaletteTrigger />
           <NotificationCenter />
+          <div
+            aria-label={t("header.language")}
+            className="hidden items-center rounded-full bg-muted/60 p-1 sm:flex"
+          >
+            {LOCALES.map((item) => (
+              <Button
+                key={item.code}
+                type="button"
+                variant={locale === item.code ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 rounded-full px-3 text-xs font-semibold"
+                aria-pressed={locale === item.code}
+                onClick={() => setLocale(item.code)}
+              >
+                {item.shortLabel}
+              </Button>
+            ))}
+          </div>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             onClick={toggle}
-            aria-label="Đổi giao diện sáng tối"
+            aria-label={t("header.theme")}
             className="size-11 rounded-full bg-muted/60 hover:bg-muted sm:size-9"
           >
             {theme === "dark" ? <Sun /> : <Moon />}
@@ -97,7 +118,7 @@ export function Header() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Mở menu chính"
+                aria-label={t("header.menu")}
                 className="size-11 rounded-full bg-muted/60 hover:bg-muted lg:hidden"
               >
                 <Menu />
@@ -114,9 +135,26 @@ export function Header() {
                   </span>
                   RadarAsset
                 </SheetTitle>
-                <SheetDescription className="text-left">Chọn khu vực bạn muốn mở.</SheetDescription>
+                <SheetDescription className="text-left">
+                  {t("header.mobileDescription")}
+                </SheetDescription>
               </SheetHeader>
-              <nav aria-label="Điều hướng mobile" className="mt-6 flex flex-col gap-2">
+              <div className="mt-5 flex items-center rounded-full bg-muted/60 p-1 sm:hidden">
+                {LOCALES.map((item) => (
+                  <Button
+                    key={item.code}
+                    type="button"
+                    variant={locale === item.code ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-9 flex-1 rounded-full text-xs font-semibold"
+                    aria-pressed={locale === item.code}
+                    onClick={() => setLocale(item.code)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+              <nav aria-label={t("header.mobileNav")} className="mt-6 flex flex-col gap-2">
                 {APP_ROUTES.map((route) => {
                   const active = path === route.href;
                   const Icon = routeIcons[route.id];
@@ -133,7 +171,7 @@ export function Header() {
                         onClick={() => setMobileOpen(false)}
                       >
                         <Icon data-icon="inline-start" />
-                        {route.mobileLabel}
+                        {t(`routes.${route.id}Mobile`)}
                       </Link>
                     </Button>
                   );

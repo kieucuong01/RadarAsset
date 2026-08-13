@@ -14,6 +14,7 @@ import {
   type BacktestStrategyPreset,
   type QuantLabTab,
 } from "@/lib/backtest/preselection";
+import { useI18n } from "@/lib/i18n/context";
 
 const PortfolioOptimizerWorkbench = dynamic(
   () =>
@@ -42,6 +43,7 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
   const [tab, setTab] = useState<QuantLabTab>(() => initialQuantLabTab(initialSymbols));
   const [strategyPreset, setStrategyPreset] = useState<BacktestStrategyPreset | null>(null);
   const [strategySymbols, setStrategySymbols] = useState<string[]>([]);
+  const { t } = useI18n();
 
   return (
     <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">
@@ -49,20 +51,15 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
             <Activity aria-hidden="true" className="size-4 text-primary" />
-            Quantitative Simulation Workbench
+            {t("quant.eyebrow")}
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Quant Lab</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Tối ưu và backtest danh mục từ immutable market datasets. Kết quả là mô phỏng nghiên
-            cứu, không phải khuyến nghị hoặc lệnh tại broker.
-          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{t("quant.title")}</h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">{t("quant.hero.description")}</p>
         </div>
         <DataStatusBadge
           status={tab === "predict" ? "UNAVAILABLE" : "SYSTEM"}
           detail={
-            tab === "predict"
-              ? "AI Prediction chưa được nối vào provider production."
-              : "Dữ liệu và tác vụ được xử lý qua API/worker của hệ thống."
+            tab === "predict" ? t("quant.status.predictionUnavailable") : t("quant.status.system")
           }
         />
       </div>
@@ -72,23 +69,23 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
           <TabsList className="min-w-max">
             <TabsTrigger value="optimizer">
               <Sliders />
-              Portfolio Optimizer
+              {t("quant.tabs.optimizer")}
             </TabsTrigger>
             <TabsTrigger value="strategies">
               <BookOpen />
-              Strategy Lab
+              {t("quant.tabs.strategies")}
             </TabsTrigger>
             <TabsTrigger value="backtest">
               <FlaskConical />
-              Backtest & Risk Engine
+              {t("quant.tabs.backtest")}
             </TabsTrigger>
             <TabsTrigger value="factors">
               <ChartScatter />
-              VN Factor Lab
+              {t("quant.tabs.factors")}
             </TabsTrigger>
             <TabsTrigger value="predict">
               <Brain />
-              AI Prediction
+              {t("quant.tabs.predict")}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -117,15 +114,11 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
         <TabsContent value="predict">
           <Card>
             <CardHeader>
-              <CardTitle>AI Prediction chưa sẵn sàng</CardTitle>
-              <CardDescription>
-                Tab này chưa có model/provider production được kiểm chứng nên hệ thống không hiển
-                thị dự báo mô phỏng.
-              </CardDescription>
+              <CardTitle>{t("quant.prediction.title")}</CardTitle>
+              <CardDescription>{t("quant.prediction.description")}</CardDescription>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Ưu tiên hiện tại là hoàn thiện portfolio backtest, strategy alerts và ingestion dữ
-              liệu miễn phí.
+              {t("quant.prediction.body")}
             </CardContent>
           </Card>
         </TabsContent>
@@ -135,8 +128,9 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
 }
 
 function WorkbenchSkeleton() {
+  const { t } = useI18n();
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]" aria-label="Đang tải Quant Lab">
+    <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]" aria-label={t("quant.loading")}>
       <Skeleton className="h-[520px] rounded-xl" />
       <Skeleton className="h-[520px] rounded-xl" />
     </div>

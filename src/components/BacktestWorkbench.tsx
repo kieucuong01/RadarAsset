@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { getBacktestRun, isActiveRun, type BacktestRun } from "@/lib/backtest/client";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
 import { backtestOutputState } from "@/lib/backtest/result-presentation";
+import { useI18n } from "@/lib/i18n/context";
 
 export function BacktestWorkbench({
   initialSymbols = [],
@@ -24,6 +25,7 @@ export function BacktestWorkbench({
 }) {
   const [run, setRun] = useState<BacktestRun | null>(null);
   const outputState = backtestOutputState(run?.status ?? null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!run || !isActiveRun(run.status)) return;
@@ -33,19 +35,19 @@ export function BacktestWorkbench({
         .then(setRun)
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          toast.error("Không thể cập nhật trạng thái portfolio backtest.");
+          toast.error(t("backtest.updateStatusError"));
         });
     }, 2_000);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [run]);
+  }, [run, t]);
 
   return (
     <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
       <aside
-        aria-label="Backtest configuration"
+        aria-label={t("backtest.configAria")}
         className="min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2"
       >
         <PortfolioBacktestBuilder
@@ -56,7 +58,7 @@ export function BacktestWorkbench({
         />
       </aside>
 
-      <main aria-label="Backtest output" className="min-w-0 space-y-5">
+      <main aria-label={t("backtest.outputAria")} className="min-w-0 space-y-5">
         {outputState === "empty" ? <BacktestResultsEmpty /> : null}
 
         {run && outputState === "active" ? (
@@ -69,7 +71,10 @@ export function BacktestWorkbench({
                     Run {run.id.slice(0, 8)}
                   </CardTitle>
                   <CardDescription className="mt-1">
-                    {run.legs.length} legs · {run.timeframe} · normalized portfolio simulation
+                    {t("backtest.activeRunDescription", {
+                      legs: run.legs.length,
+                      timeframe: run.timeframe,
+                    })}
                   </CardDescription>
                 </div>
                 <Badge variant="secondary">{run.status}</Badge>
@@ -84,10 +89,8 @@ export function BacktestWorkbench({
         {run && outputState === "failed" ? (
           <Alert variant="destructive">
             <AlertCircle />
-            <AlertTitle>Backtest failed</AlertTitle>
-            <AlertDescription>
-              Worker could not finish this run. Check the selected data and try again.
-            </AlertDescription>
+            <AlertTitle>{t("backtest.failedTitle")}</AlertTitle>
+            <AlertDescription>{t("backtest.failedDescription")}</AlertDescription>
           </Alert>
         ) : null}
 

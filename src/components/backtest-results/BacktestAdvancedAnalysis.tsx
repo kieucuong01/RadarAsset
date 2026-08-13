@@ -28,6 +28,7 @@ import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { advancedAnalysisAvailability } from "@/lib/backtest/result-presentation";
+import { useI18n } from "@/lib/i18n/context";
 
 const COLORS = [
   "var(--chart-1)",
@@ -95,6 +96,7 @@ function EquityChart({ data }: { data: Array<{ timestamp: string; equity: number
 export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvancedAnalysisProps) {
   const [applyingLegId, setApplyingLegId] = useState<string | null>(null);
   const availability = advancedAnalysisAvailability(model);
+  const { t } = useI18n();
   const componentKeys = useMemo(
     () =>
       Object.keys(model.aggregate.contribution[0]?.components ?? {}).sort((left, right) =>
@@ -149,11 +151,18 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Không thể áp dụng chiến lược vào Mock Portfolio.");
+        throw new Error(payload?.error ?? t("backtest.builder.advanced.applyError"));
       }
-      toast.success(`Đã áp dụng ${leg.strategyCode} cho ${leg.symbol}. Tín hiệu vẫn cần xác nhận.`);
+      toast.success(
+        t("backtest.builder.advanced.applySuccess", {
+          strategy: leg.strategyCode,
+          symbol: leg.symbol,
+        }),
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không thể áp dụng chiến lược.");
+      toast.error(
+        error instanceof Error ? error.message : t("backtest.builder.advanced.applyError"),
+      );
     } finally {
       setApplyingLegId(null);
     }
@@ -399,7 +408,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
               <CardContent>
                 {events.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Không có dòng tiền hoặc tái cân bằng trong kỳ.
+                    {t("backtest.builder.advanced.emptyCashFlow")}
                   </p>
                 ) : (
                   <Table>
@@ -441,7 +450,9 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     </CardDescription>
                   </div>
                   <Button onClick={() => void applyStrategy(leg)} disabled={applyingLegId !== null}>
-                    {applyingLegId === leg.id ? "Đang áp dụng…" : "Apply vào Mock Portfolio"}
+                    {applyingLegId === leg.id
+                      ? t("backtest.builder.advanced.applying")
+                      : t("backtest.builder.advanced.apply")}
                   </Button>
                 </CardHeader>
                 <CardContent className="flex min-w-0 flex-col gap-4">
@@ -463,7 +474,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                 <CardContent>
                   {leg.trades.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Không có giao dịch hoàn tất trong kỳ.
+                      {t("backtest.builder.advanced.emptyTrades")}
                     </p>
                   ) : (
                     <Table>

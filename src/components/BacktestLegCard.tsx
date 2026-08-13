@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { BuilderAction, DraftBacktestLeg } from "@/lib/backtest/builder-state";
 import type { StrategyCatalogItem } from "@/lib/backtest/client";
+import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 type BacktestLegCardProps = {
@@ -55,6 +56,7 @@ export function BacktestLegCard({
 }: BacktestLegCardProps) {
   const notional = (totalCapital * leg.allocationBps) / 10_000;
   const leverageOptions = [1, 1.5, 2].filter((value) => value <= leg.maxLeverage);
+  const { t } = useI18n();
 
   return (
     <Card className={cn(compact && "rounded-2xl border-border/80 shadow-sm")}>
@@ -78,7 +80,7 @@ export function BacktestLegCard({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label={`Xóa ${leg.symbol}`}
+            aria-label={t("backtest.builder.leg.remove", { symbol: leg.symbol })}
             onClick={() => dispatch({ type: "assetRemoved", symbol: leg.symbol })}
           >
             <Trash2 />
@@ -95,7 +97,9 @@ export function BacktestLegCard({
             )}
           >
             <Field>
-              <FieldLabel htmlFor={`${leg.symbol}-weight`}>Trọng số (%)</FieldLabel>
+              <FieldLabel htmlFor={`${leg.symbol}-weight`}>
+                {t("backtest.builder.leg.weight")}
+              </FieldLabel>
               <Input
                 id={`${leg.symbol}-weight`}
                 type="number"
@@ -114,7 +118,9 @@ export function BacktestLegCard({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${leg.symbol}-notional`}>Vốn phân bổ</FieldLabel>
+              <FieldLabel htmlFor={`${leg.symbol}-notional`}>
+                {t("backtest.builder.leg.notional")}
+              </FieldLabel>
               <Input
                 id={`${leg.symbol}-notional`}
                 type="number"
@@ -136,7 +142,9 @@ export function BacktestLegCard({
               <FieldDescription>{formatMoney(notional, baseCurrency)}</FieldDescription>
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${leg.symbol}-strategy`}>Chiến lược</FieldLabel>
+              <FieldLabel htmlFor={`${leg.symbol}-strategy`}>
+                {t("backtest.builder.leg.strategy")}
+              </FieldLabel>
               <Select
                 value={`${leg.strategyCode}@${leg.strategyVersion}`}
                 onValueChange={(value) => {
@@ -168,7 +176,9 @@ export function BacktestLegCard({
               </Select>
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${leg.symbol}-leverage`}>Đòn bẩy</FieldLabel>
+              <FieldLabel htmlFor={`${leg.symbol}-leverage`}>
+                {t("backtest.builder.leg.leverage")}
+              </FieldLabel>
               <Select
                 value={String(leg.leverage)}
                 onValueChange={(value) =>
@@ -188,7 +198,9 @@ export function BacktestLegCard({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <FieldDescription>Tối đa {leg.maxLeverage.toFixed(1)}×</FieldDescription>
+              <FieldDescription>
+                {t("backtest.builder.leg.maxLeverage", { value: leg.maxLeverage.toFixed(1) })}
+              </FieldDescription>
             </Field>
           </div>
 

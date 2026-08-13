@@ -65,6 +65,7 @@ import {
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
+import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 type PortfolioBacktestBuilderProps = {
@@ -74,18 +75,8 @@ type PortfolioBacktestBuilderProps = {
   layout?: "stacked" | "sidebar";
 };
 
-const MARKET_LABELS = {
-  vn_equity: "Chứng khoán Việt Nam",
-  crypto_spot: "Crypto spot",
-  metal_spot: "XAU/USD spot",
-} as const;
-
-const COST_FIELDS = {
-  commissionBps: "Phí giao dịch (bps)",
-  sellTaxBps: "Thuế bán (bps)",
-  slippageBps: "Trượt giá (bps)",
-  financingBpsAnnual: "Chi phí vốn/năm (bps)",
-} as const;
+const MARKET_KEYS = ["vn_equity", "crypto_spot", "metal_spot"] as const;
+const COST_KEYS = ["commissionBps", "sellTaxBps", "slippageBps", "financingBpsAnnual"] as const;
 
 export function PortfolioBacktestBuilder({
   onRunCreated,
@@ -104,6 +95,7 @@ export function PortfolioBacktestBuilder({
   const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const loadedInitialSymbols = useRef(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,11 +103,11 @@ export function PortfolioBacktestBuilder({
       .then(setStrategies)
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.error("Không thể tải catalog chiến lược.");
+        toast.error(t("backtest.builder.catalogError"));
       })
       .finally(() => setLoadingCatalog(false));
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   const initialSymbolKey = initialSymbols.join("|");
   useEffect(() => {
@@ -165,10 +157,10 @@ export function PortfolioBacktestBuilder({
       })
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.warning("Không thể nạp toàn bộ mã được chuyển từ Mock Portfolio.");
+        toast.warning(t("backtest.builder.loadSymbolsError"));
       });
     return () => controller.abort();
-  }, [initialSymbolKey, state.from, state.timeframe, state.to, strategies, strategyPreset]);
+  }, [initialSymbolKey, state.from, state.timeframe, state.to, strategies, strategyPreset, t]);
 
   const selectedKey = state.legs
     .map((leg) => leg.symbol)
@@ -201,14 +193,14 @@ export function PortfolioBacktestBuilder({
         })
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          toast.warning("Không thể làm mới trạng thái dataset của các mã đã chọn.");
+          toast.warning(t("backtest.builder.refreshDatasetError"));
         });
     }, 350);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [selectedKey, state.from, state.timeframe, state.to]);
+  }, [selectedKey, state.from, state.timeframe, state.to, t]);
 
   const reasons = useMemo(() => builderValidationReasons(state), [state]);
   const allocationTotalBps =
@@ -259,9 +251,9 @@ export function PortfolioBacktestBuilder({
         dividendMode: state.assumptions.dividendMode,
       });
       dispatch({ type: "optimizerApplied", proposal });
-      toast.success("Đã áp dụng phân bổ tối ưu từ dữ liệu lịch sử.");
+      toast.success(t("backtest.builder.optimizerApplied"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không thể tối ưu phân bổ.");
+      toast.error(error instanceof Error ? error.message : t("backtest.builder.optimizerError"));
     } finally {
       setOptimizing(false);
     }
@@ -272,9 +264,9 @@ export function PortfolioBacktestBuilder({
     try {
       const run = await submitBacktest(toPortfolioBacktestSubmission(state));
       onRunCreated(run);
-      toast.success("Portfolio backtest đã được đưa vào hàng đợi.");
+      toast.success(t("backtest.builder.queued"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không thể tạo portfolio backtest.");
+      toast.error(error instanceof Error ? error.message : t("backtest.builder.createError"));
     } finally {
       setSubmitting(false);
     }
@@ -287,12 +279,10 @@ export function PortfolioBacktestBuilder({
           <CardTitle
             className={cn(isSidebar && "text-xs uppercase tracking-wider text-muted-foreground")}
           >
-            {isSidebar ? "Strategy" : "Portfolio Backtest Builder"}
+            {isSidebar ? t("backtest.builder.strategy") : t("backtest.builder.title")}
           </CardTitle>
           {!isSidebar ? (
-            <CardDescription>
-              Chọn 1–10 mã trong hệ thống, gán chiến lược riêng cho từng mã và kiểm soát cash flow.
-            </CardDescription>
+            <CardDescription>{t("backtest.builder.description")}</CardDescription>
           ) : null}
         </CardHeader>
         <CardContent className={cn(isSidebar && "pb-5")}>
@@ -304,7 +294,9 @@ export function PortfolioBacktestBuilder({
               )}
             >
               <Field>
-                <FieldLabel htmlFor="portfolio-capital">Tổng vốn</FieldLabel>
+                <FieldLabel htmlFor="portfolio-capital">
+                  {t("backtest.builder.totalCapital")}
+                </FieldLabel>
                 <Input
                   id="portfolio-capital"
                   type="number"
@@ -320,7 +312,9 @@ export function PortfolioBacktestBuilder({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="portfolio-currency">Đồng tiền báo cáo</FieldLabel>
+                <FieldLabel htmlFor="portfolio-currency">
+                  {t("backtest.builder.currency")}
+                </FieldLabel>
                 <Select
                   value={state.assumptions.baseCurrency}
                   onValueChange={(value: "USD" | "VND") =>
@@ -339,7 +333,9 @@ export function PortfolioBacktestBuilder({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="portfolio-timeframe">Khung thời gian</FieldLabel>
+                <FieldLabel htmlFor="portfolio-timeframe">
+                  {t("backtest.builder.timeframe")}
+                </FieldLabel>
                 <Select
                   value={state.timeframe}
                   onValueChange={(value: "1d" | "1h") =>
@@ -351,14 +347,14 @@ export function PortfolioBacktestBuilder({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="1d">Ngày (1d)</SelectItem>
-                      <SelectItem value="1h">Giờ (1h)</SelectItem>
+                      <SelectItem value="1d">{t("backtest.builder.day")}</SelectItem>
+                      <SelectItem value="1h">{t("backtest.builder.hour")}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="portfolio-from">Từ ngày</FieldLabel>
+                <FieldLabel htmlFor="portfolio-from">{t("backtest.builder.from")}</FieldLabel>
                 <Input
                   id="portfolio-from"
                   type="date"
@@ -369,7 +365,7 @@ export function PortfolioBacktestBuilder({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="portfolio-to">Đến ngày</FieldLabel>
+                <FieldLabel htmlFor="portfolio-to">{t("backtest.builder.to")}</FieldLabel>
                 <Input
                   id="portfolio-to"
                   type="date"
@@ -393,12 +389,11 @@ export function PortfolioBacktestBuilder({
                   isSidebar && "text-xs uppercase tracking-wider text-muted-foreground",
                 )}
               >
-                {isSidebar ? "Portfolio Legs" : "Phân bổ tài sản"}
+                {isSidebar ? t("backtest.builder.legs") : t("backtest.builder.allocation")}
               </CardTitle>
               {!isSidebar ? (
                 <CardDescription className="mt-1">
-                  Equal chia đều phần vốn sau cash; Custom cho phép sửa từng mã; Optimized dùng
-                  engine dữ liệu thật.
+                  {t("backtest.builder.allocationDescription")}
                 </CardDescription>
               ) : null}
             </div>
@@ -411,7 +406,12 @@ export function PortfolioBacktestBuilder({
               onAdd={(asset) => {
                 const strategy = defaultStrategyFor(asset.market);
                 if (!strategy) {
-                  toast.error(`Chưa có chiến lược hỗ trợ ${asset.symbol} trên ${state.timeframe}.`);
+                  toast.error(
+                    t("backtest.builder.unsupportedStrategy", {
+                      symbol: asset.symbol,
+                      timeframe: state.timeframe,
+                    }),
+                  );
                   return;
                 }
                 dispatch({ type: "assetAdded", asset, strategy });
@@ -427,7 +427,7 @@ export function PortfolioBacktestBuilder({
             )}
           >
             <Field>
-              <FieldLabel>Chế độ phân bổ</FieldLabel>
+              <FieldLabel>{t("backtest.builder.mode")}</FieldLabel>
               <ToggleGroup
                 type="single"
                 value={state.allocationMode === "optimized" ? "" : state.allocationMode}
@@ -449,7 +449,9 @@ export function PortfolioBacktestBuilder({
               )}
             >
               <Field className={cn("w-64", isSidebar && "w-full")}>
-                <FieldLabel htmlFor="backtest-optimizer-method">Optimization method</FieldLabel>
+                <FieldLabel htmlFor="backtest-optimizer-method">
+                  {t("backtest.builder.optimizerMethod")}
+                </FieldLabel>
                 <Select
                   value={optimizerMethod}
                   onValueChange={(value: OptimizerMethod) => setOptimizerMethod(value)}
@@ -473,7 +475,9 @@ export function PortfolioBacktestBuilder({
               </Field>
               {optimizerMethod === "target_return" ? (
                 <Field className={cn("w-40", isSidebar && "w-full")}>
-                  <FieldLabel htmlFor="backtest-target-return">Target return/năm</FieldLabel>
+                  <FieldLabel htmlFor="backtest-target-return">
+                    {t("backtest.builder.targetReturn")}
+                  </FieldLabel>
                   <Input
                     id="backtest-target-return"
                     type="number"
@@ -488,7 +492,9 @@ export function PortfolioBacktestBuilder({
               ) : null}
               {optimizerMethod === "target_volatility" ? (
                 <Field className={cn("w-40", isSidebar && "w-full")}>
-                  <FieldLabel htmlFor="backtest-target-volatility">Target vol/năm</FieldLabel>
+                  <FieldLabel htmlFor="backtest-target-volatility">
+                    {t("backtest.builder.targetVolatility")}
+                  </FieldLabel>
                   <Input
                     id="backtest-target-volatility"
                     type="number"
@@ -503,7 +509,9 @@ export function PortfolioBacktestBuilder({
               ) : null}
               {optimizerMethod === "risk_tolerance" ? (
                 <Field className={cn("w-40", isSidebar && "w-full")}>
-                  <FieldLabel>Risk tolerance: {markowitzRiskTolerance}</FieldLabel>
+                  <FieldLabel>
+                    {t("backtest.builder.riskTolerance", { value: markowitzRiskTolerance })}
+                  </FieldLabel>
                   <Slider
                     value={[markowitzRiskTolerance]}
                     min={0.1}
@@ -515,7 +523,7 @@ export function PortfolioBacktestBuilder({
                 </Field>
               ) : null}
               <Field className={cn("w-40", isSidebar && "w-full")}>
-                <FieldLabel>Max/mã: {maxWeightPct}%</FieldLabel>
+                <FieldLabel>{t("backtest.builder.maxWeight", { value: maxWeightPct })}</FieldLabel>
                 <Slider
                   value={[maxWeightPct]}
                   min={10}
@@ -536,7 +544,7 @@ export function PortfolioBacktestBuilder({
                 ) : (
                   <Calculator data-icon="inline-start" />
                 )}
-                Tối ưu
+                {t("backtest.builder.optimize")}
               </Button>
             </div>
           </div>
@@ -551,10 +559,8 @@ export function PortfolioBacktestBuilder({
               {state.legs.length === 0 ? (
                 <Alert>
                   <WalletCards />
-                  <AlertTitle>Portfolio đang trống</AlertTitle>
-                  <AlertDescription>
-                    Dùng “Thêm mã” để chọn bất kỳ tài sản nào hệ thống hỗ trợ.
-                  </AlertDescription>
+                  <AlertTitle>{t("backtest.builder.emptyTitle")}</AlertTitle>
+                  <AlertDescription>{t("backtest.builder.emptyDescription")}</AlertDescription>
                 </Alert>
               ) : null}
               {state.legs.map((leg) => (
@@ -578,17 +584,19 @@ export function PortfolioBacktestBuilder({
               )}
             >
               <CardHeader className={cn(isSidebar && "pb-3")}>
-                <CardTitle className={cn(isSidebar && "text-sm")}>Cash</CardTitle>
+                <CardTitle className={cn(isSidebar && "text-sm")}>
+                  {t("backtest.builder.cash")}
+                </CardTitle>
                 {!isSidebar ? (
-                  <CardDescription>
-                    Giữ tiền mặt trong đồng tiền báo cáo, lãi suất 0% ở MVP.
-                  </CardDescription>
+                  <CardDescription>{t("backtest.builder.cashDescription")}</CardDescription>
                 ) : null}
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="cash-weight">Trọng số cash (%)</FieldLabel>
+                    <FieldLabel htmlFor="cash-weight">
+                      {t("backtest.builder.cashWeight")}
+                    </FieldLabel>
                     <Input
                       id="cash-weight"
                       type="number"
@@ -606,7 +614,9 @@ export function PortfolioBacktestBuilder({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="cash-notional">Giá trị cash</FieldLabel>
+                    <FieldLabel htmlFor="cash-notional">
+                      {t("backtest.builder.cashValue")}
+                    </FieldLabel>
                     <Input
                       id="cash-notional"
                       type="number"
@@ -638,7 +648,7 @@ export function PortfolioBacktestBuilder({
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span>Tổng trọng số</span>
+              <span>{t("backtest.builder.totalWeight")}</span>
               <Badge variant={allocationTotalBps === 10_000 ? "secondary" : "destructive"}>
                 {(allocationTotalBps / 100).toFixed(2)}%
               </Badge>
@@ -659,12 +669,10 @@ export function PortfolioBacktestBuilder({
           <CardTitle
             className={cn(isSidebar && "text-xs uppercase tracking-wider text-muted-foreground")}
           >
-            Assumptions
+            {t("backtest.builder.assumptions")}
           </CardTitle>
           {!isSidebar ? (
-            <CardDescription>
-              Các giả định này được chuẩn hóa, lưu trong run hash và hiển thị lại ở kết quả.
-            </CardDescription>
+            <CardDescription>{t("backtest.builder.assumptionsDescription")}</CardDescription>
           ) : null}
         </CardHeader>
         <CardContent className={cn("flex flex-col gap-5", isSidebar && "gap-4")}>
@@ -675,7 +683,9 @@ export function PortfolioBacktestBuilder({
             )}
           >
             <Field>
-              <FieldLabel htmlFor="rebalance-frequency">Chu kỳ tái cân bằng</FieldLabel>
+              <FieldLabel htmlFor="rebalance-frequency">
+                {t("backtest.builder.rebalance")}
+              </FieldLabel>
               <Select
                 value={state.assumptions.rebalanceFrequency}
                 onValueChange={(value: "none" | "monthly" | "quarterly" | "yearly") =>
@@ -687,16 +697,18 @@ export function PortfolioBacktestBuilder({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="none">Không</SelectItem>
-                    <SelectItem value="monthly">Hàng tháng</SelectItem>
-                    <SelectItem value="quarterly">Hàng quý</SelectItem>
-                    <SelectItem value="yearly">Hàng năm</SelectItem>
+                    <SelectItem value="none">{t("backtest.builder.none")}</SelectItem>
+                    <SelectItem value="monthly">{t("backtest.builder.monthly")}</SelectItem>
+                    <SelectItem value="quarterly">{t("backtest.builder.quarterly")}</SelectItem>
+                    <SelectItem value="yearly">{t("backtest.builder.yearly")}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
             <Field>
-              <FieldLabel htmlFor="monthly-contribution">Góp vốn hàng tháng</FieldLabel>
+              <FieldLabel htmlFor="monthly-contribution">
+                {t("backtest.builder.monthlyContribution")}
+              </FieldLabel>
               <Input
                 id="monthly-contribution"
                 type="number"
@@ -713,7 +725,7 @@ export function PortfolioBacktestBuilder({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="dividend-mode">Cổ tức</FieldLabel>
+              <FieldLabel htmlFor="dividend-mode">{t("backtest.builder.dividend")}</FieldLabel>
               <Select
                 value={state.assumptions.dividendMode}
                 onValueChange={(value: "exclude" | "adjusted_prices") =>
@@ -725,59 +737,56 @@ export function PortfolioBacktestBuilder({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="exclude">Không tính riêng</SelectItem>
-                    <SelectItem value="adjusted_prices">Giá total-return</SelectItem>
+                    <SelectItem value="exclude">{t("backtest.builder.excludeDividend")}</SelectItem>
+                    <SelectItem value="adjusted_prices">
+                      {t("backtest.builder.adjustedPrices")}
+                    </SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
             <Field>
-              <FieldLabel>FX policy</FieldLabel>
+              <FieldLabel>{t("backtest.builder.fxPolicy")}</FieldLabel>
               <Input value="Normalized returns" readOnly aria-readonly="true" />
-              <FieldDescription>Không mô phỏng settlement FX lịch sử ở MVP.</FieldDescription>
+              <FieldDescription>{t("backtest.builder.fxDescription")}</FieldDescription>
             </Field>
           </div>
 
           <Alert>
             <AlertCircle />
-            <AlertTitle>Không tạo dữ liệu giả</AlertTitle>
-            <AlertDescription>
-              “Giá total-return” chỉ chạy khi có dataset immutable phù hợp; nếu không, server trả
-              lỗi trước khi tạo run.
-            </AlertDescription>
+            <AlertTitle>{t("backtest.builder.noFakeTitle")}</AlertTitle>
+            <AlertDescription>{t("backtest.builder.noFakeDescription")}</AlertDescription>
           </Alert>
 
           <Accordion type="multiple" className="w-full">
-            {Object.entries(MARKET_LABELS).map(([market, label]) => (
+            {MARKET_KEYS.map((market) => (
               <AccordionItem key={market} value={market}>
-                <AccordionTrigger>{label}</AccordionTrigger>
+                <AccordionTrigger>{t(`backtest.builder.markets.${market}`)}</AccordionTrigger>
                 <AccordionContent>
                   <FieldSet>
-                    <FieldLegend variant="label">Cost model theo thị trường</FieldLegend>
+                    <FieldLegend variant="label">{t("backtest.builder.costModel")}</FieldLegend>
                     <div
                       className={cn(
                         "grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
                         isSidebar && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-1",
                       )}
                     >
-                      {Object.entries(COST_FIELDS).map(([key, fieldLabel]) => (
+                      {COST_KEYS.map((key) => (
                         <Field key={key}>
-                          <FieldLabel htmlFor={`${market}-${key}`}>{fieldLabel}</FieldLabel>
+                          <FieldLabel htmlFor={`${market}-${key}`}>
+                            {t(`backtest.builder.costs.${key}`)}
+                          </FieldLabel>
                           <Input
                             id={`${market}-${key}`}
                             type="number"
                             inputMode="decimal"
                             min={0}
-                            value={
-                              state.assumptions.marketCosts[market as keyof typeof MARKET_LABELS][
-                                key as keyof typeof COST_FIELDS
-                              ]
-                            }
+                            value={state.assumptions.marketCosts[market][key]}
                             onChange={(event) =>
                               dispatch({
                                 type: "marketCostEdited",
-                                market: market as keyof typeof MARKET_LABELS,
-                                key: key as keyof typeof COST_FIELDS,
+                                market,
+                                key,
                                 value: Number(event.target.value),
                               })
                             }
@@ -796,7 +805,7 @@ export function PortfolioBacktestBuilder({
       {reasons.length > 0 ? (
         <Alert variant="destructive">
           <AlertCircle />
-          <AlertTitle>Chưa thể chạy backtest</AlertTitle>
+          <AlertTitle>{t("backtest.builder.invalidTitle")}</AlertTitle>
           <AlertDescription>
             <ul className="ml-4 list-disc">
               {reasons.map((reason) => (
@@ -815,9 +824,7 @@ export function PortfolioBacktestBuilder({
           )}
         >
           {!isSidebar ? (
-            <p className="text-sm text-muted-foreground">
-              Kết quả là normalized simulation capital, không phải số dư hoặc lệnh tại broker.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("backtest.builder.footer")}</p>
           ) : null}
           <Button
             type="button"
@@ -831,7 +838,7 @@ export function PortfolioBacktestBuilder({
             ) : (
               <Play data-icon="inline-start" />
             )}
-            Run Portfolio Backtest
+            {t("backtest.builder.run")}
           </Button>
         </CardFooter>
       </Card>
