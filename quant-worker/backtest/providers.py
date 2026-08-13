@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
-from .catalog import FEEDS
+from .catalog import DEFAULT_CRYPTO_UNIVERSE, FEEDS
 from .models import Bar
 from .quality import normalize_bars
 
@@ -124,6 +124,7 @@ class BinanceSpotAdapter:
         transport: HttpJsonTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[], float] = random.random,
+        allowed_assets: Iterable[str] = DEFAULT_CRYPTO_UNIVERSE,
         max_pages: int = 128,
         max_rows: int = 100_000,
         timeout_seconds: float = 15,
@@ -135,6 +136,7 @@ class BinanceSpotAdapter:
         self.transport = transport or UrllibJsonTransport()
         self.sleep = sleep
         self.jitter = jitter
+        self.allowed_assets = {asset.strip().upper() for asset in allowed_assets}
         self.max_pages = max_pages
         self.max_rows = max_rows
         self.timeout_seconds = timeout_seconds
@@ -157,6 +159,7 @@ class BinanceSpotAdapter:
         if not isinstance(rows, list) or len(rows) > 5_000:
             raise ProviderUnavailableError("invalid_response", "Provider catalog response is invalid.")
         instruments: list[ProviderInstrumentDescriptor] = []
+        seen_assets: set[str] = set()
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -168,15 +171,29 @@ class BinanceSpotAdapter:
                 continue
             base = str(row.get("baseAsset", "")).upper()
             symbol = str(row.get("symbol", "")).upper()
+            if base not in self.allowed_assets:
+                continue
             try:
                 canonical, provider_symbol = self.normalize_symbol(base, symbol)
             except ValueError:
                 continue
+            seen_assets.add(canonical)
             instruments.append(
                 ProviderInstrumentDescriptor(
                     provider_symbol=provider_symbol,
                     canonical_symbol=canonical,
                     name=f"{canonical} / Tether",
+                    market="crypto_spot",
+                    venue="BINANCE",
+                    currency="USDT",
+                )
+            )
+        for missing in sorted(self.allowed_assets - seen_assets):
+            instruments.append(
+                ProviderInstrumentDescriptor(
+                    provider_symbol=f"{missing}USDT",
+                    canonical_symbol=missing,
+                    name=f"{missing} / Tether",
                     market="crypto_spot",
                     venue="BINANCE",
                     currency="USDT",
@@ -467,16 +484,25 @@ def _default_market_factory() -> Any:
     return Market()
 
 
+def _default_listing_factory() -> Any:
+    _load_vnstock_market()
+    from vnstock import Listing
+
+    return Listing()
+
+
 class VnstockAdapter:
     def __init__(
         self,
         *,
         market_factory: Callable[[], Any] = _default_market_factory,
+        listing_factory: Callable[[], Any] | None = _default_listing_factory,
         max_rows: int = 100_000,
     ) -> None:
         if not 100 <= max_rows <= 250_000:
             raise ValueError("Vnstock max_rows is outside the supported range.")
         self.market_factory = market_factory
+        self.listing_factory = listing_factory
         self.max_rows = max_rows
 
     @staticmethod
@@ -489,8 +515,86 @@ class VnstockAdapter:
             raise ValueError("Vnstock symbol is not a supported canonical instrument.")
         return canonical, symbol
 
+    @staticmethod
+    def _frame_records(frame: Any) -> list[dict[str, Any]]:
+        if hasattr(frame, "to_dict"):
+            records = frame.to_dict("records")
+        else:
+            records = frame
+        return records if isinstance(records, list) else []
+
+    @staticmethod
+    def _record_value(record: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+        for key in keys:
+            value = record.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return ""
+
+    @staticmethod
+    def _is_hose_record(record: Mapping[str, Any], *, already_scoped: bool) -> bool:
+        value = VnstockAdapter._record_value(
+            record,
+            ("exchange", "floor", "board", "comGroupCode", "organTypeCode", "stockExchange"),
+        ).upper()
+        if not value:
+            return already_scoped
+        return value in {"HOSE", "HSX", "STOCK_HOSE"}
+
+    def _listing_records(self) -> tuple[list[dict[str, Any]], bool]:
+        if self.listing_factory is None:
+            return [], False
+        listing = self.listing_factory()
+        for name in ("symbols_by_exchange", "list_by_exchange"):
+            method = getattr(listing, name, None)
+            if not callable(method):
+                continue
+            for args, kwargs in ((("HOSE",), {}), ((), {"exchange": "HOSE"})):
+                try:
+                    records = self._frame_records(method(*args, **kwargs))
+                except TypeError:
+                    continue
+                if records:
+                    return records, True
+        method = getattr(listing, "all_symbols", None)
+        if callable(method):
+            return self._frame_records(method()), False
+        return [], False
+
+    def _dynamic_hose_instruments(self) -> list[ProviderInstrumentDescriptor]:
+        try:
+            records, already_scoped = self._listing_records()
+        except Exception:
+            return []
+        instruments: dict[str, ProviderInstrumentDescriptor] = {}
+        for record in records:
+            if not isinstance(record, Mapping) or not self._is_hose_record(
+                record, already_scoped=already_scoped
+            ):
+                continue
+            instrument_type = self._record_value(record, ("type", "instrumentType")).lower()
+            if instrument_type and instrument_type != "stock":
+                continue
+            symbol = self._record_value(record, ("symbol", "ticker", "code")).upper()
+            if not re.fullmatch(r"[A-Z][A-Z0-9]{1,9}", symbol):
+                continue
+            name = self._record_value(
+                record,
+                ("organ_name", "company_name", "name", "short_name", "organName"),
+            )
+            instruments[symbol] = ProviderInstrumentDescriptor(
+                provider_symbol=symbol,
+                canonical_symbol=symbol,
+                name=name or symbol,
+                market="vn_equity",
+                venue="HOSE",
+                currency="VND",
+            )
+        return [instruments[symbol] for symbol in sorted(instruments)]
+
     def list_instruments(self) -> list[ProviderInstrumentDescriptor]:
-        return [
+        dynamic_hose = self._dynamic_hose_instruments()
+        fallback_feeds = [
             ProviderInstrumentDescriptor(
                 provider_symbol=feed.provider_symbol,
                 canonical_symbol=feed.symbol,
@@ -501,6 +605,17 @@ class VnstockAdapter:
             )
             for feed in sorted(FEEDS.values(), key=lambda item: item.symbol)
             if feed.provider_code in {"vnstock-vci-free", "msn-via-vnstock"}
+        ]
+        if not dynamic_hose:
+            return fallback_feeds
+        existing = {item.canonical_symbol for item in dynamic_hose}
+        return [
+            *dynamic_hose,
+            *[
+                item
+                for item in fallback_feeds
+                if item.market != "vn_equity" and item.canonical_symbol not in existing
+            ],
         ]
 
     @staticmethod

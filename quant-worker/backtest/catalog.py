@@ -43,6 +43,43 @@ def vn_equity_feed(symbol: str, name: str, venue: str = "HOSE") -> AssetFeed:
     )
 
 
+DEFAULT_CRYPTO_UNIVERSE = (
+    "BTC",
+    "ETH",
+    "XRP",
+    "SOL",
+    "BNB",
+    "ADA",
+    "LINK",
+    "LTC",
+    "AVAX",
+    "TRX",
+    "ZEC",
+    "XMR",
+    "XLM",
+)
+
+
+def crypto_feed(symbol: str, name: str | None = None) -> AssetFeed:
+    return AssetFeed(
+        symbol=symbol,
+        market="crypto_spot",
+        canonical_key=f"CRYPTO:BINANCE:{symbol}USDT",
+        asset_name=name or f"{symbol} / Tether",
+        currency="USDT",
+        venue="BINANCE",
+        timezone_name="UTC",
+        maximum_leverage=Decimal("1"),
+        provider_code="binance-public",
+        provider_name="Binance Public Spot",
+        provider_symbol=f"{symbol}USDT",
+        terms_url="https://developers.binance.com/en/docs/products/spot/rest-api",
+        client_provider="binance",
+        upstream_provider="binance",
+        naive_timezone="UTC",
+    )
+
+
 FEEDS = {
     "FPT": vn_equity_feed("FPT", "FPT Corporation"),
     "VCB": vn_equity_feed(
@@ -53,23 +90,7 @@ FEEDS = {
     "MWG": vn_equity_feed("MWG", "Mobile World Investment Corporation"),
     "SSI": vn_equity_feed("SSI", "SSI Securities Corporation"),
     "VIC": vn_equity_feed("VIC", "Vingroup"),
-    "BTC": AssetFeed(
-        symbol="BTC",
-        market="crypto_spot",
-        canonical_key="CRYPTO:BINANCE:BTCUSDT",
-        asset_name="Bitcoin / Tether",
-        currency="USDT",
-        venue="BINANCE",
-        timezone_name="UTC",
-        maximum_leverage=Decimal("1"),
-        provider_code="binance-public",
-        provider_name="Binance Public Spot",
-        provider_symbol="BTCUSDT",
-        terms_url="https://developers.binance.com/en/docs/products/spot/rest-api",
-        client_provider="binance",
-        upstream_provider="binance",
-        naive_timezone="UTC",
-    ),
+    **{symbol: crypto_feed(symbol) for symbol in DEFAULT_CRYPTO_UNIVERSE},
     "XAU": AssetFeed(
         symbol="XAU",
         market="metal_spot",

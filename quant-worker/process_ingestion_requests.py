@@ -58,7 +58,12 @@ def _prepare_request_dataset(
     if request.timeframe not in {"1h", "1d"}:
         raise ValueError("Unsupported ingestion timeframe.")
     active = repository.load_active(request)
-    window = ingestion_window(request.timeframe, now=now, active=active)
+    window = ingestion_window(
+        request.timeframe,
+        now=now,
+        active=active,
+        market=request.market,
+    )
     provider = provider_factory(request.provider_code)
     incoming = provider.fetch(
         symbol=request.provider_symbol,

@@ -103,6 +103,14 @@ class FakeFrame:
         return self.records
 
 
+class FakeListing:
+    def __init__(self, records: list[dict[str, Any]]) -> None:
+        self.records = records
+
+    def all_symbols(self) -> FakeFrame:
+        return FakeFrame(self.records)
+
+
 class FakeInstrument:
     def __init__(
         self,
@@ -403,6 +411,50 @@ def test_vnstock_routes_fpt_through_vci() -> None:
     assert market.instrument.calls[0]["count"] == 100_000
 
 
+def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
+    adapter = VnstockAdapter(
+        listing_factory=lambda: FakeListing(
+            [
+                {
+                    "symbol": "AAA",
+                    "exchange": "HNX",
+                    "organ_name": "Not HOSE",
+                },
+                {
+                    "symbol": "FPT",
+                    "exchange": "HOSE",
+                    "type": "stock",
+                    "organ_name": "FPT Corporation",
+                },
+                {
+                    "symbol": "FUEVFVND",
+                    "exchange": "HOSE",
+                    "type": "fund",
+                    "organ_name": "ETF",
+                },
+                {
+                    "symbol": "VNM",
+                    "exchange": "HSX",
+                    "type": "stock",
+                    "organ_name": "Vietnam Dairy Products",
+                },
+            ]
+        )
+    )
+
+    descriptors = adapter.list_instruments()
+
+    assert [
+        (item.canonical_symbol, item.name, item.market, item.venue)
+        for item in descriptors
+        if item.market == "vn_equity"
+    ] == [
+        ("FPT", "FPT Corporation", "vn_equity", "HOSE"),
+        ("VNM", "Vietnam Dairy Products", "vn_equity", "HOSE"),
+    ]
+    assert any(item.canonical_symbol == "XAU" for item in descriptors)
+
+
 def test_vnstock_rejects_missing_required_columns() -> None:
     market = FakeMarket([{"time": "2026-08-10T09:00:00", "close": 100}])
 
@@ -528,6 +580,7 @@ def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
                 {},
                 {
                     "symbols": [
+                        {"symbol": "DOGEUSDT", "baseAsset": "DOGE", "quoteAsset": "USDT", "status": "TRADING", "isSpotTradingAllowed": True},
                         {"symbol": "ETHUSDT", "baseAsset": "ETH", "quoteAsset": "USDT", "status": "TRADING", "isSpotTradingAllowed": True},
                         {"symbol": "OLDUSDT", "baseAsset": "OLD", "quoteAsset": "USDT", "status": "BREAK", "isSpotTradingAllowed": True},
                         {"symbol": "ETHBTC", "baseAsset": "ETH", "quoteAsset": "BTC", "status": "TRADING", "isSpotTradingAllowed": True},
@@ -537,7 +590,10 @@ def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
         ]
     )
 
-    assert BinanceSpotAdapter(transport=transport).list_instruments() == [
+    instruments = BinanceSpotAdapter(transport=transport).list_instruments()
+
+    assert "DOGE" not in {item.canonical_symbol for item in instruments}
+    assert {
         ProviderInstrumentDescriptor(
             provider_symbol="ETHUSDT",
             canonical_symbol="ETH",
@@ -545,8 +601,16 @@ def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
             market="crypto_spot",
             venue="BINANCE",
             currency="USDT",
-        )
-    ]
+        ),
+        ProviderInstrumentDescriptor(
+            provider_symbol="XMRUSDT",
+            canonical_symbol="XMR",
+            name="XMR / Tether",
+            market="crypto_spot",
+            venue="BINANCE",
+            currency="USDT",
+        ),
+    } <= set(instruments)
     assert transport.urls == [
         "https://data-api.binance.vision/api/v3/exchangeInfo"
         "?symbolStatus=TRADING&showPermissionSets=false"

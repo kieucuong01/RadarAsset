@@ -95,7 +95,9 @@ def test_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -
 def test_env_file_loader_reads_only_database_url_without_expansion(
     monkeypatch: Any,
 ) -> None:
-    env_file = Path("tests") / f".qa-env-{uuid4().hex}.local"
+    temp_dir = Path("quant-worker") / "tests" / ".tmp"
+    temp_dir.mkdir(exist_ok=True)
+    env_file = temp_dir / f".qa-env-{uuid4().hex}.local"
     try:
         env_file.write_text(
             'DATABASE_URL="postgresql://user:pass@localhost:5432/qa"\n'

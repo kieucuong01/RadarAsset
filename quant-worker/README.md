@@ -43,10 +43,12 @@ local bootstrap/tests only. Scheduled live ingestion never falls back to these g
 
 ## Scheduled Market Data Ingestion
 
-The live ingestion CLI publishes immutable, research-only datasets independently for every feed:
+The live ingestion CLIs publish immutable, research-only datasets independently for every feed:
 
-- Binance public Spot klines: `BTCUSDT`.
-- Vnstock VCI: `FPT`.
+- Binance public Spot klines: `BTCUSDT`, `ETHUSDT`, `XRPUSDT`, `SOLUSDT`, `BNBUSDT`,
+  `ADAUSDT`, `LINKUSDT`, `LTCUSDT`, `AVAXUSDT`, `TRXUSDT`, `ZECUSDT`, `XMRUSDT`, and
+  `XLMUSDT` when the pair is currently trading.
+- Vnstock VCI: current HOSE equities discovered from the provider listing catalog.
 - Dukascopy through Vnstock: `XAUUSD`.
 
 Run a provider-only smoke without database writes:
@@ -63,6 +65,17 @@ python quant-worker\ingest_market_data.py hourly --env-file .env.local
 python quant-worker\ingest_market_data.py daily --env-file .env.local
 python quant-worker\ingest_market_data.py all --asset BTC --timeframe 1h --env-file .env.local
 ```
+
+For the broad universe, sync provider instruments and queue idempotent ingestion requests:
+
+```powershell
+python quant-worker\sync_provider_instruments.py --queue-ingestion all
+python quant-worker\process_ingestion_requests.py --limit 20 --env-file .env.local
+```
+
+Initial backfills target ten years for HOSE, the longest configured free-provider crypto history
+from `2017-01-01`, and XAU daily history from `2010-01-01`. Incremental runs merge only a recent
+overlap. XAU/USD hourly remains unsupported until a genuine hourly free source is added.
 
 Exit code `0` means every selected feed succeeded, was unchanged, or was already locked. Exit `2`
 means a partial provider failure/unavailable capability; successful feeds are still committed.

@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
 $taskCliPath = Join-Path $taskRepositoryRoot "quant-worker\ingest_market_data.py"
+$taskCatalogSyncPath = Join-Path $taskRepositoryRoot "quant-worker\sync_provider_instruments.py"
 $taskRequestCliPath = Join-Path $taskRepositoryRoot "quant-worker\process_ingestion_requests.py"
 $taskEnvPath = Join-Path $taskRepositoryRoot ".env.local"
 $taskPython = (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
@@ -30,6 +31,19 @@ try {
 }
 finally {
     Pop-Location
+}
+
+if ($taskExitCode -eq 0 -and -not $DryRun) {
+    Push-Location $taskRuntimeDirectory
+    try {
+        & $taskPython $taskCatalogSyncPath "--queue-ingestion" $Command
+        if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+            $taskExitCode = $LASTEXITCODE
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 if ($taskExitCode -eq 0 -and -not $DryRun) {

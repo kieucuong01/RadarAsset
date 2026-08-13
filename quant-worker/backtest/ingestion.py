@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol
 
 from .catalog import FEEDS
@@ -101,10 +101,16 @@ def ingestion_window(
     *,
     now: datetime,
     active: ActiveSnapshot | None,
+    market: str | None = None,
 ) -> IngestionWindow:
     if timeframe not in INTERVALS:
         raise ValueError("Unsupported ingestion timeframe.")
-    initial_start = now - timedelta(days=730 if timeframe == "1d" else 60)
+    if market == "crypto_spot":
+        initial_start = datetime(2017, 1, 1, tzinfo=timezone.utc)
+    elif market == "metal_spot":
+        initial_start = datetime(2010, 1, 1, tzinfo=timezone.utc)
+    else:
+        initial_start = now - timedelta(days=3653)
     history_is_truncated = bool(
         active is not None
         and len(active.rows) > 1
@@ -204,7 +210,12 @@ def _run_dry_selection(
     now: datetime,
 ) -> IngestionOutcome:
     try:
-        window = ingestion_window(selection.timeframe, now=now, active=None)
+        window = ingestion_window(
+            selection.timeframe,
+            now=now,
+            active=None,
+            market=FEEDS[selection.asset].market,
+        )
         incoming = _fetch(
             selection,
             provider_factory=provider_factory,
@@ -256,7 +267,12 @@ def _run_live_selection(
 
         run_id = repository.start_run(selection, now)
         active = repository.load_active(selection)
-        window = ingestion_window(selection.timeframe, now=now, active=active)
+        window = ingestion_window(
+            selection.timeframe,
+            now=now,
+            active=active,
+            market=FEEDS[selection.asset].market,
+        )
         incoming = _fetch(
             selection,
             provider_factory=provider_factory,
