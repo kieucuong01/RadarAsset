@@ -144,8 +144,10 @@ python quant-worker\collect_smart_insights.py daily --live-smoke `
 Live smoke writes nothing and emits only source code, effective time, row count, status, and a
 sanitized error code. Daily production collection writes gzipped content-addressed artifacts under
 `SMART_INSIGHTS_ARTIFACT_ROOT`, publishes accepted observations transactionally, and calculates a
-regime snapshot after the enabled collectors finish. Crawl4AI sources use only fixed registry
-URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.
+regime snapshot after the enabled collectors finish. Crawl4AI and Scrapling sources use only fixed
+registry URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.
+CoinShares images are read locally by RapidOCR and fail closed on confidence, layout, unit, or
+cross-table reconciliation errors.
 
 Macro collection uses `FredCollector` for the fixed FRED registry, `CftcCollector` for fixed CFTC
 contracts/report types, and `CryptoCraftCollector` for the attributed visible calendar. The Macro

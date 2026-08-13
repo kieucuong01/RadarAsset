@@ -123,12 +123,14 @@ deterministic regimes, point-in-time metrics, a CryptoCraft calendar contract, e
 preferences, and source-health APIs. The UI does not fall back to hard-coded market facts.
 
 See the [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md) for source
-activation status, Crawl4AI setup, scheduler commands, AI fallback rules, replay, and rollback.
+activation status, Crawl4AI/Scrapling/RapidOCR setup, scheduler commands, AI fallback rules,
+replay, and rollback.
 
 Smart Insights stores normalized quantitative observations and private, content-addressed raw
-artifacts. Crawl4AI runs locally inside the Python worker with an ephemeral headless Chromium
-context. The worker sends only code-owned allow-listed URLs and never accepts a URL from an API
-request or scheduler argument.
+artifacts. Crawl4AI runs CryptoCraft in an ephemeral headless Chromium context; Scrapling fetches
+Farside and CoinShares over bounded HTTP; RapidOCR reads only allow-listed CoinShares report
+images with the ONNX Runtime CPU backend. The worker sends only code-owned allow-listed URLs and
+never accepts a URL from an API request or scheduler argument.
 
 Verify a registered source without fetching or writing data:
 
@@ -162,10 +164,13 @@ New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
 $env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
 .\.venv\Scripts\crawl4ai-doctor.exe
+.\.venv\Scripts\rapidocr.exe check
 ```
 
 This product includes software developed by
 [UncleCode as part of the Crawl4AI project](https://github.com/unclecode/crawl4ai).
+It also includes [Scrapling](https://github.com/D4Vinci/Scrapling) under BSD-3-Clause and
+[RapidOCR](https://github.com/RapidAI/RapidOCR) under Apache-2.0.
 
 The Crypto Regime Score is deterministic and point-in-time. Its six groups are momentum 20%, flow
 25%, liquidity 15%, on-chain 20%, derivatives 10%, and sentiment 10%. A score is persisted as

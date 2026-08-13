@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 
 import collect_smart_insights
-from collect_smart_insights import run_collection, select_sources
+from collect_smart_insights import SCHEDULES, run_collection, select_sources
 from smart_insights.contracts import (
     CollectionMode,
     LicenseScope,
@@ -39,6 +39,10 @@ from smart_insights.validation import ObservationValidationError, validate_obser
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
+    assert "monthly" not in SCHEDULES
 
 
 def test_database_connection_accepts_prisma_public_schema_url() -> None:

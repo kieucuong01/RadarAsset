@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("daily", "weekly", "monthly", "calendar-current", "calendar-next", "calendar-event", "briefing", "briefing-refresh", "replay")]
+    [ValidateSet("daily", "weekly", "calendar-current", "calendar-next", "calendar-event", "briefing", "briefing-refresh", "replay")]
     [string]$Schedule = "daily",
     [string]$PythonExecutable = "python",
     [string]$Source,

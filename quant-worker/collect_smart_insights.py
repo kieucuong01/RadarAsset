@@ -63,7 +63,6 @@ from smart_insights.validation import validate_observations
 SCHEDULES = (
     "daily",
     "weekly",
-    "monthly",
     "calendar-current",
     "calendar-next",
     "calendar-event",
@@ -74,7 +73,6 @@ SCHEDULES = (
 _SOURCE_SCHEDULE = {
     "daily": "daily",
     "weekly": "weekly",
-    "monthly": "source_period",
     "calendar-current": "calendar",
     "calendar-next": "calendar",
     "calendar-event": "calendar",
@@ -778,7 +776,7 @@ def main(
                 "daily", "weekly", "calendar-current", "calendar-next", "calendar-event"
             }:
                 run_macro_pipeline(repository, as_of=pipeline_time)
-            if args.schedule in {"daily", "weekly", "monthly"}:
+            if args.schedule in {"daily", "weekly"}:
                 run_gold_pipeline(repository, as_of=pipeline_time)
     except ValueError:
         outcomes, exit_code = [], 2

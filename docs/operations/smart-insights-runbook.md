@@ -19,8 +19,9 @@ Copy `.env.example` to `.env.local` and configure:
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
 
-Crawl4AI runs locally in the Python worker and receives only source URLs registered in code.
-Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw artifacts remain private.
+Crawl4AI, Scrapling, and RapidOCR run locally in the Python worker and receive only source URLs
+registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
+provider images, OCR tokens, and content-addressed artifacts remain private.
 
 Install and verify the pinned browser runtime once per worker environment:
 
@@ -30,7 +31,13 @@ New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
 $env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
 .\.venv\Scripts\crawl4ai-doctor.exe
+.\.venv\Scripts\rapidocr.exe check
 ```
+
+Crawl4AI is reserved for CryptoCraft. Farside and CoinShares use Scrapling's HTTP Fetcher with
+Chrome impersonation and stealth headers, without proxies or a challenge solver. RapidOCR uses the
+local ONNX Runtime CPU backend; its packaged models must pass `rapidocr check` before CoinShares is
+eligible for live smoke.
 
 ## Source activation gate
 
@@ -54,12 +61,15 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Anti-bot returned a 15-byte empty document (`NETWORK_ERROR`) on 2026-08-13 |
+| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Scrapling parser implemented; each source awaits its own deployment-environment smoke and publication |
 | `bitinfocharts-top-addresses` | Daily | Cloudflare JS challenge (`NETWORK_ERROR`) on 2026-08-13 |
-| `coinshares-weekly` | Weekly | Article loads, but quantitative tables are images (`MISSING_PERIOD`) |
+| `coinshares-weekly` | Weekly | Scrapling plus local OCR implemented; awaits a confidence/layout/reconciliation live smoke |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
-| `wgc-gold-etf`, `wgc-central-bank` | Source period | No allow-listed XLSX link exposed (`SCHEMA_DRIFT`) |
+
+WGC is retired from the active registry, scheduler, Data Health, and Gold score. Historical WGC
+providers, runs, snapshots, observations, evidence, and derived snapshots remain in PostgreSQL for
+audit and point-in-time replay; deployment must not delete them.
 
 Smoke a single registered source without writing observations:
 
@@ -68,7 +78,7 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
   -Schedule daily -Source farside-btc-etf -LiveSmoke
 ```
 
-Use the source's configured schedule (`daily`, `weekly`, or `monthly`). CryptoCraft uses:
+Use the source's configured schedule (`daily` or `weekly`). CryptoCraft uses:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
@@ -87,7 +97,6 @@ The repository provides commands but does not create OS scheduled tasks.
 | --- | --- | --- |
 | Daily market collection and regime calculation | Daily after source-day close | `scripts/run-smart-insights.ps1 -Schedule daily` |
 | Weekly flows and positioning | Weekly after provider publication | `scripts/run-smart-insights.ps1 -Schedule weekly` |
-| WGC source-period data | Daily check; provider data is monthly/source-period | `scripts/run-smart-insights.ps1 -Schedule monthly` |
 | CryptoCraft current week | Every 15 minutes | `scripts/run-smart-insights.ps1 -Schedule calendar-current` |
 | CryptoCraft next week | Every 12 hours | `scripts/run-smart-insights.ps1 -Schedule calendar-next` |
 | CryptoCraft high-impact details | Every 15 minutes | `scripts/run-smart-insights.ps1 -Schedule calendar-event` |
@@ -114,6 +123,17 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
 
 Replay reloads the stored revision and fingerprint; it does not fetch current provider data or
 overwrite the original briefing.
+
+## CoinShares OCR acceptance
+
+The weekly CoinShares collector downloads only the allow-listed Storyblok tenant path discovered
+from an allow-listed fund-flow article. It selects the `Ranked flows detail` asset table and the
+`Flows by exchange country` region table. The report is rejected as a whole when either image is
+missing, a required numeric/header token has confidence below 0.90, the unit is not explicit
+`US$m`, a numeric cell needs character guessing, labels repeat, the table layout changes, or asset
+and region weekly totals differ by more than USD 100,000. Stable public failure codes are
+`MISSING_TABLE`, `OCR_LOW_CONFIDENCE`, `OCR_LAYOUT_DRIFT`, `INVALID_UNIT`, and
+`RECONCILIATION_FAILED`. The last accepted weekly period remains unchanged after a rejected report.
 
 ## Quant and AI publication rules
 
