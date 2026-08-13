@@ -56,7 +56,17 @@ def _decimal_value(value: Any) -> Decimal | None:
 def _search_text(record: dict[str, Any]) -> str:
     raw = " ".join(
         str(record.get(key, ""))
-        for key in ("event_code", "event_name_vi", "event_name_en", "event_title", "category")
+        for key in (
+            "event_code",
+            "event_name_vi",
+            "event_name_en",
+            "event_title",
+            "event_title_vi",
+            "event_title_en",
+            "action_type_vi",
+            "action_type_en",
+            "category",
+        )
     ).lower()
     return "".join(
         character
