@@ -108,3 +108,29 @@ def test_vci_adapter_paginates_and_keeps_only_price_affecting_events() -> None:
     assert result.complete is True
     assert [action.provider_event_id for action in result.actions] == ["cash-1"]
     assert company.provider.pages == [0, 1]
+
+
+def test_vci_adapter_normalizes_raw_camel_case_provider_fields() -> None:
+    class CamelProvider:
+        def _fetch_events(self, **_kwargs):
+            return [
+                {
+                    "id": "stock-raw",
+                    "eventCode": "ISS",
+                    "eventNameVi": "Phát hành cổ phiếu",
+                    "eventTitleVi": "Cổ phiếu thưởng tỉ lệ 10%",
+                    "publicDate": "2025-05-01T00:00:00",
+                    "exrightDate": "2025-05-20T00:00:00",
+                    "exerciseRatio": 0.1,
+                }
+            ]
+
+    company = type("Company", (), {"provider": CamelProvider()})()
+    result = VciCorporateActionAdapter(company_factory=lambda _symbol: company).fetch(
+        "FPT", start=date(2020, 1, 1), end=date(2026, 1, 1)
+    )
+
+    assert len(result.actions) == 1
+    assert result.actions[0].action_type == "stock_dividend"
+    assert result.actions[0].status == "verified"
+    assert result.actions[0].ex_right_date == date(2025, 5, 20)

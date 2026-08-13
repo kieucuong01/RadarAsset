@@ -65,6 +65,14 @@ def _search_text(record: dict[str, Any]) -> str:
     )
 
 
+def _snake_case_key(value: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", value).lower()
+
+
+def _snake_case_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {_snake_case_key(str(key)): value for key, value in record.items()}
+
+
 @dataclass(frozen=True)
 class CorporateActionRecord:
     asset: str
@@ -155,6 +163,8 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
         "co tuc bang co phieu" in text
         or "stock dividend" in text
         or "thuong co phieu" in text
+        or "co phieu thuong" in text
+        or "bonus issue" in text
     ):
         action_type = "stock_dividend"
         distribution_ratio = ratio
@@ -265,7 +275,7 @@ class VciCorporateActionAdapter:
             for row in rows:
                 if not isinstance(row, dict):
                     continue
-                action = normalize_vci_event(symbol, row)
+                action = normalize_vci_event(symbol, _snake_case_record(row))
                 if action is not None:
                     actions[action.provider_event_id] = action
             if len(rows) < self.page_size:
