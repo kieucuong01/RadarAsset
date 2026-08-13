@@ -36,8 +36,8 @@ class FirecrawlClient:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     def scrape(self, source: SourceDefinition, url: str) -> RawSnapshot:
-        if source.collection_mode is not CollectionMode.FIRECRAWL:
-            raise ValueError("Source is not configured for Firecrawl.")
+        if source.collection_mode is not CollectionMode.CRAWL4AI:
+            raise ValueError("Source is not configured for browser collection.")
         if not is_source_url_allowed(source, url):
             raise ValueError("URL is not allow-listed for this source.")
         headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}

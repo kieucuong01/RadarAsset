@@ -5,9 +5,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
 import hashlib
+import importlib
 import json
 from pathlib import Path
 import socket
+from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -24,7 +26,6 @@ from smart_insights.contracts import (
     SourceRunResult,
 )
 from smart_insights.artifacts import ArtifactIntegrityError, ArtifactStore
-from smart_insights.firecrawl import FirecrawlClient
 from smart_insights.http import SourceFetchError, UrllibTransport
 from smart_insights.sources import (
     ENABLED_SOURCE_CODES,
@@ -344,30 +345,38 @@ def test_http_transport_maps_timeout_and_invalid_json_to_stable_codes() -> None:
     assert json_error.value.code == "INVALID_RESPONSE"
 
 
-def test_firecrawl_rejects_url_outside_source_allowlist() -> None:
-    client = FirecrawlClient(
-        "http://127.0.0.1:3002", transport=FakeJsonTransport({})
-    )
+def _crawl4ai_client_class():
+    return importlib.import_module(
+        "smart_insights.crawl4ai_client"
+    ).Crawl4AIClient
+
+
+def _crawl4ai_result(**overrides: object) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "success": True,
+        "url": "https://farside.co.uk/btc/",
+        "status_code": 200,
+        "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
+        "html": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
+        "error_message": "",
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_crawl4ai_rejects_url_outside_source_allowlist_before_browser_run() -> None:
+    calls: list[str] = []
+    client = _crawl4ai_client_class()(runner=lambda url: calls.append(url))
     with pytest.raises(ValueError, match="allow-listed"):
         client.scrape(
             source_for_code("farside-btc-etf"), "https://evil.invalid/source"
         )
+    assert calls == []
 
 
-def test_firecrawl_creates_private_snapshot_only_for_matching_source_url() -> None:
-    response = {
-        "success": True,
-        "data": {
-            "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
-            "rawHtml": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
-            "metadata": {"sourceURL": "https://farside.co.uk/btc/"},
-        },
-    }
-    client = FirecrawlClient(
-        "http://127.0.0.1:3002",
-        transport=FakeJsonTransport(response),
-        clock=lambda: NOW,
-    )
+def test_crawl4ai_creates_private_snapshot_for_matching_source_url() -> None:
+    response = _crawl4ai_result()
+    client = _crawl4ai_client_class()(runner=lambda _url: response, clock=lambda: NOW)
 
     result = client.scrape(
         source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
@@ -375,19 +384,23 @@ def test_firecrawl_creates_private_snapshot_only_for_matching_source_url() -> No
 
     assert result.source_url == "https://farside.co.uk/btc/"
     assert result.observed_at == NOW
-    assert json.loads(result.content) == response["data"]
+    assert json.loads(result.content) == {
+        "markdown": response.markdown,
+        "metadata": {
+            "sourceURL": "https://farside.co.uk/btc/",
+            "statusCode": 200,
+        },
+        "rawHtml": response.html,
+    }
+    assert result.metadata == {
+        "collector": "crawl4ai",
+        "parser_version": "farside-btc-v1",
+    }
 
-    mismatched = FirecrawlClient(
-        "http://127.0.0.1:3002",
-        transport=FakeJsonTransport(
-            {
-                "success": True,
-                "data": {
-                    "markdown": "unexpected",
-                    "metadata": {"sourceURL": "https://evil.invalid/source"},
-                },
-            }
-        ),
+
+def test_crawl4ai_rejects_changed_final_url() -> None:
+    mismatched = _crawl4ai_client_class()(
+        runner=lambda _url: _crawl4ai_result(url="https://evil.invalid/source"),
         clock=lambda: NOW,
     )
     with pytest.raises(SourceFetchError) as error:
@@ -395,6 +408,31 @@ def test_firecrawl_creates_private_snapshot_only_for_matching_source_url() -> No
             source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
         )
     assert error.value.code == "REDIRECT_REJECTED"
+
+
+def test_crawl4ai_rejects_empty_extraction() -> None:
+    client = _crawl4ai_client_class()(
+        runner=lambda _url: _crawl4ai_result(markdown="", html=""),
+        clock=lambda: NOW,
+    )
+    with pytest.raises(SourceFetchError) as error:
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+    assert error.value.code == "INVALID_RESPONSE"
+
+
+def test_crawl4ai_caps_serialized_snapshot_size() -> None:
+    client = _crawl4ai_client_class()(
+        runner=lambda _url: _crawl4ai_result(markdown="x" * 500),
+        clock=lambda: NOW,
+        max_bytes=100,
+    )
+    with pytest.raises(SourceFetchError) as error:
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+    assert error.value.code == "RESPONSE_TOO_LARGE"
 
 
 def test_artifact_store_is_atomic_and_content_addressed(tmp_path: Path) -> None:

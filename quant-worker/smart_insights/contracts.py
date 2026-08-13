@@ -17,7 +17,7 @@ class Market(StrEnum):
 
 class CollectionMode(StrEnum):
     API = "api"
-    FIRECRAWL = "firecrawl"
+    CRAWL4AI = "crawl4ai"
     MANUAL = "manual"
     DISABLED = "disabled"
 

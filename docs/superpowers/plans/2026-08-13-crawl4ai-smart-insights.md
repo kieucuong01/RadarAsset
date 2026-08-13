@@ -24,7 +24,7 @@
 
 **Files:**
 - Create: `quant-worker/smart_insights/crawl4ai_client.py`
-- Delete: `quant-worker/smart_insights/firecrawl.py`
+- Delete in Task 2 after CLI migration: `quant-worker/smart_insights/firecrawl.py`
 - Modify: `quant-worker/smart_insights/contracts.py`
 - Modify: `quant-worker/smart_insights/sources.py`
 - Modify: `quant-worker/tests/test_smart_insights_foundation.py`
@@ -101,7 +101,7 @@ Run the Step 2 command again. Expected: all selected tests pass.
 - [ ] **Step 5: Commit the acquisition boundary**
 
 ```powershell
-git add quant-worker/smart_insights/crawl4ai_client.py quant-worker/smart_insights/firecrawl.py quant-worker/smart_insights/contracts.py quant-worker/smart_insights/sources.py quant-worker/tests/test_smart_insights_foundation.py quant-worker/tests/test_smart_insights_registry.py
+git add quant-worker/smart_insights/crawl4ai_client.py quant-worker/smart_insights/contracts.py quant-worker/smart_insights/sources.py quant-worker/tests/test_smart_insights_foundation.py quant-worker/tests/test_smart_insights_registry.py docs/superpowers/plans/2026-08-13-crawl4ai-smart-insights.md
 git commit -m "feat: replace Firecrawl with Crawl4AI"
 ```
 
@@ -109,6 +109,7 @@ git commit -m "feat: replace Firecrawl with Crawl4AI"
 
 **Files:**
 - Modify: `quant-worker/collect_smart_insights.py`
+- Delete: `quant-worker/smart_insights/firecrawl.py`
 - Modify: `quant-worker/smart_insights/collectors/farside.py`
 - Modify: `quant-worker/smart_insights/collectors/coinshares.py`
 - Modify: `quant-worker/smart_insights/collectors/bitinfocharts.py`

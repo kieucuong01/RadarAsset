@@ -39,7 +39,7 @@ def test_gold_sources_resolve_through_the_foundation_registry() -> None:
     )
     assert all(source_for_code(code).code == code for code in GOLD_SOURCE_CODES)
     source = source_for_code("wgc-gold-etf")
-    assert source.collection_mode is CollectionMode.FIRECRAWL
+    assert source.collection_mode is CollectionMode.CRAWL4AI
     assert source.enabled is False
 
 
