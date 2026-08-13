@@ -177,6 +177,101 @@ function dayLabel(date: Date): string {
   return date.toLocaleDateString("en-US", { weekday: "short" });
 }
 
+type ActiveDatasetBarRow = {
+  assetId: string;
+  asset: {
+    id: string;
+    symbol: string;
+    name: string;
+    assetClass: string;
+  };
+  ts: Date;
+  open: unknown;
+  high: unknown;
+  low: unknown;
+  close: unknown;
+  volume: unknown | null;
+  source: string;
+};
+
+async function loadActiveDatasetBars(
+  prisma: ReturnType<typeof getPrisma>,
+  input: {
+    timeframe: string;
+    assetIds?: string[];
+    symbols?: string[];
+    barLimit?: number;
+  },
+): Promise<ActiveDatasetBarRow[]> {
+  const datasets = await prisma.dataset.findMany({
+    where: {
+      timeframe: input.timeframe,
+      adjustmentPolicy: "raw",
+      assetId: input.assetIds?.length ? { in: input.assetIds } : undefined,
+      asset: input.symbols?.length ? { symbol: { in: input.symbols } } : undefined,
+    },
+    select: {
+      assetId: true,
+      asset: { select: { id: true, symbol: true, name: true, assetClass: true } },
+      versions: {
+        where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
+        orderBy: [{ version: "desc" }, { publishedAt: "desc" }],
+        take: 1,
+        select: {
+          bars: {
+            orderBy: { ts: input.barLimit ? "desc" : "asc" },
+            take: input.barLimit,
+            select: {
+              ts: true,
+              open: true,
+              high: true,
+              low: true,
+              close: true,
+              volume: true,
+              source: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return datasets
+    .flatMap((dataset) =>
+      (dataset.versions[0]?.bars ?? []).map((bar) => ({
+        assetId: dataset.assetId,
+        asset: dataset.asset,
+        ...bar,
+      })),
+    )
+    .sort((left, right) => {
+      const assetOrder = left.assetId.localeCompare(right.assetId);
+      if (assetOrder !== 0) return assetOrder;
+      return left.ts.getTime() - right.ts.getTime();
+    });
+}
+
+function preferActiveDatasetBars<
+  TMarketBar extends {
+    assetId: string;
+    ts: Date;
+    close: unknown;
+    volume: unknown | null;
+    source?: string;
+  },
+>(datasetBars: ActiveDatasetBarRow[], marketBars: TMarketBar[]) {
+  if (!datasetBars.length) return marketBars;
+  const datasetAssetIds = new Set(datasetBars.map((bar) => bar.assetId));
+  return [
+    ...datasetBars,
+    ...marketBars.filter((bar) => !datasetAssetIds.has(bar.assetId)),
+  ].sort((left, right) => {
+    const assetOrder = left.assetId.localeCompare(right.assetId);
+    if (assetOrder !== 0) return assetOrder;
+    return left.ts.getTime() - right.ts.getTime();
+  });
+}
+
 function latestBarsByAssetId(
   bars: {
     assetId: string;
@@ -235,7 +330,12 @@ export async function loadPortfolioResponse(
     where: { assetId: { in: barAssetIds }, timeframe: "1d" },
     orderBy: [{ assetId: "asc" }, { ts: "asc" }],
   });
-  const latestBars = latestBarsByAssetId(bars);
+  const datasetBars = await loadActiveDatasetBars(prisma, {
+    assetIds: barAssetIds,
+    timeframe: "1d",
+  });
+  const priceBars = preferActiveDatasetBars(datasetBars, bars);
+  const latestBars = latestBarsByAssetId(priceBars);
 
   const transactions: PortfolioLedgerTransaction[] = portfolio.transactions.map((transaction) => ({
     id: transaction.id,
@@ -268,7 +368,7 @@ export async function loadPortfolioResponse(
   );
   const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });
 
-  const historicalBars: PortfolioHistoricalBar[] = bars.map((bar) => ({
+  const historicalBars: PortfolioHistoricalBar[] = priceBars.map((bar) => ({
     assetId: bar.assetId,
     ts: bar.ts.toISOString(),
     close: numberFromDecimal(bar.close),
@@ -440,7 +540,7 @@ export async function loadAssets() {
 
 export async function loadTickerResponse(symbols?: string[]): Promise<MarketTickerResponse[]> {
   const prisma = getPrisma();
-  const bars = await prisma.marketBar.findMany({
+  const marketBars = await prisma.marketBar.findMany({
     where: {
       timeframe: "1d",
       asset: symbols?.length ? { symbol: { in: symbols } } : undefined,
@@ -448,6 +548,12 @@ export async function loadTickerResponse(symbols?: string[]): Promise<MarketTick
     include: { asset: true },
     orderBy: [{ assetId: "asc" }, { ts: "asc" }],
   });
+  const datasetBars = await loadActiveDatasetBars(prisma, {
+    timeframe: "1d",
+    symbols,
+    barLimit: 2,
+  });
+  const bars = preferActiveDatasetBars(datasetBars, marketBars);
 
   const inputs: MarketBarInput[] = bars.map((bar) => ({
     symbol: bar.asset.symbol,
@@ -473,11 +579,16 @@ export async function loadMarketBars(symbol: string, timeframe = "1d") {
     where: { assetId: asset.id, timeframe },
     orderBy: { ts: "asc" },
   });
+  const datasetBars = await loadActiveDatasetBars(prisma, {
+    assetIds: [asset.id],
+    timeframe,
+  });
+  const priceBars = datasetBars.length ? datasetBars : bars;
 
   return {
     asset,
     timeframe,
-    bars: bars.map((bar) => ({
+    bars: priceBars.map((bar) => ({
       ts: bar.ts.toISOString(),
       open: numberFromDecimal(bar.open),
       high: numberFromDecimal(bar.high),

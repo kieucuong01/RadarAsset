@@ -15,9 +15,9 @@ describe("BacktestWorkbench", () => {
 
     expect(html).toContain('aria-label="Cấu hình backtest"');
     expect(html).toContain('aria-label="Kết quả backtest"');
-    expect(html).toContain("Active Portfolio");
+    expect(html).toContain("Danh mục đang chạy");
     expect(html).toContain("Equity Curve &amp; Drawdown");
-    expect(html).toContain("Trade List");
+    expect(html).toContain("Danh sách lệnh");
     expect(html).toContain("Run Portfolio Backtest");
   });
 });

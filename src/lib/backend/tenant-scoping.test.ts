@@ -14,6 +14,7 @@ const { prisma } = vi.hoisted(() => {
       createMany: vi.fn(),
     },
     asset: { findUnique: vi.fn(), findMany: vi.fn() },
+    dataset: { findMany: vi.fn() },
     marketBar: { findMany: vi.fn(), findFirst: vi.fn() },
     watchlistItem: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
     marketIngestionRequest: { findMany: vi.fn() },
@@ -59,11 +60,13 @@ import {
   getQuantRun,
   importResearchRun,
   loadAssets,
+  loadMarketBars,
   listQuantRuns,
   loadAssetIntelligence,
   loadInsights,
   loadPortfolioResponse,
   loadResearchRuns,
+  loadTickerResponse,
   loadWatchlist,
   upsertWatchlistItem,
   removeWatchlistItem,
@@ -86,6 +89,7 @@ describe("organization-scoped database services", () => {
       callback(prisma),
     );
     prisma.marketBar.findMany.mockResolvedValue([]);
+    prisma.dataset.findMany.mockResolvedValue([]);
     prisma.aiInsight.findMany.mockResolvedValue([]);
     prisma.watchlistItem.findMany.mockResolvedValue([]);
     prisma.marketIngestionRequest.findMany.mockResolvedValue([]);
@@ -169,6 +173,80 @@ describe("organization-scoped database services", () => {
             }),
           }),
         }),
+      }),
+    );
+  });
+
+  it("uses active dataset bars for public market reads when the compatibility projection is empty", async () => {
+    prisma.asset.findUnique.mockResolvedValue({
+      id: "asset-btc",
+      symbol: "BTC",
+      name: "Bitcoin",
+      assetClass: "crypto",
+    });
+    prisma.dataset.findMany.mockResolvedValue([
+      {
+        assetId: "asset-btc",
+        asset: {
+          id: "asset-btc",
+          symbol: "BTC",
+          name: "Bitcoin",
+          assetClass: "crypto",
+        },
+        versions: [
+          {
+            bars: [
+              {
+                ts: new Date("2026-08-10T00:00:00.000Z"),
+                open: 100,
+                high: 110,
+                low: 90,
+                close: 100,
+                volume: 10,
+                source: "binance-public-spot",
+              },
+              {
+                ts: new Date("2026-08-11T00:00:00.000Z"),
+                open: 100,
+                high: 125,
+                low: 95,
+                close: 120,
+                volume: 12,
+                source: "binance-public-spot",
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const [ticker] = await loadTickerResponse(["BTC"]);
+    const bars = await loadMarketBars("BTC", "1d");
+
+    expect(ticker).toMatchObject({
+      symbol: "BTC",
+      price: 120,
+      changePercent: 20,
+    });
+    expect(bars.bars).toEqual([
+      expect.objectContaining({ close: 100, source: "binance-public-spot" }),
+      expect.objectContaining({ close: 120, source: "binance-public-spot" }),
+    ]);
+    expect(prisma.marketBar.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ timeframe: "1d" }) }),
+    );
+    expect(prisma.dataset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          timeframe: "1d",
+          adjustmentPolicy: "raw",
+        }),
+      }),
+    );
+    expect(prisma.dataset.findMany.mock.calls[0][0].select.versions.select.bars).toEqual(
+      expect.objectContaining({
+        orderBy: { ts: "desc" },
+        take: 2,
       }),
     );
   });
