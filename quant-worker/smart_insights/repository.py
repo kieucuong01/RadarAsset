@@ -14,6 +14,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from .artifacts import StoredArtifact
+from .collectors.cryptocraft import CalendarEventInput
 from .contracts import ObservationInput, RawSnapshot, SourceDefinition
 from .metrics.crypto import (
     MarketClose,
@@ -193,6 +194,141 @@ class PostgresInsightRepository:
                         "snapshotId": snapshot_id,
                         "observationsInserted": inserted,
                         "observationsUnchanged": unchanged,
+                    },
+                )
+        return PublicationResult(
+            snapshot_id=snapshot_id,
+            provider_run_id=provider_run_id,
+            status=status,
+            observations_inserted=inserted,
+            observations_unchanged=unchanged,
+        )
+
+    def publish_calendar_batch(
+        self,
+        source: SourceDefinition,
+        snapshot: RawSnapshot,
+        artifact: StoredArtifact,
+        events: Sequence[CalendarEventInput],
+    ) -> PublicationResult:
+        if source.code != "cryptocraft" and not source.code.startswith("qa-calendar-"):
+            raise ValueError("Calendar publication requires a CryptoCraft source.")
+        if not events:
+            raise ValueError("Calendar publication requires at least one event.")
+        self._verify_artifact(source, snapshot, artifact)
+        if len({event.source_event_key for event in events}) != len(events):
+            raise ValueError("DUPLICATE_CONFLICT")
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                self._acquire_calendar_locks(cursor, source, events)
+                provider_id = self._upsert_provider(cursor, source)
+                snapshot_id = self._upsert_snapshot(
+                    cursor, provider_id, source, snapshot, artifact, status="fetched"
+                )
+                inserted = 0
+                unchanged = 0
+                for event in events:
+                    cursor.execute(
+                        """
+                        SELECT event, country, currency, impact, actual, forecast, previous,
+                               event_date, event_at, time_status, source_timezone, detail_url,
+                               published_at, revision, quality_status, quality_flags
+                        FROM economic_events
+                        WHERE source_code = %s AND source_event_key = %s
+                        ORDER BY revision DESC
+                        LIMIT 1
+                        FOR UPDATE
+                        """,
+                        (source.code, event.source_event_key),
+                    )
+                    latest = cursor.fetchone()
+                    comparable = {
+                        "event": event.name,
+                        "country": event.country,
+                        "currency": event.currency,
+                        "impact": event.impact,
+                        "actual": event.actual,
+                        "forecast": event.forecast,
+                        "previous": event.previous,
+                        "event_date": event.event_date,
+                        "event_at": event.event_at_utc,
+                        "time_status": event.time_status,
+                        "source_timezone": event.source_timezone,
+                        "detail_url": event.detail_url,
+                        "published_at": event.published_at,
+                        "quality_status": event.quality_status,
+                        "quality_flags": list(event.quality_flags),
+                    }
+                    if latest is not None and all(
+                        latest[field] == value for field, value in comparable.items()
+                    ):
+                        unchanged += 1
+                        continue
+                    revision = 1 if latest is None else int(latest["revision"]) + 1
+                    cursor.execute(
+                        """
+                        INSERT INTO economic_events (
+                          id, source_code, source_event_key, event, country, currency,
+                          impact, actual, forecast, previous, event_date, event_at,
+                          time_status, source_timezone, detail_url, raw_snapshot_id,
+                          published_at, observed_at, revision, quality_status,
+                          quality_flags, created_at
+                        ) VALUES (
+                          %s, %s, %s, %s, %s, %s,
+                          %s, %s, %s, %s, %s, %s,
+                          %s, %s, %s, %s,
+                          %s, %s, %s, %s,
+                          %s::jsonb, NOW()
+                        )
+                        """,
+                        (
+                            str(uuid4()),
+                            source.code,
+                            event.source_event_key,
+                            event.name,
+                            event.country,
+                            event.currency,
+                            event.impact,
+                            event.actual,
+                            event.forecast,
+                            event.previous,
+                            event.event_date,
+                            event.event_at_utc,
+                            event.time_status,
+                            event.source_timezone,
+                            event.detail_url,
+                            snapshot_id,
+                            event.published_at,
+                            snapshot.observed_at,
+                            revision,
+                            event.quality_status,
+                            json.dumps(event.quality_flags, separators=(",", ":")),
+                        ),
+                    )
+                    inserted += 1
+                cursor.execute(
+                    """
+                    UPDATE insight_raw_snapshots
+                    SET status = 'validated', error_code = NULL
+                    WHERE id = %s
+                    """,
+                    (snapshot_id,),
+                )
+                status = "succeeded" if inserted else "unchanged"
+                provider_run_id = self._insert_provider_run(
+                    cursor,
+                    source_code=source.code,
+                    status="succeeded",
+                    records_fetched=len(events),
+                    error_code=None,
+                    retry_count=0,
+                    started_at=snapshot.observed_at,
+                    finished_at=self._clock(),
+                    metadata={
+                        "publicationStatus": status,
+                        "snapshotId": snapshot_id,
+                        "eventsInserted": inserted,
+                        "eventsUnchanged": unchanged,
                     },
                 )
         return PublicationResult(
@@ -646,6 +782,22 @@ class PostgresInsightRepository:
             row = cursor.fetchone()
             if row is None or not row["acquired"]:
                 raise ConcurrentPublicationError("Source period is already publishing.")
+
+    @staticmethod
+    def _acquire_calendar_locks(
+        cursor: psycopg.Cursor[Any],
+        source: SourceDefinition,
+        events: Sequence[CalendarEventInput],
+    ) -> None:
+        for event_date in sorted({event.event_date for event in events}):
+            lock_key = f"smart-insights:{source.code}:calendar:{event_date.isoformat()}"
+            cursor.execute(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended(%s, 0)) AS acquired",
+                (lock_key,),
+            )
+            row = cursor.fetchone()
+            if row is None or not row["acquired"]:
+                raise ConcurrentPublicationError("Calendar period is already publishing.")
 
     @staticmethod
     def _upsert_provider(
