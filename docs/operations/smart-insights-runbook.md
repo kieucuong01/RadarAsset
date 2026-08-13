@@ -59,7 +59,7 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `bitinfocharts-top-addresses` | Daily | Cloudflare JS challenge (`NETWORK_ERROR`) on 2026-08-13 |
+| `bitinfocharts-top-addresses` | Daily | Scrapling HTTP fetch received Cloudflare 403 (`HTTP_ERROR`) and the bounded StealthyFetcher attempt timed out on 2026-08-14 |
 | `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
