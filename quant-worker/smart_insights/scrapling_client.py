@@ -3,15 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Set
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import base64
 import codecs
 from email.message import Message
 import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-from types import SimpleNamespace
 from typing import Any
 
 from .contracts import CollectionMode, RawSnapshot, SourceDefinition
@@ -20,47 +14,13 @@ from .sources import is_source_url_allowed
 
 
 def _fetch(url: str) -> Any:
-    repo_root = Path(__file__).resolve().parents[2]
-    default_python = repo_root / ".scrapling-venv" / (
-        "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
-    )
-    python = os.environ.get(
-        "SMART_INSIGHTS_SCRAPLING_PYTHON", str(default_python)
-    )
-    runner = repo_root / "quant-worker" / "scrapling_fetch.py"
-    try:
-        completed = subprocess.run(
-            [python, str(runner)],
-            input=json.dumps({"url": url}).encode("utf-8"),
-            capture_output=True,
-            timeout=45,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise SourceFetchError("TIMEOUT") from error
-    except OSError as error:
-        raise SourceFetchError("NETWORK_ERROR") from error
-    if completed.returncode != 0:
-        raise SourceFetchError("NETWORK_ERROR")
-    try:
-        payload = json.loads(completed.stdout)
-        body = base64.b64decode(payload["bodyBase64"], validate=True)
-        status = payload["status"]
-        final_url = payload["url"]
-        headers = payload["headers"]
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise SourceFetchError("INVALID_RESPONSE") from error
-    if (
-        not isinstance(status, int)
-        or not isinstance(final_url, str)
-        or not isinstance(headers, Mapping)
-        or not all(isinstance(key, str) for key in headers)
-    ):
-        raise SourceFetchError("INVALID_RESPONSE")
-    return SimpleNamespace(
-        body=body,
-        headers={str(key): str(value) for key, value in headers.items()},
-        status=status,
-        url=final_url,
+    from scrapling.fetchers import Fetcher
+
+    return Fetcher.get(
+        url,
+        impersonate="chrome",
+        stealthy_headers=True,
+        timeout=30,
     )
 
 

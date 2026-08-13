@@ -16,7 +16,6 @@ node_modules
 .worktrees/
 .npm-cache
 .venv/
-.scrapling-venv/
 .local-data/
 .tmp/
 .pytest-tmp-*/

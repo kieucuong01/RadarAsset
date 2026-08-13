@@ -10,7 +10,8 @@ import json
 import os
 from pathlib import Path
 import socket
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -587,85 +588,47 @@ def test_scrapling_download_requires_allowlisted_image_content_type() -> None:
     assert asset.observed_at == NOW
 
 
-def test_scrapling_default_fetcher_uses_isolated_json_runner(
+def test_scrapling_default_fetcher_uses_local_scrapling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _scrapling_client_module()
-    calls: list[tuple[list[str], bytes, float]] = []
+    calls: list[tuple[str, str, bool, int]] = []
 
-    def run(
-        command: list[str], *, input: bytes, capture_output: bool, timeout: float
-    ) -> SimpleNamespace:
-        assert capture_output is True
-        calls.append((command, input, timeout))
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "bodyBase64": "PGh0bWw+PC9odG1sPg==",
-                    "headers": {"content-type": "text/html"},
-                    "status": 200,
-                    "url": "https://farside.co.uk/btc/",
-                }
-            ).encode(),
-            stderr=b"",
-        )
+    class Fetcher:
+        @staticmethod
+        def get(
+            url: str, *, impersonate: str, stealthy_headers: bool, timeout: int
+        ) -> SimpleNamespace:
+            calls.append((url, impersonate, stealthy_headers, timeout))
+            return SimpleNamespace(
+                body=b"<html></html>",
+                headers={"content-type": "text/html"},
+                status=200,
+                url=url,
+            )
 
-    monkeypatch.setenv("SMART_INSIGHTS_SCRAPLING_PYTHON", "isolated-python.exe")
-    monkeypatch.setattr(module.subprocess, "run", run)
+    package = ModuleType("scrapling")
+    package.__path__ = []  # type: ignore[attr-defined]
+    fetchers = ModuleType("scrapling.fetchers")
+    fetchers.Fetcher = Fetcher  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "scrapling", package)
+    monkeypatch.setitem(sys.modules, "scrapling.fetchers", fetchers)
+    monkeypatch.setenv(
+        "SMART_INSIGHTS_SCRAPLING_PYTHON", "must-not-use-isolated-python.exe"
+    )
 
     response = module._fetch("https://farside.co.uk/btc/")
 
     assert response.body == b"<html></html>"
     assert response.status == 200
-    assert calls[0][0][0] == "isolated-python.exe"
-    assert json.loads(calls[0][1]) == {"url": "https://farside.co.uk/btc/"}
-    assert calls[0][2] == 45
-
-
-def test_scrapling_runner_url_allowlist_is_exact() -> None:
-    runner = importlib.import_module("scrapling_fetch")
-
-    assert runner.is_runner_url_allowed("https://farside.co.uk/btc/")
-    assert runner.is_runner_url_allowed(
-        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://coinshares.com/insights/research-data/"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://coinshares.com/insights/research-data/?page=3"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://a.storyblok.com/f/176807/1600x2000/table.png/m/"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/calendar?week=this"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/calendar?week=next"
-    )
-    assert runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/calendar/454-ch-cpi-yy"
-    )
-    assert not runner.is_runner_url_allowed("http://farside.co.uk/btc/")
-    assert not runner.is_runner_url_allowed("https://farside.co.uk/btc/extra")
-    assert not runner.is_runner_url_allowed("https://evil.invalid/btc/")
-    assert not runner.is_runner_url_allowed(
-        "https://coinshares.com/insights/research-data/?page=6"
-    )
-    assert not runner.is_runner_url_allowed(
-        "https://a.storyblok.com/f/999999/1600x2000/table.png/m/"
-    )
-    assert not runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/calendar?week=last"
-    )
-    assert not runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/calendar/454-ch-cpi-yy?next=1"
-    )
-    assert not runner.is_runner_url_allowed(
-        "https://www.cryptocraft.com/thread/454-ch-cpi-yy"
-    )
+    assert calls == [
+        (
+            "https://farside.co.uk/btc/",
+            "chrome",
+            True,
+            30,
+        )
+    ]
 
 
 def test_artifact_store_is_atomic_and_content_addressed(tmp_path: Path) -> None:

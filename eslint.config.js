@@ -15,7 +15,6 @@ export default tseslint.config(
       ".output",
       ".vinxi",
       ".venv/**",
-      ".scrapling-venv/**",
       ".worktrees/**",
     ],
   },

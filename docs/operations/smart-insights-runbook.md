@@ -14,14 +14,11 @@ Copy `.env.example` to `.env.local` and configure:
 - `SMART_INSIGHTS_TIMEZONE`: product day boundary, normally `Asia/Bangkok`.
 - `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
-- `CRAWL4_AI_BASE_DIRECTORY`: writable local Crawl4AI state directory.
 - `FRED_API_KEY`: required before the FRED collector can pass live smoke.
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
 
-Crawl4AI and RapidOCR run in the main Python environment. Scrapling runs in the isolated
-`.scrapling-venv` environment because Crawl4AI 0.8.9 and Scrapling 0.4.14 require incompatible
-major versions of `lxml`. All receive only source URLs
+Scrapling and RapidOCR run in the main Python environment. Both receive only source URLs
 registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
 provider images, OCR tokens, and content-addressed artifacts remain private.
 
@@ -29,17 +26,10 @@ Install and verify the pinned browser runtime once per worker environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
-.\.venv\Scripts\python.exe -m venv .scrapling-venv
-.\.scrapling-venv\Scripts\python.exe -m pip install -r quant-worker\requirements-scrapling.txt
-New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
-$env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
-.\.venv\Scripts\crawl4ai-setup.exe
-.\.venv\Scripts\crawl4ai-doctor.exe
 .\.venv\Scripts\rapidocr.exe check
 ```
 
-Crawl4AI is reserved for CryptoCraft. Farside and CoinShares use Scrapling's isolated JSON runner
-and HTTP Fetcher with
+CryptoCraft, Farside, and CoinShares use Scrapling's HTTP Fetcher with
 Chrome impersonation and stealth headers, without proxies or a challenge solver. RapidOCR uses the
 local ONNX Runtime CPU backend; its packaged models must pass `rapidocr check` before CoinShares is
 eligible for live smoke.
@@ -60,7 +50,7 @@ Current verified and enabled sources:
 | `defillama-stablecoins` | Crypto/liquidity | Daily | API |
 | `defillama-chains` | Crypto/on-chain | Daily | API |
 | `deribit-public` | Crypto/derivatives | Daily | API |
-| `cryptocraft` | Macro/calendar | Due-state calendar schedule | Crawl4AI |
+| `cryptocraft` | Macro/calendar | Due-state calendar schedule | Scrapling |
 | `farside-btc-etf` | Crypto/Bitcoin ETF flows | Daily | Scrapling |
 | `farside-eth-etf` | Crypto/Ethereum ETF flows | Daily | Scrapling |
 | `farside-sol-etf` | Crypto/Solana ETF flows | Daily | Scrapling |

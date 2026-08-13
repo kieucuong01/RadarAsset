@@ -3,7 +3,7 @@ pandas>=2.2,<3
 psycopg[binary]>=3.2
 pytest>=8.0
 ccxt==4.5.73
-crawl4ai==0.8.9
+scrapling[fetchers]==0.4.14
 rapidocr>=3.9,<4
 onnxruntime>=1.22,<2
 dukascopy-python==4.0.1
