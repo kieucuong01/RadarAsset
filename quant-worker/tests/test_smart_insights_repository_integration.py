@@ -19,6 +19,7 @@ from smart_insights.repository import (
     PostgresInsightRepository,
     UnknownMetricError,
 )
+from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
 from smart_insights.sources import source_for_code
 
 
@@ -157,6 +158,70 @@ def test_publication_revision_is_idempotent_and_correction_creates_revision_two(
                 {"revision": 1, "value": Decimal("10.0000000000")},
                 {"revision": 2, "value": Decimal("11.0000000000")},
             ]
+    finally:
+        _cleanup(connection, source_code=source.code, metric_codes=(metric_code,))
+        connection.close()
+
+
+def test_active_gold_definition_upsert_preserves_historical_wgc_evidence() -> None:
+    source = replace(
+        _source(),
+        code=f"wgc-gold-etf-qa-{uuid4().hex[:8]}",
+        name="Historical WGC QA evidence",
+    )
+    metric_code = f"gold.qa.wgc_history_{uuid4().hex[:8]}"
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        _seed_metric(connection, metric_code)
+        repository = PostgresInsightRepository(
+            connection, clock=lambda: NOW + timedelta(minutes=2)
+        )
+        raw = _snapshot(source.urls[0], "12")
+        repository.publish(
+            source,
+            raw,
+            _artifact(raw, source.code),
+            [_row(metric_code, "12")],
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*) FROM data_providers WHERE code = %s) AS providers,
+                  (SELECT count(*) FROM insight_raw_snapshots snapshot
+                   JOIN data_providers provider ON provider.id = snapshot.provider_id
+                   WHERE provider.code = %s) AS snapshots,
+                  (SELECT count(*) FROM metric_observations observation
+                   JOIN data_providers provider ON provider.id = observation.provider_id
+                   WHERE provider.code = %s) AS observations
+                """,
+                (source.code, source.code, source.code),
+            )
+            before = cursor.fetchone()
+
+        repository.upsert_metric_definitions(GOLD_METRIC_DEFINITIONS)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*) FROM data_providers WHERE code = %s) AS providers,
+                  (SELECT count(*) FROM insight_raw_snapshots snapshot
+                   JOIN data_providers provider ON provider.id = snapshot.provider_id
+                   WHERE provider.code = %s) AS snapshots,
+                  (SELECT count(*) FROM metric_observations observation
+                   JOIN data_providers provider ON provider.id = observation.provider_id
+                   WHERE provider.code = %s) AS observations
+                """,
+                (source.code, source.code, source.code),
+            )
+            assert cursor.fetchone() == before == {
+                "providers": 1,
+                "snapshots": 1,
+                "observations": 1,
+            }
     finally:
         _cleanup(connection, source_code=source.code, metric_codes=(metric_code,))
         connection.close()

@@ -155,7 +155,7 @@ export type SmartInsightSourceHealth = {
   sourceCode: string;
   sourceName: string;
   market: InsightMarket;
-  collectionMode: "api" | "crawl4ai" | "manual" | "disabled";
+  collectionMode: "api" | "crawl4ai" | "scrapling" | "manual" | "disabled";
   parserVersion: string;
   lastEffectiveAt: string | null;
   lastObservedAt: string | null;

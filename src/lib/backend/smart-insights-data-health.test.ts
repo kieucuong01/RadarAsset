@@ -55,7 +55,21 @@ describe("Smart Insights data health", () => {
     const response = await loadSmartInsightsDataHealth(new Date("2026-08-13T02:00:00.000Z"));
     const fearGreed = response.sources.find((source) => source.sourceCode === "alternative-fng");
 
-    expect(response.sources).toHaveLength(17);
+    expect(response.sources).toHaveLength(15);
+    expect(
+      response.sources
+        .filter(
+          (source) =>
+            source.sourceCode.startsWith("farside-") || source.sourceCode === "coinshares-weekly",
+        )
+        .map((source) => [source.sourceCode, source.collectionMode]),
+    ).toEqual([
+      ["coinshares-weekly", "scrapling"],
+      ["farside-btc-etf", "scrapling"],
+      ["farside-eth-etf", "scrapling"],
+      ["farside-sol-etf", "scrapling"],
+    ]);
+    expect(response.sources.some((source) => source.sourceCode.startsWith("wgc-"))).toBe(false);
     expect(fearGreed).toEqual({
       sourceCode: "alternative-fng",
       sourceName: "Alternative.me Crypto Fear and Greed",

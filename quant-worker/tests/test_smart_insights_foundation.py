@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 
 import collect_smart_insights
-from collect_smart_insights import run_collection, select_sources
+from collect_smart_insights import SCHEDULES, run_collection, select_sources
 from smart_insights.contracts import (
     CollectionMode,
     LicenseScope,
@@ -39,6 +39,10 @@ from smart_insights.validation import ObservationValidationError, validate_obser
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
+    assert "monthly" not in SCHEDULES
 
 
 def test_database_connection_accepts_prisma_public_schema_url() -> None:
@@ -166,8 +170,6 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-sol-etf",
         "fred",
         "mempool-space",
-        "wgc-central-bank",
-        "wgc-gold-etf",
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
@@ -176,6 +178,9 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     }
     assert {
@@ -193,6 +198,9 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     )
 
@@ -217,15 +225,20 @@ def test_discovered_links_remain_inside_source_specific_paths() -> None:
     assert not is_source_url_allowed(
         coinshares, "https://coinshares.com/company/investor-relations/"
     )
-
-    wgc = source_for_code("wgc-gold-etf")
     assert is_source_url_allowed(
-        wgc, "https://www.gold.org/download/file/12345/gold-etf-flows.xlsx"
+        coinshares,
+        "https://a.storyblok.com/f/176807/1600x2000/hash/ranked-flows-detail.png/m/",
+    )
+    assert is_source_url_allowed(
+        coinshares, "https://coinshares.com/insights/research-data/?page=3"
     )
     assert not is_source_url_allowed(
-        wgc, "https://www.gold.org/download/file/12345/gold-etf-flows.pdf"
+        coinshares, "https://coinshares.com/insights/research-data/?page=6"
     )
-
+    assert not is_source_url_allowed(
+        coinshares,
+        "https://a.storyblok.com/f/999999/1600x2000/hash/ranked-flows-detail.png/m/",
+    )
 
 def test_coinshares_discovery_accepts_current_two_digit_year_slugs() -> None:
     class Crawler:
@@ -246,6 +259,51 @@ def test_coinshares_discovery_accepts_current_two_digit_year_slugs() -> None:
     assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
         "https://coinshares.com/insights/research-data/fund-flows-01-06-26/"
     )
+
+
+def test_coinshares_discovery_reads_scrapling_raw_html() -> None:
+    class Crawler:
+        @staticmethod
+        def scrape(_source: object, url: str) -> RawSnapshot:
+            content = json.dumps(
+                {
+                    "rawHtml": (
+                        '<a href="/insights/research-data/fund-flows-25-05-26/">older</a>'
+                        '<a href="/us/insights/research-data/fund-flows-01-06-26/">latest</a>'
+                    )
+                }
+            ).encode()
+            return replace(snapshot(content), source_url=url)
+
+    assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
+    )
+
+
+def test_coinshares_discovery_scans_bounded_pages_when_link_is_generic() -> None:
+    class Crawler:
+        urls: list[str] = []
+
+        @staticmethod
+        def scrape(_source: object, url: str) -> RawSnapshot:
+            Crawler.urls.append(url)
+            html = '<a href="insights/research-data/fund-flows">Read more</a>'
+            if url.endswith("?page=2"):
+                html = (
+                    '<a href="/insights/research-data/'
+                    'fund-flows-01-06-26/">latest</a>'
+                )
+            content = json.dumps({"rawHtml": html}).encode()
+            return replace(snapshot(content), source_url=url)
+
+    assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
+        "https://coinshares.com/insights/research-data/fund-flows-01-06-26/"
+    )
+    assert Crawler.urls == [
+        "https://coinshares.com/insights/research-data/",
+        "https://coinshares.com/insights/research-data/?page=1",
+        "https://coinshares.com/insights/research-data/?page=2",
+    ]
 
 
 def test_dimension_key_is_canonical_and_contract_is_frozen() -> None:
@@ -374,10 +432,199 @@ def _crawl4ai_client_class():
     ).Crawl4AIClient
 
 
+def _scrapling_client_module():
+    return importlib.import_module("smart_insights.scrapling_client")
+
+
+def _scrapling_response(**overrides: object) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "url": "https://farside.co.uk/btc/",
+        "status": 200,
+        "body": b"<html><table><tr><td>flow</td></tr></table></html>",
+        "headers": {"content-type": "text/html; charset=utf-8"},
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_scrapling_creates_bounded_private_html_snapshot() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response()
+    client = module.ScraplingClient(
+        fetcher=lambda _url: response,
+        clock=lambda: NOW,
+    )
+
+    result = client.scrape(
+        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+    )
+
+    assert json.loads(result.content) == {
+        "metadata": {
+            "sourceURL": "https://farside.co.uk/btc/",
+            "statusCode": 200,
+        },
+        "rawHtml": response.body.decode(),
+    }
+    assert result.observed_at == NOW
+    assert result.metadata == {
+        "collector": "scrapling",
+        "parser_version": "farside-btc-v1",
+    }
+
+
+def test_scrapling_rejects_outside_url_before_fetch() -> None:
+    module = _scrapling_client_module()
+    calls: list[str] = []
+    client = module.ScraplingClient(fetcher=lambda url: calls.append(url))
+
+    with pytest.raises(ValueError, match="allow-listed"):
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://evil.invalid/source"
+        )
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("response", "expected_code"),
+    (
+        (_scrapling_response(url="https://evil.invalid/source"), "REDIRECT_REJECTED"),
+        (_scrapling_response(status=403), "HTTP_ERROR"),
+        (
+            _scrapling_response(headers={"content-type": "application/json"}),
+            "INVALID_RESPONSE",
+        ),
+    ),
+)
+def test_scrapling_rejects_invalid_html_responses(
+    response: SimpleNamespace, expected_code: str
+) -> None:
+    module = _scrapling_client_module()
+    client = module.ScraplingClient(fetcher=lambda _url: response)
+
+    with pytest.raises(SourceFetchError) as error:
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+
+    assert error.value.code == expected_code
+
+
+def test_scrapling_caps_html_and_download_bytes() -> None:
+    module = _scrapling_client_module()
+    html_client = module.ScraplingClient(
+        fetcher=lambda _url: _scrapling_response(body=b"x" * 101),
+        max_html_bytes=100,
+    )
+    with pytest.raises(SourceFetchError) as html_error:
+        html_client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+    assert html_error.value.code == "RESPONSE_TOO_LARGE"
+
+    image_client = module.ScraplingClient(
+        fetcher=lambda _url: _scrapling_response(
+            body=b"x" * 101,
+            headers={"content-type": "image/png"},
+        ),
+        max_image_bytes=100,
+    )
+    with pytest.raises(SourceFetchError) as image_error:
+        image_client.download(
+            source_for_code("farside-btc-etf"),
+            "https://farside.co.uk/btc/",
+            content_types=frozenset({"image/png"}),
+        )
+    assert image_error.value.code == "RESPONSE_TOO_LARGE"
+
+
+def test_scrapling_download_requires_allowlisted_image_content_type() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response(
+        body=b"png-bytes", headers={"content-type": "image/png"}
+    )
+    client = module.ScraplingClient(fetcher=lambda _url: response, clock=lambda: NOW)
+
+    asset = client.download(
+        source_for_code("farside-btc-etf"),
+        "https://farside.co.uk/btc/",
+        content_types=frozenset({"image/png", "image/jpeg", "image/webp"}),
+    )
+
+    assert asset.content == b"png-bytes"
+    assert asset.content_type == "image/png"
+    assert asset.source_url == "https://farside.co.uk/btc/"
+    assert asset.observed_at == NOW
+
+
+def test_scrapling_default_fetcher_uses_isolated_json_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _scrapling_client_module()
+    calls: list[tuple[list[str], bytes, float]] = []
+
+    def run(
+        command: list[str], *, input: bytes, capture_output: bool, timeout: float
+    ) -> SimpleNamespace:
+        assert capture_output is True
+        calls.append((command, input, timeout))
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "bodyBase64": "PGh0bWw+PC9odG1sPg==",
+                    "headers": {"content-type": "text/html"},
+                    "status": 200,
+                    "url": "https://farside.co.uk/btc/",
+                }
+            ).encode(),
+            stderr=b"",
+        )
+
+    monkeypatch.setenv("SMART_INSIGHTS_SCRAPLING_PYTHON", "isolated-python.exe")
+    monkeypatch.setattr(module.subprocess, "run", run)
+
+    response = module._fetch("https://farside.co.uk/btc/")
+
+    assert response.body == b"<html></html>"
+    assert response.status == 200
+    assert calls[0][0][0] == "isolated-python.exe"
+    assert json.loads(calls[0][1]) == {"url": "https://farside.co.uk/btc/"}
+    assert calls[0][2] == 45
+
+
+def test_scrapling_runner_url_allowlist_is_exact() -> None:
+    runner = importlib.import_module("scrapling_fetch")
+
+    assert runner.is_runner_url_allowed("https://farside.co.uk/btc/")
+    assert runner.is_runner_url_allowed(
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/?page=3"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://a.storyblok.com/f/176807/1600x2000/table.png/m/"
+    )
+    assert not runner.is_runner_url_allowed("http://farside.co.uk/btc/")
+    assert not runner.is_runner_url_allowed("https://farside.co.uk/btc/extra")
+    assert not runner.is_runner_url_allowed("https://evil.invalid/btc/")
+    assert not runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/?page=6"
+    )
+    assert not runner.is_runner_url_allowed(
+        "https://a.storyblok.com/f/999999/1600x2000/table.png/m/"
+    )
+
+
 def _crawl4ai_result(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
         "success": True,
-        "url": "https://farside.co.uk/btc/",
+        "url": "https://www.cryptocraft.com/calendar?week=this",
         "status_code": 200,
         "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
         "html": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
@@ -392,7 +639,7 @@ def test_crawl4ai_rejects_url_outside_source_allowlist_before_browser_run() -> N
     client = _crawl4ai_client_class()(runner=lambda url: calls.append(url))
     with pytest.raises(ValueError, match="allow-listed"):
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://evil.invalid/source"
+            source_for_code("cryptocraft"), "https://evil.invalid/source"
         )
     assert calls == []
 
@@ -402,22 +649,23 @@ def test_crawl4ai_creates_private_snapshot_for_matching_source_url() -> None:
     client = _crawl4ai_client_class()(runner=lambda _url: response, clock=lambda: NOW)
 
     result = client.scrape(
-        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        source_for_code("cryptocraft"),
+        "https://www.cryptocraft.com/calendar?week=this",
     )
 
-    assert result.source_url == "https://farside.co.uk/btc/"
+    assert result.source_url == "https://www.cryptocraft.com/calendar?week=this"
     assert result.observed_at == NOW
     assert json.loads(result.content) == {
         "markdown": response.markdown,
         "metadata": {
-            "sourceURL": "https://farside.co.uk/btc/",
+            "sourceURL": "https://www.cryptocraft.com/calendar?week=this",
             "statusCode": 200,
         },
         "rawHtml": response.html,
     }
     assert result.metadata == {
         "collector": "crawl4ai",
-        "parser_version": "farside-btc-v1",
+        "parser_version": "cryptocraft-v1",
     }
 
 
@@ -428,7 +676,8 @@ def test_crawl4ai_rejects_changed_final_url() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         mismatched.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "REDIRECT_REJECTED"
 
@@ -440,7 +689,8 @@ def test_crawl4ai_rejects_empty_extraction() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "INVALID_RESPONSE"
 
@@ -453,7 +703,8 @@ def test_crawl4ai_caps_serialized_snapshot_size() -> None:
     )
     with pytest.raises(SourceFetchError) as error:
         client.scrape(
-            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+            source_for_code("cryptocraft"),
+            "https://www.cryptocraft.com/calendar?week=this",
         )
     assert error.value.code == "RESPONSE_TOO_LARGE"
 

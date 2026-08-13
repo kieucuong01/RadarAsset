@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 from types import MappingProxyType
 from urllib.parse import urlsplit
 
@@ -13,6 +14,7 @@ QUALITY_TIERS = MappingProxyType(
         "direct_api": Decimal("1.00"),
         "community_api": Decimal("0.85"),
         "crawl4ai_table": Decimal("0.70"),
+        "scrapling_table": Decimal("0.70"),
         "heuristic": Decimal("0.50"),
     }
 )
@@ -26,6 +28,9 @@ ENABLED_SOURCE_CODES = frozenset(
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     }
 )
@@ -47,36 +52,36 @@ SOURCE_ROWS = (
         "farside-btc-etf",
         "Farside Bitcoin ETF Flows",
         Market.CRYPTO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         ("https://farside.co.uk/btc/",),
         "daily",
         "farside-btc-v1",
         2_880,
-        "crawl4ai_table",
+        "scrapling_table",
         "https://farside.co.uk/btc/",
     ),
     (
         "farside-eth-etf",
         "Farside Ethereum ETF Flows",
         Market.CRYPTO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         ("https://farside.co.uk/eth/",),
         "daily",
         "farside-eth-v1",
         2_880,
-        "crawl4ai_table",
+        "scrapling_table",
         "https://farside.co.uk/eth/",
     ),
     (
         "farside-sol-etf",
         "Farside Solana ETF Flows",
         Market.CRYPTO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         ("https://farside.co.uk/sol/",),
         "daily",
         "farside-sol-v1",
         2_880,
-        "crawl4ai_table",
+        "scrapling_table",
         "https://farside.co.uk/sol/",
     ),
     (
@@ -150,12 +155,12 @@ SOURCE_ROWS = (
         "coinshares-weekly",
         "CoinShares Digital Asset Fund Flows",
         Market.CRYPTO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         ("https://coinshares.com/insights/research-data/",),
         "weekly",
         "coinshares-v1",
         10_080,
-        "crawl4ai_table",
+        "scrapling_table",
         "https://coinshares.com/insights/research-data/",
     ),
     (
@@ -220,30 +225,6 @@ SOURCE_ROWS = (
         14_400,
         "official_api",
         "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
-    ),
-    (
-        "wgc-gold-etf",
-        "World Gold Council ETF Holdings and Flows",
-        Market.GOLD,
-        CollectionMode.CRAWL4AI,
-        ("https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows",),
-        "source_period",
-        "wgc-etf-v1",
-        20_160,
-        "crawl4ai_table",
-        "https://www.gold.org/terms-and-conditions",
-    ),
-    (
-        "wgc-central-bank",
-        "World Gold Council Gold Reserves",
-        Market.GOLD,
-        CollectionMode.CRAWL4AI,
-        ("https://www.gold.org/goldhub/data/gold-reserves-by-country",),
-        "source_period",
-        "wgc-central-bank-v1",
-        172_800,
-        "crawl4ai_table",
-        "https://www.gold.org/terms-and-conditions",
     ),
 )
 
@@ -314,14 +295,20 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             "/calendar/"
         )
     if source.code == "coinshares-weekly":
-        return parsed.hostname == "coinshares.com" and (
+        index_page = (
+            parsed.hostname == "coinshares.com"
+            and parsed.path == "/insights/research-data/"
+            and parsed.query in {f"page={page}" for page in range(1, 6)}
+        )
+        article = parsed.hostname == "coinshares.com" and (
             parsed.path.startswith("/insights/research-data/fund-flows-")
             or parsed.path.startswith("/us/insights/research-data/fund-flows-")
         )
-    if source.code.startswith("wgc-"):
-        return (
-            parsed.hostname == "www.gold.org"
-            and parsed.path.startswith("/download/file/")
-            and parsed.path.lower().endswith(".xlsx")
+        image = (
+            parsed.hostname == "a.storyblok.com"
+            and parsed.path.startswith("/f/176807/")
+            and re.search(r"\.(?:png|jpe?g|webp)/m/?$", parsed.path, re.IGNORECASE)
+            is not None
         )
+        return index_page or article or image
     return False

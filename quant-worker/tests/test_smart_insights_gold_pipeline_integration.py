@@ -51,10 +51,6 @@ class FakeRepository:
     ) -> tuple[ObservationPoint, ...]:
         if metric_code in {"macro.real_yield.10y_pct", "macro.usd_broad_index"}:
             count, spacing, provider = 100, 1, "fred"
-        elif metric_code == "gold.etf_flow_tonnes":
-            count, spacing, provider = 30, 30, "wgc-gold-etf"
-        elif metric_code == "gold.central_bank_net_purchase_tonnes":
-            count, spacing, provider = 30, 30, "wgc-central-bank"
         elif metric_code == "gold.cftc.managed_money_net_oi":
             count, spacing, provider = 40, 7, "cftc-disaggregated"
         else:
@@ -85,8 +81,8 @@ class FakeRepository:
                     quality_status="passed",
                     natural_key=f"{metric_code}:{index}",
                     revision=1,
-                    dimensions={"frequency": "source_period"} if "wgc" in provider else {},
-                    asset_symbol="XAU" if provider.startswith("wgc") else None,
+                    dimensions={},
+                    asset_symbol=None,
                 )
             )
         return tuple(row for row in output if row.observed_at <= as_of)[-limit:]
@@ -116,9 +112,7 @@ def test_gold_pipeline_is_deterministic_coverage_gated_and_replayable() -> None:
         "gold.group.momentum",
         "gold.group.real_yields",
         "gold.group.usd_pressure",
-        "gold.group.etf_flow",
         "gold.group.cftc_positioning",
-        "gold.group.central_bank_demand",
     }
     assert first.idempotency_key == replay.idempotency_key
     assert first.inputs == replay.inputs

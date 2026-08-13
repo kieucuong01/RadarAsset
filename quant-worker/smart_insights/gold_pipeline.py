@@ -220,16 +220,12 @@ def _groups(repository: GoldRepository, *, as_of: datetime) -> tuple[_GroupPoint
     momentum = _scored_component(_price_series(repository, as_of=as_of, lookback=20), direction=1, minimum=60, as_of=as_of, freshness_sla_minutes=4_320)
     real_yield = _scored_component(_raw_series(repository, "macro.real_yield.10y_pct", as_of=as_of), direction=-1, minimum=60, as_of=as_of, freshness_sla_minutes=4_320)
     usd = _scored_component(_change_series(_raw_series(repository, "macro.usd_broad_index", as_of=as_of), 20), direction=-1, minimum=60, as_of=as_of, freshness_sla_minutes=4_320)
-    etf = _scored_component(_raw_series(repository, "gold.etf_flow_tonnes", as_of=as_of), direction=1, minimum=12, as_of=as_of, freshness_sla_minutes=20_160)
     cftc = _scored_component(_raw_series(repository, "gold.cftc.managed_money_net_oi", as_of=as_of), direction=1, minimum=26, as_of=as_of, freshness_sla_minutes=14_400)
-    central_bank = _scored_component(_raw_series(repository, "gold.central_bank_net_purchase_tonnes", as_of=as_of), direction=1, minimum=8, as_of=as_of, freshness_sla_minutes=172_800)
     specifications = (
         ("momentum", tuple(row for row in (one_day, momentum) if row), 4_320),
         ("real_yields", tuple(row for row in (real_yield,) if row), 4_320),
         ("usd_pressure", tuple(row for row in (usd,) if row), 4_320),
-        ("etf_flow", tuple(row for row in (etf,) if row), 20_160),
         ("cftc_positioning", tuple(row for row in (cftc,) if row), 14_400),
-        ("central_bank_demand", tuple(row for row in (central_bank,) if row), 172_800),
     )
     return tuple(
         result

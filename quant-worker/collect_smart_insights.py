@@ -38,10 +38,10 @@ from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
-from smart_insights.collectors.world_gold_council import WorldGoldCouncilCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.crawl4ai_client import Crawl4AIClient
+from smart_insights.scrapling_client import ScraplingClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
@@ -63,7 +63,6 @@ from smart_insights.validation import validate_observations
 SCHEDULES = (
     "daily",
     "weekly",
-    "monthly",
     "calendar-current",
     "calendar-next",
     "calendar-event",
@@ -74,7 +73,6 @@ SCHEDULES = (
 _SOURCE_SCHEDULE = {
     "daily": "daily",
     "weekly": "weekly",
-    "monthly": "source_period",
     "calendar-current": "calendar",
     "calendar-next": "calendar",
     "calendar-event": "calendar",
@@ -297,36 +295,45 @@ _COINSHARES_REPORT = re.compile(
     r"fund-flows-(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})/",
     re.IGNORECASE,
 )
-
-
-def _discover_coinshares_report(crawler: Crawl4AIClient) -> str:
+def _discover_coinshares_report(crawler: Any) -> str:
     source = source_for_code("coinshares-weekly")
-    snapshot = crawler.scrape(source, source.urls[0])
-    try:
-        payload = json.loads(snapshot.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise SourceFetchError("INVALID_RESPONSE") from error
-    markdown = payload.get("markdown") if isinstance(payload, dict) else None
-    if not isinstance(markdown, str):
-        raise SourceFetchError("SCHEMA_DRIFT")
-    candidates: list[tuple[datetime, str]] = []
-    for match in _COINSHARES_REPORT.finditer(markdown):
+    index_urls = (source.urls[0],) + tuple(
+        f"{source.urls[0]}?page={page}" for page in range(1, 6)
+    )
+    for index_url in index_urls:
+        snapshot = crawler.scrape(source, index_url)
         try:
-            year = int(match.group(3))
-            if year < 100:
-                year += 2_000
-            report_date = datetime(
-                year, int(match.group(2)), int(match.group(1)),
-                tzinfo=timezone.utc,
-            )
-        except ValueError:
-            continue
-        url = urljoin("https://coinshares.com", match.group(0))
-        if is_source_url_allowed(source, url):
-            candidates.append((report_date, url))
-    if not candidates:
-        raise SourceFetchError("SCHEMA_DRIFT")
-    return max(candidates, key=lambda row: (row[0], row[1]))[1]
+            payload = json.loads(snapshot.content)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise SourceFetchError("INVALID_RESPONSE") from error
+        markdown = payload.get("markdown") if isinstance(payload, dict) else None
+        raw_html = payload.get("rawHtml") if isinstance(payload, dict) else None
+        documents = tuple(
+            value
+            for value in (markdown, raw_html)
+            if isinstance(value, str) and value.strip()
+        )
+        if not documents:
+            raise SourceFetchError("SCHEMA_DRIFT")
+        document = "\n".join(documents)
+        candidates: list[tuple[datetime, str]] = []
+        for match in _COINSHARES_REPORT.finditer(document):
+            try:
+                year = int(match.group(3))
+                if year < 100:
+                    year += 2_000
+                report_date = datetime(
+                    year, int(match.group(2)), int(match.group(1)),
+                    tzinfo=timezone.utc,
+                )
+            except ValueError:
+                continue
+            url = urljoin("https://coinshares.com", match.group(0))
+            if is_source_url_allowed(source, url):
+                candidates.append((report_date, url))
+        if candidates:
+            return max(candidates, key=lambda row: (row[0], row[1]))[1]
+    raise SourceFetchError("SCHEMA_DRIFT")
 
 
 def _previous_large_address_balances(
@@ -411,13 +418,15 @@ def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
     *,
     browser_client: Any | None = None,
+    scrapling_client: Any | None = None,
 ) -> Mapping[str, BatchCollector]:
     crawler = browser_client or Crawl4AIClient()
+    scrapling = scrapling_client or ScraplingClient()
 
     def coinshares(as_of: datetime) -> CollectionBatch:
-        report_url = _discover_coinshares_report(crawler)
+        report_url = _discover_coinshares_report(scrapling)
         return CoinSharesCollector(
-            crawler=crawler, report_url=report_url
+            crawler=scrapling, report_url=report_url
         ).collect(as_of)
 
     def bitinfocharts(as_of: datetime) -> CollectionBatch:
@@ -471,13 +480,13 @@ def build_batch_collectors(
     return {
         "alternative-fng": lambda as_of: AlternativeFearGreedCollector().collect(as_of),
         "farside-btc-etf": lambda as_of: FarsideEtfCollector(
-            "BTC", crawler=crawler
+            "BTC", crawler=scrapling
         ).collect(as_of),
         "farside-eth-etf": lambda as_of: FarsideEtfCollector(
-            "ETH", crawler=crawler
+            "ETH", crawler=scrapling
         ).collect(as_of),
         "farside-sol-etf": lambda as_of: FarsideEtfCollector(
-            "SOL", crawler=crawler
+            "SOL", crawler=scrapling
         ).collect(as_of),
         "coinmetrics-community": lambda as_of: CoinMetricsCollector().collect(as_of),
         "mempool-space": lambda as_of: MempoolSpaceCollector().collect(as_of),
@@ -489,12 +498,6 @@ def build_batch_collectors(
         "fred": fred,
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
-        "wgc-gold-etf": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-gold-etf", crawler=crawler
-        ).collect(as_of),
-        "wgc-central-bank": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-central-bank", crawler=crawler
-        ).collect(as_of),
     }
 
 
@@ -775,7 +778,7 @@ def main(
                 "daily", "weekly", "calendar-current", "calendar-next", "calendar-event"
             }:
                 run_macro_pipeline(repository, as_of=pipeline_time)
-            if args.schedule in {"daily", "weekly", "monthly"}:
+            if args.schedule in {"daily", "weekly"}:
                 run_gold_pipeline(repository, as_of=pipeline_time)
     except ValueError:
         outcomes, exit_code = [], 2
