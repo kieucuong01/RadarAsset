@@ -211,7 +211,7 @@ export function PortfolioBacktestBuilder({
   const selectedAdjustmentPolicy =
     state.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
   const adjustmentUnavailableSymbols = state.legs
-    .filter((leg) => !leg.asset.availableAdjustments.includes(selectedAdjustmentPolicy))
+    .filter((leg) => !leg.availableAdjustments.includes(selectedAdjustmentPolicy))
     .map((leg) => leg.symbol);
 
   function defaultStrategyFor(market: string) {
