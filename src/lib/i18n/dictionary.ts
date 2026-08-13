@@ -64,6 +64,13 @@ export const dictionaries = {
         noBacklog: "Không có hàng đợi",
         providerFailures: "Lỗi nguồn 24 giờ",
         lastScheduler: "Scheduler thành công: {date}",
+        worker: "Worker ingestion",
+        lastHeartbeat: "Heartbeat gần nhất: {date}",
+        workerStatus: {
+          active: "Đang chạy",
+          stale: "Mất heartbeat",
+          unavailable: "Chưa có",
+        },
       },
       tabs: {
         optimizer: "Tối ưu danh mục",
@@ -969,6 +976,13 @@ export const dictionaries = {
         noBacklog: "No backlog",
         providerFailures: "Provider failures (24h)",
         lastScheduler: "Scheduler succeeded: {date}",
+        worker: "Ingestion worker",
+        lastHeartbeat: "Latest heartbeat: {date}",
+        workerStatus: {
+          active: "Active",
+          stale: "Heartbeat stale",
+          unavailable: "Unavailable",
+        },
       },
       tabs: {
         optimizer: "Portfolio Optimizer",

@@ -27,6 +27,17 @@ const EMPTY_MARKET_COUNTS: Record<MarketDataMarket, number> = {
   metal_spot: 0,
 };
 const BACKLOG_STATUSES = new Set(["queued", "running"]);
+const PUBLIC_INGESTION_ERROR_CODES = new Set([
+  "ingestion_failed",
+  "invalid_response",
+  "network_error",
+  "provider_rejected",
+  "provider_unavailable",
+  "rate_limited",
+  "response_limit",
+  "stale_run",
+  "unsupported_timeframe",
+]);
 
 function isRealIsoDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -197,7 +208,7 @@ export async function loadQuantAssetCatalog(
 }
 
 export async function loadQuantDataReadiness(
-  context: TenantContext,
+  _context: TenantContext,
   now = new Date(),
 ): Promise<QuantDataReadinessResponse> {
   const prisma = getPrisma();
@@ -205,11 +216,11 @@ export async function loadQuantDataReadiness(
   const [
     assetCounts,
     activeDatasets,
-    activeInstrumentCount,
     ingestionCounts,
     oldestBacklog,
     recentFailures,
     schedulerRows,
+    workerHeartbeat,
   ] = await Promise.all([
     prisma.asset.groupBy({
       by: ["market"],
@@ -236,26 +247,17 @@ export async function loadQuantDataReadiness(
         },
       },
     }),
-    prisma.providerInstrument.count({
-      where: {
-        isActive: true,
-        provider: { status: "active" },
-        asset: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
-      },
-    }),
     prisma.marketIngestionRequest.groupBy({
       by: ["status", "timeframe"],
-      where: { organizationId: context.organizationId },
       _count: { _all: true },
     }),
     prisma.marketIngestionRequest.findFirst({
-      where: { organizationId: context.organizationId, status: { in: [...BACKLOG_STATUSES] } },
+      where: { status: { in: [...BACKLOG_STATUSES] } },
       orderBy: { createdAt: "asc" },
       select: { createdAt: true },
     }),
     prisma.marketIngestionRequest.findMany({
       where: {
-        organizationId: context.organizationId,
         status: "failed",
         updatedAt: { gte: failureCutoff },
       },
@@ -287,6 +289,10 @@ export async function loadQuantDataReadiness(
       ORDER BY started_at DESC
       LIMIT 1
     `,
+    prisma.ingestionWorkerHeartbeat.findFirst({
+      orderBy: { heartbeatAt: "desc" },
+      select: { heartbeatAt: true },
+    }),
   ]);
 
   const instrumentsByMarket = { ...EMPTY_MARKET_COUNTS };
@@ -339,12 +345,19 @@ export async function loadQuantDataReadiness(
   const backlogCount = ingestionRequestsByStatusTimeframe
     .filter((row) => BACKLOG_STATUSES.has(row.status))
     .reduce((total, row) => total + row.count, 0);
-  const expectedDatasetCount = activeInstrumentCount * 2;
+  const dueBacklogCount = backlogCount;
+  const expectedDatasetCount =
+    instrumentsByMarket.vn_equity * 2 +
+    instrumentsByMarket.crypto_spot * 2 +
+    instrumentsByMarket.metal_spot;
   const missingDatasetCount = Math.max(0, expectedDatasetCount - activeDatasets.length);
   const providerFailureCounts = new Map<string, number>();
   for (const failure of recentFailures) {
     const code = failure.providerInstrument.provider.code;
-    const errorCode = failure.errorCode ?? "unknown";
+    const errorCode =
+      failure.errorCode && PUBLIC_INGESTION_ERROR_CODES.has(failure.errorCode)
+        ? failure.errorCode
+        : "unknown";
     const key = `${code}:${errorCode}`;
     providerFailureCounts.set(key, (providerFailureCounts.get(key) ?? 0) + 1);
   }
@@ -381,6 +394,13 @@ export async function loadQuantDataReadiness(
   const backlogOverAge = Boolean(
     oldestBacklog && now.getTime() - oldestBacklog.createdAt.getTime() > 6 * 60 * 60 * 1000,
   );
+  const workerHeartbeatAt = workerHeartbeat?.heartbeatAt ?? null;
+  const workerStatus = !workerHeartbeatAt
+    ? "unavailable"
+    : now.getTime() - workerHeartbeatAt.getTime() <= 90_000
+      ? "active"
+      : "stale";
+  const workerCanDrainDueBacklog = dueBacklogCount === 0 || workerStatus === "active";
 
   return {
     readyForBacktest:
@@ -388,16 +408,21 @@ export async function loadQuantDataReadiness(
       missingDatasetCount === 0 &&
       staleDatasetCount === 0 &&
       !backlogOverAge &&
+      workerCanDrainDueBacklog &&
       schedulerRecent,
     instrumentsByMarket,
     activeDatasetsByMarketTimeframe,
     ingestionRequestsByStatusTimeframe,
     backlogCount,
+    dueBacklogCount,
     expectedDatasetCount,
     missingDatasetCount,
     staleDatasetCount,
     missingBarCount,
     oldestBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
+    oldestDueBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
+    workerHeartbeatAt: workerHeartbeatAt?.toISOString() ?? null,
+    workerStatus,
     lastSchedulerSuccessAt,
     latestSchedulerRun,
     recentProviderFailures,

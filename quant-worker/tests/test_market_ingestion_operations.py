@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, start_scheduler_run, verify_health
@@ -6,19 +7,39 @@ from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_ru
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_health_verifier_rejects_recent_terminal_provider_failures() -> None:
+def test_health_verifier_keeps_recent_provider_failures_as_diagnostics() -> None:
     errors = verify_health(
         {
             "missing_dataset_count": 0,
             "stale_dataset_count": 0,
             "oldest_backlog_at": None,
             "recent_provider_failure_count": 2,
+            "worker_heartbeat_at": None,
+            "due_backlog_count": 0,
         },
         maximum_backlog_age_hours=6,
         maximum_recent_failures=0,
     )
 
-    assert errors == ["provider_failures"]
+    assert errors == []
+
+
+def test_health_verifier_requires_live_worker_when_due_work_exists() -> None:
+    errors = verify_health(
+        {
+            "missing_dataset_count": 0,
+            "stale_dataset_count": 0,
+            "oldest_backlog_at": None,
+            "recent_provider_failure_count": 0,
+            "worker_heartbeat_at": datetime(2026, 8, 14, 9, 0, tzinfo=timezone.utc),
+            "due_backlog_count": 4,
+        },
+        maximum_backlog_age_hours=6,
+        maximum_recent_failures=0,
+        now=datetime(2026, 8, 14, 9, 5, tzinfo=timezone.utc),
+    )
+
+    assert errors == ["worker_stale"]
 
 
 def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:

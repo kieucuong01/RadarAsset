@@ -82,11 +82,15 @@ export type QuantDataReadinessResponse = {
     count: number;
   }>;
   backlogCount: number;
+  dueBacklogCount: number;
   expectedDatasetCount: number;
   missingDatasetCount: number;
   staleDatasetCount: number;
   missingBarCount: number;
   oldestBacklogAt: string | null;
+  oldestDueBacklogAt: string | null;
+  workerHeartbeatAt: string | null;
+  workerStatus: "active" | "stale" | "unavailable";
   lastSchedulerSuccessAt: string | null;
   latestSchedulerRun: {
     command: "hourly" | "daily" | "all";

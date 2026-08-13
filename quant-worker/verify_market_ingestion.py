@@ -22,10 +22,12 @@ class SchedulerAlreadyRunning(RuntimeError):
 HEALTH_SQL = """
 WITH expected AS (
   SELECT instrument.asset_id, timeframe.timeframe
-  FROM provider_instruments instrument
+FROM provider_instruments instrument
   JOIN data_providers provider ON provider.id = instrument.provider_id
+  JOIN assets asset ON asset.id = instrument.asset_id
   CROSS JOIN (VALUES ('1d'), ('1h')) AS timeframe(timeframe)
   WHERE instrument.is_active = true AND provider.status = 'active'
+    AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
 ), active_versions AS (
   SELECT dataset.asset_id, dataset.timeframe, version.coverage_end,
          version.missing_bar_count
@@ -41,6 +43,9 @@ WITH expected AS (
   SELECT COUNT(*)::int AS count
   FROM market_ingestion_requests
   WHERE status = 'failed' AND updated_at >= NOW() - INTERVAL '24 hours'
+), worker AS (
+  SELECT MAX(heartbeat_at) AS heartbeat_at
+  FROM ingestion_worker_heartbeats
 )
 SELECT
   COUNT(*) FILTER (WHERE active.asset_id IS NULL)::int AS missing_dataset_count,
@@ -53,8 +58,11 @@ SELECT
   )::int AS stale_dataset_count,
   COALESCE(SUM(active.missing_bar_count), 0)::bigint AS missing_bar_count,
   backlog.count AS backlog_count,
+  backlog.count AS due_backlog_count,
   backlog.oldest_at AS oldest_backlog_at,
+  backlog.oldest_at AS oldest_due_backlog_at,
   failures.count AS recent_provider_failure_count,
+  worker.heartbeat_at AS worker_heartbeat_at,
   (SELECT MAX(finished_at) FROM market_ingestion_scheduler_runs WHERE status = 'succeeded')
     AS last_scheduler_success_at
 FROM expected
@@ -62,7 +70,8 @@ LEFT JOIN active_versions active
   ON active.asset_id = expected.asset_id AND active.timeframe = expected.timeframe
 CROSS JOIN backlog
 CROSS JOIN failures
-GROUP BY backlog.count, backlog.oldest_at, failures.count
+CROSS JOIN worker
+GROUP BY backlog.count, backlog.oldest_at, failures.count, worker.heartbeat_at
 """
 
 
@@ -159,18 +168,27 @@ def finish_scheduler_run(
 
 
 def verify_health(
-    row: dict[str, Any], *, maximum_backlog_age_hours: int, maximum_recent_failures: int
+    row: dict[str, Any],
+    *,
+    maximum_backlog_age_hours: int,
+    maximum_recent_failures: int,
+    now: datetime | None = None,
 ) -> list[str]:
+    del maximum_recent_failures
     errors: list[str] = []
     if int(row["missing_dataset_count"]) > 0:
         errors.append("missing_datasets")
     if int(row["stale_dataset_count"]) > 0:
         errors.append("stale_datasets")
-    if int(row["recent_provider_failure_count"]) > maximum_recent_failures:
-        errors.append("provider_failures")
+    checked_at = now or datetime.now(timezone.utc)
+    heartbeat = row.get("worker_heartbeat_at")
+    if int(row.get("due_backlog_count", 0)) > 0 and (
+        heartbeat is None or (checked_at - heartbeat).total_seconds() > 90
+    ):
+        errors.append("worker_stale")
     oldest = row.get("oldest_backlog_at")
     if oldest is not None:
-        age_hours = (datetime.now(timezone.utc) - oldest).total_seconds() / 3600
+        age_hours = (checked_at - oldest).total_seconds() / 3600
         if age_hours > maximum_backlog_age_hours:
             errors.append("backlog_too_old")
     return errors
@@ -228,6 +246,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             else None,
             "last_scheduler_success_at": health["last_scheduler_success_at"].isoformat()
             if health["last_scheduler_success_at"]
+            else None,
+            "worker_heartbeat_at": health["worker_heartbeat_at"].isoformat()
+            if health["worker_heartbeat_at"]
             else None,
             "status": "succeeded" if not errors else "failed",
             "errors": errors,

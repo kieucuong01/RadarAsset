@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Database, History, RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Database, History, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -78,13 +78,21 @@ export function MarketDataHealthPanel() {
     },
     {
       label: t("quant.dataHealth.backlog"),
-      value: numberFormatter.format(readiness.backlogCount),
-      detail: readiness.oldestBacklogAt
+      value: numberFormatter.format(readiness.dueBacklogCount),
+      detail: readiness.oldestDueBacklogAt
         ? t("quant.dataHealth.oldestBacklog", {
-            date: dateLabel(readiness.oldestBacklogAt, locale),
+            date: dateLabel(readiness.oldestDueBacklogAt, locale),
           })
         : t("quant.dataHealth.noBacklog"),
       icon: RefreshCw,
+    },
+    {
+      label: t("quant.dataHealth.worker"),
+      value: t(`quant.dataHealth.workerStatus.${readiness.workerStatus}`),
+      detail: t("quant.dataHealth.lastHeartbeat", {
+        date: dateLabel(readiness.workerHeartbeatAt, locale),
+      }),
+      icon: Activity,
     },
     {
       label: t("quant.dataHealth.providerFailures"),
@@ -111,7 +119,7 @@ export function MarketDataHealthPanel() {
               : t("quant.dataHealth.degraded", { count: health.issueCount })}
         </Badge>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
