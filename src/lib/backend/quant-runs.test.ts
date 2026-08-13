@@ -95,6 +95,7 @@ function dataset(id: string, checksum: string) {
     coverageStart: new Date("2024-01-01T00:00:00.000Z"),
     coverageEnd: new Date("2026-01-31T00:00:00.000Z"),
     rowCount: 500,
+    issues: [],
   };
 }
 
@@ -358,6 +359,33 @@ describe("portfolio quant run persistence", () => {
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.quantRun.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an intersecting provider gap before opening a transaction", async () => {
+    prisma.asset.findMany.mockResolvedValue(
+      assets.map((asset) =>
+        asset.symbol === "BTC"
+          ? {
+              ...asset,
+              datasets: [
+                {
+                  versions: [
+                    {
+                      ...dataset("dataset-btc", "c".repeat(64)),
+                      issues: [{ classification: "PROVIDER_GAP" }],
+                    },
+                  ],
+                },
+              ],
+            }
+          : asset,
+      ),
+    );
+
+    await expect(createPortfolioQuantRun(context, submission)).rejects.toMatchObject({
+      code: "DATASET_PROVIDER_GAP",
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("enforces the resolved market leverage cap before writes", async () => {

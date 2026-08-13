@@ -39,6 +39,9 @@ function asset(
     reasonCode: null,
     listingStatus: "active",
     availableAdjustments: ["raw"],
+    calendarVersion: market === "vn_equity" ? "hose-official-closures-2024-2026-v1" : "crypto-24x7-v1",
+    qualityIssueCount: 0,
+    blockingQualityIssueCount: 0,
   };
 }
 

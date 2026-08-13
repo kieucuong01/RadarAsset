@@ -19,7 +19,17 @@ const quantAssetCatalogItemSchema = z
     rowCount: z.number().int().nonnegative(),
     freshness: z.enum(["fresh", "stale", "unavailable", "fixture"]),
     backtestable: z.boolean(),
-    reasonCode: z.enum(["DATASET_UNAVAILABLE", "DATASET_RANGE_INSUFFICIENT"]).nullable(),
+    reasonCode: z
+      .enum([
+        "DATASET_UNAVAILABLE",
+        "DATASET_RANGE_INSUFFICIENT",
+        "DATASET_PROVIDER_GAP",
+        "DATASET_CALENDAR_UNVERIFIED",
+      ])
+      .nullable(),
+    calendarVersion: z.string().min(1).max(100).nullable(),
+    qualityIssueCount: z.number().int().nonnegative(),
+    blockingQualityIssueCount: z.number().int().nonnegative(),
     listingStatus: z.enum(["active", "inactive", "delisted", "unknown"]),
     availableAdjustments: z.array(z.enum(["raw", "total_return"])).max(2),
   })
@@ -50,22 +60,34 @@ function isoDay(value: string | null) {
   return value ? value.slice(0, 10) : null;
 }
 
-export function assetReadinessLabel(item: QuantAssetCatalogItem) {
+export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | "en" = "vi") {
   if (item.backtestable) {
-    return { badge: "Sẵn sàng", detail: `${item.rowCount.toLocaleString()} bars` };
+    return { badge: locale === "vi" ? "Sẵn sàng" : "Ready", detail: `${item.rowCount.toLocaleString()} bars` };
   }
   if (item.reasonCode === "DATASET_RANGE_INSUFFICIENT") {
     const start = isoDay(item.coverageStart);
     const end = isoDay(item.coverageEnd);
     return {
-      badge: "Ngoài khoảng dữ liệu",
+      badge: locale === "vi" ? "Ngoài khoảng dữ liệu" : "Range unavailable",
       detail:
         start && end
-          ? `${item.rowCount.toLocaleString()} bars, ${start} đến ${end}`
+          ? `${item.rowCount.toLocaleString()} bars, ${start} ${locale === "vi" ? "đến" : "to"} ${end}`
           : `${item.rowCount.toLocaleString()} bars`,
     };
   }
-  return { badge: "Chưa có dataset", detail: `${item.rowCount.toLocaleString()} bars` };
+  if (item.reasonCode === "DATASET_PROVIDER_GAP") {
+    return {
+      badge: locale === "vi" ? "Có khoảng trống dữ liệu" : "Provider data gap",
+      detail: `${item.blockingQualityIssueCount.toLocaleString()} ${locale === "vi" ? "khoảng lỗi" : "blocking ranges"}`,
+    };
+  }
+  if (item.reasonCode === "DATASET_CALENDAR_UNVERIFIED") {
+    return {
+      badge: locale === "vi" ? "Lịch chưa kiểm chứng" : "Calendar unverified",
+      detail: item.calendarVersion ?? (locale === "vi" ? "Chưa có phiên bản lịch" : "No calendar version"),
+    };
+  }
+  return { badge: locale === "vi" ? "Chưa có dataset" : "No dataset", detail: `${item.rowCount.toLocaleString()} bars` };
 }
 
 export function parseQuantAssetCatalog(input: unknown): QuantAssetCatalog {

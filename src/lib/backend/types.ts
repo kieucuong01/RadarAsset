@@ -59,7 +59,15 @@ export type QuantAssetCatalogItem = {
   rowCount: number;
   freshness: MarketDataFreshness;
   backtestable: boolean;
-  reasonCode: "DATASET_UNAVAILABLE" | "DATASET_RANGE_INSUFFICIENT" | null;
+  reasonCode:
+    | "DATASET_UNAVAILABLE"
+    | "DATASET_RANGE_INSUFFICIENT"
+    | "DATASET_PROVIDER_GAP"
+    | "DATASET_CALENDAR_UNVERIFIED"
+    | null;
+  calendarVersion: string | null;
+  qualityIssueCount: number;
+  blockingQualityIssueCount: number;
   listingStatus: "active" | "inactive" | "delisted" | "unknown";
   availableAdjustments: Array<"raw" | "total_return">;
 };

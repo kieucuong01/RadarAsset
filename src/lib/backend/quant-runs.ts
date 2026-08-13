@@ -27,6 +27,8 @@ type EligibilityCode =
   | "ASSET_UNAVAILABLE"
   | "DATASET_UNAVAILABLE"
   | "DATASET_RANGE_INSUFFICIENT"
+  | "DATASET_PROVIDER_GAP"
+  | "DATASET_CALENDAR_UNVERIFIED"
   | "LEVERAGE_LIMIT_EXCEEDED"
   | "STRATEGY_UNAVAILABLE"
   | "STRATEGY_UNSUPPORTED";
@@ -160,6 +162,14 @@ async function resolvePortfolioLegs(
               coverageStart: true,
               coverageEnd: true,
               rowCount: true,
+              issues: {
+                where: {
+                  rangeStart: { lte: dateBoundary(input.to) },
+                  rangeEnd: { gte: dateBoundary(input.from) },
+                  classification: { in: ["PROVIDER_GAP", "CALENDAR_RANGE_UNVERIFIED"] },
+                },
+                select: { classification: true },
+              },
             },
           },
         },
@@ -193,6 +203,20 @@ async function resolvePortfolioLegs(
       throw new PortfolioRunEligibilityError(
         "DATASET_RANGE_INSUFFICIENT",
         `${leg.symbol} does not cover the requested range.`,
+      );
+    }
+    if (
+      dataset.issues.some((issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED")
+    ) {
+      throw new PortfolioRunEligibilityError(
+        "DATASET_CALENDAR_UNVERIFIED",
+        `${leg.symbol} intersects an uncertified calendar range.`,
+      );
+    }
+    if (dataset.issues.some((issue) => issue.classification === "PROVIDER_GAP")) {
+      throw new PortfolioRunEligibilityError(
+        "DATASET_PROVIDER_GAP",
+        `${leg.symbol} intersects a provider data gap.`,
       );
     }
     const strategy = strategyByKey.get(`${leg.strategyCode}@${leg.strategyVersion}`);

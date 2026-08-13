@@ -121,6 +121,15 @@ export async function loadQuantAssetCatalog(
               coverageStart: true,
               coverageEnd: true,
               rowCount: true,
+              sourceMetadata: true,
+              issues: {
+                select: {
+                  classification: true,
+                  severity: true,
+                  rangeStart: true,
+                  rangeEnd: true,
+                },
+              },
               bars: {
                 orderBy: { ts: "desc" },
                 take: 1,
@@ -160,11 +169,32 @@ export async function loadQuantAssetCatalog(
         const rangeCovered = Boolean(
           version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
         );
+        const intersectingIssues = (version?.issues ?? []).filter(
+          (issue) =>
+            issue.rangeStart &&
+            issue.rangeEnd &&
+            issue.rangeStart <= requestedEnd &&
+            issue.rangeEnd >= requestedStart,
+        );
+        const hasCalendarBlock = intersectingIssues.some(
+          (issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED",
+        );
+        const hasProviderGap = intersectingIssues.some(
+          (issue) => issue.classification === "PROVIDER_GAP",
+        );
         const reasonCode: QuantAssetReasonCode = !version
           ? "DATASET_UNAVAILABLE"
           : !rangeCovered
             ? "DATASET_RANGE_INSUFFICIENT"
+            : hasCalendarBlock
+              ? "DATASET_CALENDAR_UNVERIFIED"
+              : hasProviderGap
+                ? "DATASET_PROVIDER_GAP"
             : null;
+        const sourceMetadata =
+          version?.sourceMetadata && typeof version.sourceMetadata === "object"
+            ? (version.sourceMetadata as Record<string, unknown>)
+            : {};
 
         return {
           symbol: asset.symbol,
@@ -188,6 +218,16 @@ export async function loadQuantAssetCatalog(
           }),
           backtestable: reasonCode === null,
           reasonCode,
+          calendarVersion:
+            typeof sourceMetadata.calendarVersion === "string"
+              ? sourceMetadata.calendarVersion
+              : null,
+          qualityIssueCount: version?.issues.length ?? 0,
+          blockingQualityIssueCount: intersectingIssues.filter(
+            (issue) =>
+              issue.classification === "PROVIDER_GAP" ||
+              issue.classification === "CALENDAR_RANGE_UNVERIFIED",
+          ).length,
           listingStatus: ["active", "inactive", "delisted", "unknown"].includes(asset.listingStatus)
             ? (asset.listingStatus as "active" | "inactive" | "delisted" | "unknown")
             : "unknown",

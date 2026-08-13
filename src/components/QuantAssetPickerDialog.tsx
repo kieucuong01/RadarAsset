@@ -47,7 +47,7 @@ export function QuantAssetPickerDialog({
   const [items, setItems] = useState<QuantAssetCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -133,7 +133,7 @@ export function QuantAssetPickerDialog({
             {items.map((item) => {
               const selected = selectedSymbols.includes(item.symbol);
               const unavailable = !item.backtestable;
-              const readiness = assetReadinessLabel(item);
+              const readiness = assetReadinessLabel(item, locale);
               return (
                 <Button
                   key={item.symbol}

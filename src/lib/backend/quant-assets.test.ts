@@ -33,6 +33,8 @@ const vnmAsset = {
           coverageEnd: new Date("2026-01-01T00:00:00.000Z"),
           rowCount: 500,
           publishedAt: new Date("2026-01-01T09:00:00.000Z"),
+          sourceMetadata: { calendarVersion: "hose-official-closures-2024-2026-v1" },
+          issues: [],
           bars: [{ source: "vnstock" }],
         },
       ],
@@ -81,6 +83,9 @@ describe("supported Quant asset catalog", () => {
         reasonCode: null,
         listingStatus: "active",
         availableAdjustments: ["raw"],
+        calendarVersion: "hose-official-closures-2024-2026-v1",
+        qualityIssueCount: 0,
+        blockingQualityIssueCount: 0,
       }),
       expect.objectContaining({
         symbol: "VN30",
@@ -162,6 +167,51 @@ describe("supported Quant asset catalog", () => {
     expect(result.items[0]).toMatchObject({
       backtestable: false,
       reasonCode: "DATASET_RANGE_INSUFFICIENT",
+    });
+  });
+
+  it("blocks only quality ranges intersecting the requested interval", async () => {
+    const baseVersion = vnmAsset.datasets[0].versions[0];
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        ...vnmAsset,
+        datasets: [
+          {
+            adjustmentPolicy: "raw",
+            versions: [
+              {
+                ...baseVersion,
+                issues: [
+                  {
+                    classification: "PROVIDER_GAP",
+                    severity: "warning",
+                    rangeStart: new Date("2024-01-01T00:00:00Z"),
+                    rangeEnd: new Date("2024-01-03T00:00:00Z"),
+                  },
+                  {
+                    classification: "CALENDAR_RANGE_UNVERIFIED",
+                    severity: "error",
+                    rangeStart: new Date("2025-06-01T00:00:00Z"),
+                    rangeEnd: new Date("2025-06-05T00:00:00Z"),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "VNM", timeframe: "1d", from: "2025-01-01", to: "2025-12-31" },
+      new Date("2026-01-02T12:00:00Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      backtestable: false,
+      reasonCode: "DATASET_CALENDAR_UNVERIFIED",
+      qualityIssueCount: 2,
+      blockingQualityIssueCount: 1,
     });
   });
 
