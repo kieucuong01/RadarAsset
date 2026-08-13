@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 
 from .adjustments import adjust_total_return_bars
+from .adjustments import AdjustmentUnavailable
 from .corporate_actions import CorporateActionRecord
 from .market_calendar import HOSE_CALENDAR_VERSION
 from .publication import PreparedDatasetPublication, prepare_dataset_publication
@@ -17,6 +18,22 @@ def build_adjusted_publication(
     corporate_action_coverage_complete: bool,
 ) -> PreparedDatasetPublication:
     action_rows = list(actions)
+    coverage_start = raw.coverage_start.date()
+    coverage_end = raw.coverage_end.date()
+    unsafe_actions = []
+    for action in action_rows:
+        if action.status == "verified" or action.action_type == "symbol_change":
+            continue
+        if action.ex_right_date is None:
+            unsafe = action.public_date is None or action.public_date <= coverage_end
+        else:
+            unsafe = coverage_start <= action.ex_right_date <= coverage_end
+        if unsafe:
+            unsafe_actions.append(action)
+    if unsafe_actions:
+        raise AdjustmentUnavailable(
+            "Corporate action coverage contains unverified price-affecting events."
+        )
     result = adjust_total_return_bars(
         raw.rows,
         action_rows,

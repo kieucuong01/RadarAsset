@@ -11,6 +11,7 @@ const { prisma } = vi.hoisted(() => {
     asset: { findMany: vi.fn() },
     quantRun: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
     quantRunLeg: { createMany: vi.fn(), updateMany: vi.fn() },
+    $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
   return { prisma: client };
@@ -188,18 +189,21 @@ describe("portfolio quant run persistence", () => {
     prisma.asset.findMany.mockResolvedValue(assets);
     prisma.quantRun.create.mockResolvedValue({ id: "run-1" });
     prisma.quantRunLeg.createMany.mockResolvedValue({ count: 2 });
-    prisma.quantRun.findFirst.mockImplementation(({ where }: { where?: { status?: string } }) =>
-      Promise.resolve(where?.status === "succeeded" ? null : runRecord()),
+    prisma.quantRun.findFirst.mockImplementation(
+      ({ where }: { where?: { id?: string; status?: string | { in: string[] } } }) =>
+        Promise.resolve(where?.id ? runRecord() : null),
     );
     prisma.quantRun.findMany.mockResolvedValue([runRecord()]);
     prisma.quantRun.updateMany.mockResolvedValue({ count: 1 });
     prisma.quantRunLeg.updateMany.mockResolvedValue({ count: 2 });
+    prisma.$executeRaw.mockResolvedValue(1);
   });
 
   it("creates one aggregate run and every independently resolved leg in one transaction", async () => {
     const result = await createPortfolioQuantRun(context, submission);
 
     expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.$executeRaw).toHaveBeenCalledOnce();
     expect(prisma.quantRun.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -245,12 +249,11 @@ describe("portfolio quant run persistence", () => {
 
     const result = await createPortfolioQuantRun(context, submission);
 
-    expect(prisma.quantRun.findFirst).toHaveBeenNthCalledWith(
-      1,
+    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           organizationId: "organization-a",
-          status: "succeeded",
+          status: { in: ["queued", "running", "succeeded"] },
           engineVersion: "portfolio-v1",
           strategyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         }),
@@ -258,6 +261,23 @@ describe("portfolio quant run persistence", () => {
     );
     expect(prisma.quantRun.create).not.toHaveBeenCalled();
     expect(result).toMatchObject({ id: "run-1", cacheHit: true, sourceRunId: "run-1" });
+  });
+
+  it("serializes cache lookup and creation by tenant fingerprint", async () => {
+    await createPortfolioQuantRun(context, submission);
+
+    expect(prisma.$executeRaw).toHaveBeenCalledOnce();
+    expect(prisma.quantRun.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: "organization-a",
+          strategyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+      }),
+    );
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.quantRun.findFirst.mock.invocationCallOrder[0],
+    );
   });
 
   it("cancels a queued run immediately inside the active organization", async () => {

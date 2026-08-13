@@ -44,6 +44,7 @@ def test_cash_dividend_adjusts_only_pre_ex_date_prices() -> None:
     )
 
     assert [row.close for row in result.rows] == [Decimal("90"), Decimal("90"), Decimal("95")]
+    assert [row.volume for row in result.rows] == [Decimal("100"), Decimal("100"), Decimal("100")]
     assert result.policy == "total_return"
 
 
@@ -67,7 +68,7 @@ def test_stock_dividend_and_rights_issue_use_theoretical_ex_price_factor() -> No
     )
 
     assert result.rows[0].close.quantize(Decimal("0.00000001")) == Decimal("80.76923077")
-    assert result.rows[0].volume.quantize(Decimal("0.0001")) == Decimal("123.8095")
+    assert result.rows[0].volume == Decimal("130.0")
     assert result.rows[1].close == Decimal("75")
 
 

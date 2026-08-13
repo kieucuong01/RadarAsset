@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from verify_market_ingestion import verify_health
+from verify_market_ingestion import recover_stale_scheduler_runs, verify_health
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +35,8 @@ def test_scheduler_wrapper_drains_retries_and_verifies_every_scheduled_batch() -
     assert '"--finish-run"' in source
     assert "$schedulerRunId = $null" in source
     assert source.rfind("& $taskVerificationPath") < source.rfind('"--finish-run"')
+    assert "finally" in source
+    assert "$schedulerFinished" in source
     assert "sync_corporate_actions.py" in source
     assert "publish_adjusted_datasets.py" in source
     assert '$Command -in @("daily", "all")' in source
@@ -74,6 +76,38 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
     assert "Exit 1" in wrapper
+
+
+def test_scheduler_start_recovers_abandoned_running_rows() -> None:
+    class Cursor:
+        rowcount = 2
+
+        def execute(self, query, params):
+            self.query = query
+            self.params = params
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Connection:
+        def __init__(self):
+            self.cursor_value = Cursor()
+
+        def cursor(self):
+            return self.cursor_value
+
+        def commit(self):
+            self.committed = True
+
+    connection = Connection()
+
+    assert recover_stale_scheduler_runs(connection, maximum_age_minutes=180) == 2
+    assert "status = 'failed'" in connection.cursor_value.query
+    assert connection.cursor_value.params == (180,)
+    assert connection.committed is True
 
 
 def test_quant_lab_mounts_bilingual_ingestion_health_dashboard() -> None:

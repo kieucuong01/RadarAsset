@@ -69,7 +69,26 @@ def load_health(connection: Any) -> dict[str, Any]:
     return dict(row)
 
 
+def recover_stale_scheduler_runs(connection: Any, *, maximum_age_minutes: int = 180) -> int:
+    if not 1 <= maximum_age_minutes <= 1440:
+        raise ValueError("Scheduler recovery age is invalid.")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE market_ingestion_scheduler_runs
+            SET status = 'failed', finished_at = NOW(), error_code = 'scheduler_abandoned'
+            WHERE status = 'running'
+              AND started_at < NOW() - (%s * INTERVAL '1 minute')
+            """,
+            (maximum_age_minutes,),
+        )
+        recovered = cursor.rowcount
+    connection.commit()
+    return recovered
+
+
 def start_scheduler_run(connection: Any, command: str) -> str:
+    recover_stale_scheduler_runs(connection)
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """

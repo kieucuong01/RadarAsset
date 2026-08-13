@@ -296,25 +296,25 @@ export async function createPortfolioQuantRun(
     PORTFOLIO_ENGINE_VERSION,
   );
   const datasetVersionIds = resolvedLegs.map((leg) => leg.datasetVersionId);
-  const cached = await getPrisma().quantRun.findFirst({
-    where: {
-      organizationId: context.organizationId,
-      status: "succeeded",
-      strategyHash: portfolioHash,
-      engineVersion: PORTFOLIO_ENGINE_VERSION,
-    },
-    orderBy: { finishedAt: "desc" },
-    include: runInclude(context.organizationId),
-  });
-  if (cached) {
-    return {
-      ...quantRunToResponse(cached),
-      cacheHit: true,
-      sourceRunId: cached.id,
-    };
-  }
-
   return getPrisma().$transaction(async (tx) => {
+    const lockKey = `${context.organizationId}:${PORTFOLIO_ENGINE_VERSION}:${portfolioHash}`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+    const cached = await tx.quantRun.findFirst({
+      where: {
+        organizationId: context.organizationId,
+        status: { in: ["queued", "running", "succeeded"] },
+        strategyHash: portfolioHash,
+        engineVersion: PORTFOLIO_ENGINE_VERSION,
+      },
+      orderBy: [{ status: "desc" }, { finishedAt: "desc" }, { createdAt: "desc" }],
+      include: runInclude(context.organizationId),
+    });
+    if (cached) {
+      const response = quantRunToResponse(cached);
+      return cached.status === "succeeded"
+        ? { ...response, cacheHit: true, sourceRunId: cached.id }
+        : response;
+    }
     const run = await tx.quantRun.create({
       data: {
         organizationId: context.organizationId,

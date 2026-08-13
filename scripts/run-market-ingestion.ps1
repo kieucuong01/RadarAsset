@@ -36,11 +36,13 @@ $taskExitCode = 0
 $env:QUANT_WORKER_ORGANIZATION_SLUG = $OrganizationSlug
 $env:QUANT_WORKER_USER_EMAIL = $UserEmail
 $schedulerRunId = $null
+$schedulerFinished = $false
 if (-not $DryRun) {
     $schedulerRun = & $taskPython $taskOperationsCliPath "--env-file" $taskEnvPath "--start-command" $Command
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $schedulerRunId = ($schedulerRun | ConvertFrom-Json).runId
 }
+try {
 Push-Location $taskRuntimeDirectory
 try {
     & $taskPython @taskArguments
@@ -102,9 +104,17 @@ if (-not $DryRun) {
     if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0 -and $taskExitCode -eq 0) {
         $taskExitCode = $LASTEXITCODE
     }
-    $schedulerStatus = if ($taskExitCode -eq 0) { "succeeded" } else { "failed" }
-    & $taskPython $taskOperationsCliPath "--env-file" $taskEnvPath "--finish-run" $schedulerRunId "--finish-status" $schedulerStatus
-    if ($LASTEXITCODE -ne 0 -and $taskExitCode -eq 0) { $taskExitCode = $LASTEXITCODE }
 }
-
+}
+catch {
+    if ($taskExitCode -eq 0) { $taskExitCode = 1 }
+}
+finally {
+    if (-not $DryRun -and $null -ne $schedulerRunId -and -not $schedulerFinished) {
+        $schedulerStatus = if ($taskExitCode -eq 0) { "succeeded" } else { "failed" }
+        & $taskPython $taskOperationsCliPath "--env-file" $taskEnvPath "--finish-run" $schedulerRunId "--finish-status" $schedulerStatus
+        $schedulerFinished = $LASTEXITCODE -eq 0
+        if (-not $schedulerFinished -and $taskExitCode -eq 0) { $taskExitCode = $LASTEXITCODE }
+    }
+}
 exit $taskExitCode

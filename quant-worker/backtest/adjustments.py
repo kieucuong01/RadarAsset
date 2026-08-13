@@ -23,12 +23,12 @@ class AdjustmentResult:
     skipped_unverified: int
 
 
-def _event_factor(
+def _event_factors(
     previous_close: Decimal,
     actions: list[CorporateActionRecord],
     *,
     cash_value_scale: Decimal,
-) -> Decimal:
+) -> tuple[Decimal, Decimal]:
     cash = sum(
         (
             item.cash_per_share
@@ -70,10 +70,13 @@ def _event_factor(
         theoretical_ex_price = (
             previous_close - cash + subscription_value
         ) / (Decimal(1) + distribution + subscription_ratio)
-        factor = theoretical_ex_price / previous_close
-    if not factor.is_finite() or factor <= 0:
+        price_factor = theoretical_ex_price / previous_close
+        quantity_factor = Decimal(1) + distribution + subscription_ratio
+    if not price_factor.is_finite() or price_factor <= 0:
         raise AdjustmentUnavailable("Corporate action produced an invalid adjustment factor.")
-    return factor
+    if not quantity_factor.is_finite() or quantity_factor <= 0:
+        raise AdjustmentUnavailable("Corporate action produced an invalid quantity factor.")
+    return price_factor, quantity_factor
 
 
 def adjust_total_return_bars(
@@ -103,7 +106,7 @@ def adjust_total_return_bars(
             continue
         by_date.setdefault(item.ex_right_date, []).append(item)
 
-    factors: list[tuple[date, Decimal]] = []
+    factors: list[tuple[date, Decimal, Decimal]] = []
     for ex_date in sorted(by_date):
         previous = [
             row
@@ -115,7 +118,7 @@ def adjust_total_return_bars(
         factors.append(
             (
                 ex_date,
-                _event_factor(
+                *_event_factors(
                     previous[-1].close,
                     by_date[ex_date],
                     cash_value_scale=cash_value_scale,
@@ -128,20 +131,22 @@ def adjust_total_return_bars(
         context.prec = 36
         for row in normalized:
             market_date = timestamp_to_market_date(row.timestamp, "vn_equity")
-            cumulative = Decimal(1)
-            for ex_date, factor in factors:
+            price_cumulative = Decimal(1)
+            quantity_cumulative = Decimal(1)
+            for ex_date, price_factor, quantity_factor in factors:
                 if market_date < ex_date:
-                    cumulative *= factor
+                    price_cumulative *= price_factor
+                    quantity_cumulative *= quantity_factor
             adjusted.append(
                 Bar(
                     asset=row.asset,
                     timestamp=row.timestamp,
                     timeframe=row.timeframe,
-                    open=row.open * cumulative,
-                    high=row.high * cumulative,
-                    low=row.low * cumulative,
-                    close=row.close * cumulative,
-                    volume=None if row.volume is None else row.volume / cumulative,
+                    open=row.open * price_cumulative,
+                    high=row.high * price_cumulative,
+                    low=row.low * price_cumulative,
+                    close=row.close * price_cumulative,
+                    volume=None if row.volume is None else row.volume * quantity_cumulative,
                     source=f"{row.source}:total-return-adjusted",
                 )
             )

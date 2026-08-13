@@ -99,7 +99,7 @@ def claim_next_evaluation(connection: Any, worker_id: str, lease_seconds: int = 
             """
             SELECT assignment.portfolio_id, assignment.asset_id, assignment.strategy_version_id,
                    assignment.parameters, assignment.last_evaluated_bar_at, assignment.state,
-                   portfolio.user_id, asset.symbol, version.code, version.version,
+                   portfolio.user_id, asset.symbol, asset.market, version.code, version.version,
                    version.implementation_hash,
                    published.checksum, run.parameters AS run_parameters
             FROM strategy_assignments assignment
@@ -133,7 +133,7 @@ def claim_next_evaluation(connection: Any, worker_id: str, lease_seconds: int = 
         bars = [Bar(asset=str(row["symbol"]), timestamp=bar["ts"], timeframe=str(bar["timeframe"]), open=Decimal(str(bar["open"])), high=Decimal(str(bar["high"])), low=Decimal(str(bar["low"])), close=Decimal(str(bar["close"])), volume=None if bar["volume"] is None else Decimal(str(bar["volume"])), source=str(bar["source"])) for bar in cursor.fetchall()]
     params = row["run_parameters"] if isinstance(row["run_parameters"], dict) else {}
     costs = params.get("assumptions", {}).get("marketCosts", {}) if isinstance(params, dict) else {}
-    market_cost = next(iter(costs.values()), {}) if isinstance(costs, dict) else {}
+    market_cost = costs.get(str(row["market"]), {}) if isinstance(costs, dict) else {}
     return EvaluationWork(str(job["id"]), str(job["organization_id"]), str(job["assignment_id"]), str(row["portfolio_id"]), str(row["user_id"]), str(row["asset_id"]), str(row["symbol"]), str(row["strategy_version_id"]), str(row["code"]), str(row["version"]), str(row["implementation_hash"]), dict(row["parameters"] or {}), str(job["dataset_version_id"]), str(row["checksum"]), row["last_evaluated_bar_at"], dict(row["state"] or {}), bars, Decimal(str(market_cost.get("commissionBps", 0))), Decimal(str(market_cost.get("sellTaxBps", 0))), Decimal(str(market_cost.get("slippageBps", 0))))
 
 

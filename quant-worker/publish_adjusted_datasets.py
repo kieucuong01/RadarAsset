@@ -12,12 +12,15 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backtest.adjusted_publication import build_adjusted_publication
+from backtest.adjustments import AdjustmentUnavailable
 from backtest.corporate_actions import CorporateActionRecord
 from backtest.publication import PostgresDatasetPublisher, prepare_dataset_publication
 from ingest_market_data import load_database_url, psycopg_connection_url
 
 
-def _load_actions(connection: Any, asset: str) -> tuple[list[CorporateActionRecord], bool]:
+def _load_actions(
+    connection: Any, asset: str
+) -> tuple[list[CorporateActionRecord], bool, date | None, date | None]:
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """
@@ -68,7 +71,47 @@ def _load_actions(connection: Any, asset: str) -> tuple[list[CorporateActionReco
         )
         for row in rows
     ]
-    return actions, complete
+    coverage_start = coverage.get("start")
+    coverage_end = coverage.get("end")
+    return (
+        actions,
+        complete,
+        date.fromisoformat(coverage_start) if isinstance(coverage_start, str) else None,
+        date.fromisoformat(coverage_end) if isinstance(coverage_end, str) else None,
+    )
+
+
+def _deactivate_adjusted_dataset(connection: Any, asset: str, timeframe: str) -> int:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE dataset_versions AS version
+            SET is_active = false
+            FROM datasets AS dataset
+            JOIN assets AS asset ON asset.id = dataset.asset_id
+            WHERE version.dataset_id = dataset.id
+              AND asset.symbol = %s
+              AND dataset.timeframe = %s
+              AND dataset.adjustment_policy = 'total_return'
+              AND version.is_active = true
+            """,
+            (asset, timeframe),
+        )
+        return cursor.rowcount
+
+
+def _coverage_contains_raw(
+    action_start: date | None,
+    action_end: date | None,
+    raw_start: date,
+    raw_end: date,
+) -> bool:
+    return (
+        action_start is not None
+        and action_end is not None
+        and action_start <= raw_start
+        and action_end >= raw_end
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -79,6 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     url = psycopg_connection_url(load_database_url(Path(args.env_file)))
     published = 0
     skipped = 0
+    blocked = 0
     with psycopg.connect(url, autocommit=False) as connection:
         publisher = PostgresDatasetPublisher(connection)
         with connection.cursor(row_factory=dict_row) as cursor:
@@ -99,9 +143,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             symbol = str(candidate["symbol"])
             timeframe = str(candidate["timeframe"])
             raw = publisher.load_active(symbol, timeframe, "raw")
-            actions, complete = _load_actions(connection, symbol)
-            if raw is None or not complete:
+            actions, complete, action_start, action_end = _load_actions(connection, symbol)
+            if raw is None:
                 skipped += 1
+                continue
+            raw_start = raw.rows[0].timestamp.date()
+            raw_end = raw.rows[-1].timestamp.date()
+            if not complete or not _coverage_contains_raw(
+                action_start, action_end, raw_start, raw_end
+            ):
+                with connection.transaction():
+                    _deactivate_adjusted_dataset(connection, symbol, timeframe)
+                blocked += 1
                 continue
             metadata = raw.source_metadata
             prepared_raw = prepare_dataset_publication(
@@ -119,16 +172,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 terms_url="https://vnstocks.com/docs/vnstock",
                 source_metadata=metadata,
             )
-            adjusted = build_adjusted_publication(
-                prepared_raw,
-                raw_dataset_version_id=raw.dataset_version_id,
-                actions=actions,
-                corporate_action_coverage_complete=complete,
-            )
+            try:
+                adjusted = build_adjusted_publication(
+                    prepared_raw,
+                    raw_dataset_version_id=raw.dataset_version_id,
+                    actions=actions,
+                    corporate_action_coverage_complete=complete,
+                )
+            except AdjustmentUnavailable:
+                with connection.transaction():
+                    _deactivate_adjusted_dataset(connection, symbol, timeframe)
+                blocked += 1
+                continue
             with connection.transaction():
                 publisher.publish_if_changed(adjusted)
             published += 1
-    print(json.dumps({"status": "succeeded", "published": published, "skipped": skipped}))
+    print(
+        json.dumps(
+            {"status": "succeeded", "published": published, "skipped": skipped, "blocked": blocked}
+        )
+    )
     return 0
 
 
