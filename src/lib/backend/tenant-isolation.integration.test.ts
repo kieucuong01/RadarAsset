@@ -227,6 +227,353 @@ describe("database tenant isolation", () => {
     expect(runsB.map((run) => run.id)).toEqual([fixtures.quantRunBId]);
   });
 
+  it("isolates Smart Insights preferences and briefings when one tenant is deleted", async () => {
+    const userAId = randomUUID();
+    const userBId = randomUUID();
+    const organizationAId = randomUUID();
+    const organizationBId = randomUUID();
+    const signalAId = randomUUID();
+    const signalBId = randomUUID();
+
+    try {
+      await prisma.appUser.createMany({
+        data: [
+          { id: userAId, email: `insights-a-${suffix}@example.test`, name: "Insights A" },
+          { id: userBId, email: `insights-b-${suffix}@example.test`, name: "Insights B" },
+        ],
+      });
+      await prisma.organization.createMany({
+        data: [
+          { id: organizationAId, name: "Insights A", slug: `insights-a-${suffix}` },
+          { id: organizationBId, name: "Insights B", slug: `insights-b-${suffix}` },
+        ],
+      });
+      await prisma.membership.createMany({
+        data: [
+          { organizationId: organizationAId, userId: userAId, role: "editor" },
+          { organizationId: organizationBId, userId: userBId, role: "editor" },
+        ],
+      });
+      await prisma.userInsightPreference.createMany({
+        data: [
+          {
+            organizationId: organizationAId,
+            userId: userAId,
+            markets: ["crypto"],
+            investmentHorizon: "swing",
+            riskTolerance: "balanced",
+          },
+          {
+            organizationId: organizationBId,
+            userId: userBId,
+            markets: ["gold"],
+            investmentHorizon: "long_term",
+            riskTolerance: "conservative",
+          },
+        ],
+      });
+      await prisma.signalSnapshot.createMany({
+        data: [
+          {
+            id: signalAId,
+            market: "crypto",
+            effectiveAt: new Date("2026-08-13T00:00:00.000Z"),
+            methodologyVersion: "integration-v1",
+            signalType: "risk_regime",
+            label: "neutral",
+            dataConfidence: "90",
+            coverage: "1",
+            status: "active",
+            idempotencyKey: `insights-a-${suffix}`,
+          },
+          {
+            id: signalBId,
+            market: "gold",
+            effectiveAt: new Date("2026-08-13T00:00:00.000Z"),
+            methodologyVersion: "integration-v1",
+            signalType: "risk_regime",
+            label: "neutral",
+            dataConfidence: "90",
+            coverage: "1",
+            status: "active",
+            idempotencyKey: `insights-b-${suffix}`,
+          },
+        ],
+      });
+
+      for (const tenant of [
+        { organizationId: organizationAId, userId: userAId, signalId: signalAId },
+        { organizationId: organizationBId, userId: userBId, signalId: signalBId },
+      ]) {
+        const researchRun = await prisma.researchRun.create({
+          data: {
+            organizationId: tenant.organizationId,
+            userId: tenant.userId,
+            source: "smart-insights",
+            kind: "daily_briefing",
+            status: "succeeded",
+          },
+        });
+        await prisma.dailyBriefing.create({
+          data: {
+            organizationId: tenant.organizationId,
+            userId: tenant.userId,
+            researchRunId: researchRun.id,
+            effectiveDate: new Date("2026-08-13T00:00:00.000Z"),
+            effectiveAt: new Date("2026-08-13T00:00:00.000Z"),
+            timezone: "Asia/Bangkok",
+            revision: 1,
+            fingerprint: `${tenant.organizationId}:2026-08-13:1`,
+            promptVersion: "quant-only-v1",
+            methodologyVersion: "integration-v1",
+            status: "quant_only",
+            dataConfidence: "90",
+            items: {
+              create: {
+                signalSnapshotId: tenant.signalId,
+                rank: 1,
+                section: "primary_change",
+                relevanceScore: "80",
+                timeHorizon: "daily",
+                suggestedCheckTemplate: "Review portfolio exposure",
+                explanationStatus: "unavailable",
+                confidence: "90",
+              },
+            },
+          },
+        });
+      }
+
+      const visibleToA = await prisma.dailyBriefing.findMany({
+        where: { organizationId: organizationAId, userId: userAId },
+        include: { items: true },
+      });
+      expect(visibleToA).toHaveLength(1);
+      expect(visibleToA[0]).toMatchObject({ organizationId: organizationAId });
+      expect(visibleToA[0]?.items).toHaveLength(1);
+
+      await prisma.organization.delete({ where: { id: organizationAId } });
+
+      await expect(
+        prisma.dailyBriefing.count({ where: { organizationId: organizationBId } }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.userInsightPreference.count({ where: { organizationId: organizationBId } }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.dailyBriefing.count({ where: { organizationId: organizationAId } }),
+      ).resolves.toBe(0);
+    } finally {
+      await prisma.organization.deleteMany({
+        where: { id: { in: [organizationAId, organizationBId] } },
+      });
+      await prisma.appUser.deleteMany({ where: { id: { in: [userAId, userBId] } } });
+      await prisma.signalSnapshot.deleteMany({ where: { id: { in: [signalAId, signalBId] } } });
+    }
+  });
+
+  it("rejects duplicate Smart Insights immutable and tenant-scoped keys", async () => {
+    const providerId = randomUUID();
+    const snapshotId = randomUUID();
+    const metricId = randomUUID();
+    const observationId = randomUUID();
+    const signalId = randomUUID();
+    const researchRunId = randomUUID();
+    const briefingId = randomUUID();
+    const observedAt = new Date("2026-08-13T01:00:00.000Z");
+
+    try {
+      await prisma.dataProvider.create({
+        data: { id: providerId, code: `smart-provider-${suffix}`, name: "Smart Provider" },
+      });
+      await prisma.insightRawSnapshot.create({
+        data: {
+          id: snapshotId,
+          providerId,
+          sourceUrl: "https://example.test/source",
+          observedAt,
+          contentHash: "a".repeat(64),
+          contentType: "application/json",
+          storageLocator: `smart-provider-${suffix}/2026/08/${"a".repeat(64)}.json.gz`,
+          parserVersion: "integration-v1",
+          status: "validated",
+        },
+      });
+      await expect(
+        prisma.insightRawSnapshot.create({
+          data: {
+            providerId,
+            sourceUrl: "https://example.test/source",
+            observedAt,
+            contentHash: "a".repeat(64),
+            contentType: "application/json",
+            storageLocator: "duplicate.json.gz",
+            parserVersion: "integration-v1",
+            status: "validated",
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      await prisma.metricDefinition.create({
+        data: {
+          id: metricId,
+          code: `crypto.integration.${suffix}`,
+          market: "crypto",
+          name: "Integration metric",
+          unit: "usd",
+          frequency: "daily",
+          methodologyVersion: "integration-v1",
+          freshnessSlaMinutes: 1_440,
+        },
+      });
+      await expect(
+        prisma.metricDefinition.create({
+          data: {
+            code: `crypto.integration.${suffix}`,
+            market: "crypto",
+            name: "Duplicate metric",
+            unit: "usd",
+            frequency: "daily",
+            methodologyVersion: "integration-v1",
+            freshnessSlaMinutes: 1_440,
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      const observation = {
+        metricDefinitionId: metricId,
+        providerId,
+        rawSnapshotId: snapshotId,
+        effectiveAt: observedAt,
+        observedAt,
+        revision: 1,
+        value: "10",
+        naturalKey: "b".repeat(64),
+        dimensionKey: "{}",
+        qualityStatus: "passed",
+      };
+      await prisma.metricObservation.create({ data: { id: observationId, ...observation } });
+      await expect(prisma.metricObservation.create({ data: observation })).rejects.toMatchObject({
+        code: "P2002",
+      });
+
+      await prisma.signalSnapshot.create({
+        data: {
+          id: signalId,
+          market: "crypto",
+          effectiveAt: observedAt,
+          methodologyVersion: "integration-v1",
+          signalType: "risk_regime",
+          label: "neutral",
+          dataConfidence: "90",
+          coverage: "1",
+          status: "active",
+          idempotencyKey: `signal-${suffix}`,
+        },
+      });
+      await expect(
+        prisma.signalSnapshot.create({
+          data: {
+            market: "crypto",
+            effectiveAt: observedAt,
+            methodologyVersion: "integration-v1",
+            signalType: "risk_regime",
+            label: "neutral",
+            dataConfidence: "90",
+            coverage: "1",
+            status: "active",
+            idempotencyKey: `signal-${suffix}`,
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      await prisma.userInsightPreference.create({
+        data: {
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          investmentHorizon: "swing",
+          riskTolerance: "balanced",
+        },
+      });
+      await expect(
+        prisma.userInsightPreference.create({
+          data: {
+            organizationId: fixtures.organizationAId,
+            userId: fixtures.userAId,
+            investmentHorizon: "long_term",
+            riskTolerance: "conservative",
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      await prisma.researchRun.create({
+        data: {
+          id: researchRunId,
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          source: "smart-insights",
+          kind: "daily_briefing",
+          status: "succeeded",
+        },
+      });
+      await prisma.dailyBriefing.create({
+        data: {
+          id: briefingId,
+          organizationId: fixtures.organizationAId,
+          userId: fixtures.userAId,
+          researchRunId,
+          effectiveDate: new Date("2026-08-13T00:00:00.000Z"),
+          effectiveAt: observedAt,
+          timezone: "Asia/Bangkok",
+          revision: 1,
+          fingerprint: `uniqueness-${suffix}`,
+          promptVersion: "quant-only-v1",
+          methodologyVersion: "integration-v1",
+          status: "quant_only",
+          dataConfidence: "90",
+          items: {
+            create: {
+              signalSnapshotId: signalId,
+              rank: 1,
+              section: "primary_change",
+              relevanceScore: "80",
+              timeHorizon: "daily",
+              suggestedCheckTemplate: "Review portfolio exposure",
+              explanationStatus: "unavailable",
+              confidence: "90",
+            },
+          },
+        },
+      });
+      await expect(
+        prisma.dailyBriefingItem.create({
+          data: {
+            dailyBriefingId: briefingId,
+            signalSnapshotId: signalId,
+            rank: 1,
+            section: "risk_alert",
+            relevanceScore: "70",
+            timeHorizon: "daily",
+            suggestedCheckTemplate: "Review risk limits",
+            explanationStatus: "unavailable",
+            confidence: "80",
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+    } finally {
+      await prisma.dailyBriefing.deleteMany({ where: { id: briefingId } });
+      await prisma.researchRun.deleteMany({ where: { id: researchRunId } });
+      await prisma.userInsightPreference.deleteMany({
+        where: { organizationId: fixtures.organizationAId, userId: fixtures.userAId },
+      });
+      await prisma.metricObservation.deleteMany({ where: { id: observationId } });
+      await prisma.insightRawSnapshot.deleteMany({ where: { id: snapshotId } });
+      await prisma.metricDefinition.deleteMany({ where: { id: metricId } });
+      await prisma.signalSnapshot.deleteMany({ where: { id: signalId } });
+      await prisma.dataProvider.deleteMany({ where: { id: providerId } });
+    }
+  });
+
   it("persists an immutable strategy version link on a tenant quant run", async () => {
     const strategyId = randomUUID();
     try {
