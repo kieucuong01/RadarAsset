@@ -97,6 +97,30 @@ Start in:             <repository root>
 The repository documents scheduler commands but does not register operating-system tasks
 automatically. Deployment must configure and observe its own cron/platform schedule.
 
+## Smart Insights Collection
+
+Smart Insights stores normalized quantitative observations and private, content-addressed raw
+artifacts. Firecrawl runs as a separate private service; set `FIRECRAWL_API_URL` to its local or
+private HTTPS endpoint. The worker sends only code-owned allow-listed URLs and never accepts a URL
+from an API request or scheduler argument.
+
+Verify a registered source without fetching or writing data:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -DryRun
+```
+
+Run enabled daily collectors after applying the Smart Insights migration:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
+```
+
+No source is enabled until its production parser passes a bounded live smoke. The repository only
+documents scheduler commands and does not register a Windows scheduled task automatically. Source
+health is available to authenticated research viewers at `GET /api/smart-insights/data-health`;
+raw bodies, artifact paths, and provider diagnostics are not returned.
+
 ## Investor Intelligence
 
 The local v1 backend stores research in PostgreSQL:

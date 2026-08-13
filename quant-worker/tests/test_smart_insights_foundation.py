@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
+from collect_smart_insights import run_collection, select_sources
 from smart_insights.contracts import (
     CollectionMode,
     LicenseScope,
@@ -422,3 +423,23 @@ def test_validation_rejects_duplicates_unknown_metrics_and_source_row_overflow()
             source_for_code("alternative-fng"), [row, row]
         )
     assert duplicate.value.code == "DUPLICATE_CONFLICT"
+
+
+def test_cli_selection_never_accepts_a_url_or_cross_schedule_source() -> None:
+    assert select_sources("daily", source_code="alternative-fng") == (
+        source_for_code("alternative-fng"),
+    )
+    with pytest.raises(ValueError, match="registered"):
+        select_sources("daily", source_code="https://evil.invalid")
+    with pytest.raises(ValueError, match="schedule"):
+        select_sources("weekly", source_code="alternative-fng")
+
+
+def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> None:
+    outcomes, exit_code = run_collection(
+        "daily", source_code=None, dry_run=True, collectors={}
+    )
+
+    assert exit_code == 0
+    assert len(outcomes) == 11
+    assert all(outcome.status == "dry_run" for outcome in outcomes)

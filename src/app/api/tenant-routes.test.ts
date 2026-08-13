@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   listQuantRuns: vi.fn(),
   getQuantRun: vi.fn(),
   loadMarketDataHealth: vi.fn(),
+  loadSmartInsightsDataHealth: vi.fn(),
   loadResearchRuns: vi.fn(),
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
@@ -55,6 +56,10 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
 
 vi.mock("@/lib/backend/worker-context", () => ({
   getWorkerImportContext: mocks.getWorkerImportContext,
+}));
+
+vi.mock("@/lib/backend/smart-insights-data-health", () => ({
+  loadSmartInsightsDataHealth: mocks.loadSmartInsightsDataHealth,
 }));
 
 vi.mock("@/lib/backend/strategy-forward-tests", () => ({
@@ -112,6 +117,7 @@ import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
+import { GET as smartInsightsDataHealthGet } from "./smart-insights/data-health/route";
 import { GET as quantAssetsGet } from "./quant/assets/route";
 import { GET as quantDataReadinessGet } from "./quant/data-readiness/route";
 import { POST as quantOptimizePost } from "./quant/allocations/optimize/route";
@@ -145,6 +151,7 @@ describe("tenant API authorization", () => {
     mocks.removeWatchlistItem.mockResolvedValue(true);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
+    mocks.loadSmartInsightsDataHealth.mockResolvedValue({ generatedAt: "now", sources: [] });
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
     mocks.loadQuantDataReadiness.mockResolvedValue({
       readyForBacktest: true,
@@ -543,6 +550,14 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
     expect(mocks.loadMarketDataHealth).toHaveBeenCalledOnce();
+  });
+
+  it("allows viewer Smart Insights health reads through research capability", async () => {
+    const response = await smartInsightsDataHealthGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "research", "read");
+    expect(mocks.loadSmartInsightsDataHealth).toHaveBeenCalledOnce();
   });
 
   it("does not expose market data health without a tenant session", async () => {
