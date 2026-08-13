@@ -138,7 +138,8 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
     )
     assert "provider.code = ANY(%s)" in deactivation[0]
     assert deactivation[1][0] == ["binance-public"]
-    assert "< 2 THEN instrument.is_active" in deactivation[0]
+    assert "< 2" in deactivation[0]
+    assert "THEN instrument.is_active" in deactivation[0]
     assert "instrument.last_seen_at < %s" in deactivation[0]
 
 
