@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -15,6 +15,7 @@ from backtest.providers import (
     ProviderInstrumentDescriptor,
     VnstockAdapter,
 )
+from backtest.market_calendar import HOSE_TIMEZONE, is_session_day
 from backtest.catalog import FEEDS
 from ingest_market_data import load_database_url, psycopg_connection_url
 
@@ -34,6 +35,67 @@ PROVIDERS = {
         "https://www.dukascopy.com/swiss/english/marketwatch/historical/",
     ),
 }
+
+
+FRESHNESS_TOLERANCE = {
+    "1h": timedelta(minutes=90),
+    "1d": timedelta(hours=36),
+}
+
+
+def _latest_closed_bar_open(market: str, timeframe: str, now: datetime) -> datetime:
+    if now.tzinfo is None:
+        raise ValueError("Queue timestamp must be timezone-aware.")
+    now = now.astimezone(timezone.utc)
+    if market == "crypto_spot":
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        return current_hour - (timedelta(hours=1) if timeframe == "1h" else timedelta(days=1))
+
+    if market == "vn_equity":
+        local_day = now.astimezone(HOSE_TIMEZONE).date()
+        for day_offset in range(14):
+            session_day = local_day - timedelta(days=day_offset)
+            if not is_session_day(session_day, market):
+                continue
+            if timeframe == "1d":
+                session_close = datetime.combine(
+                    session_day, time(15), tzinfo=HOSE_TIMEZONE
+                ).astimezone(timezone.utc)
+                if session_close <= now:
+                    return datetime.combine(
+                        session_day, time(0), tzinfo=HOSE_TIMEZONE
+                    ).astimezone(timezone.utc)
+            else:
+                for hour in (7, 6, 4, 3, 2):
+                    candidate = datetime.combine(
+                        session_day, time(hour), tzinfo=timezone.utc
+                    )
+                    if candidate + timedelta(hours=1) <= now:
+                        return candidate
+        raise ValueError("Unable to resolve the latest closed HOSE bar.")
+
+    candidate = (
+        now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+        if timeframe == "1h"
+        else now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    )
+    step = timedelta(hours=1) if timeframe == "1h" else timedelta(days=1)
+    while not is_session_day(candidate.date(), market):
+        candidate -= step
+    return candidate
+
+
+def market_timeframe_stale_cutoffs(now: datetime) -> dict[tuple[str, str], datetime]:
+    return {
+        (market, timeframe): _latest_closed_bar_open(market, timeframe, now)
+        - FRESHNESS_TOLERANCE[timeframe]
+        for market, timeframes in {
+            "crypto_spot": ("1d", "1h"),
+            "vn_equity": ("1d", "1h"),
+            "metal_spot": ("1d",),
+        }.items()
+        for timeframe in timeframes
+    }
 
 
 def load_service_tenant(env_file: Path = Path(".env.local")) -> tuple[str, str]:
@@ -289,15 +351,20 @@ def queue_market_ingestion_requests(
     command: str,
     organization_slug: str = "demo-workspace",
     user_email: str = "demo@radarasset.local",
+    now: datetime | None = None,
 ) -> int:
     if command not in {"all", "daily", "hourly"}:
         raise ValueError("Unsupported bulk ingestion command.")
     timeframe_filter = {"all": "all", "daily": "1d", "hourly": "1h"}[command]
+    cutoffs = market_timeframe_stale_cutoffs(now or datetime.now(timezone.utc))
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                WITH requester AS (
+                WITH queue_lock AS MATERIALIZED (
+                  SELECT pg_advisory_xact_lock(hashtext('market-ingestion-due-queue'))
+                ),
+                requester AS (
                   SELECT org.id AS organization_id, app_user.id AS user_id
                   FROM organizations AS org
                   JOIN app_users AS app_user ON app_user.email = %s
@@ -312,10 +379,32 @@ def queue_market_ingestion_requests(
                   CROSS JOIN LATERAL (
                     VALUES ('1d'), ('1h')
                   ) AS timeframe(timeframe)
+                  LEFT JOIN LATERAL (
+                    SELECT version.coverage_end
+                    FROM datasets AS dataset
+                    JOIN dataset_versions AS version ON version.dataset_id = dataset.id
+                    WHERE dataset.asset_id = asset.id
+                      AND dataset.timeframe = timeframe.timeframe
+                      AND dataset.adjustment_policy = 'raw'
+                      AND version.is_active = true
+                    ORDER BY version.published_at DESC
+                    LIMIT 1
+                  ) AS active_raw ON true
                   WHERE provider.status = 'active'
                     AND pi.is_active = true
                     AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
+                    AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
+                    AND (
+                      active_raw.coverage_end IS NULL
+                      OR active_raw.coverage_end < CASE
+                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1h' THEN %s
+                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1d' THEN %s
+                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1h' THEN %s
+                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1d' THEN %s
+                        WHEN asset.market = 'metal_spot' AND timeframe.timeframe = '1d' THEN %s
+                      END
+                    )
                     AND (%s = 'all' OR %s = timeframe.timeframe)
                 )
                 INSERT INTO market_ingestion_requests (
@@ -328,6 +417,7 @@ def queue_market_ingestion_requests(
                   'queued', 0, NOW(), NOW(), NOW()
                 FROM requester
                 CROSS JOIN candidates
+                CROSS JOIN queue_lock
                 WHERE NOT EXISTS (
                   SELECT 1
                   FROM market_ingestion_requests AS existing
@@ -337,8 +427,19 @@ def queue_market_ingestion_requests(
                     AND existing.timeframe = candidates.timeframe
                     AND existing.status IN ('queued', 'running')
                 )
+                ON CONFLICT DO NOTHING
                 """,
-                (user_email, organization_slug, timeframe_filter, timeframe_filter),
+                (
+                    user_email,
+                    organization_slug,
+                    cutoffs[("crypto_spot", "1h")],
+                    cutoffs[("crypto_spot", "1d")],
+                    cutoffs[("vn_equity", "1h")],
+                    cutoffs[("vn_equity", "1d")],
+                    cutoffs[("metal_spot", "1d")],
+                    timeframe_filter,
+                    timeframe_filter,
+                ),
             )
             return cursor.rowcount
 

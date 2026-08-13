@@ -276,6 +276,32 @@ def test_drain_processes_until_idle_without_sleeping() -> None:
     assert repository.swept == 1
 
 
+def test_one_provider_failure_does_not_block_the_next_request() -> None:
+    failed = request()
+    succeeded = QueuedIngestionRequest(
+        **{**request().__dict__, "id": "request-2", "provider_code": "vnstock-vci-free"}
+    )
+    repository = FakeRequestRepository([failed, succeeded])
+
+    def provider_factory(code: str) -> FakeProvider:
+        if code == "binance-public":
+            return FakeProvider(ProviderUnavailableError("rate_limited", "bounded"))
+        return FakeProvider(bars())
+
+    result = process_ingestion_backlog(
+        repository,
+        provider_factory,
+        batch_limit=2,
+        drain=False,
+        max_total=2,
+        sleep=lambda _seconds: None,
+        now=NOW,
+    )
+
+    assert result == {"status": "partial_failure", "processed": 2, "failed": 1}
+    assert repository.completed == [("request-2", "eth-1h-version")]
+
+
 def test_request_repository_sweeps_expired_exhausted_leases() -> None:
     import inspect
 

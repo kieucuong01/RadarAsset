@@ -1,5 +1,8 @@
+from datetime import datetime, timezone
+
 from backtest.providers import ProviderInstrumentDescriptor
 from sync_provider_instruments import (
+    market_timeframe_stale_cutoffs,
     load_service_tenant,
     queue_market_ingestion_requests,
     select_provider_instruments,
@@ -90,9 +93,13 @@ def test_bulk_queue_selects_supported_timeframes_for_all_synced_instruments() ->
     query, params = connection.cursor_instance.queries[0]
     assert "provider_instruments" in query
     assert "market_ingestion_requests" in query
-    assert params == ("demo@radarasset.local", "demo-workspace", "all", "all")
+    assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
+    assert params[-2:] == ("all", "all")
     assert "dukascopy-public" in query
     assert "NOT (provider.code = 'msn-via-vnstock'" not in query
+    assert "active_raw.coverage_end IS NULL" in query
+    assert "pg_advisory_xact_lock" in query
+    assert "ON CONFLICT DO NOTHING" in query
 
 
 def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() -> None:
@@ -133,7 +140,47 @@ def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
 
     query, params = connection.cursor_instance.queries[0]
     assert "pi.is_active = true" in query
-    assert params == ("demo@radarasset.local", "demo-workspace", "1d", "1d")
+    assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
+    assert params[-2:] == ("1d", "1d")
+
+
+def test_due_cutoffs_follow_closed_crypto_and_hose_sessions() -> None:
+    now = datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc)
+
+    cutoffs = market_timeframe_stale_cutoffs(now)
+
+    assert cutoffs[("crypto_spot", "1h")] == datetime(
+        2026, 8, 14, 6, 30, tzinfo=timezone.utc
+    )
+    assert cutoffs[("vn_equity", "1h")] == datetime(
+        2026, 8, 14, 5, 30, tzinfo=timezone.utc
+    )
+    assert cutoffs[("vn_equity", "1d")] == datetime(
+        2026, 8, 12, 5, 0, tzinfo=timezone.utc
+    )
+
+
+def test_due_cutoffs_use_previous_hose_session_on_market_holiday() -> None:
+    now = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
+
+    cutoffs = market_timeframe_stale_cutoffs(now)
+
+    assert cutoffs[("vn_equity", "1h")] == datetime(
+        2026, 8, 31, 5, 30, tzinfo=timezone.utc
+    )
+
+
+def test_bulk_queue_excludes_unsupported_xau_hourly_identity() -> None:
+    connection = FakeConnection()
+
+    queue_market_ingestion_requests(
+        connection,
+        command="hourly",
+        now=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+    )
+
+    query, _params = connection.cursor_instance.queries[0]
+    assert "NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')" in query
 
 
 def test_catalog_cli_uses_configured_service_tenant_for_scheduled_queue(monkeypatch) -> None:

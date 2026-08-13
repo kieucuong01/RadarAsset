@@ -18,6 +18,7 @@ from backtest.ingestion_repository import (
 )
 from backtest.models import Bar
 from backtest.publication import prepare_dataset_publication
+from sync_provider_instruments import queue_market_ingestion_requests
 
 
 def _test_database_url() -> str:
@@ -342,4 +343,114 @@ def test_request_worker_heartbeat_and_lease_renewal_round_trip() -> None:
             cursor.execute("DELETE FROM data_providers WHERE id = %s", (provider_id,))
             cursor.execute("DELETE FROM organizations WHERE id = %s", (organization_id,))
             cursor.execute("DELETE FROM app_users WHERE id = %s", (user_id,))
+        connection.close()
+
+
+def test_due_queue_skips_fresh_and_enqueues_stale_crypto_hourly() -> None:
+    suffix = uuid4().hex[:8]
+    organization_id = str(uuid4())
+    user_id = str(uuid4())
+    asset_id = str(uuid4())
+    instrument_id = str(uuid4())
+    dataset_id = str(uuid4())
+    version_id = str(uuid4())
+    org_slug = f"qa-due-{suffix}"
+    email = f"qa-due-{suffix}@example.test"
+    now = datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc)
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM data_providers WHERE code = 'binance-public'"
+            )
+            provider = cursor.fetchone()
+            if provider is None:
+                pytest.skip("binance-public provider seed is required.")
+            provider_id = str(provider["id"])
+            cursor.execute(
+                "INSERT INTO app_users (id, email, name, created_at, updated_at) VALUES (%s, %s, 'QA due', NOW(), NOW())",
+                (user_id, email),
+            )
+            cursor.execute(
+                "INSERT INTO organizations (id, name, slug, created_at) VALUES (%s, 'QA due', %s, NOW())",
+                (organization_id, org_slug),
+            )
+            cursor.execute(
+                """
+                INSERT INTO assets (
+                  id, symbol, canonical_key, name, asset_class, market, timezone,
+                  currency, listing_status, created_at, updated_at
+                ) VALUES (%s, %s, %s, 'QA due', 'crypto', 'crypto_spot', 'UTC',
+                          'USDT', 'active', NOW(), NOW())
+                """,
+                (asset_id, f"QD{suffix}", f"QA:DUE:{suffix}"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO provider_instruments (
+                  id, provider_id, asset_id, provider_symbol, is_active,
+                  last_seen_at, created_at
+                ) VALUES (%s, %s, %s, %s, true, NOW(), NOW())
+                """,
+                (instrument_id, provider_id, asset_id, f"QD{suffix}USDT"),
+            )
+            cursor.execute(
+                "INSERT INTO datasets (id, asset_id, timeframe, adjustment_policy, created_at) VALUES (%s, %s, '1h', 'raw', NOW())",
+                (dataset_id, asset_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO dataset_versions (
+                  id, dataset_id, provider_id, version, checksum, coverage_start,
+                  coverage_end, row_count, is_active, published_at
+                ) VALUES (%s, %s, %s, 1, %s, %s, %s, 1, true, NOW())
+                """,
+                (
+                    version_id,
+                    dataset_id,
+                    provider_id,
+                    f"qa-due-{suffix}",
+                    now - timedelta(days=1),
+                    datetime(2026, 8, 14, 8, tzinfo=timezone.utc),
+                ),
+            )
+
+        assert queue_market_ingestion_requests(
+            connection,
+            command="hourly",
+            organization_slug=org_slug,
+            user_email=email,
+            now=now,
+        ) >= 0
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) AS count FROM market_ingestion_requests WHERE organization_id = %s AND provider_instrument_id = %s",
+                (organization_id, instrument_id),
+            )
+            assert cursor.fetchone()["count"] == 0
+            cursor.execute(
+                "UPDATE dataset_versions SET coverage_end = %s WHERE id = %s",
+                (datetime(2026, 8, 14, 5, tzinfo=timezone.utc), version_id),
+            )
+
+        assert queue_market_ingestion_requests(
+            connection,
+            command="hourly",
+            organization_slug=org_slug,
+            user_email=email,
+            now=now,
+        ) >= 1
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT status FROM market_ingestion_requests WHERE organization_id = %s AND provider_instrument_id = %s",
+                (organization_id, instrument_id),
+            )
+            assert cursor.fetchone()["status"] == "queued"
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM organizations WHERE id = %s", (organization_id,))
+            cursor.execute("DELETE FROM app_users WHERE id = %s", (user_id,))
+            cursor.execute("DELETE FROM assets WHERE id = %s", (asset_id,))
         connection.close()
