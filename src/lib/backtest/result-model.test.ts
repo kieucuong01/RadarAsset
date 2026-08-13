@@ -205,8 +205,7 @@ describe("portfolio backtest result model", () => {
         outOfSamplePositiveFoldPct: 100,
         sampleAdequacy: "adequate",
         warnings: [],
-        disclaimer:
-          "Anchored walk-forward selection.",
+        disclaimer: "Anchored walk-forward selection.",
         overallStatus: "mixed",
         parameterStability: {
           status: "not_evaluated",

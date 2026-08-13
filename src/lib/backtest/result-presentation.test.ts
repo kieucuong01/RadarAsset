@@ -12,7 +12,9 @@ import {
 } from "./result-presentation";
 
 it("surfaces the combined fragile classification ahead of parameter-only status", () => {
-  expect(robustnessStatus({ overallStatus: "fragile", parameterStability: { status: "stable" } })).toBe("fragile");
+  expect(
+    robustnessStatus({ overallStatus: "fragile", parameterStability: { status: "stable" } }),
+  ).toBe("fragile");
   expect(robustnessStatus({ parameterStability: { status: "mixed" } })).toBe("mixed");
 });
 

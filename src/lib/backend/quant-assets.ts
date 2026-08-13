@@ -365,11 +365,13 @@ export async function loadQuantDataReadiness(
       }
     : null;
   const lastSchedulerSuccessAt =
-    latestScheduler?.status === "succeeded" ? latestScheduler.finished_at?.toISOString() ?? null : null;
+    latestScheduler?.status === "succeeded"
+      ? (latestScheduler.finished_at?.toISOString() ?? null)
+      : null;
   const schedulerRecent = Boolean(
     latestScheduler?.status === "succeeded" &&
-      latestScheduler.finished_at &&
-      now.getTime() - latestScheduler.finished_at.getTime() <= 25 * 60 * 60 * 1000,
+    latestScheduler.finished_at &&
+    now.getTime() - latestScheduler.finished_at.getTime() <= 25 * 60 * 60 * 1000,
   );
 
   return {

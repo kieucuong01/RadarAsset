@@ -214,9 +214,11 @@ describe("backtest API client", () => {
   });
 
   it("requests cancellation through the tenant-scoped run resource", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ...queuedRun, status: "cancelled", progress: 100 })),
-    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ...queuedRun, status: "cancelled", progress: 100 })),
+      );
 
     const result = await cancelBacktestRun("run-1", fetcher);
 

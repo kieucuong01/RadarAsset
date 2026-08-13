@@ -36,7 +36,9 @@ export function QuantDataReadinessBadge({ className }: { className?: string }) {
     const controller = new AbortController();
     setLoading(true);
     setFailed(false);
-    void getQuantDataReadiness((input, init) => fetch(input, { ...init, signal: controller.signal }))
+    void getQuantDataReadiness((input, init) =>
+      fetch(input, { ...init, signal: controller.signal }),
+    )
       .then(setReadiness)
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
