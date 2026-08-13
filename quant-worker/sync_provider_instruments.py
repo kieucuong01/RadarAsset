@@ -149,15 +149,51 @@ def select_provider_instruments(
     return sorted(selected, key=lambda item: (item.canonical_symbol, item.market))
 
 
+def collect_provider_descriptors(
+    adapters: Iterable[tuple[str, Any]],
+) -> tuple[list[ProviderInstrumentDescriptor], list[str]]:
+    descriptors: list[ProviderInstrumentDescriptor] = []
+    failures: list[str] = []
+    for code, adapter in adapters:
+        try:
+            descriptors.extend(adapter.list_instruments())
+        except Exception:
+            failures.append(code)
+    return descriptors, failures
+
+
+def complete_catalog_provider_codes(
+    descriptors: Iterable[ProviderInstrumentDescriptor],
+) -> set[str]:
+    counts: dict[str, int] = {}
+    for descriptor in descriptors:
+        code = provider_code(descriptor)
+        counts[code] = counts.get(code, 0) + 1
+    return {
+        code
+        for code, minimum in {
+            "binance-public": 10,
+            "vnstock-vci-free": 100,
+            "dukascopy-public": 1,
+        }.items()
+        if counts.get(code, 0) >= minimum
+    }
+
+
 def sync_provider_instruments(
     connection: psycopg.Connection[Any],
     descriptors: Iterable[ProviderInstrumentDescriptor],
+    *,
+    observed_provider_codes: Iterable[str] | None = None,
 ) -> int:
     rows = sorted(
         select_provider_instruments(descriptors),
         key=lambda item: (provider_code(item), item.canonical_symbol),
     )
     observed_at = datetime.now(timezone.utc)
+    provider_codes = sorted(
+        set(observed_provider_codes or (provider_code(item) for item in rows))
+    )
     synchronized = 0
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -175,12 +211,9 @@ def sync_provider_instruments(
                 SET is_active = false
                 FROM data_providers AS provider
                 WHERE instrument.provider_id = provider.id
-                  AND provider.code IN (
-                    'binance-public', 'dukascopy-public',
-                    'vnstock-vci-free', 'msn-via-vnstock'
-                  )
+                  AND provider.code = ANY(%s)
                 """,
-                (),
+                (provider_codes,),
             )
             for descriptor in rows:
                 code = provider_code(descriptor)
@@ -454,9 +487,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         env_file = Path(args.env_file)
         organization_slug, user_email = load_service_tenant(env_file)
-        descriptors = [
-            *BinanceSpotAdapter().list_instruments(),
-            *VnstockAdapter().list_instruments(),
+        descriptors, provider_failures = collect_provider_descriptors(
+            (
+                ("binance-public", BinanceSpotAdapter()),
+                ("vnstock-vci-free", VnstockAdapter()),
+            )
+        )
+        descriptors.append(
             ProviderInstrumentDescriptor(
                 provider_symbol="XAUUSD",
                 canonical_symbol="XAU",
@@ -464,11 +501,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 market="metal_spot",
                 venue="OTC",
                 currency="USD",
-            ),
-        ]
+            )
+        )
+        observed_codes = complete_catalog_provider_codes(descriptors)
         url = psycopg_connection_url(load_database_url(env_file))
         with psycopg.connect(url, autocommit=False) as connection:
-            count = sync_provider_instruments(connection, descriptors)
+            count = sync_provider_instruments(
+                connection, descriptors, observed_provider_codes=observed_codes
+            )
             queued = (
                 queue_market_ingestion_requests(
                     connection,
@@ -481,7 +521,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         print(
             json.dumps(
-                {"status": "succeeded", "synchronized": count, "queued": queued},
+                {
+                    "status": "succeeded" if not provider_failures else "degraded",
+                    "synchronized": count,
+                    "queued": queued,
+                    "providerFailures": provider_failures,
+                },
                 separators=(",", ":"),
             )
         )

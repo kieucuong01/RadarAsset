@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from backtest.providers import ProviderInstrumentDescriptor
 from sync_provider_instruments import (
+    collect_provider_descriptors,
+    complete_catalog_provider_codes,
     market_timeframe_stale_cutoffs,
     load_service_tenant,
     queue_market_ingestion_requests,
@@ -131,6 +133,54 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
         "UPDATE data_providers" in query and "msn-via-vnstock" in query
         for query in queries
     )
+    deactivation = next(
+        (query, params)
+        for query, params in connection.cursor_instance.queries
+        if "UPDATE provider_instruments AS instrument" in query
+    )
+    assert "provider.code = ANY(%s)" in deactivation[0]
+    assert deactivation[1] == (["binance-public"],)
+
+
+def test_catalog_collection_isolates_one_provider_failure() -> None:
+    crypto = ProviderInstrumentDescriptor(
+        provider_symbol="BTCUSDT",
+        canonical_symbol="BTC",
+        name="Bitcoin / Tether",
+        market="crypto_spot",
+        venue="BINANCE",
+        currency="USDT",
+    )
+
+    class FailedAdapter:
+        def list_instruments(self):
+            raise RuntimeError("upstream secret must not escape")
+
+    class HealthyAdapter:
+        def list_instruments(self):
+            return [crypto]
+
+    descriptors, failures = collect_provider_descriptors(
+        (("vnstock-vci-free", FailedAdapter()), ("binance-public", HealthyAdapter()))
+    )
+
+    assert descriptors == [crypto]
+    assert failures == ["vnstock-vci-free"]
+
+
+def test_incomplete_catalog_cannot_deactivate_existing_provider_universe() -> None:
+    descriptors = [
+        ProviderInstrumentDescriptor(
+            provider_symbol="FPT",
+            canonical_symbol="FPT",
+            name="FPT",
+            market="vn_equity",
+            venue="HOSE",
+            currency="VND",
+        )
+    ]
+
+    assert complete_catalog_provider_codes(descriptors) == set()
 
 
 def test_bulk_queue_ignores_inactive_catalog_entries() -> None:

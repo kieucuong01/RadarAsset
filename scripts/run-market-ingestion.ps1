@@ -53,7 +53,7 @@ if (-not $DryRun) {
         $taskCatalogOutput = & $taskPython $taskCatalogSyncPath "--queue-ingestion" $Command "--env-file" $taskEnvPath
         $taskCatalogOutput | Write-Output
         try {
-            $taskCatalogSummary = $taskCatalogOutput[-1] | ConvertFrom-Json
+            $taskCatalogSummary = @($taskCatalogOutput)[-1] | ConvertFrom-Json
             if ($null -ne $taskCatalogSummary.queued) { $taskQueuedCount = [int]$taskCatalogSummary.queued }
         }
         catch { if ($taskExitCode -eq 0) { $taskExitCode = 1 }; $taskErrorCode = "catalog_summary_invalid" }

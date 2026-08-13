@@ -21,7 +21,8 @@ class SchedulerAlreadyRunning(RuntimeError):
 
 HEALTH_SQL = """
 WITH expected AS (
-  SELECT instrument.asset_id, timeframe.timeframe
+  SELECT DISTINCT ON (instrument.asset_id, timeframe.timeframe)
+         instrument.asset_id, timeframe.timeframe
 FROM provider_instruments instrument
   JOIN data_providers provider ON provider.id = instrument.provider_id
   JOIN assets asset ON asset.id = instrument.asset_id
@@ -29,12 +30,14 @@ FROM provider_instruments instrument
   WHERE instrument.is_active = true AND provider.status = 'active'
     AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
 ), active_versions AS (
-  SELECT dataset.asset_id, dataset.timeframe, version.coverage_end,
+  SELECT DISTINCT ON (dataset.asset_id, dataset.timeframe)
+         dataset.asset_id, dataset.timeframe, version.coverage_end,
          version.missing_bar_count
   FROM datasets dataset
   JOIN dataset_versions version ON version.dataset_id = dataset.id
   WHERE dataset.adjustment_policy = 'raw' AND version.is_active = true
     AND version.quality_status IN ('passed', 'warning')
+  ORDER BY dataset.asset_id, dataset.timeframe, version.published_at DESC
 ), backlog AS (
   SELECT COUNT(*)::int AS count, MIN(created_at) AS oldest_at
   FROM market_ingestion_requests

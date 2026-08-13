@@ -95,6 +95,7 @@ def test_scheduled_wrapper_enqueues_without_draining_the_full_universe() -> None
 
     assert '[switch]$DrainRequests' in wrapper
     assert 'if ($DrainRequests) {' in wrapper
+    assert "@($taskCatalogOutput)[-1]" in wrapper
     drain_block = wrapper.split('if ($DrainRequests) {', 1)[1]
     assert '"--retry-failed"' in drain_block
     assert '"--drain"' in drain_block
@@ -120,6 +121,8 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "market_ingestion_requests" in source
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
+    assert "DISTINCT ON (instrument.asset_id, timeframe.timeframe)" in source
+    assert "DISTINCT ON (dataset.asset_id, dataset.timeframe)" in source
     assert "Exit 1" in wrapper
     assert '.venv\\Scripts\\python.exe' in wrapper
 
