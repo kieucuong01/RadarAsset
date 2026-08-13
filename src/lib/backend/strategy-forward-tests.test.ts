@@ -65,6 +65,7 @@ describe("strategy forward activation", () => {
           parameters: input.strategyParameters,
           implementationHash: "a".repeat(64),
           initialNotional: 1000,
+          metrics: { totalReturnPct: 18.5 },
           datasetVersionId: "dataset-v1",
           datasetVersion: {
             isActive: true,
@@ -92,6 +93,7 @@ describe("strategy forward activation", () => {
       portfolioId: "portfolio-a",
       parameters: input.strategyParameters,
       status: "active",
+      state: { backtestTotalReturnPct: 18.5, sourceQuantRunId: input.backtestRunId, sourceQuantRunLegId: input.backtestRunLegId },
       asset: { symbol: "BTC" },
       strategyVersion: { code: input.strategyCode, version: "1.0.0", name: "BTC entry" },
       signals: [],
@@ -117,6 +119,13 @@ describe("strategy forward activation", () => {
         cumulativeContributions: 0,
       }),
     });
+    expect(prisma.strategyAssignment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          state: expect.objectContaining({ backtestTotalReturnPct: 18.5 }),
+        }),
+      }),
+    );
     expect(prisma.notification.count).not.toHaveBeenCalled();
   });
 
@@ -133,6 +142,11 @@ describe("strategy forward activation", () => {
         id: "assignment-a",
         portfolioId: "portfolio-a",
         status: "active",
+        state: {
+          backtestTotalReturnPct: 18.5,
+          sourceQuantRunId: input.backtestRunId,
+          sourceQuantRunLegId: input.backtestRunLegId,
+        },
         activatedAt: new Date("2026-08-01T00:00:00Z"),
         lastEvaluatedAt: new Date("2026-08-12T00:00:00Z"),
         lastEvaluatedBarAt: new Date("2026-08-11T00:00:00Z"),
@@ -171,6 +185,11 @@ describe("strategy forward activation", () => {
       assignmentId: "assignment-a",
       symbol: "BTC",
       status: "active",
+      backtestBaseline: {
+        runId: input.backtestRunId,
+        legId: input.backtestRunLegId,
+        totalReturnPct: 18.5,
+      },
     });
     expect(result[0].snapshots[0].equity).toBe(1020);
   });

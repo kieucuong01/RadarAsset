@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
-import { advancedAnalysisAvailability } from "@/lib/backtest/result-presentation";
+import { advancedAnalysisAvailability, robustnessStatus } from "@/lib/backtest/result-presentation";
 import { useI18n } from "@/lib/i18n/context";
 
 const COLORS = [
@@ -221,6 +221,12 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
               <CardDescription>{t("backtestResults.advanced.holdoutDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+              <Badge
+                variant={robustnessStatus(model.aggregate.robustness) === "fragile" ? "destructive" : "secondary"}
+                className="w-fit uppercase"
+              >
+                {robustnessStatus(model.aggregate.robustness)}
+              </Badge>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border p-3">
                   <p className="text-xs uppercase text-muted-foreground">

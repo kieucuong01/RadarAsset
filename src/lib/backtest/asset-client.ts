@@ -20,6 +20,8 @@ const quantAssetCatalogItemSchema = z
     freshness: z.enum(["fresh", "stale", "unavailable", "fixture"]),
     backtestable: z.boolean(),
     reasonCode: z.enum(["DATASET_UNAVAILABLE", "DATASET_RANGE_INSUFFICIENT"]).nullable(),
+    listingStatus: z.enum(["active", "inactive", "delisted", "unknown"]),
+    availableAdjustments: z.array(z.enum(["raw", "total_return"])).max(2),
   })
   .strict()
   .superRefine((item, context) => {

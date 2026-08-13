@@ -122,7 +122,12 @@ export function buildPortfolioResponse(input: {
 export class PortfolioDomainError extends Error {
   constructor(
     message: string,
-    readonly code: "POSITION_NOT_FOUND" | "INSUFFICIENT_QUANTITY",
+    readonly code:
+      | "POSITION_NOT_FOUND"
+      | "INSUFFICIENT_QUANTITY"
+      | "SIGNAL_SIDE_MISMATCH"
+      | "SIGNAL_ALREADY_ACTED"
+      | "SIGNAL_SCOPE_MISMATCH",
   ) {
     super(message);
     this.name = "PortfolioDomainError";

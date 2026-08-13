@@ -116,6 +116,7 @@ export async function applyStrategyAssignment(
             parameters: true,
             implementationHash: true,
             initialNotional: true,
+            metrics: true,
             datasetVersionId: true,
             datasetVersion: {
               select: {
@@ -176,6 +177,9 @@ export async function applyStrategyAssignment(
     const initialNotional = numberFromDecimal(leg.initialNotional);
     const marketValue = quantity * price;
     const simulatedCash = Math.max(0, initialNotional - marketValue);
+    const activationEquity = simulatedCash + marketValue;
+    const legMetrics = objectJson(leg.metrics);
+    const backtestTotalReturnPct = numberFromDecimal(legMetrics.totalReturnPct);
 
     await tx.strategyAssignment.updateMany({
       where: {
@@ -205,8 +209,11 @@ export async function applyStrategyAssignment(
           simulatedQuantity: quantity,
           cumulativeContributions: 0,
           cumulativeFees: 0,
-          startingEquity: initialNotional,
-          benchmarkQuantity: price > 0 ? initialNotional / price : 0,
+          startingEquity: activationEquity,
+          benchmarkQuantity: price > 0 ? activationEquity / price : 0,
+          backtestTotalReturnPct,
+          sourceQuantRunId: run.id,
+          sourceQuantRunLegId: leg.id,
         },
       },
       select: { id: true },
@@ -239,8 +246,8 @@ export async function applyStrategyAssignment(
         equity: simulatedCash + marketValue,
         cumulativeContributions: 0,
         cumulativeFees: 0,
-        pnlExcludingContributions: simulatedCash + marketValue - initialNotional,
-        benchmarkEquity: initialNotional,
+        pnlExcludingContributions: 0,
+        benchmarkEquity: activationEquity,
       },
     });
 
@@ -275,6 +282,7 @@ export async function loadStrategyForwardTests(
       id: true,
       portfolioId: true,
       status: true,
+      state: true,
       activatedAt: true,
       lastEvaluatedAt: true,
       lastEvaluatedBarAt: true,
@@ -300,7 +308,12 @@ export async function loadStrategyForwardTests(
       },
     },
   });
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const state = objectJson(row.state);
+    const runId = typeof state.sourceQuantRunId === "string" ? state.sourceQuantRunId : null;
+    const legId = typeof state.sourceQuantRunLegId === "string" ? state.sourceQuantRunLegId : null;
+    const totalReturnPct = Number(state.backtestTotalReturnPct);
+    return ({
     assignmentId: row.id,
     portfolioId: row.portfolioId,
     symbol: row.asset.symbol,
@@ -325,6 +338,10 @@ export async function loadStrategyForwardTests(
           signals: row.signals,
         }).signals[0] ?? null)
       : null,
+    backtestBaseline:
+      runId && legId && Number.isFinite(totalReturnPct)
+        ? { runId, legId, totalReturnPct }
+        : null,
     snapshots: [...row.forwardSnapshots].reverse().map((s) => ({
       timestamp: s.barAt.toISOString(),
       equity: numberFromDecimal(s.equity),
@@ -333,7 +350,8 @@ export async function loadStrategyForwardTests(
       cumulativeContributions: numberFromDecimal(s.cumulativeContributions),
       cumulativeFees: numberFromDecimal(s.cumulativeFees),
     })),
-  }));
+    });
+  });
 }
 
 export async function loadNotifications(

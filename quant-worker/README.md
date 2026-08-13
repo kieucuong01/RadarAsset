@@ -93,18 +93,25 @@ Exit `1` means invalid configuration or a fatal database/bootstrap failure. Erro
 provider response bodies and environment values are never logged.
 
 Use `scripts\run-market-ingestion.ps1` as the scheduler boundary. It resolves the repository root,
-propagates the Python exit code, and does not print `.env.local`:
+performs a bounded retry/drain, verifies the post-run health contract, records scheduler outcomes,
+and does not print `.env.local`. Daily/all runs additionally refresh corporate actions and publish
+adjusted datasets:
 
 ```powershell
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
-powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -MaxRequestTotal 500
 ```
 
 For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
 Set **Start in** to the repository root. If `python` is not on the task account's PATH, add
 `-PythonExecutable C:\path\to\python.exe`. Do not register duplicate tasks for the same environment;
 PostgreSQL advisory locks are a final overlap guard, not a substitute for clean scheduling.
+On a Windows deployment host, register the two versioned tasks explicitly:
+
+```powershell
+powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Install
+```
 
 `MARKET_INGEST_MAX_PAGES` defaults to `128` (`1..512`) and
 `MARKET_INGEST_MAX_ROWS` defaults to `250000` (`100..250000`). The CLI accepts only code-owned

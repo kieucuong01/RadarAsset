@@ -32,6 +32,8 @@ APPROVED_PROVIDER_CODES = frozenset(
 
 
 class RequestRepository(Protocol):
+    def fail_exhausted_requests(self) -> int: ...
+
     def claim_next_request(self) -> QueuedIngestionRequest | None: ...
 
     def load_active(self, request: QueuedIngestionRequest) -> ActiveSnapshot | None: ...
@@ -185,6 +187,7 @@ def process_ingestion_backlog(
     now: datetime | None = None,
     emit: Callable[[dict[str, str]], None] | None = None,
 ) -> dict[str, int | str]:
+    repository.fail_exhausted_requests()
     processed = 0
     failed = 0
     while watch or processed < max_total:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildForwardChart } from "./presentation";
+import { buildForwardChart, buildForwardComparison } from "./presentation";
 
 describe("forward-test presentation", () => {
   it("normalizes strategy and benchmark to 100 at activation", () => {
@@ -41,5 +41,19 @@ describe("forward-test presentation", () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  it("compares forward return with its immutable source backtest", () => {
+    const snapshots = [
+      { timestamp: "2026-08-01T00:00:00.000Z", equity: 1000, benchmarkEquity: 1000, pnlExcludingContributions: 0, cumulativeContributions: 0, cumulativeFees: 0 },
+      { timestamp: "2026-08-02T00:00:00.000Z", equity: 1080, benchmarkEquity: 1030, pnlExcludingContributions: 80, cumulativeContributions: 0, cumulativeFees: 1 },
+    ];
+
+    expect(buildForwardComparison(snapshots, { totalReturnPct: 12 })).toEqual({
+      forwardReturnPct: 8,
+      buyHoldReturnPct: 3,
+      backtestReturnPct: 12,
+      backtestGapPctPoints: -4,
+    });
   });
 });

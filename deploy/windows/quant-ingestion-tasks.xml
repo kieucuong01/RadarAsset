@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<QuantIngestionTasks version="1">
+  <Task name="RadarAsset Quant Ingestion Hourly">
+    <Trigger startBoundary="2026-08-14T00:10:00Z" repetitionInterval="PT1H" />
+    <Command>powershell.exe</Command>
+    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-market-ingestion.ps1 -Command hourly</Arguments>
+  </Task>
+  <Task name="RadarAsset Quant Ingestion Daily">
+    <Trigger startBoundary="2026-08-14T01:15:00Z" repetitionInterval="P1D" />
+    <Command>powershell.exe</Command>
+    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-market-ingestion.ps1 -Command daily</Arguments>
+  </Task>
+</QuantIngestionTasks>

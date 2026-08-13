@@ -112,3 +112,16 @@ def test_naive_timestamps_are_rejected_at_the_normalization_boundary() -> None:
 
     with pytest.raises(ValueError, match="timezone-aware"):
         normalize_bars([row])
+
+
+def test_vietnam_daily_missing_bars_compare_market_dates_not_utc_anchors() -> None:
+    report = validate_bars(
+        [
+            bar("2025-02-03T17:00:00Z", asset="FPT", timeframe="1d"),
+            bar("2025-02-05T17:00:00Z", asset="FPT", timeframe="1d"),
+        ],
+        market="vn_equity",
+    )
+
+    assert report.missing_bar_count == 1
+    assert report.issues[0].details == {"marketDate": "2025-02-05"}

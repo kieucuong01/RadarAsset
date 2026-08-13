@@ -4,7 +4,14 @@ export type TransactionType = "buy" | "sell";
 
 export type PortfolioTimeframe = "1W" | "1M" | "YTD" | "1Y";
 
-export type QuantRunStatus = "queued" | "running" | "succeeded" | "failed";
+export type QuantRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancel_requested"
+  | "cancelled"
+  | "timed_out";
 
 export type MarketDataMarket = "crypto_spot" | "vn_equity" | "metal_spot";
 
@@ -53,6 +60,8 @@ export type QuantAssetCatalogItem = {
   freshness: MarketDataFreshness;
   backtestable: boolean;
   reasonCode: "DATASET_UNAVAILABLE" | "DATASET_RANGE_INSUFFICIENT" | null;
+  listingStatus: "active" | "inactive" | "delisted" | "unknown";
+  availableAdjustments: Array<"raw" | "total_return">;
 };
 
 export type QuantAssetCatalogResponse = {
@@ -73,6 +82,13 @@ export type QuantDataReadinessResponse = {
     count: number;
   }>;
   backlogCount: number;
+  expectedDatasetCount: number;
+  missingDatasetCount: number;
+  staleDatasetCount: number;
+  missingBarCount: number;
+  oldestBacklogAt: string | null;
+  lastSchedulerSuccessAt: string | null;
+  recentProviderFailures: Array<{ providerCode: string; count: number }>;
 };
 
 export type PortfolioTransactionCreateInput = {
@@ -81,6 +97,7 @@ export type PortfolioTransactionCreateInput = {
   quantity: number;
   price: number;
   fee?: number;
+  sourceSignalId?: string;
   executedAt?: string;
   note?: string | null;
   timeframe?: PortfolioTimeframe;
@@ -139,6 +156,7 @@ export type StrategyForwardTestResponse = {
   lastEvaluatedAt: string | null;
   lastEvaluatedBarAt: string | null;
   latestSignal: StrategySignalResponse | null;
+  backtestBaseline: { runId: string; legId: string; totalReturnPct: number } | null;
   snapshots: Array<{
     timestamp: string;
     equity: number;
@@ -371,6 +389,8 @@ export type QuantRunResponse = {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  cacheHit: boolean;
+  sourceRunId: string | null;
   legs: Array<{
     id: string;
     symbol: string;

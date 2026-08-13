@@ -322,9 +322,14 @@ export function builderValidationReasons(state: BuilderState) {
     reasons.push("Total capital must be positive.");
   }
   if (state.from > state.to) reasons.push("Start date must not be after end date.");
+  const adjustmentPolicy =
+    state.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
   for (const leg of state.legs) {
     if (!leg.backtestable || !leg.datasetVersionId || leg.timeframe !== state.timeframe) {
       reasons.push(`${leg.symbol} needs an eligible ${state.timeframe} dataset for this range.`);
+    }
+    if (!leg.availableAdjustments.includes(adjustmentPolicy)) {
+      reasons.push(`${leg.symbol} does not have a ${adjustmentPolicy} dataset for this range.`);
     }
     if (leg.leverage < 1 || leg.leverage > leg.maxLeverage) {
       reasons.push(`${leg.symbol} leverage must be between 1 and ${leg.maxLeverage}.`);

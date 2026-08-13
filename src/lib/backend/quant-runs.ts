@@ -18,6 +18,8 @@ const MARKET_LEVERAGE_CAP = {
   metal_spot: 1,
 } as const;
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
+const PORTFOLIO_ENGINE_VERSION = "portfolio-v1";
+const RUN_TIMEOUT_MS = 15 * 60 * 1_000;
 
 type SupportedMarket = keyof typeof MARKET_LEVERAGE_CAP;
 type ArtifactKind = QuantRunResponse["artifacts"][number]["kind"];
@@ -288,8 +290,29 @@ export async function createPortfolioQuantRun(
 ) {
   const normalizedInput = normalizeBacktestSubmission(input);
   const resolvedLegs = await resolvePortfolioLegs(context, normalizedInput);
-  const portfolioHash = hashResolvedPortfolioRun(normalizedInput, resolvedLegs);
+  const portfolioHash = hashResolvedPortfolioRun(
+    normalizedInput,
+    resolvedLegs,
+    PORTFOLIO_ENGINE_VERSION,
+  );
   const datasetVersionIds = resolvedLegs.map((leg) => leg.datasetVersionId);
+  const cached = await getPrisma().quantRun.findFirst({
+    where: {
+      organizationId: context.organizationId,
+      status: "succeeded",
+      strategyHash: portfolioHash,
+      engineVersion: PORTFOLIO_ENGINE_VERSION,
+    },
+    orderBy: { finishedAt: "desc" },
+    include: runInclude(context.organizationId),
+  });
+  if (cached) {
+    return {
+      ...quantRunToResponse(cached),
+      cacheHit: true,
+      sourceRunId: cached.id,
+    };
+  }
 
   return getPrisma().$transaction(async (tx) => {
     const run = await tx.quantRun.create({
@@ -303,7 +326,8 @@ export async function createPortfolioQuantRun(
         progress: 0,
         strategyHash: portfolioHash,
         datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
-        engineVersion: "portfolio-v1",
+        engineVersion: PORTFOLIO_ENGINE_VERSION,
+        deadlineAt: new Date(Date.now() + RUN_TIMEOUT_MS),
         parameters: normalizedInput as Prisma.InputJsonValue,
       },
       select: { id: true },
@@ -342,6 +366,47 @@ export function loadPortfolioQuantRun(context: TenantContext, id: string) {
   return loadRunWithClient(getPrisma(), context.organizationId, id);
 }
 
+export async function cancelPortfolioQuantRun(context: TenantContext, id: string) {
+  return getPrisma().$transaction(async (tx) => {
+    const existing = await tx.quantRun.findFirst({
+      where: { id, organizationId: context.organizationId },
+      select: { status: true },
+    });
+    if (!existing) throw new Error("Quant run not found.");
+
+    const requestedAt = new Date();
+    if (existing.status === "queued") {
+      const cancelled = await tx.quantRun.updateMany({
+        where: { id, organizationId: context.organizationId, status: "queued" },
+        data: {
+          status: "cancelled",
+          progress: 100,
+          cancelRequestedAt: requestedAt,
+          finishedAt: requestedAt,
+          leaseExpiresAt: null,
+        },
+      });
+      if (cancelled.count > 0) {
+        await tx.quantRunLeg.updateMany({
+          where: { quantRunId: id, status: "queued" },
+          data: { status: "cancelled", progress: 100 },
+        });
+      } else {
+        await tx.quantRun.updateMany({
+          where: { id, organizationId: context.organizationId, status: "running" },
+          data: { status: "cancel_requested", cancelRequestedAt: requestedAt },
+        });
+      }
+    } else if (existing.status === "running") {
+      await tx.quantRun.updateMany({
+        where: { id, organizationId: context.organizationId, status: "running" },
+        data: { status: "cancel_requested", cancelRequestedAt: requestedAt },
+      });
+    }
+    return loadRunWithClient(tx, context.organizationId, id);
+  });
+}
+
 function numberFromDecimal(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value === "string") return Number(value);
@@ -356,7 +421,15 @@ function objectJson(value: unknown): Record<string, unknown> {
 }
 
 function quantRunStatus(value: string): QuantRunStatus {
-  if (value === "queued" || value === "running" || value === "succeeded" || value === "failed") {
+  if (
+    value === "queued" ||
+    value === "running" ||
+    value === "succeeded" ||
+    value === "failed" ||
+    value === "cancel_requested" ||
+    value === "cancelled" ||
+    value === "timed_out"
+  ) {
     return value;
   }
   throw new Error("Invalid quant run status returned from storage.");
@@ -380,6 +453,8 @@ function quantRunToResponse(run: QuantRunRecord): QuantRunResponse {
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     createdAt: run.createdAt?.toISOString() ?? new Date(0).toISOString(),
+    cacheHit: false,
+    sourceRunId: null,
     legs: run.legs.map((leg) => ({
       id: leg.id,
       symbol: leg.symbolSnapshot,

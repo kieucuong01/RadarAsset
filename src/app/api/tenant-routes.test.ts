@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   createQuantRun: vi.fn(),
   listQuantRuns: vi.fn(),
   getQuantRun: vi.fn(),
+  cancelQuantRun: vi.fn(),
   loadMarketDataHealth: vi.fn(),
   loadSmartInsightsDataHealth: vi.fn(),
   loadBriefing: vi.fn(),
@@ -103,6 +104,7 @@ vi.mock("@/lib/backend/quant-runs", async (importOriginal) => {
     createPortfolioQuantRun: mocks.createQuantRun,
     listPortfolioQuantRuns: mocks.listQuantRuns,
     loadPortfolioQuantRun: mocks.getQuantRun,
+    cancelPortfolioQuantRun: mocks.cancelQuantRun,
   };
 });
 
@@ -135,7 +137,7 @@ import { PATCH as strategySignalPatch } from "./portfolio/strategy-assignments/[
 import { GET as watchlistGet, POST as watchlistPost } from "./watchlist/route";
 import { DELETE as watchlistDelete } from "./watchlist/[id]/route";
 import { POST as quantPost } from "./quant/runs/route";
-import { GET as quantDetailGet } from "./quant/runs/[id]/route";
+import { DELETE as quantDetailDelete, GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { GET as smartInsightsDataHealthGet } from "./smart-insights/data-health/route";
@@ -179,6 +181,7 @@ describe("tenant API authorization", () => {
     mocks.upsertWatchlistItem.mockResolvedValue([]);
     mocks.removeWatchlistItem.mockResolvedValue(true);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
+    mocks.cancelQuantRun.mockResolvedValue({ id: "run-a", status: "cancel_requested" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadSmartInsightsDataHealth.mockResolvedValue({ generatedAt: "now", sources: [] });
     mocks.loadBriefing.mockResolvedValue(null);
@@ -623,6 +626,19 @@ describe("tenant API authorization", () => {
 
     expect(response.status).toBe(404);
     expect(mocks.getQuantRun).toHaveBeenCalledWith(viewerContext, "run-b");
+  });
+
+  it("requires cancel capability before requesting cooperative run cancellation", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+
+    const response = await quantDetailDelete(
+      new Request("http://localhost/api/quant/runs/run-a", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "run-a" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "backtest", "cancel");
+    expect(mocks.cancelQuantRun).toHaveBeenCalledWith(editorContext, "run-a");
   });
 
   it("allows viewer market data health reads through backtest capability", async () => {

@@ -8,7 +8,13 @@ import {
   buildBacktestKpis,
   buildPortfolioTradeRows,
   filterPortfolioTradeRows,
+  robustnessStatus,
 } from "./result-presentation";
+
+it("surfaces the combined fragile classification ahead of parameter-only status", () => {
+  expect(robustnessStatus({ overallStatus: "fragile", parameterStability: { status: "stable" } })).toBe("fragile");
+  expect(robustnessStatus({ parameterStability: { status: "mixed" } })).toBe("mixed");
+});
 
 function modelWithTrades(): BacktestResultModel {
   const trade = (asset: "BTC" | "FPT", exitAt: string) => ({
@@ -247,7 +253,10 @@ describe("backtest result presentation", () => {
     expect(backtestOutputState(null)).toBe("empty");
     expect(backtestOutputState("queued")).toBe("active");
     expect(backtestOutputState("running")).toBe("active");
+    expect(backtestOutputState("cancel_requested")).toBe("active");
     expect(backtestOutputState("failed")).toBe("failed");
+    expect(backtestOutputState("cancelled")).toBe("failed");
+    expect(backtestOutputState("timed_out")).toBe("failed");
     expect(backtestOutputState("succeeded")).toBe("results");
   });
 });

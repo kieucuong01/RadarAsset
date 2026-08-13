@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from .custom_rules import PriceThresholdRule, ScheduledDcaRule, custom_rule_implementation_hash, parse_custom_rule
 from .models import Bar
 from .quality import canonical_bar_checksum
+from .strategy_factory import strategy_from_catalog
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -26,6 +27,8 @@ class EvaluationWork:
     asset_id: str
     symbol: str
     strategy_version_id: str
+    strategy_code: str
+    strategy_version: str
     implementation_hash: str
     parameters: dict[str, Any]
     dataset_version_id: str
@@ -96,7 +99,8 @@ def claim_next_evaluation(connection: Any, worker_id: str, lease_seconds: int = 
             """
             SELECT assignment.portfolio_id, assignment.asset_id, assignment.strategy_version_id,
                    assignment.parameters, assignment.last_evaluated_bar_at, assignment.state,
-                   portfolio.user_id, asset.symbol, version.implementation_hash,
+                   portfolio.user_id, asset.symbol, version.code, version.version,
+                   version.implementation_hash,
                    published.checksum, run.parameters AS run_parameters
             FROM strategy_assignments assignment
             JOIN portfolios portfolio ON portfolio.id = assignment.portfolio_id
@@ -130,7 +134,7 @@ def claim_next_evaluation(connection: Any, worker_id: str, lease_seconds: int = 
     params = row["run_parameters"] if isinstance(row["run_parameters"], dict) else {}
     costs = params.get("assumptions", {}).get("marketCosts", {}) if isinstance(params, dict) else {}
     market_cost = next(iter(costs.values()), {}) if isinstance(costs, dict) else {}
-    return EvaluationWork(str(job["id"]), str(job["organization_id"]), str(job["assignment_id"]), str(row["portfolio_id"]), str(row["user_id"]), str(row["asset_id"]), str(row["symbol"]), str(row["strategy_version_id"]), str(row["implementation_hash"]), dict(row["parameters"] or {}), str(job["dataset_version_id"]), str(row["checksum"]), row["last_evaluated_bar_at"], dict(row["state"] or {}), bars, Decimal(str(market_cost.get("commissionBps", 0))), Decimal(str(market_cost.get("sellTaxBps", 0))), Decimal(str(market_cost.get("slippageBps", 0))))
+    return EvaluationWork(str(job["id"]), str(job["organization_id"]), str(job["assignment_id"]), str(row["portfolio_id"]), str(row["user_id"]), str(row["asset_id"]), str(row["symbol"]), str(row["strategy_version_id"]), str(row["code"]), str(row["version"]), str(row["implementation_hash"]), dict(row["parameters"] or {}), str(job["dataset_version_id"]), str(row["checksum"]), row["last_evaluated_bar_at"], dict(row["state"] or {}), bars, Decimal(str(market_cost.get("commissionBps", 0))), Decimal(str(market_cost.get("sellTaxBps", 0))), Decimal(str(market_cost.get("slippageBps", 0))))
 
 
 class PostgresEvaluationRepository:
@@ -220,34 +224,88 @@ def _new_bars(item: EvaluationWork) -> list[Bar]:
     return item.bars if item.last_evaluated_bar_at is None else [row for row in item.bars if row.timestamp > item.last_evaluated_bar_at]
 
 
+def _fill_pending(
+    item: EvaluationWork,
+    state: dict[str, Any],
+    current: Bar,
+    cash: Decimal,
+    quantity: Decimal,
+    fees: Decimal,
+    *,
+    default_size_pct: Decimal = Decimal("100"),
+) -> tuple[Decimal, Decimal, Decimal]:
+    pending = state.pop("pendingAction", None)
+    if not isinstance(pending, dict):
+        return cash, quantity, fees
+    size = Decimal(str(pending.get("sizePct", default_size_pct))) / Decimal("100")
+    fee_rate, slip = item.fee_bps / BPS, item.slippage_bps / BPS
+    if pending.get("action") == "buy" and cash > ZERO:
+        fill, budget = current.open * (ONE + slip), cash * size
+        bought = budget / (fill * (ONE + fee_rate))
+        commission = bought * fill * fee_rate
+        return cash - bought * fill - commission, quantity + bought, fees + commission
+    if pending.get("action") == "sell" and quantity > ZERO:
+        fill, sold = current.open * (ONE - slip), quantity * size
+        commission = sold * fill * (fee_rate + item.sell_tax_bps / BPS)
+        return cash + sold * fill - commission, quantity - sold, fees + commission
+    return cash, quantity, fees
+
+
 def _price_outcome(item: EvaluationWork, rule: PriceThresholdRule) -> ForwardOutcome:
     state = dict(item.state)
     cash, quantity = _number(state, "simulatedCash"), _number(state, "simulatedQuantity")
     fees, rows = _number(state, "cumulativeFees"), _new_bars(item)
-    pending = state.get("pendingAction")
-    if isinstance(pending, dict) and rows:
-        size = Decimal(str(pending.get("sizePct", rule.size_pct))) / Decimal("100")
-        first, fee_rate, slip = rows[0], item.fee_bps / BPS, item.slippage_bps / BPS
-        if pending.get("action") == "buy" and cash > ZERO:
-            fill, budget = first.open * (ONE + slip), cash * size
-            bought = budget / (fill * (ONE + fee_rate))
-            commission = bought * fill * fee_rate
-            cash, quantity, fees = cash - bought * fill - commission, quantity + bought, fees + commission
-        elif pending.get("action") == "sell" and quantity > ZERO:
-            fill, sold = first.open * (ONE - slip), quantity * size
-            commission = sold * fill * (fee_rate + item.sell_tax_bps / BPS)
-            cash, quantity, fees = cash + sold * fill - commission, quantity - sold, fees + commission
-        state.pop("pendingAction", None)
     signals: list[ForwardSignal] = []
     for previous, current in zip(item.bars, item.bars[1:], strict=False):
         if item.last_evaluated_bar_at is not None and current.timestamp <= item.last_evaluated_bar_at:
             continue
+        cash, quantity, fees = _fill_pending(
+            item, state, current, cash, quantity, fees, default_size_pct=rule.size_pct
+        )
         crossed = previous.close <= rule.threshold < current.close if rule.operator == "crosses_above" else previous.close >= rule.threshold > current.close
         if crossed:
             metadata = {"referenceClose": float(current.close), "threshold": float(rule.threshold), "sizePct": float(rule.size_pct), "executionStatus": "pending_next_bar_open"}
             signals.append(ForwardSignal(rule.action, "PRICE_CROSS", current.timestamp, current.close, f"price_{rule.operator}", metadata))
             state["pendingAction"] = {"action": rule.action, "sizePct": float(rule.size_pct), "signalAt": current.timestamp.isoformat().replace("+00:00", "Z")}
     latest = rows[-1] if rows else (item.bars[-1] if item.bars else None)
+    market_value = quantity * latest.close if latest else ZERO
+    state.update({"simulatedCash": float(cash), "simulatedQuantity": float(quantity), "cumulativeFees": float(fees)})
+    benchmark = _number(state, "benchmarkQuantity") * latest.close if latest else ZERO
+    return ForwardOutcome(state, tuple(signals), latest.timestamp if latest else None, cash + market_value, market_value, benchmark)
+
+
+def _catalog_outcome(item: EvaluationWork) -> ForwardOutcome:
+    strategy = strategy_from_catalog(item.strategy_code, item.strategy_version, item.parameters)
+    prepare = getattr(strategy, "prepare", None)
+    if callable(prepare):
+        prepare(item.bars)
+    state = dict(item.state)
+    cash, quantity = _number(state, "simulatedCash"), _number(state, "simulatedQuantity")
+    fees = _number(state, "cumulativeFees")
+    signals: list[ForwardSignal] = []
+    for index, current in enumerate(item.bars):
+        if item.last_evaluated_bar_at is not None and current.timestamp <= item.last_evaluated_bar_at:
+            continue
+        cash, quantity, fees = _fill_pending(item, state, current, cash, quantity, fees)
+        signal = strategy.signal(item.bars, index, in_position=quantity > ZERO)
+        if signal is None:
+            continue
+        signals.append(
+            ForwardSignal(
+                signal.action,
+                "TECHNICAL_SIGNAL",
+                current.timestamp,
+                current.close,
+                signal.reason,
+                {**signal.metadata, "executionStatus": "pending_next_bar_open"},
+            )
+        )
+        state["pendingAction"] = {
+            "action": signal.action,
+            "sizePct": 100,
+            "signalAt": current.timestamp.isoformat().replace("+00:00", "Z"),
+        }
+    latest = item.bars[-1] if item.bars else None
     market_value = quantity * latest.close if latest else ZERO
     state.update({"simulatedCash": float(cash), "simulatedQuantity": float(quantity), "cumulativeFees": float(fees)})
     benchmark = _number(state, "benchmarkQuantity") * latest.close if latest else ZERO
@@ -285,14 +343,17 @@ def process_next_evaluation(repository: EvaluationRepository) -> dict[str, Any]:
     if item is None:
         return {"status": "idle", "message": "No queued strategy evaluations."}
     try:
-        rule = parse_custom_rule(item.parameters)
         if not item.bars or canonical_bar_checksum(item.bars) != item.dataset_checksum:
             repository.fail_evaluation(item, "DATASET_INVALID")
             return {"status": "failed", "id": item.job_id, "code": "DATASET_INVALID"}
-        if item.rule_hash != item.implementation_hash:
-            repository.fail_evaluation(item, "STRATEGY_HASH_MISMATCH")
-            return {"status": "failed", "id": item.job_id, "code": "STRATEGY_HASH_MISMATCH"}
-        outcome = _price_outcome(item, rule) if isinstance(rule, PriceThresholdRule) else _dca_outcome(item, rule)
+        if item.strategy_code.startswith("custom:"):
+            rule = parse_custom_rule(item.parameters)
+            if item.rule_hash != item.implementation_hash:
+                repository.fail_evaluation(item, "STRATEGY_HASH_MISMATCH")
+                return {"status": "failed", "id": item.job_id, "code": "STRATEGY_HASH_MISMATCH"}
+            outcome = _price_outcome(item, rule) if isinstance(rule, PriceThresholdRule) else _dca_outcome(item, rule)
+        else:
+            outcome = _catalog_outcome(item)
         repository.complete_evaluation(item, outcome)
         return {"status": "succeeded", "id": item.job_id, "signalCount": len(outcome.signals)}
     except ValueError:

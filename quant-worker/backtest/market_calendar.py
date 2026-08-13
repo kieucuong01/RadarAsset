@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+
+HOSE_CALENDAR_VERSION = "hose-official-closures-2024-2026-v1"
+HOSE_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+HOSE_VERIFIED_FROM = date(2024, 1, 1)
+HOSE_VERIFIED_TO = date(2026, 12, 31)
 
 
 # Exchange closures used by the free-data MVP. Keep these explicit and reviewed yearly;
@@ -52,10 +59,19 @@ def annualization_factor(market: str, timeframe: str) -> int:
         raise ValueError(f"Unsupported market/timeframe: {market}/{timeframe}.") from error
 
 
-def is_session_day(day: date, market: str) -> bool:
+def timestamp_to_market_date(timestamp: datetime, market: str) -> date:
+    if timestamp.tzinfo is None:
+        raise ValueError("Market timestamp must be timezone-aware.")
+    zone = HOSE_TIMEZONE if market == "vn_equity" else timezone.utc
+    return timestamp.astimezone(zone).date()
+
+
+def is_session_day(day: date, market: str, *, strict: bool = False) -> bool:
     if market == "crypto_spot":
         return True
     if market == "vn_equity":
+        if strict and not HOSE_VERIFIED_FROM <= day <= HOSE_VERIFIED_TO:
+            raise ValueError("HOSE date is outside verified coverage.")
         return day.weekday() < 5 and day not in _VN_HOLIDAYS
     if market == "metal_spot":
         return day.weekday() < 5
@@ -87,6 +103,22 @@ def expected_bar_timestamps(
                     candidate = datetime.combine(current, time(hour), tzinfo=timezone.utc)
                     if start <= candidate <= end:
                         result.add(candidate)
+            current += timedelta(days=1)
+        return result
+
+    if timeframe == "1d" and market == "vn_equity":
+        result: set[datetime] = set()
+        first_market_day = timestamp_to_market_date(start, market)
+        last_market_day = timestamp_to_market_date(end, market)
+        anchor_time = start.astimezone(HOSE_TIMEZONE).timetz().replace(tzinfo=None)
+        current = first_market_day
+        while current <= last_market_day:
+            if is_session_day(current, market):
+                candidate = datetime.combine(current, anchor_time, tzinfo=HOSE_TIMEZONE).astimezone(
+                    timezone.utc
+                )
+                if start <= candidate <= end:
+                    result.add(candidate)
             current += timedelta(days=1)
         return result
 

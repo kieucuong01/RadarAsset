@@ -96,10 +96,11 @@ export async function loadQuantAssetCatalog(
       venue: true,
       currency: true,
       maxLeverage: true,
+      listingStatus: true,
       datasets: {
-        where: { timeframe: query.timeframe, adjustmentPolicy: "raw" },
-        take: 1,
+        where: { timeframe: query.timeframe, adjustmentPolicy: { in: ["raw", "total_return"] } },
         select: {
+          adjustmentPolicy: true,
           versions: {
             where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
             orderBy: { version: "desc" },
@@ -128,7 +129,23 @@ export async function loadQuantAssetCatalog(
     items: assets
       .map((asset) => {
         const market = supportedMarket(asset.market);
-        const version = asset.datasets[0]?.versions[0] ?? null;
+        const rawDataset = asset.datasets.find((dataset) => dataset.adjustmentPolicy === "raw");
+        const version = rawDataset?.versions[0] ?? null;
+        const availableAdjustments = asset.datasets
+          .filter((dataset) => {
+            const policyVersion = dataset.versions[0];
+            return Boolean(
+              policyVersion &&
+              policyVersion.coverageStart <= requestedStart &&
+              policyVersion.coverageEnd >= requestedEnd,
+            );
+          })
+          .map((dataset) => dataset.adjustmentPolicy)
+          .filter(
+            (policy): policy is "raw" | "total_return" =>
+              policy === "raw" || policy === "total_return",
+          )
+          .sort((left, right) => (left === "raw" ? -1 : right === "raw" ? 1 : 0));
         const rangeCovered = Boolean(
           version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
         );
@@ -160,6 +177,10 @@ export async function loadQuantAssetCatalog(
           }),
           backtestable: reasonCode === null,
           reasonCode,
+          listingStatus: ["active", "inactive", "delisted", "unknown"].includes(asset.listingStatus)
+            ? (asset.listingStatus as "active" | "inactive" | "delisted" | "unknown")
+            : "unknown",
+          availableAdjustments,
         };
       })
       .sort((left, right) => {
@@ -177,19 +198,29 @@ export async function loadQuantAssetCatalog(
 
 export async function loadQuantDataReadiness(
   context: TenantContext,
+  now = new Date(),
 ): Promise<QuantDataReadinessResponse> {
   const prisma = getPrisma();
-  const [assetCounts, activeDatasets, ingestionCounts] = await Promise.all([
+  const failureCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const [
+    assetCounts,
+    activeDatasets,
+    activeInstrumentCount,
+    ingestionCounts,
+    oldestBacklog,
+    recentFailures,
+    schedulerRows,
+  ] = await Promise.all([
     prisma.asset.groupBy({
       by: ["market"],
-      where: { market: { in: [...SUPPORTED_MARKETS] } },
+      where: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
       _count: { _all: true },
     }),
     prisma.dataset.findMany({
       where: {
         adjustmentPolicy: "raw",
         timeframe: { in: ["1d", "1h"] },
-        asset: { market: { in: [...SUPPORTED_MARKETS] } },
+        asset: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
         versions: {
           some: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
         },
@@ -197,6 +228,19 @@ export async function loadQuantDataReadiness(
       select: {
         timeframe: true,
         asset: { select: { market: true } },
+        versions: {
+          where: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { coverageEnd: true, missingBarCount: true, sourceMetadata: true },
+        },
+      },
+    }),
+    prisma.providerInstrument.count({
+      where: {
+        isActive: true,
+        provider: { status: "active" },
+        asset: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
       },
     }),
     prisma.marketIngestionRequest.groupBy({
@@ -204,6 +248,27 @@ export async function loadQuantDataReadiness(
       where: { organizationId: context.organizationId },
       _count: { _all: true },
     }),
+    prisma.marketIngestionRequest.findFirst({
+      where: { organizationId: context.organizationId, status: { in: [...BACKLOG_STATUSES] } },
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    }),
+    prisma.marketIngestionRequest.findMany({
+      where: {
+        organizationId: context.organizationId,
+        status: "failed",
+        updatedAt: { gte: failureCutoff },
+      },
+      select: { providerInstrument: { select: { provider: { select: { code: true } } } } },
+      take: 1_000,
+    }),
+    prisma.$queryRaw<Array<{ finished_at: Date | null }>>`
+      SELECT finished_at
+      FROM market_ingestion_scheduler_runs
+      WHERE status = 'succeeded'
+      ORDER BY finished_at DESC
+      LIMIT 1
+    `,
   ]);
 
   const instrumentsByMarket = { ...EMPTY_MARKET_COUNTS };
@@ -211,10 +276,29 @@ export async function loadQuantDataReadiness(
     instrumentsByMarket[supportedMarket(row.market)] = row._count._all;
   }
 
-  const activeDatasetMap = new Map<string, QuantDataReadinessResponse["activeDatasetsByMarketTimeframe"][number]>();
+  const activeDatasetMap = new Map<
+    string,
+    QuantDataReadinessResponse["activeDatasetsByMarketTimeframe"][number]
+  >();
+  let staleDatasetCount = 0;
+  let missingBarCount = 0;
   for (const dataset of activeDatasets) {
     const market = supportedMarket(dataset.asset.market);
     const timeframe = dataset.timeframe as MarketDataTimeframe;
+    const version = dataset.versions[0];
+    if (version) {
+      missingBarCount += version.missingBarCount;
+      const metadata = version.sourceMetadata as { mode?: unknown } | null;
+      const freshness = calculateFreshness({
+        market,
+        timeframe,
+        coverageEnd: version.coverageEnd,
+        source: metadata?.mode === "fixture" ? "research_fixture" : null,
+        lastStatus: null,
+        now,
+      });
+      if (freshness === "stale") staleDatasetCount += 1;
+    }
     const key = `${market}:${timeframe}`;
     const current = activeDatasetMap.get(key);
     if (current) {
@@ -237,6 +321,16 @@ export async function loadQuantDataReadiness(
   const backlogCount = ingestionRequestsByStatusTimeframe
     .filter((row) => BACKLOG_STATUSES.has(row.status))
     .reduce((total, row) => total + row.count, 0);
+  const expectedDatasetCount = activeInstrumentCount * 2;
+  const missingDatasetCount = Math.max(0, expectedDatasetCount - activeDatasets.length);
+  const providerFailureCounts = new Map<string, number>();
+  for (const failure of recentFailures) {
+    const code = failure.providerInstrument.provider.code;
+    providerFailureCounts.set(code, (providerFailureCounts.get(code) ?? 0) + 1);
+  }
+  const recentProviderFailures = [...providerFailureCounts.entries()]
+    .map(([providerCode, count]) => ({ providerCode, count }))
+    .sort((left, right) => left.providerCode.localeCompare(right.providerCode));
 
   return {
     readyForBacktest: activeDatasetsByMarketTimeframe.some((row) => row.count > 0),
@@ -244,5 +338,12 @@ export async function loadQuantDataReadiness(
     activeDatasetsByMarketTimeframe,
     ingestionRequestsByStatusTimeframe,
     backlogCount,
+    expectedDatasetCount,
+    missingDatasetCount,
+    staleDatasetCount,
+    missingBarCount,
+    oldestBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
+    lastSchedulerSuccessAt: schedulerRows[0]?.finished_at?.toISOString() ?? null,
+    recentProviderFailures,
   };
 }

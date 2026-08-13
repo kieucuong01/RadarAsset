@@ -18,6 +18,8 @@ const validItem = {
   freshness: "fresh",
   backtestable: true,
   reasonCode: null,
+  listingStatus: "active",
+  availableAdjustments: ["raw", "total_return"],
 } satisfies QuantAssetCatalogItem;
 
 describe("Quant asset catalog client", () => {

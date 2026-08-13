@@ -1,113 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Database, History, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { MarketDataHealthItem, MarketDataTimeframe } from "@/lib/backend/types";
-import { getMarketDataHealth, marketDataStatusMeta } from "@/lib/market-data/client";
+import {
+  getQuantDataReadiness,
+  quantDataOperationsHealth,
+  type QuantDataReadiness,
+} from "@/lib/backtest/data-readiness-client";
+import { useI18n } from "@/lib/i18n/context";
 
-const ASSET_ORDER = ["FPT", "BTC", "XAU"] as const;
-
-function coverageLabel(value: string | null) {
-  if (!value) return "No active coverage";
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(new Date(value));
+function dateLabel(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(value),
+  );
 }
 
-export function MarketDataHealthPanel({ timeframe }: { timeframe: MarketDataTimeframe }) {
-  const [items, setItems] = useState<MarketDataHealthItem[]>([]);
-  const [loading, setLoading] = useState(true);
+export function MarketDataHealthPanel() {
+  const [readiness, setReadiness] = useState<QuantDataReadiness | null>(null);
   const [failed, setFailed] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     const controller = new AbortController();
-    let active = true;
-    void getMarketDataHealth(fetch, controller.signal)
-      .then((data) => {
-        if (!active) return;
-        setItems(data);
+    void getQuantDataReadiness((input, init) =>
+      fetch(input, { ...init, signal: controller.signal }),
+    )
+      .then((value) => {
+        setReadiness(value);
         setFailed(false);
       })
       .catch((error: unknown) => {
-        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
         setFailed(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
       });
-    return () => {
-      active = false;
-      controller.abort();
-    };
+    return () => controller.abort();
   }, []);
 
-  const selected = ASSET_ORDER.map((symbol) =>
-    items.find((item) => item.symbol === symbol && item.timeframe === timeframe),
-  ).filter((item): item is MarketDataHealthItem => Boolean(item));
+  const health = useMemo(
+    () => (readiness ? quantDataOperationsHealth(readiness) : null),
+    [readiness],
+  );
+
+  if (failed) {
+    return (
+      <Alert variant="destructive" className="mb-6">
+        <AlertTriangle aria-hidden="true" />
+        <AlertTitle>{t("quant.dataHealth.unavailable")}</AlertTitle>
+        <AlertDescription>{t("quant.dataHealth.unavailableDetail")}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!readiness || !health) return <Skeleton className="mb-6 h-32 w-full" />;
+
+  const metrics = [
+    {
+      label: t("quant.dataHealth.coverage"),
+      value: `${readiness.expectedDatasetCount - readiness.missingDatasetCount}/${readiness.expectedDatasetCount}`,
+      detail: t("quant.dataHealth.missingDatasets", { count: readiness.missingDatasetCount }),
+      icon: Database,
+    },
+    {
+      label: t("quant.dataHealth.stale"),
+      value: readiness.staleDatasetCount.toLocaleString(),
+      detail: t("quant.dataHealth.missingBars", { count: readiness.missingBarCount }),
+      icon: History,
+    },
+    {
+      label: t("quant.dataHealth.backlog"),
+      value: readiness.backlogCount.toLocaleString(),
+      detail: readiness.oldestBacklogAt
+        ? t("quant.dataHealth.oldestBacklog", { date: dateLabel(readiness.oldestBacklogAt) })
+        : t("quant.dataHealth.noBacklog"),
+      icon: RefreshCw,
+    },
+    {
+      label: t("quant.dataHealth.providerFailures"),
+      value: health.providerFailureCount.toLocaleString(),
+      detail: t("quant.dataHealth.lastScheduler", {
+        date: dateLabel(readiness.lastSchedulerSuccessAt),
+      }),
+      icon: health.tone === "healthy" ? CheckCircle2 : AlertTriangle,
+    },
+  ];
 
   return (
-    <Card className="shadow-none" aria-live="polite">
-      <CardHeader className="p-4 pb-3">
-        <CardTitle className="text-sm">Market data health</CardTitle>
-        <CardDescription className="text-xs">
-          Active immutable snapshots · research only · {timeframe}
-        </CardDescription>
+    <Card className="mb-6 shadow-none" aria-live="polite">
+      <CardHeader className="flex-row items-start justify-between gap-4 pb-3">
+        <div>
+          <CardTitle className="text-sm">{t("quant.dataHealth.title")}</CardTitle>
+          <CardDescription className="text-xs">{t("quant.dataHealth.description")}</CardDescription>
+        </div>
+        <Badge variant={health.tone === "healthy" ? "default" : "destructive"}>
+          {health.tone === "healthy"
+            ? t("quant.dataHealth.healthy")
+            : t("quant.dataHealth.degraded", { count: health.issueCount })}
+        </Badge>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 p-4 pt-0">
-        {loading ? (
-          ASSET_ORDER.map((symbol) => <Skeleton key={symbol} className="h-16 w-full" />)
-        ) : failed ? (
-          <Alert>
-            <AlertTitle>Data health unavailable</AlertTitle>
-            <AlertDescription>
-              Không thể tải trạng thái nguồn dữ liệu. Backtest controls vẫn hoạt động độc lập.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          selected.map((item) => {
-            const status = marketDataStatusMeta(item.freshness);
-            const provider = item.providerName ?? "No active provider";
-            const upstream =
-              item.upstreamProvider && item.upstreamProvider !== item.providerCode
-                ? ` · upstream ${item.upstreamProvider}`
-                : "";
-            return (
-              <div
-                key={item.symbol}
-                className="flex min-w-0 items-start justify-between gap-3 rounded-lg border bg-muted/20 p-3"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold">{item.symbol}</div>
-                  <div
-                    className="truncate text-xs text-muted-foreground"
-                    title={`${provider}${upstream}`}
-                  >
-                    {provider}
-                    {upstream}
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    {coverageLabel(item.coverageEnd)} UTC · v{item.version ?? "—"} ·{" "}
-                    {item.rowCount.toLocaleString()} rows
-                  </div>
-                  {item.lastErrorCode ? (
-                    <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      Last run: {item.lastErrorCode}
-                    </div>
-                  ) : null}
-                </div>
-                <Badge variant={status.variant} className="shrink-0">
-                  {status.label}
-                </Badge>
+      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <div key={metric.label} className="rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Icon aria-hidden="true" className="size-3.5" />
+                {metric.label}
               </div>
-            );
-          })
-        )}
+              <div className="mt-1 font-mono text-lg font-semibold">{metric.value}</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{metric.detail}</div>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );

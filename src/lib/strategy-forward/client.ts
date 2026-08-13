@@ -38,6 +38,10 @@ export const forwardTestSchema = z
     lastEvaluatedAt: z.string().datetime().nullable(),
     lastEvaluatedBarAt: z.string().datetime().nullable(),
     latestSignal: signalSchema.nullable(),
+    backtestBaseline: z
+      .object({ runId: z.string(), legId: z.string(), totalReturnPct: z.number() })
+      .strict()
+      .nullable(),
     snapshots: z.array(snapshotSchema).max(365),
   })
   .strict();
@@ -92,4 +96,21 @@ export async function markNotificationReadClient(
     body: JSON.stringify({ read: true }),
   });
   if (!response.ok) throw new Error("Không thể cập nhật thông báo.");
+}
+
+export async function updateStrategySignalStatusClient(
+  assignmentId: string,
+  signalId: string,
+  status: "reviewed" | "dismissed",
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const response = await fetcher(
+    `/api/portfolio/strategy-assignments/${encodeURIComponent(assignmentId)}/signals/${encodeURIComponent(signalId)}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!response.ok) throw new Error("Unable to update strategy signal.");
 }

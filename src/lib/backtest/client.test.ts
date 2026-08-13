@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  cancelBacktestRun,
   getBacktestRun,
   getStrategyCatalog,
   isActiveRun,
@@ -48,6 +49,8 @@ const queuedRun = {
   startedAt: null,
   finishedAt: null,
   createdAt: "2026-08-10T00:00:00.000Z",
+  cacheHit: false,
+  sourceRunId: null,
   legs: [],
   artifacts: [],
 };
@@ -200,11 +203,25 @@ describe("backtest API client", () => {
     ]);
   });
 
-  it("classifies only queued and running states as active", () => {
+  it("classifies cooperative cancellation as active and terminal lifecycle states as inactive", () => {
     expect(isActiveRun("queued")).toBe(true);
     expect(isActiveRun("running")).toBe(true);
+    expect(isActiveRun("cancel_requested")).toBe(true);
     expect(isActiveRun("succeeded")).toBe(false);
     expect(isActiveRun("failed")).toBe(false);
+    expect(isActiveRun("cancelled")).toBe(false);
+    expect(isActiveRun("timed_out")).toBe(false);
+  });
+
+  it("requests cancellation through the tenant-scoped run resource", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ...queuedRun, status: "cancelled", progress: 100 })),
+    );
+
+    const result = await cancelBacktestRun("run-1", fetcher);
+
+    expect(result.status).toBe("cancelled");
+    expect(fetcher).toHaveBeenCalledWith("/api/quant/runs/run-1", { method: "DELETE" });
   });
 
   it("loads a tenant-scoped run detail and forwards AbortSignal", async () => {

@@ -22,6 +22,7 @@ export function hashBacktestSubmission(input: unknown) {
 export function hashResolvedPortfolioRun(
   input: PortfolioBacktestSubmission,
   legs: ResolvedPortfolioHashLeg[],
+  engineVersion: string,
 ) {
   const normalized = normalizeBacktestSubmission(input);
   const resolvedLegs = [...legs]
@@ -40,6 +41,6 @@ export function hashResolvedPortfolioRun(
       ),
     }));
   return createHash("sha256")
-    .update(JSON.stringify({ submission: normalized, resolvedLegs }), "utf8")
+    .update(JSON.stringify({ submission: normalized, resolvedLegs, engineVersion }), "utf8")
     .digest("hex");
 }

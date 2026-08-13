@@ -76,10 +76,15 @@ class FakeRequestRepository:
         self.retried: tuple[str, str] | None = None
         self.prepared = None
         self.requeued: tuple[int, str | None, str | None] | None = None
+        self.swept = 0
 
     def claim_next_request(self) -> QueuedIngestionRequest | None:
         self.claim_count += 1
         return self.queue.pop(0) if self.queue else None
+
+    def fail_exhausted_requests(self) -> int:
+        self.swept += 1
+        return 0
 
     def load_active(self, _request: QueuedIngestionRequest):
         return None
@@ -221,6 +226,21 @@ def test_drain_processes_until_idle_without_sleeping() -> None:
         ("request-2", "eth-1h-version"),
     ]
     assert repository.claim_count == 3
+    assert repository.swept == 1
+
+
+def test_request_repository_sweeps_expired_exhausted_leases() -> None:
+    import inspect
+
+    from backtest.ingestion_repository import PostgresRequestRepository
+
+    source = inspect.getsource(PostgresRequestRepository.fail_exhausted_requests)
+
+    assert "status = 'running'" in source
+    assert "lease_expires_at <= NOW()" in source
+    assert "attempt_count >= 3" in source
+    assert "status = 'failed'" in source
+    assert "worker_lost" in source
 
 
 def test_drain_stops_at_max_total_guard() -> None:

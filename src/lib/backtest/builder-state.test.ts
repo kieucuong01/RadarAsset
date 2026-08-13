@@ -37,6 +37,8 @@ function asset(
     freshness: "fresh",
     backtestable: true,
     reasonCode: null,
+    listingStatus: "active",
+    availableAdjustments: ["raw"],
   };
 }
 
@@ -102,6 +104,19 @@ describe("portfolio backtest builder state", () => {
 
     expect(state.legs).toEqual([]);
     expect(builderValidationReasons(state)).toContain("Add at least one backtestable asset.");
+  });
+
+  it("blocks total-return mode when any leg only has raw data", () => {
+    const state = addTwoAssets();
+    const adjusted = reduceBuilder(state, {
+      type: "assumptionEdited",
+      key: "dividendMode",
+      value: "adjusted_prices",
+    });
+
+    expect(builderValidationReasons(adjusted)).toContain(
+      "BTC does not have a total_return dataset for this range.",
+    );
   });
 
   it("distributes equal weights over the investable allocation after add and remove", () => {

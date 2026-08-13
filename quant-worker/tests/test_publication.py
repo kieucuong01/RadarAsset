@@ -67,6 +67,7 @@ def test_prepare_and_publish_preserves_provenance_quality_and_checksum() -> None
         "mode": "public-api",
         "licenseScope": "research_only",
     }
+    assert prepared.adjustment_policy == "raw"
 
     publisher = FakePublisher()
     result = publish_dataset(publisher, prepared)

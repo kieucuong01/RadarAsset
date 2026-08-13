@@ -30,6 +30,8 @@ def work(rule: dict[str, object], rows: list[Bar]) -> EvaluationWork:
         asset_id="asset-btc",
         symbol="BTC",
         strategy_version_id="strategy-v1",
+        strategy_code=f"custom:{'1' * 36}",
+        strategy_version="1.0.0",
         implementation_hash="",
         parameters=rule,
         dataset_version_id="dataset-v2",
@@ -155,3 +157,64 @@ def test_hash_mismatch_fails_with_sanitized_code() -> None:
     repository = FakeRepository(item)
     assert process_next_evaluation(repository)["code"] == "STRATEGY_HASH_MISMATCH"
     assert repository.failed == ("job-a", "STRATEGY_HASH_MISMATCH")
+
+
+def test_builtin_strategy_dispatches_with_incremental_next_bar_execution() -> None:
+    rows = [bar(1, "10", "10"), bar(2, "9", "9"), bar(3, "8", "8"), bar(4, "9", "9"), bar(5, "10", "10"), bar(6, "11", "11")]
+    item = work({"fastPeriod": 2, "slowPeriod": 3}, rows)
+    item = EvaluationWork(
+        **{
+            **item.__dict__,
+            "strategy_code": "ma_crossover",
+            "strategy_version": "1.0.0",
+            "implementation_hash": "catalog-hash",
+            "last_evaluated_bar_at": datetime(2026, 8, 3, tzinfo=timezone.utc),
+        }
+    )
+    repository = FakeRepository(item)
+
+    response = process_next_evaluation(repository)
+
+    assert response["status"] == "succeeded"
+    outcome = repository.completed[1]
+    assert [signal.signal_type for signal in outcome.signals] == ["buy"]
+    assert outcome.state["simulatedQuantity"] > 0
+    assert "pendingAction" not in outcome.state
+
+
+def test_price_rule_catches_up_multiple_bars_and_fills_each_signal_on_next_open() -> None:
+    rows = [
+        bar(1, "99", "99"),
+        bar(2, "101", "101"),
+        bar(3, "102", "102"),
+        bar(4, "99", "99"),
+        bar(5, "101", "101"),
+        bar(6, "103", "103"),
+    ]
+    item = work(
+        {
+            "schemaVersion": 1,
+            "kind": "price_threshold",
+            "operator": "crosses_above",
+            "threshold": 100,
+            "currency": "USD",
+            "action": "buy",
+            "sizePct": 25,
+        },
+        rows,
+    )
+    item = EvaluationWork(
+        **{
+            **item.__dict__,
+            "implementation_hash": item.rule_hash,
+            "last_evaluated_bar_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        }
+    )
+    repository = FakeRepository(item)
+
+    process_next_evaluation(repository)
+
+    outcome = repository.completed[1]
+    assert len(outcome.signals) == 2
+    assert outcome.state["simulatedQuantity"] > 0
+    assert "pendingAction" not in outcome.state

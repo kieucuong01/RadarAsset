@@ -71,6 +71,7 @@ import {
   upsertWatchlistItem,
   removeWatchlistItem,
   upsertStrategyAssignment,
+  validateSourceSignalExecution,
 } from "./db";
 import { getWorkerImportContext } from "./worker-context";
 
@@ -132,6 +133,37 @@ describe("organization-scoped database services", () => {
       select: { id: true, organizationId: true },
     });
     expect(prisma.portfolioTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it("validates a source signal against portfolio, asset, side, and terminal state", () => {
+    const signal = {
+      status: "suggested",
+      signalType: "buy",
+      assetId: "asset-btc",
+      assignment: { portfolioId: "portfolio-a" },
+    };
+
+    expect(() =>
+      validateSourceSignalExecution(signal, {
+        portfolioId: "portfolio-a",
+        assetId: "asset-btc",
+        side: "buy",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateSourceSignalExecution({ ...signal, signalType: "sell" }, {
+        portfolioId: "portfolio-a",
+        assetId: "asset-btc",
+        side: "buy",
+      }),
+    ).toThrow("SIGNAL_SIDE_MISMATCH");
+    expect(() =>
+      validateSourceSignalExecution({ ...signal, status: "executed" }, {
+        portfolioId: "portfolio-a",
+        assetId: "asset-btc",
+        side: "buy",
+      }),
+    ).toThrow("SIGNAL_ALREADY_ACTED");
   });
 
   it("ranks assets with active datasets first for portfolio buy selection", async () => {

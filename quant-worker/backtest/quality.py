@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Iterable
 
 from .models import Bar, QualityIssue, QualityReport
-from .market_calendar import expected_bar_timestamps
+from .market_calendar import expected_bar_timestamps, timestamp_to_market_date
 
 
 def normalize_bars(rows: Iterable[Bar]) -> list[Bar]:
@@ -105,7 +105,16 @@ def validate_bars(rows: Iterable[Bar], *, market: str) -> QualityReport:
     expected = _expected_timestamps(normalized, market)
     missing = sorted(expected - seen)
     issues.extend(
-        QualityIssue(code="MISSING_BAR", severity="warning", timestamp=timestamp)
+        QualityIssue(
+            code="MISSING_BAR",
+            severity="warning",
+            timestamp=timestamp,
+            details=(
+                {"marketDate": timestamp_to_market_date(timestamp, market).isoformat()}
+                if market == "vn_equity"
+                else {}
+            ),
+        )
         for timestamp in missing
     )
     if any(issue.severity == "error" for issue in issues):

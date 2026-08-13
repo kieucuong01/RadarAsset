@@ -103,9 +103,20 @@ export function advancedAnalysisAvailability(model: BacktestResultModel) {
   };
 }
 
+export function robustnessStatus(robustness: {
+  overallStatus?: "stable" | "mixed" | "fragile" | "not_evaluated";
+  parameterStability: { status: "stable" | "mixed" | "fragile" | "not_evaluated" };
+}) {
+  return robustness.overallStatus ?? robustness.parameterStability.status;
+}
+
 export function backtestOutputState(status: BacktestRun["status"] | null) {
   if (status === null) return "empty" as const;
-  if (status === "queued" || status === "running") return "active" as const;
-  if (status === "failed") return "failed" as const;
+  if (status === "queued" || status === "running" || status === "cancel_requested") {
+    return "active" as const;
+  }
+  if (status === "failed" || status === "cancelled" || status === "timed_out") {
+    return "failed" as const;
+  }
   return "results" as const;
 }

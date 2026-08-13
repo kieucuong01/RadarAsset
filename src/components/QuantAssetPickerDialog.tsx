@@ -150,6 +150,9 @@ export function QuantAssetPickerDialog({
                     <span className="block truncate font-semibold">{item.symbol}</span>
                     <span className="block truncate text-xs font-normal text-muted-foreground">
                       {item.name} · {item.market} · {item.currency}
+                      {item.listingStatus !== "active"
+                        ? ` · ${t("backtest.builder.assetPicker.inactive")}`
+                        : ""}
                     </span>
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">

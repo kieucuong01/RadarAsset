@@ -47,6 +47,23 @@ export const dictionaries = {
         backlogDetail: "{count} job ingestion đang chờ/đang chạy.",
         readyDetail: "Không còn backlog ingestion.",
       },
+      dataHealth: {
+        title: "Sức khỏe dữ liệu thị trường",
+        description: "Độ mới, độ phủ, dữ liệu thiếu và lỗi nguồn trong 24 giờ gần nhất.",
+        healthy: "Ổn định",
+        degraded: "{count} vấn đề",
+        unavailable: "Không đọc được sức khỏe dữ liệu",
+        unavailableDetail: "Dashboard vận hành ingestion hiện không khả dụng.",
+        coverage: "Độ phủ dataset",
+        missingDatasets: "Thiếu {count} dataset",
+        stale: "Dataset lỗi thời",
+        missingBars: "Thiếu {count} bars",
+        backlog: "Hàng đợi ingestion",
+        oldestBacklog: "Cũ nhất: {date}",
+        noBacklog: "Không có hàng đợi",
+        providerFailures: "Lỗi nguồn 24 giờ",
+        lastScheduler: "Scheduler thành công: {date}",
+      },
       tabs: {
         optimizer: "Tối ưu danh mục",
         strategies: "Thư viện chiến lược",
@@ -329,6 +346,9 @@ export const dictionaries = {
       holding: "Holding",
       apply: "Áp dụng chiến lược",
       reviewRequired: "Cần review",
+      review: "Đã xem",
+      dismiss: "Bỏ qua",
+      decisionError: "Không thể cập nhật trạng thái tín hiệu.",
       noSignal:
         "Chưa có tín hiệu BUY/SELL mới. Assignment sẽ được đánh giá khi dataset thị trường immutable mới được publish.",
     },
@@ -348,6 +368,9 @@ export const dictionaries = {
       noSignal: "Chưa có tín hiệu mới",
       strategy: "Chiến lược",
       buyHold: "Buy & Hold",
+      forwardReturn: "Lợi nhuận forward",
+      backtestReturn: "Lợi nhuận backtest nguồn",
+      backtestGap: "Chênh lệch so với backtest",
     },
     optimizer: {
       title: "Bộ tối ưu Awesome-Quant",
@@ -509,6 +532,8 @@ export const dictionaries = {
       emptyMessage: "Chạy portfolio backtest để có hiệu suất thật và lệnh đã hoàn tất.",
       emptyContinue: "Chạy portfolio backtest để tiếp tục.",
       activePortfolio: "Danh mục đang chạy",
+      rawData: "Dữ liệu raw · chưa điều chỉnh",
+      adjustedData: "Dữ liệu adjusted · total return",
       legs: "legs",
       equityTitle: "Equity Curve & Drawdown",
       strategy: "Chiến lược",
@@ -591,6 +616,11 @@ export const dictionaries = {
       activeRunDescription: "{legs} legs · {timeframe} · normalized portfolio simulation",
       failedTitle: "Backtest failed",
       failedDescription: "Worker could not finish this run. Check the selected data and try again.",
+      cancelledTitle: "Backtest đã hủy",
+      cancelledDescription: "Run đã được hủy và sẽ không tiếp tục xử lý.",
+      timedOutTitle: "Backtest quá thời gian",
+      timedOutDescription:
+        "Run vượt quá thời gian xử lý cho phép. Hãy thu hẹp phạm vi hoặc thử lại.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",
@@ -633,11 +663,19 @@ export const dictionaries = {
         dividend: "Cổ tức",
         excludeDividend: "Không tính riêng",
         adjustedPrices: "Giá total-return",
+        rawPolicyDescription: "Raw: giá gốc từ nhà cung cấp, chưa điều chỉnh cổ tức hoặc quyền.",
+        adjustedPolicyDescription:
+          "Adjusted: total return từ action đã xác minh; bars gốc vẫn được giữ bất biến.",
+        adjustmentUnavailableTitle: "Chưa có dữ liệu adjusted",
+        adjustmentUnavailableDescription:
+          "Các mã sau chưa có total-return dataset phủ đủ khoảng chọn: {symbols}.",
         fxPolicy: "FX policy",
         fxDescription: "Không mô phỏng settlement FX lịch sử ở MVP.",
         noFakeTitle: "Không tạo dữ liệu giả",
         noFakeDescription:
           "“Giá total-return” chỉ chạy khi có dataset immutable phù hợp; nếu không, server trả lỗi trước khi tạo run.",
+        survivorshipNotice:
+          "Catalog giữ lại mã inactive kể từ khi hệ thống bắt đầu snapshot. Giai đoạn trước snapshot chưa phải historical constituent universe hoàn chỉnh.",
         costModel: "Cost model theo thị trường",
         invalidTitle: "Chưa thể chạy backtest",
         footer: "Kết quả là normalized simulation capital, không phải số dư hoặc lệnh tại broker.",
@@ -675,6 +713,7 @@ export const dictionaries = {
           emptyTitle: "Không tìm thấy mã phù hợp",
           emptyDescription: "Thử từ khóa khác hoặc điều chỉnh khoảng thời gian.",
           selected: "Đã thêm",
+          inactive: "Không còn trong catalog hiện tại",
         },
         leg: {
           remove: "Xóa {symbol}",
@@ -733,6 +772,24 @@ export const dictionaries = {
         activeDatasets: "{count} active datasets",
         backlogDetail: "{count} ingestion jobs queued/running.",
         readyDetail: "No ingestion backlog.",
+      },
+      dataHealth: {
+        title: "Market data health",
+        description:
+          "Freshness, coverage, missing data, and provider failures in the last 24 hours.",
+        healthy: "Healthy",
+        degraded: "{count} issues",
+        unavailable: "Market data health unavailable",
+        unavailableDetail: "The ingestion operations dashboard cannot be loaded.",
+        coverage: "Dataset coverage",
+        missingDatasets: "{count} datasets missing",
+        stale: "Stale datasets",
+        missingBars: "{count} bars missing",
+        backlog: "Ingestion backlog",
+        oldestBacklog: "Oldest: {date}",
+        noBacklog: "No backlog",
+        providerFailures: "Provider failures (24h)",
+        lastScheduler: "Scheduler succeeded: {date}",
       },
       tabs: {
         optimizer: "Portfolio Optimizer",
@@ -1013,6 +1070,9 @@ export const dictionaries = {
       holding: "Holding",
       apply: "Apply strategy",
       reviewRequired: "Review required",
+      review: "Mark reviewed",
+      dismiss: "Dismiss",
+      decisionError: "Unable to update signal status.",
       noSignal:
         "No new BUY/SELL signal yet. Active assignments are evaluated whenever a new immutable market dataset is published.",
     },
@@ -1032,6 +1092,9 @@ export const dictionaries = {
       noSignal: "No new signal yet",
       strategy: "Strategy",
       buyHold: "Buy & Hold",
+      forwardReturn: "Forward return",
+      backtestReturn: "Source backtest return",
+      backtestGap: "Gap vs backtest",
     },
     optimizer: {
       title: "Awesome-Quant Optimizer",
@@ -1194,6 +1257,8 @@ export const dictionaries = {
       emptyMessage: "Run a portfolio backtest to populate real performance and completed trades.",
       emptyContinue: "Run a portfolio backtest to continue.",
       activePortfolio: "Active Portfolio",
+      rawData: "Raw data · unadjusted",
+      adjustedData: "Adjusted data · total return",
       legs: "legs",
       equityTitle: "Equity Curve & Drawdown",
       strategy: "Strategy",
@@ -1275,6 +1340,11 @@ export const dictionaries = {
       activeRunDescription: "{legs} legs · {timeframe} · normalized portfolio simulation",
       failedTitle: "Backtest failed",
       failedDescription: "Worker could not finish this run. Check the selected data and try again.",
+      cancelledTitle: "Backtest cancelled",
+      cancelledDescription: "The run was cancelled and will not continue processing.",
+      timedOutTitle: "Backtest timed out",
+      timedOutDescription:
+        "The run exceeded its processing deadline. Narrow the range or try again.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",
@@ -1317,11 +1387,19 @@ export const dictionaries = {
         dividend: "Dividends",
         excludeDividend: "Do not model separately",
         adjustedPrices: "Total-return prices",
+        rawPolicyDescription: "Raw: provider prices before dividend or rights adjustments.",
+        adjustedPolicyDescription:
+          "Adjusted: total return from verified actions; source bars remain immutable.",
+        adjustmentUnavailableTitle: "Adjusted data unavailable",
+        adjustmentUnavailableDescription:
+          "These assets do not yet have a total-return dataset covering the selected range: {symbols}.",
         fxPolicy: "FX policy",
         fxDescription: "Historical settlement FX is not modeled in the MVP.",
         noFakeTitle: "No synthetic price data",
         noFakeDescription:
           "“Total-return prices” only run when a compatible immutable dataset exists; otherwise the server rejects the run before creation.",
+        survivorshipNotice:
+          "The catalog retains inactive symbols from the first system snapshot onward. Earlier periods are not yet a complete historical constituent universe.",
         costModel: "Market cost model",
         invalidTitle: "Backtest cannot run yet",
         footer: "Results are normalized simulation capital, not broker balances or orders.",
@@ -1359,6 +1437,7 @@ export const dictionaries = {
           emptyTitle: "No matching assets found",
           emptyDescription: "Try another keyword or adjust the date range.",
           selected: "Added",
+          inactive: "Not in the current catalog",
         },
         leg: {
           remove: "Remove {symbol}",

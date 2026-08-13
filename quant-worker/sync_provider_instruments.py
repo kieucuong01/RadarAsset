@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -33,6 +34,30 @@ PROVIDERS = {
         "https://www.dukascopy.com/swiss/english/marketwatch/historical/",
     ),
 }
+
+
+def load_service_tenant(env_file: Path = Path(".env.local")) -> tuple[str, str]:
+    configured = {
+        "QUANT_WORKER_ORGANIZATION_SLUG": os.getenv("QUANT_WORKER_ORGANIZATION_SLUG", "").strip(),
+        "QUANT_WORKER_USER_EMAIL": os.getenv("QUANT_WORKER_USER_EMAIL", "").strip(),
+    }
+    if not all(configured.values()) and env_file.exists():
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in configured or configured[key]:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                value = value[1:-1]
+            configured[key] = value.strip()
+    return (
+        configured["QUANT_WORKER_ORGANIZATION_SLUG"] or "demo-workspace",
+        configured["QUANT_WORKER_USER_EMAIL"] or "demo@radarasset.local",
+    )
 
 
 def provider_code(descriptor: ProviderInstrumentDescriptor) -> str:
@@ -70,9 +95,7 @@ def sync_provider_instruments(
         select_provider_instruments(descriptors),
         key=lambda item: (provider_code(item), item.canonical_symbol),
     )
-    reserved_non_crypto_symbols = sorted(
-        feed.symbol for feed in FEEDS.values() if feed.market != "crypto_spot"
-    )
+    observed_at = datetime.now(timezone.utc)
     synchronized = 0
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -84,27 +107,18 @@ def sync_provider_instruments(
                 """,
                 (),
             )
-            selected_catalog = json.dumps(
-                [
-                    {
-                        "provider_code": provider_code(row),
-                        "provider_symbol": row.provider_symbol,
-                        "canonical_symbol": row.canonical_symbol,
-                    }
-                    for row in rows
-                ],
-                separators=(",", ":"),
-            )
             cursor.execute(
                 """
-                DELETE FROM provider_instruments pi
-                USING data_providers p, assets a
-                WHERE pi.provider_id = p.id
-                  AND pi.asset_id = a.id
-                  AND p.code = 'binance-public'
-                  AND a.symbol = ANY(%s)
+                UPDATE provider_instruments AS instrument
+                SET is_active = false
+                FROM data_providers AS provider
+                WHERE instrument.provider_id = provider.id
+                  AND provider.code IN (
+                    'binance-public', 'dukascopy-public',
+                    'vnstock-vci-free', 'msn-via-vnstock'
+                  )
                 """,
-                (reserved_non_crypto_symbols,),
+                (),
             )
             for descriptor in rows:
                 code = provider_code(descriptor)
@@ -137,10 +151,11 @@ def sync_provider_instruments(
                     INSERT INTO assets (
                         id, symbol, canonical_key, name, asset_class, market, venue,
                         timezone, max_leverage, currency, provider, provider_symbol,
+                        listing_status,
                         created_at, updated_at
                     ) VALUES (
                         gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, NOW(), NOW()
+                        %s, %s, %s, %s, 'active', NOW(), NOW()
                     )
                     ON CONFLICT (symbol) DO UPDATE SET
                         name = EXCLUDED.name,
@@ -150,6 +165,7 @@ def sync_provider_instruments(
                         currency = EXCLUDED.currency,
                         provider = EXCLUDED.provider,
                         provider_symbol = EXCLUDED.provider_symbol,
+                        listing_status = 'active',
                         updated_at = NOW()
                     RETURNING id
                     """,
@@ -169,86 +185,100 @@ def sync_provider_instruments(
                 )
                 asset_id = cursor.fetchone()[0]
                 metadata = {
-                    "catalogSynchronizedAt": datetime.now(timezone.utc).isoformat(),
+                    "catalogSynchronizedAt": observed_at.isoformat(),
                     "source": "approved-provider-catalog",
                 }
                 cursor.execute(
                     """
                     INSERT INTO provider_instruments (
-                        id, provider_id, asset_id, provider_symbol, metadata, created_at
-                    ) VALUES (gen_random_uuid(), %s, %s, %s, %s::jsonb, NOW())
+                        id, provider_id, asset_id, provider_symbol, metadata,
+                        is_active, last_seen_at, created_at
+                    ) VALUES (
+                        gen_random_uuid(), %s, %s, %s, %s::jsonb,
+                        true, %s, NOW()
+                    )
                     ON CONFLICT (provider_id, asset_id) DO UPDATE SET
                         provider_symbol = EXCLUDED.provider_symbol,
-                        metadata = EXCLUDED.metadata
+                        metadata = EXCLUDED.metadata,
+                        is_active = true,
+                        last_seen_at = EXCLUDED.last_seen_at
                     """,
                     (
                         provider_id,
                         asset_id,
                         descriptor.provider_symbol,
                         json.dumps(metadata, separators=(",", ":")),
+                        observed_at,
                     ),
                 )
                 synchronized += 1
             cursor.execute(
                 """
-                WITH selected AS (
-                  SELECT *
-                  FROM jsonb_to_recordset(%s::jsonb) AS row(
-                    provider_code text,
-                    provider_symbol text,
-                    canonical_symbol text
-                  )
-                ),
-                stale AS (
-                  SELECT pi.id
-                  FROM provider_instruments pi
-                  JOIN data_providers provider ON provider.id = pi.provider_id
-                  JOIN assets asset ON asset.id = pi.asset_id
-                  LEFT JOIN selected
-                    ON selected.provider_code = provider.code
-                   AND selected.provider_symbol = pi.provider_symbol
-                   AND selected.canonical_symbol = asset.symbol
-                  WHERE provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
-                    AND selected.provider_code IS NULL
+                UPDATE assets AS asset
+                SET listing_status = CASE
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM provider_instruments AS active_instrument
+                    WHERE active_instrument.asset_id = asset.id
+                      AND active_instrument.is_active = true
+                  ) THEN 'active'
+                  ELSE 'inactive'
+                END,
+                updated_at = NOW()
+                WHERE EXISTS (
+                  SELECT 1
+                  FROM provider_instruments AS managed_instrument
+                  JOIN data_providers AS managed_provider
+                    ON managed_provider.id = managed_instrument.provider_id
+                  WHERE managed_instrument.asset_id = asset.id
+                    AND managed_provider.code IN (
+                      'binance-public', 'dukascopy-public',
+                      'vnstock-vci-free', 'msn-via-vnstock'
+                    )
                 )
-                DELETE FROM market_ingestion_requests request
-                USING stale
-                WHERE request.provider_instrument_id = stale.id
-                  AND request.status IN ('queued', 'running')
                 """,
-                (selected_catalog,),
+                (),
             )
             cursor.execute(
                 """
-                WITH selected AS (
-                  SELECT *
-                  FROM jsonb_to_recordset(%s::jsonb) AS row(
-                    provider_code text,
-                    provider_symbol text,
-                    canonical_symbol text
-                  )
+                INSERT INTO instrument_catalog_snapshots (
+                  id, provider_code, asset_id, provider_symbol, venue,
+                  listing_status, observed_at, metadata
                 )
-                DELETE FROM provider_instruments pi
-                USING data_providers provider, assets asset
-                WHERE pi.provider_id = provider.id
-                  AND pi.asset_id = asset.id
-                  AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM selected
-                    WHERE selected.provider_code = provider.code
-                      AND selected.provider_symbol = pi.provider_symbol
-                      AND selected.canonical_symbol = asset.symbol
-                  )
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM datasets dataset
-                    JOIN dataset_versions version ON version.dataset_id = dataset.id
-                    WHERE dataset.asset_id = asset.id
-                      AND version.is_active = true
-                  )
+                SELECT
+                  gen_random_uuid(), provider.code, asset.id,
+                  instrument.provider_symbol, asset.venue,
+                  CASE WHEN instrument.is_active THEN 'active' ELSE 'inactive' END,
+                  %s, instrument.metadata
+                FROM provider_instruments AS instrument
+                JOIN data_providers AS provider ON provider.id = instrument.provider_id
+                JOIN assets AS asset ON asset.id = instrument.asset_id
+                WHERE provider.code IN (
+                  'binance-public', 'dukascopy-public',
+                  'vnstock-vci-free', 'msn-via-vnstock'
+                )
+                ON CONFLICT (provider_code, asset_id, observed_at) DO UPDATE SET
+                  provider_symbol = EXCLUDED.provider_symbol,
+                  venue = EXCLUDED.venue,
+                  listing_status = EXCLUDED.listing_status,
+                  metadata = EXCLUDED.metadata
                 """,
-                (selected_catalog,),
+                (observed_at,),
+            )
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests AS request
+                SET status = 'failed',
+                    worker_id = NULL,
+                    lease_expires_at = NULL,
+                    error_code = 'instrument_inactive',
+                    updated_at = NOW()
+                FROM provider_instruments AS instrument
+                WHERE request.provider_instrument_id = instrument.id
+                  AND instrument.is_active = false
+                  AND request.status IN ('queued', 'running')
+                """,
+                (),
             )
     return synchronized
 
@@ -262,6 +292,7 @@ def queue_market_ingestion_requests(
 ) -> int:
     if command not in {"all", "daily", "hourly"}:
         raise ValueError("Unsupported bulk ingestion command.")
+    timeframe_filter = {"all": "all", "daily": "1d", "hourly": "1h"}[command]
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(
@@ -282,6 +313,7 @@ def queue_market_ingestion_requests(
                     VALUES ('1d'), ('1h')
                   ) AS timeframe(timeframe)
                   WHERE provider.status = 'active'
+                    AND pi.is_active = true
                     AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
                     AND (%s = 'all' OR %s = timeframe.timeframe)
@@ -306,7 +338,7 @@ def queue_market_ingestion_requests(
                     AND existing.status IN ('queued', 'running')
                 )
                 """,
-                (user_email, organization_slug, command, command),
+                (user_email, organization_slug, timeframe_filter, timeframe_filter),
             )
             return cursor.rowcount
 
@@ -316,8 +348,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Sync approved market-data provider catalogs.")
     parser.add_argument("--queue-ingestion", choices=("all", "daily", "hourly"))
+    parser.add_argument("--env-file", default=".env.local")
     args = parser.parse_args(argv)
     try:
+        env_file = Path(args.env_file)
+        organization_slug, user_email = load_service_tenant(env_file)
         descriptors = [
             *BinanceSpotAdapter().list_instruments(),
             *VnstockAdapter().list_instruments(),
@@ -330,11 +365,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 currency="USD",
             ),
         ]
-        url = psycopg_connection_url(load_database_url(Path(".env.local")))
+        url = psycopg_connection_url(load_database_url(env_file))
         with psycopg.connect(url, autocommit=False) as connection:
             count = sync_provider_instruments(connection, descriptors)
             queued = (
-                queue_market_ingestion_requests(connection, command=args.queue_ingestion)
+                queue_market_ingestion_requests(
+                    connection,
+                    command=args.queue_ingestion,
+                    organization_slug=organization_slug,
+                    user_email=user_email,
+                )
                 if args.queue_ingestion
                 else 0
             )

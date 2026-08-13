@@ -208,6 +208,11 @@ export function PortfolioBacktestBuilder({
     state.legs.reduce((total, leg) => total + leg.allocationBps, 0);
   const investableBps = 10_000 - state.assumptions.cashAllocationBps;
   const isSidebar = layout === "sidebar";
+  const selectedAdjustmentPolicy =
+    state.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
+  const adjustmentUnavailableSymbols = state.legs
+    .filter((leg) => !leg.availableAdjustments.includes(selectedAdjustmentPolicy))
+    .map((leg) => leg.symbol);
 
   function defaultStrategyFor(market: string) {
     const selectedPreset = strategyPreset
@@ -704,6 +709,11 @@ export function PortfolioBacktestBuilder({
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              <FieldDescription>
+                {state.assumptions.dividendMode === "adjusted_prices"
+                  ? t("backtest.builder.adjustedPolicyDescription")
+                  : t("backtest.builder.rawPolicyDescription")}
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="monthly-contribution">
@@ -755,8 +765,21 @@ export function PortfolioBacktestBuilder({
           <Alert>
             <AlertCircle />
             <AlertTitle>{t("backtest.builder.noFakeTitle")}</AlertTitle>
-            <AlertDescription>{t("backtest.builder.noFakeDescription")}</AlertDescription>
+            <AlertDescription>
+              {t("backtest.builder.noFakeDescription")} {t("backtest.builder.survivorshipNotice")}
+            </AlertDescription>
           </Alert>
+          {adjustmentUnavailableSymbols.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertTitle>{t("backtest.builder.adjustmentUnavailableTitle")}</AlertTitle>
+              <AlertDescription>
+                {t("backtest.builder.adjustmentUnavailableDescription", {
+                  symbols: adjustmentUnavailableSymbols.join(", "),
+                })}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           <Accordion type="multiple" className="w-full">
             {MARKET_KEYS.map((market) => (
