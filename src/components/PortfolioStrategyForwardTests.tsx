@@ -54,7 +54,7 @@ export function PortfolioStrategyForwardTests() {
 }
 
 function ForwardCard({ item }: { item: ForwardTest }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const chart = useMemo(() => buildForwardChart(item.snapshots), [item.snapshots]);
   const comparison = useMemo(
     () => buildForwardComparison(item.snapshots, item.backtestBaseline),
@@ -77,7 +77,10 @@ function ForwardCard({ item }: { item: ForwardTest }) {
           {t("forwardTesting.dataUntil")}
           <br />
           {item.lastEvaluatedBarAt
-            ? new Date(item.lastEvaluatedBarAt).toLocaleString("vi-VN")
+            ? new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }).format(new Date(item.lastEvaluatedBarAt))
             : t("forwardTesting.waiting")}
         </div>
       </div>
@@ -94,9 +97,18 @@ function ForwardCard({ item }: { item: ForwardTest }) {
       </div>
       {comparison ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <PercentMetric label={t("forwardTesting.forwardReturn")} value={comparison.forwardReturnPct} />
-          <PercentMetric label={t("forwardTesting.backtestReturn")} value={comparison.backtestReturnPct} />
-          <PercentMetric label={t("forwardTesting.backtestGap")} value={comparison.backtestGapPctPoints} />
+          <PercentMetric
+            label={t("forwardTesting.forwardReturn")}
+            value={comparison.forwardReturnPct}
+          />
+          <PercentMetric
+            label={t("forwardTesting.backtestReturn")}
+            value={comparison.backtestReturnPct}
+          />
+          <PercentMetric
+            label={t("forwardTesting.backtestGap")}
+            value={comparison.backtestGapPctPoints}
+          />
         </div>
       ) : null}
       <div className="mt-4 h-52">
@@ -144,11 +156,12 @@ function ForwardCard({ item }: { item: ForwardTest }) {
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
+  const { locale } = useI18n();
   return (
     <div className="rounded-xl border bg-muted/20 p-3">
       <div className="text-[10px] font-mono uppercase text-muted-foreground">{label}</div>
       <div className="mt-1 font-semibold tabular-nums">
-        {value.toLocaleString("en-US", {
+        {value.toLocaleString(locale === "vi" ? "vi-VN" : "en-US", {
           style: "currency",
           currency: "USD",
           maximumFractionDigits: 2,
@@ -162,8 +175,15 @@ function PercentMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border bg-muted/20 p-3">
       <div className="text-[10px] font-mono uppercase text-muted-foreground">{label}</div>
-      <div className={value >= 0 ? "mt-1 font-semibold tabular-nums text-bull" : "mt-1 font-semibold tabular-nums text-bear"}>
-        {value >= 0 ? "+" : ""}{value.toFixed(2)}%
+      <div
+        className={
+          value >= 0
+            ? "mt-1 font-semibold tabular-nums text-bull"
+            : "mt-1 font-semibold tabular-nums text-bear"
+        }
+      >
+        {value >= 0 ? "+" : ""}
+        {value.toFixed(2)}%
       </div>
     </div>
   );

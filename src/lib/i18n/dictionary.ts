@@ -52,6 +52,7 @@ export const dictionaries = {
         description: "Độ mới, độ phủ, dữ liệu thiếu và lỗi nguồn trong 24 giờ gần nhất.",
         healthy: "Ổn định",
         degraded: "{count} vấn đề",
+        failed: "Lỗi vận hành",
         unavailable: "Không đọc được sức khỏe dữ liệu",
         unavailableDetail: "Dashboard vận hành ingestion hiện không khả dụng.",
         coverage: "Độ phủ dataset",
@@ -118,6 +119,7 @@ export const dictionaries = {
       unavailableMvp: "Chưa khả dụng trong MVP",
       noData: "Chưa có dữ liệu",
       loading: "Đang tải…",
+      notAvailable: "Không có",
     },
     overview: {
       hero: {
@@ -420,6 +422,57 @@ export const dictionaries = {
       empty: "Chọn tài sản rồi chạy optimizer để xem phân bổ. Không có kết quả mô phỏng mặc định.",
       dataset: "Dataset",
       observations: "{count} overlapping returns",
+      methods: {
+        equal_weight: {
+          label: "Chia đều",
+          description: "Mốc 1/N để so sánh các phương án tối ưu.",
+        },
+        inverse_volatility: {
+          label: "Nghịch đảo biến động",
+          description: "Ưu tiên tài sản có biến động thấp.",
+        },
+        minimum_variance: {
+          label: "Phương sai tối thiểu",
+          description:
+            "Tối thiểu hóa biến động danh mục với ràng buộc long-only và trọng số tối đa.",
+        },
+        maximum_sharpe: {
+          label: "Sharpe tối đa",
+          description: "Tối đa hóa Sharpe từ lợi nhuận lịch sử và hiệp phương sai.",
+        },
+        target_return: {
+          label: "Markowitz theo lợi nhuận mục tiêu",
+          description: "Tìm danh mục có biến động thấp nhất tại lợi nhuận mục tiêu.",
+        },
+        target_volatility: {
+          label: "Markowitz theo biến động mục tiêu",
+          description: "Tìm danh mục có lợi nhuận kỳ vọng cao nhất tại biến động mục tiêu.",
+        },
+        risk_tolerance: {
+          label: "Markowitz theo mức chịu rủi ro",
+          description: "Chọn điểm trên đường biên hiệu quả theo mức chịu rủi ro.",
+        },
+        risk_parity: {
+          label: "Cân bằng rủi ro",
+          description: "Chia đều đóng góp rủi ro thay vì chia đều vốn.",
+        },
+        most_diversified: {
+          label: "Đa dạng hóa tối đa",
+          description: "Tối đa hóa tỷ lệ đa dạng hóa với ràng buộc long-only và trọng số tối đa.",
+        },
+        minimum_correlation: {
+          label: "Tương quan tối thiểu",
+          description: "Ưu tiên tài sản có tương quan thấp để tăng phân tán.",
+        },
+        minimum_cvar: {
+          label: "CVaR tối thiểu",
+          description: "Tối thiểu hóa mức lỗ kỳ vọng trong 5% quan sát xấu nhất.",
+        },
+        hierarchical_risk_parity: {
+          label: "Cân bằng rủi ro phân cấp",
+          description: "Nhóm các tài sản tương quan và phân bổ rủi ro theo cấu trúc phân cấp.",
+        },
+      },
     },
     strategyLab: {
       title: "Thư viện chiến lược",
@@ -506,6 +559,97 @@ export const dictionaries = {
       greaterThan: "Lớn hơn",
       greaterThanOrEqual: "Lớn hơn hoặc bằng",
       threshold: "Ngưỡng",
+      defaultName: "Chiến lược của tôi",
+      version: "Phiên bản",
+      styles: {
+        trend: "Theo xu hướng",
+        momentum: "Động lượng",
+        mean_reversion: "Hồi quy trung bình",
+        pattern: "Mẫu hình",
+      },
+      guides: {
+        ma_crossover: {
+          thesis: "Theo xu hướng bằng cách so sánh động lượng giá ngắn hạn và dài hạn.",
+          entry: "Mua khi SMA nhanh cắt lên SMA chậm; khớp ở giá mở cửa nến kế tiếp.",
+          exit: "Bán khi SMA nhanh cắt xuống SMA chậm.",
+          ideal1: "Thị trường có xu hướng kéo dài",
+          ideal2: "Thanh khoản ổn định",
+          risk1: "Nhiều tín hiệu nhiễu khi giá đi ngang",
+          risk2: "Tín hiệu trễ sau điểm đảo chiều",
+        },
+        turtle_breakout: {
+          thesis: "Bám theo xu hướng mới khi giá vượt khỏi vùng cực trị gần nhất.",
+          entry: "Mua khi giá đóng cửa vượt đỉnh của cửa sổ entry trước đó.",
+          exit: "Bán khi giá đóng cửa xuống dưới đáy của cửa sổ exit.",
+          ideal1: "Breakout có xu hướng tiếp diễn",
+          ideal2: "Biến động mở rộng",
+          risk1: "Breakout giả",
+          risk2: "Khoảng dừng lỗ có thể rộng",
+        },
+        signal_rolling_reversal: {
+          thesis: "Xác nhận sự đổi hướng bằng chuỗi nến tăng hoặc giảm liên tục.",
+          entry: "Mua sau số nến xác nhận tăng được cấu hình.",
+          exit: "Bán sau số nến xác nhận giảm được cấu hình.",
+          ideal1: "Động lượng ngắn hạn rõ ràng",
+          ideal2: "Chuỗi nến có tính liên tục",
+          risk1: "Vào lệnh trễ",
+          risk2: "Nhạy với chuỗi nến nhiễu",
+        },
+        abcd_causal: {
+          thesis: "Tìm cấu trúc ABCD đã được xác nhận mà không sử dụng dữ liệu tương lai.",
+          entry: "Mua khi pivot D và tỷ lệ retracement/extension hợp lệ được xác nhận.",
+          exit: "Bán khi đạt mục tiêu giá của mẫu hình.",
+          ideal1: "Nhịp giá rõ ràng",
+          ideal2: "Biên độ đủ lớn sau phí",
+          risk1: "Ít tín hiệu",
+          risk2: "Kết quả nhạy với tham số pivot",
+        },
+        ema_trend: {
+          thesis: "Theo xu hướng bằng EMA để phản ứng nhanh hơn SMA với thay đổi gần đây.",
+          entry: "Mua khi EMA nhanh cắt lên EMA chậm.",
+          exit: "Bán khi EMA nhanh cắt xuống EMA chậm.",
+          ideal1: "Xu hướng trung hạn",
+          ideal2: "Tài sản giao dịch liên tục",
+          risk1: "Nhiễu trong vùng tích lũy",
+          risk2: "Nhạy với biến động ngắn hạn",
+        },
+        rsi_mean_reversion: {
+          thesis: "Mua khi động lượng giảm quá mức và chờ giá hồi về trạng thái cân bằng.",
+          entry: "Mua khi RSI xuống dưới ngưỡng quá bán.",
+          exit: "Bán khi RSI hồi lên ngưỡng phục hồi.",
+          ideal1: "Thị trường đi ngang",
+          ideal2: "Giá thường hồi về trung bình",
+          risk1: "Bắt dao rơi trong xu hướng giảm",
+          risk2: "RSI có thể quá bán lâu",
+        },
+        bollinger_mean_reversion: {
+          thesis: "Kỳ vọng giá quay về trung tâm sau khi lệch xa khỏi phân phối gần đây.",
+          entry: "Mua khi giá đóng cửa dưới dải Bollinger dưới.",
+          exit: "Bán khi giá quay về đường trung tâm.",
+          ideal1: "Biến động ổn định",
+          ideal2: "Thị trường không có xu hướng mạnh",
+          risk1: "Giá có thể tiếp tục bám dải",
+          risk2: "Độ lệch chuẩn thay đổi nhanh",
+        },
+        macd_momentum: {
+          thesis: "Theo sự thay đổi động lượng được phản ánh qua MACD histogram.",
+          entry: "Mua khi MACD histogram cắt lên mức 0.",
+          exit: "Bán khi MACD histogram cắt xuống mức 0.",
+          ideal1: "Động lượng tăng bền",
+          ideal2: "Xu hướng vừa hình thành",
+          risk1: "Tín hiệu trễ",
+          risk2: "Nhiễu khi histogram dao động quanh 0",
+        },
+        atr_breakout: {
+          thesis: "Chỉ tham gia breakout đủ lớn so với biến động thông thường của tài sản.",
+          entry: "Mua khi giá vượt đỉnh trước cộng vùng đệm ATR.",
+          exit: "Bán khi giá xuống dưới đáy cửa sổ exit.",
+          ideal1: "Biến động mở rộng",
+          ideal2: "Xu hướng tiếp diễn sau breakout",
+          risk1: "Khoảng vào lệnh xa",
+          risk2: "Breakout giả vẫn có thể xảy ra",
+        },
+      },
     },
     factorLab: {
       loading: "Đang tải universe factor Việt Nam…",
@@ -526,6 +670,10 @@ export const dictionaries = {
       liquidity: "Thanh khoản",
       return126d: "Return 126d",
       vol63d: "Vol 63d",
+      reasons: {
+        insufficient_symbols: "Factor Lab cần ít nhất 5 mã VN có 252 phiên giá/khối lượng ngày.",
+        insufficient_aligned_sessions: "Dữ liệu VN chưa có đủ 252 phiên ngày được căn chỉnh.",
+      },
     },
     backtestResults: {
       aria: "Kết quả backtest",
@@ -552,6 +700,7 @@ export const dictionaries = {
       winningTrades: "Lệnh thắng",
       totalReturn: "Total Return",
       portfolioReturn: "Lợi nhuận danh mục",
+      pnl: "Lãi/lỗ",
       tradeList: {
         title: "Danh sách lệnh",
         description: "Fills khớp lệnh và round trip hoàn tất, mới nhất trước.",
@@ -634,11 +783,15 @@ export const dictionaries = {
         from: "Từ ngày",
         to: "Đến ngày",
         legs: "Portfolio Legs",
+        bars: "bars",
         allocation: "Phân bổ tài sản",
         allocationDescription:
           "Equal chia đều phần vốn sau cash; Custom cho phép sửa từng mã; Optimized dùng engine dữ liệu thật.",
         mode: "Chế độ phân bổ",
+        equal: "Chia đều",
+        custom: "Tùy chỉnh",
         optimizerMethod: "Optimization method",
+        optimizedBy: "Tối ưu bởi",
         targetReturn: "Target return/năm",
         targetVolatility: "Target vol/năm",
         riskTolerance: "Risk tolerance: {value}",
@@ -779,6 +932,7 @@ export const dictionaries = {
           "Freshness, coverage, missing data, and provider failures in the last 24 hours.",
         healthy: "Healthy",
         degraded: "{count} issues",
+        failed: "Operational failure",
         unavailable: "Market data health unavailable",
         unavailableDetail: "The ingestion operations dashboard cannot be loaded.",
         coverage: "Dataset coverage",
@@ -842,6 +996,7 @@ export const dictionaries = {
       unavailableMvp: "Unavailable in MVP",
       noData: "No data",
       loading: "Loading…",
+      notAvailable: "N/A",
     },
     overview: {
       hero: {
@@ -1146,6 +1301,58 @@ export const dictionaries = {
         "Choose assets and run the optimizer to see allocations. No default simulated result is shown.",
       dataset: "Dataset",
       observations: "{count} overlapping returns",
+      methods: {
+        equal_weight: {
+          label: "Equal Weight",
+          description: "A 1/N baseline for comparing optimization methods.",
+        },
+        inverse_volatility: {
+          label: "Inverse Volatility",
+          description: "Favors assets with lower historical volatility.",
+        },
+        minimum_variance: {
+          label: "Global Minimum Variance",
+          description:
+            "Minimizes portfolio volatility under long-only and maximum-weight constraints.",
+        },
+        maximum_sharpe: {
+          label: "Maximum Sharpe",
+          description: "Maximizes the Sharpe ratio using historical returns and covariance.",
+        },
+        target_return: {
+          label: "Markowitz Target Return",
+          description: "Finds the lowest-volatility portfolio at the target return.",
+        },
+        target_volatility: {
+          label: "Markowitz Target Volatility",
+          description: "Finds the highest expected return at the target volatility.",
+        },
+        risk_tolerance: {
+          label: "Markowitz Risk Tolerance",
+          description: "Selects a point on the efficient frontier by risk tolerance.",
+        },
+        risk_parity: {
+          label: "Risk Parity",
+          description: "Equalizes risk contribution instead of capital allocation.",
+        },
+        most_diversified: {
+          label: "Most Diversified",
+          description:
+            "Maximizes the diversification ratio under long-only and maximum-weight constraints.",
+        },
+        minimum_correlation: {
+          label: "Minimum Correlation",
+          description: "Favors low-correlation assets to improve diversification.",
+        },
+        minimum_cvar: {
+          label: "Minimum CVaR",
+          description: "Minimizes expected loss in the worst 5% of historical observations.",
+        },
+        hierarchical_risk_parity: {
+          label: "Hierarchical Risk Parity",
+          description: "Clusters correlated assets and allocates risk through the hierarchy.",
+        },
+      },
     },
     strategyLab: {
       title: "Strategy Lab",
@@ -1231,6 +1438,98 @@ export const dictionaries = {
       greaterThan: "Greater than",
       greaterThanOrEqual: "Greater than or equal",
       threshold: "Threshold",
+      defaultName: "My strategy",
+      version: "Version",
+      styles: {
+        trend: "Trend following",
+        momentum: "Momentum",
+        mean_reversion: "Mean reversion",
+        pattern: "Pattern",
+      },
+      guides: {
+        ma_crossover: {
+          thesis: "Follows trends by comparing short- and long-term price momentum.",
+          entry: "Buy when the fast SMA crosses above the slow SMA; execute at the next bar open.",
+          exit: "Sell when the fast SMA crosses below the slow SMA.",
+          ideal1: "Persistent market trends",
+          ideal2: "Stable liquidity",
+          risk1: "Frequent whipsaws in sideways markets",
+          risk2: "Signals lag turning points",
+        },
+        turtle_breakout: {
+          thesis: "Follows new trends when price breaks beyond a recent extreme.",
+          entry: "Buy when the close exceeds the prior entry-window high.",
+          exit: "Sell when the close falls below the exit-window low.",
+          ideal1: "Breakouts that continue",
+          ideal2: "Expanding volatility",
+          risk1: "False breakouts",
+          risk2: "Potentially wide stop distance",
+        },
+        signal_rolling_reversal: {
+          thesis: "Confirms direction changes through consecutive rising or falling bars.",
+          entry: "Buy after the configured number of rising confirmation bars.",
+          exit: "Sell after the configured number of falling confirmation bars.",
+          ideal1: "Clear short-term momentum",
+          ideal2: "Persistent bar sequences",
+          risk1: "Late entries",
+          risk2: "Sensitive to noisy bar sequences",
+        },
+        abcd_causal: {
+          thesis: "Finds confirmed ABCD structures without using future data.",
+          entry: "Buy after pivot D and valid retracement/extension ratios are confirmed.",
+          exit: "Sell at the pattern price target.",
+          ideal1: "Clear price swings",
+          ideal2: "Range remains meaningful after costs",
+          risk1: "Few signals",
+          risk2: "Sensitive to pivot parameters",
+        },
+        ema_trend: {
+          thesis: "Uses EMA crossovers to react faster than SMA to recent changes.",
+          entry: "Buy when the fast EMA crosses above the slow EMA.",
+          exit: "Sell when the fast EMA crosses below the slow EMA.",
+          ideal1: "Medium-term trends",
+          ideal2: "Continuously traded assets",
+          risk1: "Whipsaws in consolidation",
+          risk2: "Sensitive to short-term noise",
+        },
+        rsi_mean_reversion: {
+          thesis: "Buys when downside momentum is stretched and waits for a return toward balance.",
+          entry: "Buy when RSI falls below the oversold threshold.",
+          exit: "Sell when RSI recovers to the exit threshold.",
+          ideal1: "Sideways markets",
+          ideal2: "Prices that mean-revert",
+          risk1: "Catching a falling knife",
+          risk2: "RSI can remain oversold",
+        },
+        bollinger_mean_reversion: {
+          thesis:
+            "Expects price to return toward the center after deviating from its recent distribution.",
+          entry: "Buy when the close is below the lower Bollinger band.",
+          exit: "Sell when price returns to the center line.",
+          ideal1: "Stable volatility",
+          ideal2: "Markets without a strong trend",
+          risk1: "Price may keep riding the band",
+          risk2: "Standard deviation can change quickly",
+        },
+        macd_momentum: {
+          thesis: "Tracks momentum changes represented by the MACD histogram.",
+          entry: "Buy when the MACD histogram crosses above zero.",
+          exit: "Sell when the MACD histogram crosses below zero.",
+          ideal1: "Persistent positive momentum",
+          ideal2: "Newly forming trends",
+          risk1: "Lagging signals",
+          risk2: "Noise around the zero line",
+        },
+        atr_breakout: {
+          thesis: "Requires a breakout large enough relative to normal asset volatility.",
+          entry: "Buy above the prior high plus an ATR buffer.",
+          exit: "Sell below the exit-window low.",
+          ideal1: "Expanding volatility",
+          ideal2: "Post-breakout trend continuation",
+          risk1: "Distant entry price",
+          risk2: "False breakouts remain possible",
+        },
+      },
     },
     factorLab: {
       loading: "Loading VN factor universe…",
@@ -1251,6 +1550,11 @@ export const dictionaries = {
       liquidity: "Liquidity",
       return126d: "126d return",
       vol63d: "63d vol",
+      reasons: {
+        insufficient_symbols:
+          "Factor Lab needs at least 5 VN symbols with 252 daily price/volume sessions.",
+        insufficient_aligned_sessions: "VN datasets do not yet have 252 aligned daily sessions.",
+      },
     },
     backtestResults: {
       aria: "Backtest results",
@@ -1277,6 +1581,7 @@ export const dictionaries = {
       winningTrades: "Winning trades",
       totalReturn: "Total Return",
       portfolioReturn: "Portfolio return",
+      pnl: "PnL",
       tradeList: {
         title: "Trade List",
         description: "Execution fills and completed round trips, newest first.",
@@ -1358,11 +1663,15 @@ export const dictionaries = {
         from: "From",
         to: "To",
         legs: "Portfolio Legs",
+        bars: "bars",
         allocation: "Asset allocation",
         allocationDescription:
           "Equal splits capital after cash; Custom lets you edit each asset; Optimized uses the historical-data engine.",
         mode: "Allocation mode",
+        equal: "Equal",
+        custom: "Custom",
         optimizerMethod: "Optimization method",
+        optimizedBy: "Optimized by",
         targetReturn: "Target return/year",
         targetVolatility: "Target vol/year",
         riskTolerance: "Risk tolerance: {value}",

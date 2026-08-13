@@ -33,7 +33,7 @@ type BacktestTradeListProps = {
 };
 
 export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [symbol, setSymbol] = useState("all");
   const rows = useMemo(() => buildPortfolioTradeRows(model), [model]);
   const visibleRows = useMemo(() => filterPortfolioTradeRows(rows, symbol), [rows, symbol]);
@@ -42,6 +42,9 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
     style: "currency",
     currency,
     maximumFractionDigits: currency === "VND" ? 0 : 2,
+  });
+  const number = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
+    maximumFractionDigits: 8,
   });
 
   return (
@@ -86,7 +89,7 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
                 <TableHead className="text-right">{t("common.quantity")}</TableHead>
                 <TableHead className="text-right">{t("backtestResults.tradeList.bars")}</TableHead>
                 <TableHead className="text-right">{t("backtestResults.tradeList.fees")}</TableHead>
-                <TableHead className="text-right">PnL</TableHead>
+                <TableHead className="text-right">{t("backtestResults.pnl")}</TableHead>
                 <TableHead className="text-right">
                   {t("backtestResults.tradeList.return")}
                 </TableHead>
@@ -103,10 +106,10 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
                     <Badge variant="outline">{trade.action.toUpperCase()}</Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.price.toLocaleString()}
+                    {number.format(trade.price)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.quantity.toLocaleString()}
+                    {number.format(trade.quantity)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{trade.barsHeld ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">

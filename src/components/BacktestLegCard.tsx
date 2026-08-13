@@ -56,7 +56,8 @@ export function BacktestLegCard({
 }: BacktestLegCardProps) {
   const notional = (totalCapital * leg.allocationBps) / 10_000;
   const leverageOptions = [1, 1.5, 2].filter((value) => value <= leg.maxLeverage);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const numberFormatter = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US");
 
   return (
     <Card className={cn(compact && "rounded-2xl border-border/80 shadow-sm")}>
@@ -73,7 +74,8 @@ export function BacktestLegCard({
               <Badge variant="outline">{leg.freshness}</Badge>
             </CardTitle>
             <CardDescription className={cn("mt-1", compact ? "line-clamp-2" : "truncate")}>
-              {leg.name} · {leg.currency} · {leg.rowCount.toLocaleString()} bars
+              {leg.name} · {leg.currency} · {numberFormatter.format(leg.rowCount)}{" "}
+              {t("backtest.builder.bars")}
             </CardDescription>
           </div>
           <Button

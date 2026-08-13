@@ -56,6 +56,7 @@ import {
 } from "@/lib/strategy-lab/custom-strategy";
 import { listStrategyLibrary, type StrategyFamily } from "@/lib/strategy-lab/library";
 import { useI18n } from "@/lib/i18n/context";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
 
 const STORAGE_KEY = "radarasset.strategy-lab.v1";
 const FAMILY_LABELS: Record<
@@ -66,12 +67,19 @@ const FAMILY_LABELS: Record<
   fundamental: "strategyLab.fundamental",
   systematic: "strategyLab.systematic",
 };
-const STYLE_LABELS = {
-  trend: "Trend following",
-  momentum: "Momentum",
-  mean_reversion: "Mean reversion",
-  pattern: "Pattern",
+const STYLE_KEYS = {
+  trend: "strategyLab.styles.trend",
+  momentum: "strategyLab.styles.momentum",
+  mean_reversion: "strategyLab.styles.mean_reversion",
+  pattern: "strategyLab.styles.pattern",
 } as const;
+
+function guideKey(
+  code: string,
+  field: "thesis" | "entry" | "exit" | "ideal1" | "ideal2" | "risk1" | "risk2",
+) {
+  return `strategyLab.guides.${code}.${field}` as TranslationKey;
+}
 
 type BuilderKind = CustomStrategyInput["kind"];
 type BuilderState = {
@@ -97,10 +105,10 @@ export type StrategyLabSelection = {
   symbols: string[];
 };
 
-function initialBuilderState(): BuilderState {
+function initialBuilderState(name: string): BuilderState {
   const strategy = STRATEGY_CATALOG[0];
   return {
-    name: "Chiến lược của tôi",
+    name,
     symbol: "BTC",
     kind: "catalog_preset",
     strategyCode: strategy.code,
@@ -123,12 +131,14 @@ export function StrategyLab({
 }: {
   onUsePreset: (selection: StrategyLabSelection) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const library = useMemo(() => listStrategyLibrary(), []);
   const [section, setSection] = useState("library");
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<"all" | StrategyFamily>("all");
-  const [builder, setBuilder] = useState<BuilderState>(initialBuilderState);
+  const [builder, setBuilder] = useState<BuilderState>(() =>
+    initialBuilderState(t("strategyLab.defaultName")),
+  );
   const [saved, setSaved] = useState<CustomStrategy[]>([]);
 
   useEffect(() => {
@@ -136,12 +146,13 @@ export function StrategyLab({
   }, []);
 
   const filteredLibrary = library.filter((strategy) => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("vi");
+    const searchLocale = locale === "vi" ? "vi-VN" : "en-US";
+    const normalizedQuery = query.trim().toLocaleLowerCase(searchLocale);
     return (
       (family === "all" || family === strategy.family) &&
       (!normalizedQuery ||
-        `${strategy.name} ${strategy.thesis} ${STYLE_LABELS[strategy.style]}`
-          .toLocaleLowerCase("vi")
+        `${strategy.name} ${t(guideKey(strategy.code, "thesis"))} ${t(STYLE_KEYS[strategy.style])}`
+          .toLocaleLowerCase(searchLocale)
           .includes(normalizedQuery))
     );
   });
@@ -357,11 +368,13 @@ export function StrategyLab({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle>{strategy.name}</CardTitle>
-                        <CardDescription className="mt-1">{strategy.thesis}</CardDescription>
+                        <CardDescription className="mt-1">
+                          {t(guideKey(strategy.code, "thesis"))}
+                        </CardDescription>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge>{t(FAMILY_LABELS[strategy.family])}</Badge>
-                        <Badge variant="outline">{STYLE_LABELS[strategy.style]}</Badge>
+                        <Badge variant="outline">{t(STYLE_KEYS[strategy.style])}</Badge>
                       </div>
                     </div>
                   </CardHeader>
@@ -372,11 +385,11 @@ export function StrategyLab({
                         <AccordionContent className="flex flex-col gap-2 text-muted-foreground">
                           <p>
                             <strong className="text-foreground">{t("strategyLab.entry")}:</strong>{" "}
-                            {strategy.entryRule}
+                            {t(guideKey(strategy.code, "entry"))}
                           </p>
                           <p>
                             <strong className="text-foreground">{t("strategyLab.exit")}:</strong>{" "}
-                            {strategy.exitRule}
+                            {t(guideKey(strategy.code, "exit"))}
                           </p>
                         </AccordionContent>
                       </AccordionItem>
@@ -385,9 +398,18 @@ export function StrategyLab({
                         <AccordionContent className="grid gap-4 md:grid-cols-2">
                           <GuideList
                             title={t("strategyLab.ideal")}
-                            items={strategy.idealConditions}
+                            items={[
+                              t(guideKey(strategy.code, "ideal1")),
+                              t(guideKey(strategy.code, "ideal2")),
+                            ]}
                           />
-                          <GuideList title={t("strategyLab.risk")} items={strategy.risks} />
+                          <GuideList
+                            title={t("strategyLab.risk")}
+                            items={[
+                              t(guideKey(strategy.code, "risk1")),
+                              t(guideKey(strategy.code, "risk2")),
+                            ]}
+                          />
                         </AccordionContent>
                       </AccordionItem>
                       <AccordionItem value="requirements">
@@ -399,7 +421,7 @@ export function StrategyLab({
                           </p>
                           <p>
                             {t("strategyLab.timeframes")}: {strategy.supportedTimeframes.join(", ")}{" "}
-                            · Version {strategy.version}
+                            · {t("strategyLab.version")} {strategy.version}
                           </p>
                           <p>{strategy.sourceAttribution}</p>
                         </AccordionContent>
