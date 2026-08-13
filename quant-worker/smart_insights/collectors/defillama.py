@@ -124,16 +124,19 @@ class DefiLlamaChainsCollector(_DefiLlamaCollector):
                 names.add(normalized)
                 tvl = _number(row.get("tvl"))
                 total += tvl
+                dimensions = {
+                    "chain": name,
+                    "frequency": "observed_daily",
+                }
+                token_symbol = row.get("tokenSymbol")
+                if isinstance(token_symbol, str) and token_symbol.strip():
+                    dimensions["token_symbol"] = token_symbol.strip()
                 observations.append(
                     ObservationInput(
                         metric_code="crypto.defi.chain_tvl_usd",
                         value=tvl,
                         effective_at=as_of,
-                        dimensions={
-                            "chain": name,
-                            "token_symbol": str(row.get("tokenSymbol") or ""),
-                            "frequency": "observed_daily",
-                        },
+                        dimensions=dimensions,
                     )
                 )
         except ValueError as error:

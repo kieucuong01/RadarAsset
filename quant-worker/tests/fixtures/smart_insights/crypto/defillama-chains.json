@@ -10,7 +10,7 @@
   {
     "gecko_id": "solana",
     "tvl": 50000000,
-    "tokenSymbol": "SOL",
+    "tokenSymbol": null,
     "cmcId": "5426",
     "name": "Solana",
     "chainId": null
