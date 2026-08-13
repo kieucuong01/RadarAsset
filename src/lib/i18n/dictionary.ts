@@ -538,7 +538,7 @@ export const dictionaries = {
       capabilityFundamentalBody:
         "Có thể thiết kế và lưu rule ngay, nhưng hệ thống chưa backtest cho đến khi có dữ liệu báo cáo tài chính point-in-time để tránh look-ahead bias.",
       capabilitySystematicBody:
-        "Có thể thiết kế DCA hàng tháng ngay. Engine portfolio đã có cash-flow assumptions, nhưng chưa thực thi DCA thành lệnh theo từng tài sản.",
+        "Có thể thiết kế, lưu phiên bản và backtest DCA hàng tháng bằng custom-rule engine.",
       needsData: "Cần dữ liệu",
       needsEngine: "Cần engine",
       executable: "Có thể backtest",
@@ -1427,7 +1427,7 @@ export const dictionaries = {
       capabilityFundamentalBody:
         "You can design and save the rule now, but the system will not backtest it until point-in-time financial statement data exists to avoid look-ahead bias.",
       capabilitySystematicBody:
-        "You can design monthly DCA now. The portfolio engine has cash-flow assumptions, but it does not yet convert DCA into per-asset orders.",
+        "Design, version, and backtest monthly DCA with the custom-rule engine.",
       needsData: "Needs data",
       needsEngine: "Needs engine",
       executable: "Backtestable",

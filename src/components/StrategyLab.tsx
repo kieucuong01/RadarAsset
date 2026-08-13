@@ -734,7 +734,7 @@ function CapabilityCard({
             </CardDescription>
           </div>
           <Badge variant="outline">
-            {fundamental ? t("strategyLab.needsData") : t("strategyLab.needsEngine")}
+            {fundamental ? t("strategyLab.needsData") : t("strategyLab.executable")}
           </Badge>
         </div>
       </CardHeader>
