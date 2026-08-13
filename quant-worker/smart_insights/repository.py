@@ -210,11 +210,18 @@ class PostgresInsightRepository:
         snapshot: RawSnapshot,
         artifact: StoredArtifact,
         events: Sequence[CalendarEventInput],
+        *,
+        job_code: str | None = None,
     ) -> PublicationResult:
         if source.code != "cryptocraft" and not source.code.startswith("qa-calendar-"):
             raise ValueError("Calendar publication requires a CryptoCraft source.")
         if not events:
             raise ValueError("Calendar publication requires at least one event.")
+        if job_code is not None and not (
+            job_code in {"cryptocraft-current", "cryptocraft-next"}
+            or job_code.startswith("cryptocraft-event:cryptocraft:")
+        ):
+            raise ValueError("Calendar job code is not registered.")
         self._verify_artifact(source, snapshot, artifact)
         if len({event.source_event_key for event in events}) != len(events):
             raise ValueError("DUPLICATE_CONFLICT")
@@ -315,6 +322,14 @@ class PostgresInsightRepository:
                     (snapshot_id,),
                 )
                 status = "succeeded" if inserted else "unchanged"
+                metadata: dict[str, object] = {
+                    "publicationStatus": status,
+                    "snapshotId": snapshot_id,
+                    "eventsInserted": inserted,
+                    "eventsUnchanged": unchanged,
+                }
+                if job_code is not None:
+                    metadata["jobCode"] = job_code
                 provider_run_id = self._insert_provider_run(
                     cursor,
                     source_code=source.code,
@@ -324,12 +339,7 @@ class PostgresInsightRepository:
                     retry_count=0,
                     started_at=snapshot.observed_at,
                     finished_at=self._clock(),
-                    metadata={
-                        "publicationStatus": status,
-                        "snapshotId": snapshot_id,
-                        "eventsInserted": inserted,
-                        "eventsUnchanged": unchanged,
-                    },
+                    metadata=metadata,
                 )
         return PublicationResult(
             snapshot_id=snapshot_id,
@@ -434,6 +444,88 @@ class PostgresInsightRepository:
 
     def last_successful_source_run(self, source_code: str) -> dict[str, Any] | None:
         return self._last_run(source_code, successful_only=True)
+
+    def last_successful_calendar_jobs(
+        self, source_code: str = "cryptocraft"
+    ) -> dict[str, datetime]:
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT metadata ->> 'jobCode' AS job_code,
+                       MAX(finished_at) AT TIME ZONE current_setting('TimeZone')
+                         AS finished_at
+                FROM provider_runs
+                WHERE provider = %s
+                  AND status = 'succeeded'
+                  AND metadata ? 'jobCode'
+                GROUP BY metadata ->> 'jobCode'
+                """,
+                (source_code,),
+            )
+            return {
+                str(row["job_code"]): _as_utc(row["finished_at"])
+                for row in cursor.fetchall()
+                if row["job_code"] and row["finished_at"] is not None
+            }
+
+    def latest_calendar_events(
+        self, *, as_of: datetime, source_code: str = "cryptocraft"
+    ) -> tuple[CalendarEventInput, ...]:
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("Calendar query time must be timezone-aware.")
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                WITH ranked AS (
+                  SELECT event_row.*,
+                         ROW_NUMBER() OVER (
+                           PARTITION BY source_code, source_event_key
+                           ORDER BY revision DESC
+                         ) AS rank
+                  FROM economic_events event_row
+                  WHERE source_code = %s
+                    AND observed_at <= %s
+                    AND quality_status IN ('passed', 'warning')
+                )
+                SELECT source_event_key, event, country, currency, impact,
+                       actual, forecast, previous, event_date, event_at,
+                       time_status, source_timezone, detail_url, published_at,
+                       quality_status, quality_flags
+                FROM ranked
+                WHERE rank = 1
+                ORDER BY event_date, event_at NULLS LAST, source_event_key
+                """,
+                (source_code, as_of),
+            )
+            return tuple(
+                CalendarEventInput(
+                    source_event_key=str(row["source_event_key"]),
+                    name=str(row["event"]),
+                    country=str(row["country"]),
+                    currency=str(row["currency"]),
+                    impact=str(row["impact"]),
+                    actual=row["actual"],
+                    forecast=row["forecast"],
+                    previous=row["previous"],
+                    event_date=row["event_date"],
+                    event_at_utc=(
+                        _as_utc(row["event_at"])
+                        if row["event_at"] is not None
+                        else None
+                    ),
+                    time_status=str(row["time_status"]),
+                    source_timezone=str(row["source_timezone"]),
+                    detail_url=row["detail_url"],
+                    published_at=(
+                        _as_utc(row["published_at"])
+                        if row["published_at"] is not None
+                        else None
+                    ),
+                    quality_status=str(row["quality_status"]),
+                    quality_flags=tuple(row["quality_flags"]),
+                )
+                for row in cursor.fetchall()
+            )
 
     def source_health_rows(self, source_code: str | None = None) -> list[dict[str, Any]]:
         parameters: tuple[object, ...] = () if source_code is None else (source_code,)

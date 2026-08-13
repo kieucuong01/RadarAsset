@@ -141,6 +141,19 @@ automatically. Source health is available to authenticated research viewers at
 `GET /api/smart-insights/data-health`; raw bodies, artifact paths, and provider diagnostics are not
 returned.
 
+For CryptoCraft, invoke the current-calendar boundary every 15 minutes after the source passes its
+Firecrawl live smoke:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule calendar-current
+```
+
+The worker persists due state in provider-run metadata rather than process memory. It refreshes the
+current week no more often than every two hours, the next week every twelve hours, and high-impact
+event detail pages every fifteen minutes from T-30 through T+90. An early invocation exits
+successfully as `not_due`. Calendar timestamps use the explicit CryptoCraft timezone and are stored
+in UTC; all-day and tentative rows retain their source date without a fabricated instant.
+
 ## Investor Intelligence
 
 The local v1 backend stores research in PostgreSQL:

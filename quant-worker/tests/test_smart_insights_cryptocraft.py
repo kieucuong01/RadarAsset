@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -13,10 +13,12 @@ import psycopg
 from psycopg.rows import dict_row
 import pytest
 
+from collect_smart_insights import run_calendar_schedule
 from smart_insights.artifacts import StoredArtifact
 from smart_insights.collectors.cryptocraft import CryptoCraftCollector
 from smart_insights.contracts import RawSnapshot
 from smart_insights.repository import PostgresInsightRepository
+from smart_insights.scheduling import ScheduledSourceJob, due_calendar_jobs
 from smart_insights.sources import is_source_url_allowed, source_for_code
 
 
@@ -184,6 +186,122 @@ def test_calendar_urls_are_fixed_and_detail_urls_are_allow_listed() -> None:
         CryptoCraftCollector(
             firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
         ).collect_week("other", observed_at=NOW)
+    detail_firecrawl = FakeFirecrawl(fixture_text("cryptocraft-actual-revision.md"))
+    detail = CryptoCraftCollector(firecrawl=detail_firecrawl).collect_detail(
+        "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m",
+        observed_at=NOW,
+    )
+    assert detail.error_code is None
+    assert detail_firecrawl.calls == [
+        "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m"
+    ]
+
+
+def test_calendar_cadence_selects_current_and_next_jobs_at_boundaries() -> None:
+    assert due_calendar_jobs(
+        NOW,
+        events=(),
+        last_success={
+            "cryptocraft-current": NOW - timedelta(hours=2),
+            "cryptocraft-next": NOW - timedelta(hours=8),
+        },
+    ) == (ScheduledSourceJob("cryptocraft-current", "current"),)
+
+    assert ScheduledSourceJob("cryptocraft-next", "next") in due_calendar_jobs(
+        NOW,
+        events=(),
+        last_success={
+            "cryptocraft-current": NOW - timedelta(hours=1),
+            "cryptocraft-next": NOW - timedelta(hours=12),
+        },
+    )
+
+
+def test_high_impact_detail_window_is_inclusive_and_medium_is_excluded() -> None:
+    batch = CryptoCraftCollector(
+        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+    ).collect_week("current", observed_at=NOW)
+    high = next(row for row in batch.events if row.name == "Core CPI m/m")
+    medium = next(
+        row
+        for row in batch.events
+        if row.name == "Core CPI m/m" and row.impact == "medium"
+    )
+    assert high.event_at_utc is not None
+    detail_job = ScheduledSourceJob(
+        f"cryptocraft-event:{high.source_event_key}", high.detail_url or ""
+    )
+
+    assert detail_job not in due_calendar_jobs(
+        high.event_at_utc - timedelta(minutes=31), events=(high,), last_success={}
+    )
+    assert detail_job in due_calendar_jobs(
+        high.event_at_utc - timedelta(minutes=30), events=(high,), last_success={}
+    )
+    assert detail_job in due_calendar_jobs(
+        high.event_at_utc + timedelta(minutes=90), events=(high,), last_success={}
+    )
+    assert detail_job not in due_calendar_jobs(
+        high.event_at_utc + timedelta(minutes=91), events=(high,), last_success={}
+    )
+    assert not any(
+        job.job_code.startswith("cryptocraft-event:")
+        for job in due_calendar_jobs(
+            medium.event_at_utc or NOW, events=(medium,), last_success={}
+        )
+    )
+
+
+def test_event_detail_job_respects_fifteen_minute_last_success() -> None:
+    event = CryptoCraftCollector(
+        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+    ).collect_week("current", observed_at=NOW).events[0]
+    assert event.event_at_utc is not None
+    job_code = f"cryptocraft-event:{event.source_event_key}"
+
+    jobs = due_calendar_jobs(
+        event.event_at_utc,
+        events=(event,),
+        last_success={
+            "cryptocraft-current": event.event_at_utc,
+            "cryptocraft-next": event.event_at_utc,
+            job_code: event.event_at_utc - timedelta(minutes=14),
+        },
+    )
+    assert not any(job.job_code == job_code for job in jobs)
+
+
+def test_calendar_runner_reports_not_due_without_fetching() -> None:
+    class Repository:
+        @staticmethod
+        def latest_calendar_events(*, as_of: datetime) -> tuple[()]:
+            assert as_of == NOW
+            return ()
+
+        @staticmethod
+        def last_successful_calendar_jobs() -> dict[str, datetime]:
+            return {
+                "cryptocraft-current": NOW,
+                "cryptocraft-next": NOW,
+            }
+
+    class NeverCollector:
+        def collect_week(self, week: str, *, observed_at: datetime) -> None:
+            raise AssertionError("A not-due schedule must not fetch.")
+
+        def collect_detail(self, detail_url: str, *, observed_at: datetime) -> None:
+            raise AssertionError("A not-due schedule must not fetch.")
+
+    outcomes, exit_code = run_calendar_schedule(
+        "calendar-current",
+        as_of=NOW,
+        repository=Repository(),  # type: ignore[arg-type]
+        artifact_store=object(),  # type: ignore[arg-type]
+        collector=NeverCollector(),  # type: ignore[arg-type]
+    )
+
+    assert exit_code == 0
+    assert outcomes[0].status == "not_due"
 
 
 def _test_database_url() -> str:
@@ -229,23 +347,31 @@ def test_calendar_publication_is_idempotent_and_retains_actual_revision() -> Non
             first.snapshot,
             _artifact(first.snapshot, source.code),
             first.events,
+            job_code="cryptocraft-current",
         )
         unchanged = repository.publish_calendar_batch(
             source,
             first.snapshot,
             _artifact(first.snapshot, source.code),
             first.events,
+            job_code="cryptocraft-current",
         )
         corrected = repository.publish_calendar_batch(
             source,
             revised.snapshot,
             _artifact(revised.snapshot, source.code),
             revised.events,
+            job_code="cryptocraft-current",
         )
 
         assert published.observations_inserted == 5
         assert unchanged.status == "unchanged"
         assert corrected.observations_inserted == 1
+        assert repository.last_successful_calendar_jobs(source.code) == {
+            "cryptocraft-current": NOW
+        }
+        latest = repository.latest_calendar_events(as_of=NOW, source_code=source.code)
+        assert next(row for row in latest if row.source_event_key == key).actual == "0.3%"
         with connection.cursor() as cursor:
             cursor.execute(
                 """

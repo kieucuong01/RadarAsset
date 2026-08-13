@@ -9,4 +9,3 @@ Calendar Time Zone: America/New_York (GMT -4)
 |  | 10:00am | US | Medium | Core CPI m/m |  | 0.4% | 0.2% | https://www.cryptocraft.com/calendar/1003-us-core-cpi-m-m |
 |  | All Day | US | Low | Treasury Currency Report |  |  |  | https://www.cryptocraft.com/calendar/1004-us-treasury-currency-report |
 | Fri Aug 14 | Tentative | EZ | Medium | ECB President Speaks |  |  |  | https://www.cryptocraft.com/calendar/1005-ez-ecb-president-speaks |
-

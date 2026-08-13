@@ -21,6 +21,7 @@ from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollec
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
 from smart_insights.collectors.coinshares import CoinSharesCollector
+from smart_insights.collectors.cryptocraft import CryptoCraftCollector
 from smart_insights.collectors.defillama import (
     DefiLlamaChainsCollector,
     DefiLlamaStablecoinsCollector,
@@ -34,6 +35,7 @@ from smart_insights.firecrawl import FirecrawlClient
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
 from smart_insights.repository import PostgresInsightRepository
+from smart_insights.scheduling import due_calendar_jobs
 from smart_insights.sources import (
     SOURCE_CODES,
     is_source_url_allowed,
@@ -100,6 +102,8 @@ def select_sources(
             raise ValueError("Source must be a registered code.") from error
         if source.schedule != source_schedule:
             raise ValueError("Source is not configured for this schedule.")
+        if not include_disabled and not source.enabled:
+            return ()
         return (source,)
     return tuple(
         source
@@ -145,8 +149,66 @@ def run_collection(
             outcomes.append(CollectionOutcome(source.code, "failed", 0, error.code))
         except Exception:
             outcomes.append(CollectionOutcome(source.code, "failed", 0, "INTERNAL_ERROR"))
-    succeeded = {"succeeded", "unchanged", "dry_run"}
+    succeeded = {"succeeded", "unchanged", "not_due", "dry_run"}
     return outcomes, 0 if all(outcome.status in succeeded for outcome in outcomes) else 1
+
+
+def run_calendar_schedule(
+    schedule: str,
+    *,
+    as_of: datetime,
+    repository: PostgresInsightRepository,
+    artifact_store: ArtifactStore,
+    collector: CryptoCraftCollector,
+) -> tuple[list[CollectionOutcome], int]:
+    if schedule not in {"calendar-current", "calendar-next", "calendar-event"}:
+        raise ValueError("Calendar schedule is not supported.")
+    latest_events = repository.latest_calendar_events(as_of=as_of)
+    due = due_calendar_jobs(
+        as_of,
+        events=latest_events,
+        last_success=repository.last_successful_calendar_jobs(),
+    )
+    if schedule == "calendar-next":
+        due = tuple(job for job in due if job.job_code == "cryptocraft-next")
+    elif schedule == "calendar-event":
+        due = tuple(job for job in due if job.job_code.startswith("cryptocraft-event:"))
+    if not due:
+        return [CollectionOutcome("cryptocraft", "not_due", 0, None)], 0
+
+    source = source_for_code("cryptocraft")
+    outcomes: list[CollectionOutcome] = []
+    for job in due:
+        batch = (
+            collector.collect_week(job.target, observed_at=as_of)
+            if job.target in {"current", "next"}
+            else collector.collect_detail(job.target, observed_at=as_of)
+        )
+        artifact = artifact_store.write(batch.snapshot, source.code)
+        if batch.error_code is not None or not batch.events:
+            error_code = batch.error_code or "MISSING_REQUIRED_FIELD"
+            repository.quarantine(
+                source, batch.snapshot, artifact, error_code=error_code
+            )
+            outcomes.append(CollectionOutcome(job.job_code, "quarantined", 0, error_code))
+            continue
+        publication = repository.publish_calendar_batch(
+            source,
+            batch.snapshot,
+            artifact,
+            batch.events,
+            job_code=job.job_code,
+        )
+        outcomes.append(
+            CollectionOutcome(
+                job.job_code,
+                publication.status,
+                len(batch.events),
+                None,
+            )
+        )
+    successful = {"succeeded", "unchanged", "not_due"}
+    return outcomes, 0 if all(row.status in successful for row in outcomes) else 1
 
 
 def run_live_smoke(
@@ -445,17 +507,39 @@ def main(
                     )
                 )
             )
-            active_collectors = build_production_collectors(
-                repository,
-                artifact_store,
-                build_batch_collectors(repository),
+            if args.schedule.startswith("calendar-"):
+                source = source_for_code("cryptocraft")
+                if args.source not in {None, source.code}:
+                    raise ValueError("Calendar schedule requires the CryptoCraft source.")
+                if not source.enabled:
+                    outcomes, exit_code = [
+                        CollectionOutcome(source.code, "failed", 0, "SOURCE_DISABLED")
+                    ], 1
+                else:
+                    firecrawl = FirecrawlClient(
+                        os.getenv("FIRECRAWL_API_URL", "http://127.0.0.1:3002"),
+                        api_key=os.getenv("FIRECRAWL_API_KEY"),
+                    )
+                    outcomes, exit_code = run_calendar_schedule(
+                        args.schedule,
+                        as_of=datetime.now(timezone.utc),
+                        repository=repository,
+                        artifact_store=artifact_store,
+                        collector=CryptoCraftCollector(firecrawl=firecrawl),
+                    )
+            else:
+                active_collectors = build_production_collectors(
+                    repository,
+                    artifact_store,
+                    build_batch_collectors(repository),
+                )
+        if not (repository is not None and args.schedule.startswith("calendar-")):
+            outcomes, exit_code = run_collection(
+                args.schedule,
+                source_code=args.source,
+                dry_run=args.dry_run,
+                collectors=active_collectors or {},
             )
-        outcomes, exit_code = run_collection(
-            args.schedule,
-            source_code=args.source,
-            dry_run=args.dry_run,
-            collectors=active_collectors or {},
-        )
         if (
             repository is not None
             and args.schedule == "daily"
