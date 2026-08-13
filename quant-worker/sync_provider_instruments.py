@@ -208,12 +208,23 @@ def sync_provider_instruments(
             cursor.execute(
                 """
                 UPDATE provider_instruments AS instrument
-                SET is_active = false
+                SET metadata = jsonb_set(
+                      instrument.metadata,
+                      '{absenceObservationCount}',
+                      to_jsonb(COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) + 1),
+                      true
+                    ),
+                    is_active = CASE
+                      WHEN COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) + 1 < 2
+                        THEN instrument.is_active
+                      ELSE false
+                    END
                 FROM data_providers AS provider
                 WHERE instrument.provider_id = provider.id
                   AND provider.code = ANY(%s)
+                  AND instrument.last_seen_at < %s
                 """,
-                (provider_codes,),
+                (provider_codes, observed_at),
             )
             for descriptor in rows:
                 code = provider_code(descriptor)
@@ -282,6 +293,7 @@ def sync_provider_instruments(
                 metadata = {
                     "catalogSynchronizedAt": observed_at.isoformat(),
                     "source": "approved-provider-catalog",
+                    "absenceObservationCount": 0,
                 }
                 cursor.execute(
                     """
@@ -307,6 +319,47 @@ def sync_provider_instruments(
                     ),
                 )
                 synchronized += 1
+            cursor.execute(
+                """
+                INSERT INTO asset_listing_periods (
+                  id, asset_id, provider_instrument_id, provider_code,
+                  provider_symbol, venue, status, valid_from,
+                  confirmation_count, metadata, created_at
+                )
+                SELECT
+                  gen_random_uuid(), asset.id, instrument.id, provider.code,
+                  instrument.provider_symbol, asset.venue, 'confirmed_active',
+                  instrument.last_seen_at, 1, instrument.metadata, NOW()
+                FROM provider_instruments instrument
+                JOIN data_providers provider ON provider.id = instrument.provider_id
+                JOIN assets asset ON asset.id = instrument.asset_id
+                WHERE provider.code = ANY(%s)
+                  AND instrument.is_active = true
+                  AND NOT EXISTS (
+                    SELECT 1 FROM asset_listing_periods open_period
+                    WHERE open_period.provider_instrument_id = instrument.id
+                      AND open_period.valid_to IS NULL
+                  )
+                """,
+                (provider_codes,),
+            )
+            cursor.execute(
+                """
+                UPDATE asset_listing_periods period
+                SET valid_to = %s,
+                    status = 'confirmed_inactive',
+                    confirmation_count = GREATEST(
+                      period.confirmation_count,
+                      COALESCE((instrument.metadata->>'absenceObservationCount')::int, 2)
+                    )
+                FROM provider_instruments instrument
+                WHERE period.provider_instrument_id = instrument.id
+                  AND period.valid_to IS NULL
+                  AND instrument.is_active = false
+                  AND COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) >= 2
+                """,
+                (observed_at,),
+            )
             cursor.execute(
                 """
                 UPDATE assets AS asset

@@ -176,6 +176,7 @@ model Asset {
   signalSnapshots     SignalSnapshot[]
   corporateActions    CorporateAction[]
   catalogSnapshots    InstrumentCatalogSnapshot[]
+  listingPeriods      AssetListingPeriod[]
 
   @@index([assetClass])
   @@map("assets")
@@ -898,6 +899,7 @@ model ProviderInstrument {
   asset             Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
   ingestionRequests MarketIngestionRequest[]
   corporateActions  CorporateAction[]
+  listingPeriods    AssetListingPeriod[]
 
   @@unique([providerId, providerSymbol])
   @@unique([providerId, assetId])
@@ -951,6 +953,28 @@ model InstrumentCatalogSnapshot {
   @@index([assetId, observedAt(sort: Desc)])
   @@index([providerCode, listingStatus, observedAt(sort: Desc)])
   @@map("instrument_catalog_snapshots")
+}
+
+model AssetListingPeriod {
+  id                   String             @id @default(uuid()) @db.Uuid
+  assetId              String             @map("asset_id") @db.Uuid
+  providerInstrumentId String             @map("provider_instrument_id") @db.Uuid
+  providerCode         String             @map("provider_code")
+  providerSymbol       String             @map("provider_symbol")
+  venue                String?
+  status               String
+  validFrom            DateTime           @map("valid_from") @db.Timestamptz(3)
+  validTo              DateTime?          @map("valid_to") @db.Timestamptz(3)
+  confirmationCount    Int                @default(1) @map("confirmation_count")
+  metadata             Json               @default("{}")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  asset                Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  providerInstrument   ProviderInstrument @relation(fields: [providerInstrumentId], references: [id], onDelete: Restrict)
+
+  @@unique([providerInstrumentId, validFrom])
+  @@index([assetId, validFrom, validTo])
+  @@index([providerCode, status, validTo])
+  @@map("asset_listing_periods")
 }
 
 model MarketCalendarVersion {

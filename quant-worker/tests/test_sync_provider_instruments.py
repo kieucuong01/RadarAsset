@@ -119,11 +119,9 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
 
     queries = [query for query, _params in connection.cursor_instance.queries]
     assert not any("DELETE FROM provider_instruments" in query for query in queries)
-    assert any(
-        "UPDATE provider_instruments" in query and "is_active = false" in query
-        for query in queries
-    )
+    assert any("absenceObservationCount" in query for query in queries)
     assert any("instrument_catalog_snapshots" in query for query in queries)
+    assert any("INSERT INTO asset_listing_periods" in query for query in queries)
     assert any(
         "UPDATE market_ingestion_requests" in query
         and "instrument_inactive" in query
@@ -136,10 +134,37 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
     deactivation = next(
         (query, params)
         for query, params in connection.cursor_instance.queries
-        if "UPDATE provider_instruments AS instrument" in query
+        if "absenceObservationCount" in query
     )
     assert "provider.code = ANY(%s)" in deactivation[0]
-    assert deactivation[1] == (["binance-public"],)
+    assert deactivation[1][0] == ["binance-public"]
+    assert "< 2 THEN instrument.is_active" in deactivation[0]
+    assert "instrument.last_seen_at < %s" in deactivation[0]
+
+
+def test_listing_history_keeps_symbol_and_venue_lineage_without_deleting_assets() -> None:
+    connection = FakeConnection()
+    descriptor = ProviderInstrumentDescriptor(
+        provider_symbol="FPT",
+        canonical_symbol="FPT",
+        name="FPT Corporation",
+        market="vn_equity",
+        venue="HOSE",
+        currency="VND",
+    )
+
+    sync_provider_instruments(
+        connection,
+        [descriptor],
+        observed_provider_codes={"vnstock-vci-free"},
+    )
+
+    queries = [query for query, _params in connection.cursor_instance.queries]
+    listing_insert = next(query for query in queries if "INSERT INTO asset_listing_periods" in query)
+    assert "instrument.provider_symbol" in listing_insert
+    assert "asset.venue" in listing_insert
+    assert "confirmed_active" in listing_insert
+    assert not any("DELETE FROM assets" in query for query in queries)
 
 
 def test_catalog_collection_isolates_one_provider_failure() -> None:
