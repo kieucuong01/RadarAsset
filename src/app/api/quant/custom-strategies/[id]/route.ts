@@ -39,3 +39,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiError(error, statusFor(error));
   }
 }
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const context = await requireTenantContext();
+    requireTenantCapability(context, "backtest", "create");
+    const { id } = await params;
+    return NextResponse.json(await archiveCustomStrategy(context, id));
+  } catch (error) {
+    return apiError(error, statusFor(error));
+  }
+}

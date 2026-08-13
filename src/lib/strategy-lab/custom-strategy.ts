@@ -83,8 +83,8 @@ export function customStrategyReadiness(input: CustomStrategyInput | CustomStrat
     };
   }
   return {
-    status: "engine_required" as const,
-    detail: "Rule đã lưu được nhưng engine chưa hỗ trợ thực thi trong MVP này.",
+    status: "executable" as const,
+    detail: "Có thể chạy bằng custom-rule engine hiện tại.",
   };
 }
 

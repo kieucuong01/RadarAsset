@@ -168,9 +168,30 @@ async function createImmutableVersion(
   return customVersion;
 }
 
+async function lockCustomStrategy(client: Prisma.TransactionClient, key: string) {
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))
+  `;
+}
+
 export async function createCustomStrategy(context: TenantContext, input: unknown) {
   const normalized = createCustomStrategySchema.parse(input);
+  const hash = implementationHash(normalized.rule);
   const strategyId = await getPrisma().$transaction(async (tx) => {
+    await lockCustomStrategy(
+      tx,
+      `custom-strategy:${context.organizationId}:${normalized.name.toLocaleLowerCase()}:${hash}`,
+    );
+    const existing = await tx.customStrategy.findFirst({
+      where: {
+        organizationId: context.organizationId,
+        status: "active",
+        name: { equals: normalized.name, mode: "insensitive" },
+        versions: { some: { implementationHash: hash } },
+      },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
     const strategy = await tx.customStrategy.create({
       data: {
         organizationId: context.organizationId,
@@ -199,16 +220,23 @@ export async function createCustomStrategyVersion(
   input: unknown,
 ) {
   const payload = zVersionPayload(input);
+  const hash = implementationHash(payload.rule);
   const strategyId = await getPrisma().$transaction(async (tx) => {
+    await lockCustomStrategy(tx, `custom-strategy-version:${context.organizationId}:${id}`);
     const strategy = await tx.customStrategy.findFirst({
       where: { id, organizationId: context.organizationId, status: "active" },
       select: {
         id: true,
         name: true,
-        versions: { orderBy: { createdAt: "desc" }, take: 1, select: { version: true } },
+        versions: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { version: true, implementationHash: true },
+        },
       },
     });
     if (!strategy) throw new Error("Custom strategy not found.");
+    if (strategy.versions[0]?.implementationHash === hash) return strategy.id;
     await createImmutableVersion(tx, {
       customStrategyId: strategy.id,
       organizationId: context.organizationId,

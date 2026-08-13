@@ -44,6 +44,25 @@ describe("Quant Lab URL preselection", () => {
     ).toBeNull();
   });
 
+  it("preserves an immutable custom strategy version for the backtest handoff", () => {
+    const preset = {
+      strategyCode: "custom:11111111-1111-4111-8111-111111111111",
+      strategyVersion: "1.0.1",
+      strategyParameters: {
+        schemaVersion: 1,
+        kind: "scheduled_dca",
+        contributionAmount: 400,
+        currency: "USD",
+        frequency: "monthly",
+        dayOfMonth: 1,
+      },
+    };
+    expect(normalizeBacktestStrategyPreset(preset)).toEqual({
+      ...preset,
+      strategyParameters: {},
+    });
+  });
+
   it("accepts Strategy Lab as a first-class Quant Lab tab", () => {
     expect(normalizeQuantLabTab("strategies")).toBe("strategies");
     expect(normalizeQuantLabTab("unknown")).toBe("optimizer");

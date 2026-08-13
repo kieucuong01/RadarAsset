@@ -49,16 +49,20 @@ import {
   customStrategyReadiness,
   describeCustomStrategy,
   normalizeCustomStrategy,
-  parseStoredCustomStrategies,
-  serializeCustomStrategies,
-  type CustomStrategy,
   type CustomStrategyInput,
 } from "@/lib/strategy-lab/custom-strategy";
+import {
+  archiveCustomStrategy,
+  createCustomStrategy,
+  createCustomStrategyVersion,
+  listCustomStrategies,
+  type CustomStrategySummary,
+} from "@/lib/strategy-lab/client";
+import { migrateLegacyStrategies } from "@/lib/strategy-lab/legacy-migration";
 import { listStrategyLibrary, type StrategyFamily } from "@/lib/strategy-lab/library";
 import { useI18n } from "@/lib/i18n/context";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 
-const STORAGE_KEY = "radarasset.strategy-lab.v1";
 const FAMILY_LABELS: Record<
   StrategyFamily,
   "strategyLab.technical" | "strategyLab.fundamental" | "strategyLab.systematic"
@@ -139,11 +143,22 @@ export function StrategyLab({
   const [builder, setBuilder] = useState<BuilderState>(() =>
     initialBuilderState(t("strategyLab.defaultName")),
   );
-  const [saved, setSaved] = useState<CustomStrategy[]>([]);
+  const [saved, setSaved] = useState<CustomStrategySummary[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    setSaved(parseStoredCustomStrategies(window.localStorage.getItem(STORAGE_KEY)));
-  }, []);
+    let active = true;
+    void migrateLegacyStrategies(window.localStorage, (input) => createCustomStrategy(input))
+      .then(() => listCustomStrategies())
+      .then((strategies) => active && setSaved(strategies))
+      .catch(() => toast.error(t("strategyLab.loadError")))
+      .finally(() => active && setLoadingSaved(false));
+    return () => {
+      active = false;
+    };
+  }, [t]);
 
   const filteredLibrary = library.filter((strategy) => {
     const searchLocale = locale === "vi" ? "vi-VN" : "en-US";
@@ -156,11 +171,6 @@ export function StrategyLab({
           .includes(normalizedQuery))
     );
   });
-
-  function persist(next: CustomStrategy[]) {
-    window.localStorage.setItem(STORAGE_KEY, serializeCustomStrategies(next));
-    setSaved(next);
-  }
 
   function selectCatalogStrategy(code: string) {
     const strategy = STRATEGY_CATALOG.find((item) => item.code === code);
@@ -220,15 +230,95 @@ export function StrategyLab({
     };
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     try {
       const strategy = normalizeCustomStrategy(buildDraft());
-      persist([...saved, strategy]);
+      if (strategy.kind === "catalog_preset") {
+        sendCatalogPresetToBacktest({
+          code: strategy.strategyCode,
+          version: strategy.strategyVersion,
+          parameters: strategy.strategyParameters,
+          symbol: strategy.symbol,
+        });
+        return;
+      }
+      if (strategy.kind === "fundamental_threshold") {
+        toast.error(t("strategyLab.fundamentalUnavailable"));
+        return;
+      }
+      setSaving(true);
+      const rule =
+        strategy.kind === "scheduled_dca"
+          ? {
+              schemaVersion: 1 as const,
+              kind: "scheduled_dca" as const,
+              contributionAmount: strategy.amount,
+              currency: strategy.currency,
+              frequency: "monthly" as const,
+              dayOfMonth: strategy.dayOfMonth,
+            }
+          : {
+              schemaVersion: 1 as const,
+              kind: "price_threshold" as const,
+              operator: strategy.operator,
+              threshold: strategy.value,
+              currency: strategy.currency,
+              action: strategy.action,
+              sizePct: strategy.sizePct,
+            };
+      const result = editingId
+        ? await createCustomStrategyVersion(editingId, { rule })
+        : await createCustomStrategy({ name: strategy.name, description: strategy.symbol, rule });
+      setSaved((current) => [result, ...current.filter((item) => item.id !== result.id)]);
+      setEditingId(null);
       setSection("mine");
       toast.success(t("strategyLab.saved"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("strategyLab.invalid"));
+      toast.error(t("strategyLab.saveError"));
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function archive(id: string) {
+    try {
+      const archived = await archiveCustomStrategy(id);
+      setSaved((current) => current.map((item) => (item.id === archived.id ? archived : item)));
+      toast.success(t("strategyLab.archived"));
+    } catch {
+      toast.error(t("strategyLab.archiveError"));
+    }
+  }
+
+  function edit(strategy: CustomStrategySummary) {
+    const latest = strategy.versions[0];
+    if (!latest) return;
+    setEditingId(strategy.id);
+    setBuilder((current) => {
+      if (latest.rule.kind === "scheduled_dca") {
+        return {
+          ...current,
+          name: strategy.name,
+          symbol: strategy.description ?? current.symbol,
+          kind: "scheduled_dca",
+          amount: latest.rule.contributionAmount,
+          currency: latest.rule.currency,
+          dayOfMonth: latest.rule.dayOfMonth,
+        };
+      }
+      return {
+        ...current,
+        name: strategy.name,
+        symbol: strategy.description ?? current.symbol,
+        kind: "price_threshold",
+        priceOperator: latest.rule.operator,
+        priceValue: latest.rule.threshold,
+        currency: latest.rule.currency,
+        action: latest.rule.action,
+        sizePct: latest.rule.sizePct,
+      };
+    });
+    setSection("builder");
   }
 
   function sendCatalogPresetToBacktest(input: {
@@ -530,8 +620,9 @@ export function StrategyLab({
                 </FieldGroup>
               </CardContent>
               <CardFooter>
-                <Button onClick={saveDraft}>
-                  <Save data-icon="inline-start" /> {t("strategyLab.saveStrategy")}
+                <Button disabled={saving} onClick={() => void saveDraft()}>
+                  <Save data-icon="inline-start" />
+                  {editingId ? t("strategyLab.saveNewVersion") : t("strategyLab.saveStrategy")}
                 </Button>
               </CardFooter>
             </Card>
@@ -541,7 +632,13 @@ export function StrategyLab({
         </TabsContent>
 
         <TabsContent value="mine">
-          {saved.length === 0 ? (
+          {loadingSaved ? (
+            <Card>
+              <CardContent className="py-8 text-sm text-muted-foreground">
+                {t("strategyLab.loading")}
+              </CardContent>
+            </Card>
+          ) : saved.filter((strategy) => strategy.status === "active").length === 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>{t("strategyLab.noCustomTitle")}</CardTitle>
@@ -555,49 +652,54 @@ export function StrategyLab({
             </Card>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2">
-              {saved.map((strategy) => {
-                const readiness = customStrategyReadiness(strategy);
-                return (
-                  <Card key={strategy.id}>
-                    <CardHeader>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <CardTitle>{strategy.name}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {describeCustomStrategy(strategy)}
-                          </CardDescription>
+              {saved
+                .filter((strategy) => strategy.status === "active")
+                .map((strategy) => {
+                  const latest = strategy.versions[0];
+                  return (
+                    <Card key={strategy.id}>
+                      <CardHeader>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <CardTitle>{strategy.name}</CardTitle>
+                            <CardDescription className="mt-1">
+                              {strategy.description ?? t("strategyLab.noDescription")} ·{" "}
+                              {t("strategyLab.version")} {latest?.version ?? "—"}
+                            </CardDescription>
+                          </div>
+                          <ReadinessBadge status="executable" />
                         </div>
-                        <ReadinessBadge status={readiness.status} />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      {readiness.detail}
-                    </CardContent>
-                    <CardFooter className="flex flex-wrap justify-between gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => persist(saved.filter((item) => item.id !== strategy.id))}
-                      >
-                        <Trash2 data-icon="inline-start" /> {t("strategyLab.delete")}
-                      </Button>
-                      <Button
-                        disabled={strategy.kind !== "catalog_preset"}
-                        onClick={() => {
-                          if (strategy.kind !== "catalog_preset") return;
-                          sendCatalogPresetToBacktest({
-                            code: strategy.strategyCode,
-                            version: strategy.strategyVersion,
-                            parameters: strategy.strategyParameters,
-                            symbol: strategy.symbol,
-                          });
-                        }}
-                      >
-                        <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                );
-              })}
+                      </CardHeader>
+                      <CardContent className="text-sm text-muted-foreground">
+                        {t("strategyLab.dbBacked")}
+                      </CardContent>
+                      <CardFooter className="flex flex-wrap justify-between gap-3">
+                        <Button variant="outline" onClick={() => void archive(strategy.id)}>
+                          <Trash2 data-icon="inline-start" /> {t("strategyLab.delete")}
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => edit(strategy)}>
+                            <Wrench data-icon="inline-start" /> {t("strategyLab.edit")}
+                          </Button>
+                          <Button
+                            disabled={!latest?.executionCode}
+                            onClick={() => {
+                              if (!latest?.executionCode) return;
+                              sendCatalogPresetToBacktest({
+                                code: latest.executionCode,
+                                version: latest.version,
+                                parameters: {},
+                                symbol: strategy.description ?? undefined,
+                              });
+                            }}
+                          >
+                            <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
+                          </Button>
+                        </div>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
             </div>
           )}
         </TabsContent>
