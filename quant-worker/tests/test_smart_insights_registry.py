@@ -27,7 +27,7 @@ def test_gold_registry_freezes_weights_direction_and_frequency() -> None:
         GOLD_METRICS["gold.central_bank_net_purchase_tonnes"].frequency
         == "source_period"
     )
-    assert GOLD_METRICS["gold.cftc_managed_money_net"].frequency == "weekly"
+    assert GOLD_METRICS["gold.cftc.managed_money_net_oi"].frequency == "weekly"
 
 
 def test_gold_sources_resolve_through_the_foundation_registry() -> None:

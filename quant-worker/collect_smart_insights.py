@@ -31,11 +31,14 @@ from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
+from smart_insights.collectors.world_gold_council import WorldGoldCouncilCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.firecrawl import FirecrawlClient
+from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
+from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
 from smart_insights.macro_pipeline import run_macro_pipeline
 from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
 from smart_insights.metrics.macro import MACRO_METRIC_DEFINITIONS
@@ -474,6 +477,12 @@ def build_batch_collectors(
         "fred": fred,
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
+        "wgc-gold-etf": lambda as_of: WorldGoldCouncilCollector(
+            "wgc-gold-etf", firecrawl=firecrawl
+        ).collect(as_of),
+        "wgc-central-bank": lambda as_of: WorldGoldCouncilCollector(
+            "wgc-central-bank", firecrawl=firecrawl
+        ).collect(as_of),
     }
 
 
@@ -637,7 +646,9 @@ def main(
             )
             repository = PostgresInsightRepository(connection)
             repository.upsert_metric_definitions(
-                CRYPTO_METRIC_DEFINITIONS + MACRO_METRIC_DEFINITIONS
+                CRYPTO_METRIC_DEFINITIONS
+                + MACRO_METRIC_DEFINITIONS
+                + GOLD_METRIC_DEFINITIONS
             )
             artifact_store = ArtifactStore(
                 Path(
@@ -688,6 +699,8 @@ def main(
                 "daily", "weekly", "calendar-current", "calendar-next", "calendar-event"
             }:
                 run_macro_pipeline(repository, as_of=pipeline_time)
+            if args.schedule in {"daily", "weekly", "monthly"}:
+                run_gold_pipeline(repository, as_of=pipeline_time)
     except ValueError:
         outcomes, exit_code = [], 2
     finally:

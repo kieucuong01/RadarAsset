@@ -32,7 +32,7 @@ _GOLD_METRIC_ROWS = (
     ("macro.real_yield.10y_pct", "real_yields", -1, 4_320, "daily"),
     ("macro.usd_broad_index", "usd_pressure", -1, 4_320, "daily"),
     ("gold.etf_flow_tonnes", "etf_flow", 1, 20_160, "source_period"),
-    ("gold.cftc_managed_money_net", "cftc_positioning", 1, 14_400, "weekly"),
+    ("gold.cftc.managed_money_net_oi", "cftc_positioning", 1, 14_400, "weekly"),
     (
         "gold.central_bank_net_purchase_tonnes",
         "central_bank_demand",
