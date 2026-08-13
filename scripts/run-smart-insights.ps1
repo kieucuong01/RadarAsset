@@ -1,10 +1,16 @@
 param(
-    [ValidateSet("daily", "weekly", "monthly", "calendar-current", "calendar-next", "calendar-event")]
+    [ValidateSet("daily", "weekly", "monthly", "calendar-current", "calendar-next", "calendar-event", "briefing", "briefing-refresh", "replay")]
     [string]$Schedule = "daily",
     [string]$PythonExecutable = "python",
     [string]$Source,
     [switch]$LiveSmoke,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$OrganizationId,
+    [string]$UserId,
+    [switch]$AllMemberships,
+    [string]$LocalDate,
+    [string]$Timezone = "Asia/Bangkok",
+    [string]$BriefingId
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +45,12 @@ if ($LiveSmoke) {
     }
     $arguments += "--live-smoke"
 }
+if ($OrganizationId) { $arguments += @("--organization-id", $OrganizationId) }
+if ($UserId) { $arguments += @("--user-id", $UserId) }
+if ($AllMemberships) { $arguments += "--all-memberships" }
+if ($LocalDate) { $arguments += @("--local-date", $LocalDate) }
+if ($Timezone) { $arguments += @("--timezone", $Timezone) }
+if ($BriefingId) { $arguments += @("--briefing-id", $BriefingId) }
 
 & $PythonExecutable @arguments
 exit $LASTEXITCODE

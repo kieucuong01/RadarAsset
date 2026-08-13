@@ -11,11 +11,17 @@ from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.rows import dict_row
 
 from smart_insights.artifacts import ArtifactStore
+from smart_insights.briefing_pipeline import (
+    PostgresBriefingRepository,
+    generate_briefing,
+    replay_briefing,
+)
 from smart_insights.collectors import CollectionBatch
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
@@ -60,6 +66,9 @@ SCHEDULES = (
     "calendar-current",
     "calendar-next",
     "calendar-event",
+    "briefing",
+    "briefing-refresh",
+    "replay",
 )
 _SOURCE_SCHEDULE = {
     "daily": "daily",
@@ -562,6 +571,13 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--live-smoke", action="store_true")
     parser.add_argument("--env-file", default=".env.local")
+    parser.add_argument("--organization-id")
+    parser.add_argument("--user-id")
+    parser.add_argument("--all-memberships", action="store_true")
+    parser.add_argument("--local-date")
+    parser.add_argument("--timezone", default="Asia/Bangkok")
+    parser.add_argument("--briefing-id")
+    parser.add_argument("--reason")
     return parser
 
 
@@ -650,6 +666,61 @@ def main(
                 + MACRO_METRIC_DEFINITIONS
                 + GOLD_METRIC_DEFINITIONS
             )
+            if args.schedule in {"briefing", "briefing-refresh", "replay"}:
+                briefing_repository = PostgresBriefingRepository(connection)
+                if args.schedule == "replay":
+                    if not args.briefing_id:
+                        raise ValueError("Replay requires --briefing-id.")
+                    record = replay_briefing(briefing_repository, args.briefing_id)
+                    outcomes, exit_code = [
+                        CollectionOutcome("briefing", "unchanged", len(record.items), None)
+                    ], 0
+                else:
+                    timezone_name = args.timezone
+                    timezone_info = ZoneInfo(timezone_name)
+                    as_of = datetime.now(timezone.utc)
+                    local_day = (
+                        datetime.fromisoformat(args.local_date).date()
+                        if args.local_date
+                        else as_of.astimezone(timezone_info).date()
+                    )
+                    memberships: list[tuple[str, str]] = []
+                    if args.all_memberships:
+                        with connection.cursor(row_factory=dict_row) as cursor:
+                            cursor.execute(
+                                "SELECT organization_id, user_id FROM memberships ORDER BY organization_id, user_id"
+                            )
+                            memberships = [
+                                (str(row["organization_id"]), str(row["user_id"]))
+                                for row in cursor.fetchall()
+                            ]
+                    elif args.organization_id and args.user_id:
+                        with connection.cursor(row_factory=dict_row) as cursor:
+                            cursor.execute(
+                                "SELECT 1 FROM memberships WHERE organization_id = %s AND user_id = %s",
+                                (args.organization_id, args.user_id),
+                            )
+                            if cursor.fetchone() is None:
+                                raise ValueError("User is not a member of the organization.")
+                        memberships = [(args.organization_id, args.user_id)]
+                    else:
+                        raise ValueError("Briefing requires scoped IDs or --all-memberships.")
+                    generated = [
+                        generate_briefing(
+                            briefing_repository,
+                            organization_id=organization_id,
+                            user_id=user_id,
+                            local_date=local_day,
+                            timezone_name=timezone_name,
+                            as_of=as_of,
+                        )
+                        for organization_id, user_id in memberships
+                    ]
+                    outcomes, exit_code = [
+                        CollectionOutcome("briefing", "succeeded", len(generated), None)
+                    ], 0
+                _emit(outcomes, exit_code)
+                return exit_code
             artifact_store = ArtifactStore(
                 Path(
                     os.getenv(
