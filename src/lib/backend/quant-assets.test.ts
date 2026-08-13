@@ -214,18 +214,26 @@ describe("supported Quant asset catalog", () => {
       createdAt: new Date("2026-08-14T09:00:00Z"),
     });
     prisma.marketIngestionRequest.findMany.mockResolvedValue([
-      { providerInstrument: { provider: { code: "vnstock-vci-free" } } },
-      { providerInstrument: { provider: { code: "vnstock-vci-free" } } },
-      { providerInstrument: { provider: { code: "binance-public" } } },
+      { errorCode: null, providerInstrument: { provider: { code: "vnstock-vci-free" } } },
+      { errorCode: null, providerInstrument: { provider: { code: "vnstock-vci-free" } } },
+      { errorCode: null, providerInstrument: { provider: { code: "binance-public" } } },
     ]);
-    prisma.$queryRaw.mockResolvedValue([{ finished_at: new Date("2026-08-14T10:30:00Z") }]);
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        command: "hourly",
+        status: "succeeded",
+        started_at: new Date("2026-08-14T10:00:00Z"),
+        finished_at: new Date("2026-08-14T10:30:00Z"),
+        error_code: null,
+      },
+    ]);
 
     const result = await loadQuantDataReadiness(
       { userId: "user-a", organizationId: "org-a", role: "viewer" },
       new Date("2026-08-14T12:00:00Z"),
     );
 
-    expect(result.readyForBacktest).toBe(true);
+    expect(result.readyForBacktest).toBe(false);
     expect(result.instrumentsByMarket).toEqual({
       vn_equity: 404,
       crypto_spot: 13,
@@ -249,9 +257,16 @@ describe("supported Quant asset catalog", () => {
       missingBarCount: 3,
       oldestBacklogAt: "2026-08-14T09:00:00.000Z",
       lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
+      latestSchedulerRun: {
+        command: "hourly",
+        status: "succeeded",
+        startedAt: "2026-08-14T10:00:00.000Z",
+        finishedAt: "2026-08-14T10:30:00.000Z",
+        errorCode: null,
+      },
       recentProviderFailures: [
-        { providerCode: "binance-public", count: 1 },
-        { providerCode: "vnstock-vci-free", count: 2 },
+        { providerCode: "binance-public", errorCode: "unknown", count: 1 },
+        { providerCode: "vnstock-vci-free", errorCode: "unknown", count: 2 },
       ],
     });
     expect(prisma.marketIngestionRequest.groupBy).toHaveBeenCalledWith(

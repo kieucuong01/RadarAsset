@@ -88,7 +88,14 @@ export type QuantDataReadinessResponse = {
   missingBarCount: number;
   oldestBacklogAt: string | null;
   lastSchedulerSuccessAt: string | null;
-  recentProviderFailures: Array<{ providerCode: string; count: number }>;
+  latestSchedulerRun: {
+    command: "hourly" | "daily" | "all";
+    status: "running" | "succeeded" | "failed";
+    startedAt: string;
+    finishedAt: string | null;
+    errorCode: string | null;
+  } | null;
+  recentProviderFailures: Array<{ providerCode: string; errorCode: string; count: number }>;
 };
 
 export type PortfolioTransactionCreateInput = {

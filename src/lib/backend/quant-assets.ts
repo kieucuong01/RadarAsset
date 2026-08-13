@@ -259,14 +259,24 @@ export async function loadQuantDataReadiness(
         status: "failed",
         updatedAt: { gte: failureCutoff },
       },
-      select: { providerInstrument: { select: { provider: { select: { code: true } } } } },
+      select: {
+        errorCode: true,
+        providerInstrument: { select: { provider: { select: { code: true } } } },
+      },
       take: 1_000,
     }),
-    prisma.$queryRaw<Array<{ finished_at: Date | null }>>`
-      SELECT finished_at
+    prisma.$queryRaw<
+      Array<{
+        command: string;
+        status: string;
+        started_at: Date;
+        finished_at: Date | null;
+        error_code: string | null;
+      }>
+    >`
+      SELECT command, status, started_at, finished_at, error_code
       FROM market_ingestion_scheduler_runs
-      WHERE status = 'succeeded'
-      ORDER BY finished_at DESC
+      ORDER BY started_at DESC
       LIMIT 1
     `,
   ]);
@@ -326,14 +336,49 @@ export async function loadQuantDataReadiness(
   const providerFailureCounts = new Map<string, number>();
   for (const failure of recentFailures) {
     const code = failure.providerInstrument.provider.code;
-    providerFailureCounts.set(code, (providerFailureCounts.get(code) ?? 0) + 1);
+    const errorCode = failure.errorCode ?? "unknown";
+    const key = `${code}:${errorCode}`;
+    providerFailureCounts.set(key, (providerFailureCounts.get(key) ?? 0) + 1);
   }
   const recentProviderFailures = [...providerFailureCounts.entries()]
-    .map(([providerCode, count]) => ({ providerCode, count }))
-    .sort((left, right) => left.providerCode.localeCompare(right.providerCode));
+    .map(([key, count]) => {
+      const separator = key.indexOf(":");
+      return {
+        providerCode: key.slice(0, separator),
+        errorCode: key.slice(separator + 1),
+        count,
+      };
+    })
+    .sort((left, right) =>
+      `${left.providerCode}:${left.errorCode}`.localeCompare(
+        `${right.providerCode}:${right.errorCode}`,
+      ),
+    );
+  const latestScheduler = schedulerRows[0] ?? null;
+  const latestSchedulerRun = latestScheduler
+    ? {
+        command: latestScheduler.command as "hourly" | "daily" | "all",
+        status: latestScheduler.status as "running" | "succeeded" | "failed",
+        startedAt: latestScheduler.started_at.toISOString(),
+        finishedAt: latestScheduler.finished_at?.toISOString() ?? null,
+        errorCode: latestScheduler.error_code,
+      }
+    : null;
+  const lastSchedulerSuccessAt =
+    latestScheduler?.status === "succeeded" ? latestScheduler.finished_at?.toISOString() ?? null : null;
+  const schedulerRecent = Boolean(
+    latestScheduler?.status === "succeeded" &&
+      latestScheduler.finished_at &&
+      now.getTime() - latestScheduler.finished_at.getTime() <= 25 * 60 * 60 * 1000,
+  );
 
   return {
-    readyForBacktest: activeDatasetsByMarketTimeframe.some((row) => row.count > 0),
+    readyForBacktest:
+      activeDatasetsByMarketTimeframe.some((row) => row.count > 0) &&
+      missingDatasetCount === 0 &&
+      staleDatasetCount === 0 &&
+      backlogCount === 0 &&
+      schedulerRecent,
     instrumentsByMarket,
     activeDatasetsByMarketTimeframe,
     ingestionRequestsByStatusTimeframe,
@@ -343,7 +388,8 @@ export async function loadQuantDataReadiness(
     staleDatasetCount,
     missingBarCount,
     oldestBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
-    lastSchedulerSuccessAt: schedulerRows[0]?.finished_at?.toISOString() ?? null,
+    lastSchedulerSuccessAt,
+    latestSchedulerRun,
     recentProviderFailures,
   };
 }
