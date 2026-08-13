@@ -94,7 +94,7 @@ def test_bulk_queue_selects_supported_timeframes_for_all_synced_instruments() ->
     assert "NOT (provider.code = 'msn-via-vnstock'" not in query
 
 
-def test_catalog_sync_prunes_stale_approved_provider_instruments() -> None:
+def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() -> None:
     connection = FakeConnection()
     descriptor = ProviderInstrumentDescriptor(
         provider_symbol="BTCUSDT",
@@ -108,10 +108,28 @@ def test_catalog_sync_prunes_stale_approved_provider_instruments() -> None:
     sync_provider_instruments(connection, [descriptor])
 
     queries = [query for query, _params in connection.cursor_instance.queries]
-    assert any("DELETE FROM market_ingestion_requests" in query for query in queries)
-    assert any("DELETE FROM provider_instruments" in query for query in queries)
-    assert any("jsonb_to_recordset" in query for query in queries)
+    assert not any("DELETE FROM provider_instruments" in query for query in queries)
+    assert any(
+        "UPDATE provider_instruments" in query and "is_active = false" in query
+        for query in queries
+    )
+    assert any("instrument_catalog_snapshots" in query for query in queries)
+    assert any(
+        "UPDATE market_ingestion_requests" in query
+        and "instrument_inactive" in query
+        for query in queries
+    )
     assert any(
         "UPDATE data_providers" in query and "msn-via-vnstock" in query
         for query in queries
     )
+
+
+def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
+    connection = FakeConnection()
+
+    queue_market_ingestion_requests(connection, command="daily")
+
+    query, params = connection.cursor_instance.queries[0]
+    assert "pi.is_active = true" in query
+    assert params == ("demo@radarasset.local", "demo-workspace", "1d", "1d")

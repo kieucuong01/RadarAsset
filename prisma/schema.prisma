@@ -138,20 +138,21 @@ model Invitation {
 }
 
 model Asset {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  symbol              String                 @unique
-  canonicalKey        String?                @unique @map("canonical_key")
+  id                  String                      @id @default(uuid()) @db.Uuid
+  symbol              String                      @unique
+  canonicalKey        String?                     @unique @map("canonical_key")
   name                String
-  assetClass          String                 @map("asset_class")
-  market              String                 @default("other")
+  assetClass          String                      @map("asset_class")
+  market              String                      @default("other")
   venue               String?
-  timezone            String                 @default("UTC")
-  maxLeverage         Decimal                @default(1) @map("max_leverage") @db.Decimal(5, 2)
-  currency            String                 @default("USD")
+  timezone            String                      @default("UTC")
+  maxLeverage         Decimal                     @default(1) @map("max_leverage") @db.Decimal(5, 2)
+  currency            String                      @default("USD")
   provider            String?
-  providerSymbol      String?                @map("provider_symbol")
-  createdAt           DateTime               @default(now()) @map("created_at")
-  updatedAt           DateTime               @updatedAt @map("updated_at")
+  providerSymbol      String?                     @map("provider_symbol")
+  listingStatus       String                      @default("active") @map("listing_status")
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
   bars                MarketBar[]
   positions           PortfolioPosition[]
   transactions        PortfolioTransaction[]
@@ -167,6 +168,8 @@ model Asset {
   quantRunLegs        QuantRunLeg[]
   strategyAssignments StrategyAssignment[]
   strategySignals     StrategySignal[]
+  corporateActions    CorporateAction[]
+  catalogSnapshots    InstrumentCatalogSnapshot[]
 
   @@index([assetClass])
   @@map("assets")
@@ -676,15 +679,83 @@ model ProviderInstrument {
   assetId           String                   @map("asset_id") @db.Uuid
   providerSymbol    String                   @map("provider_symbol")
   metadata          Json                     @default("{}")
+  isActive          Boolean                  @default(true) @map("is_active")
+  lastSeenAt        DateTime                 @default(now()) @map("last_seen_at") @db.Timestamptz(3)
   createdAt         DateTime                 @default(now()) @map("created_at")
   provider          DataProvider             @relation(fields: [providerId], references: [id], onDelete: Cascade)
   asset             Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
   ingestionRequests MarketIngestionRequest[]
+  corporateActions  CorporateAction[]
 
   @@unique([providerId, providerSymbol])
   @@unique([providerId, assetId])
   @@index([assetId])
+  @@index([providerId, isActive])
   @@map("provider_instruments")
+}
+
+model CorporateAction {
+  id                   String             @id @default(uuid()) @db.Uuid
+  assetId              String             @map("asset_id") @db.Uuid
+  providerInstrumentId String             @map("provider_instrument_id") @db.Uuid
+  providerEventId      String             @map("provider_event_id")
+  actionType           String             @map("action_type")
+  status               String             @default("unverified")
+  publicDate           DateTime?          @map("public_date") @db.Date
+  exRightDate          DateTime?          @map("ex_right_date") @db.Date
+  recordDate           DateTime?          @map("record_date") @db.Date
+  paymentDate          DateTime?          @map("payment_date") @db.Date
+  cashPerShare         Decimal?           @map("cash_per_share") @db.Decimal(20, 8)
+  distributionRatio    Decimal?           @map("distribution_ratio") @db.Decimal(20, 10)
+  subscriptionRatio    Decimal?           @map("subscription_ratio") @db.Decimal(20, 10)
+  subscriptionPrice    Decimal?           @map("subscription_price") @db.Decimal(20, 8)
+  oldSymbol            String?            @map("old_symbol")
+  newSymbol            String?            @map("new_symbol")
+  checksum             String
+  sourcePayload        Json               @default("{}") @map("source_payload")
+  observedAt           DateTime           @default(now()) @map("observed_at") @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  asset                Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  providerInstrument   ProviderInstrument @relation(fields: [providerInstrumentId], references: [id], onDelete: Restrict)
+
+  @@unique([providerInstrumentId, providerEventId])
+  @@index([assetId, exRightDate])
+  @@index([status, actionType])
+  @@map("corporate_actions")
+}
+
+model InstrumentCatalogSnapshot {
+  id             String   @id @default(uuid()) @db.Uuid
+  providerCode   String   @map("provider_code")
+  assetId        String   @map("asset_id") @db.Uuid
+  providerSymbol String   @map("provider_symbol")
+  venue          String?
+  listingStatus  String   @map("listing_status")
+  observedAt     DateTime @map("observed_at") @db.Timestamptz(3)
+  metadata       Json     @default("{}")
+  asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([providerCode, assetId, observedAt])
+  @@index([assetId, observedAt(sort: Desc)])
+  @@index([providerCode, listingStatus, observedAt(sort: Desc)])
+  @@map("instrument_catalog_snapshots")
+}
+
+model MarketCalendarVersion {
+  id            String    @id
+  venue         String
+  timezone      String
+  version       String
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  sessionRules  Json      @map("session_rules")
+  closureDates  Json      @map("closure_dates")
+  checksum      String
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([venue, version])
+  @@index([venue, effectiveFrom])
+  @@map("market_calendar_versions")
 }
 
 model Dataset {
