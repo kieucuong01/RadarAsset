@@ -61,6 +61,7 @@ class PreparedDatasetPublication:
     quality_status: str
     coverage_start: datetime
     coverage_end: datetime
+    adjustment_policy: Literal["raw", "total_return"] = "raw"
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ def prepare_dataset_publication(
     maximum_leverage: Decimal,
     terms_url: str | None,
     source_metadata: dict[str, Any],
+    adjustment_policy: Literal["raw", "total_return"] = "raw",
 ) -> PreparedDatasetPublication:
     normalized = [_quantize_for_storage(row) for row in normalize_bars(rows)]
     if not normalized:
@@ -127,6 +129,7 @@ def prepare_dataset_publication(
         quality_status=report.status,
         coverage_start=normalized[0].timestamp,
         coverage_end=normalized[-1].timestamp,
+        adjustment_policy=adjustment_policy,
     )
 
 
@@ -141,7 +144,9 @@ class PostgresDatasetPublisher:
     def __init__(self, connection: psycopg.Connection[Any]) -> None:
         self.connection = connection
 
-    def load_active(self, asset: str, timeframe: str) -> ActiveSnapshot | None:
+    def load_active(
+        self, asset: str, timeframe: str, adjustment_policy: str = "raw"
+    ) -> ActiveSnapshot | None:
         with self.connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
                 """
@@ -157,11 +162,11 @@ class PostgresDatasetPublisher:
                 JOIN dataset_versions dv ON dv.dataset_id = d.id AND dv.is_active = true
                 WHERE a.symbol = %s
                   AND d.timeframe = %s
-                  AND d.adjustment_policy = 'raw'
+                  AND d.adjustment_policy = %s
                 ORDER BY dv.published_at DESC
                 LIMIT 1
                 """,
-                (asset, timeframe),
+                (asset, timeframe, adjustment_policy),
             )
             manifest = cursor.fetchone()
             if manifest is None:
@@ -208,7 +213,9 @@ class PostgresDatasetPublisher:
     def publish_if_changed(
         self, prepared: PreparedDatasetPublication
     ) -> PublicationResult:
-        active = self.load_active(prepared.asset, prepared.timeframe)
+        active = self.load_active(
+            prepared.asset, prepared.timeframe, prepared.adjustment_policy
+        )
         if active is not None and active.checksum == prepared.checksum:
             return PublicationResult(
                 status="unchanged",
@@ -314,12 +321,12 @@ class PostgresDatasetPublisher:
             cursor.execute(
                 """
                 INSERT INTO datasets (id, asset_id, timeframe, adjustment_policy, created_at)
-                VALUES (gen_random_uuid(), %s, %s, 'raw', NOW())
+                VALUES (gen_random_uuid(), %s, %s, %s, NOW())
                 ON CONFLICT (asset_id, timeframe, adjustment_policy) DO UPDATE
                 SET timeframe = EXCLUDED.timeframe
                 RETURNING id
                 """,
-                (asset_id, prepared.timeframe),
+                (asset_id, prepared.timeframe, prepared.adjustment_policy),
             )
             dataset_id = str(cursor.fetchone()["id"])
             cursor.execute("SELECT id FROM datasets WHERE id = %s FOR UPDATE", (dataset_id,))
