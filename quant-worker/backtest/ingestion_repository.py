@@ -70,7 +70,39 @@ class PostgresRequestRepository:
         self.connection = connection
         self.worker_id = worker_id or f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
         self.lease_seconds = lease_seconds
+        self.lease_heartbeat_interval_seconds = max(1.0, lease_seconds / 3)
         self.publisher = PostgresDatasetPublisher(connection)
+
+    def heartbeat(self, current_request_id: str | None = None) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO ingestion_worker_heartbeats (
+                  worker_id, started_at, heartbeat_at, current_request_id, metadata
+                ) VALUES (%s, NOW(), NOW(), %s, '{}'::jsonb)
+                ON CONFLICT (worker_id) DO UPDATE SET
+                  heartbeat_at = NOW(),
+                  current_request_id = EXCLUDED.current_request_id
+                """,
+                (self.worker_id, current_request_id),
+            )
+
+    def renew_lease(self, request: QueuedIngestionRequest) -> bool:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests
+                SET lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    updated_at = NOW()
+                WHERE id = %s AND status = 'running' AND worker_id = %s
+                  AND lease_expires_at > NOW()
+                """,
+                (self.lease_seconds, request.id, request.worker_id),
+            )
+            renewed = cursor.rowcount == 1
+        if renewed:
+            self.heartbeat(request.id)
+        return renewed
 
     def fail_exhausted_requests(self) -> int:
         with self.connection.cursor() as cursor:

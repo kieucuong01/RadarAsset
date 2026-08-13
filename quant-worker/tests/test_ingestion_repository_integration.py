@@ -11,7 +11,11 @@ from psycopg.rows import dict_row
 import pytest
 
 from backtest.ingestion import IngestionSelection
-from backtest.ingestion_repository import PostgresIngestionRepository
+from backtest.ingestion_repository import (
+    PostgresIngestionRepository,
+    PostgresRequestRepository,
+    QueuedIngestionRequest,
+)
 from backtest.models import Bar
 from backtest.publication import prepare_dataset_publication
 
@@ -247,4 +251,95 @@ def test_fail_stale_runs_marks_only_expired_running_rows() -> None:
                 "DELETE FROM market_ingestion_runs WHERE id IN (%s, %s)",
                 (stale_id, fresh_id),
             )
+        connection.close()
+
+
+def test_request_worker_heartbeat_and_lease_renewal_round_trip() -> None:
+    worker_id = f"qa-worker-{uuid4().hex[:8]}"
+    request_id = str(uuid4())
+    organization_id = str(uuid4())
+    user_id = str(uuid4())
+    provider_id = str(uuid4())
+    asset_id = str(uuid4())
+    instrument_id = str(uuid4())
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO app_users (id, email, name, created_at, updated_at) VALUES (%s, %s, 'QA', NOW(), NOW())",
+                (user_id, f"{worker_id}@example.test"),
+            )
+            cursor.execute(
+                "INSERT INTO organizations (id, name, slug, created_at) VALUES (%s, 'QA', %s, NOW())",
+                (organization_id, worker_id),
+            )
+            cursor.execute(
+                "INSERT INTO data_providers (id, code, name, status, created_at, updated_at) VALUES (%s, %s, 'QA', 'active', NOW(), NOW())",
+                (provider_id, worker_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO assets (id, symbol, canonical_key, name, asset_class, market, timezone, currency, listing_status, created_at, updated_at)
+                VALUES (%s, %s, %s, 'QA', 'crypto', 'crypto_spot', 'UTC', 'USD', 'active', NOW(), NOW())
+                """,
+                (asset_id, worker_id.upper(), f"QA:{worker_id}"),
+            )
+            cursor.execute(
+                "INSERT INTO provider_instruments (id, provider_id, asset_id, provider_symbol, is_active, last_seen_at, created_at) VALUES (%s, %s, %s, %s, true, NOW(), NOW())",
+                (instrument_id, provider_id, asset_id, worker_id.upper()),
+            )
+            cursor.execute(
+                """
+                INSERT INTO market_ingestion_requests (
+                  id, organization_id, user_id, provider_instrument_id, timeframe,
+                  status, attempt_count, available_at, worker_id, lease_expires_at,
+                  created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, '1h', 'running', 1, NOW(), %s, NOW() + INTERVAL '10 seconds', NOW(), NOW())
+                """,
+                (request_id, organization_id, user_id, instrument_id, worker_id),
+            )
+
+        repository = PostgresRequestRepository(
+            connection, worker_id=worker_id, lease_seconds=60
+        )
+        queued = QueuedIngestionRequest(
+            id=request_id,
+            provider_code=worker_id,
+            provider_name="QA",
+            terms_url=None,
+            provider_symbol=worker_id.upper(),
+            asset=worker_id.upper(),
+            asset_name="QA",
+            market="crypto_spot",
+            venue=None,
+            currency="USD",
+            timezone_name="UTC",
+            canonical_key=f"QA:{worker_id}",
+            maximum_leverage=Decimal("1"),
+            timeframe="1h",
+            worker_id=worker_id,
+            attempt_count=1,
+        )
+
+        repository.heartbeat(request_id)
+        assert repository.renew_lease(queued) is True
+        repository.heartbeat(None)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT current_request_id, heartbeat_at >= started_at AS fresh FROM ingestion_worker_heartbeats WHERE worker_id = %s",
+                (worker_id,),
+            )
+            assert cursor.fetchone() == {"current_request_id": None, "fresh": True}
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM ingestion_worker_heartbeats WHERE worker_id = %s", (worker_id,))
+            cursor.execute("DELETE FROM market_ingestion_requests WHERE id = %s", (request_id,))
+            cursor.execute("DELETE FROM provider_instruments WHERE id = %s", (instrument_id,))
+            cursor.execute("DELETE FROM assets WHERE id = %s", (asset_id,))
+            cursor.execute("DELETE FROM data_providers WHERE id = %s", (provider_id,))
+            cursor.execute("DELETE FROM organizations WHERE id = %s", (organization_id,))
+            cursor.execute("DELETE FROM app_users WHERE id = %s", (user_id,))
         connection.close()

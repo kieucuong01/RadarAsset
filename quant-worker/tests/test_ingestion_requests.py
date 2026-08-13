@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import time
 from typing import Any
 
 import pytest
@@ -77,6 +78,10 @@ class FakeRequestRepository:
         self.prepared = None
         self.requeued: tuple[int, str | None, str | None] | None = None
         self.swept = 0
+        self.heartbeats: list[str | None] = []
+        self.renewals: list[str] = []
+        self.renew_result = True
+        self.lease_heartbeat_interval_seconds = 0.01
 
     def claim_next_request(self) -> QueuedIngestionRequest | None:
         self.claim_count += 1
@@ -85,6 +90,13 @@ class FakeRequestRepository:
     def fail_exhausted_requests(self) -> int:
         self.swept += 1
         return 0
+
+    def heartbeat(self, current_request_id: str | None = None) -> None:
+        self.heartbeats.append(current_request_id)
+
+    def renew_lease(self, queued: QueuedIngestionRequest) -> bool:
+        self.renewals.append(queued.id)
+        return self.renew_result
 
     def load_active(self, _request: QueuedIngestionRequest):
         return None
@@ -134,6 +146,41 @@ def test_request_worker_claims_once_and_publishes_dataset() -> None:
     assert repository.claim_count == 1
     assert repository.prepared.asset == "ETH"
     assert provider.calls[0]["symbol"] == "ETHUSDT"
+    assert repository.heartbeats[0] == "request-1"
+    assert repository.heartbeats[-1] is None
+
+
+def test_request_worker_renews_the_lease_during_slow_provider_io() -> None:
+    class SlowProvider(FakeProvider):
+        def fetch(self, **kwargs: Any) -> list[Bar]:
+            time.sleep(0.04)
+            return super().fetch(**kwargs)
+
+    repository = FakeRequestRepository(request())
+
+    response = process_next_ingestion_request(
+        repository, lambda _code: SlowProvider(bars()), now=NOW
+    )
+
+    assert response["status"] == "succeeded"
+    assert repository.renewals
+
+
+def test_request_worker_does_not_publish_after_losing_its_lease() -> None:
+    class SlowProvider(FakeProvider):
+        def fetch(self, **kwargs: Any) -> list[Bar]:
+            time.sleep(0.04)
+            return super().fetch(**kwargs)
+
+    repository = FakeRequestRepository(request())
+    repository.renew_result = False
+
+    response = process_next_ingestion_request(
+        repository, lambda _code: SlowProvider(bars()), now=NOW
+    )
+
+    assert response == {"status": "failed", "id": "request-1", "code": "worker_lost"}
+    assert repository.prepared is None
 
 
 def test_request_worker_records_ccxt_fallback_provenance() -> None:
@@ -306,3 +353,4 @@ def test_watch_waits_when_queue_is_empty_instead_of_exiting() -> None:
         )
 
     assert repository.claim_count == 1
+    assert repository.heartbeats == [None]

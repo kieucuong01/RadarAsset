@@ -1100,6 +1100,17 @@ model MarketIngestionRequest {
   @@map("market_ingestion_requests")
 }
 
+model IngestionWorkerHeartbeat {
+  workerId         String   @id @map("worker_id")
+  startedAt        DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
+  heartbeatAt      DateTime @default(now()) @map("heartbeat_at") @db.Timestamptz(3)
+  currentRequestId String?  @map("current_request_id") @db.Uuid
+  metadata         Json     @default("{}")
+
+  @@index([heartbeatAt(sort: Desc)])
+  @@map("ingestion_worker_heartbeats")
+}
+
 model QuantRunArtifact {
   id             String       @id @default(uuid()) @db.Uuid
   organizationId String       @map("organization_id") @db.Uuid

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 import time
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
@@ -32,6 +33,12 @@ APPROVED_PROVIDER_CODES = frozenset(
 
 
 class RequestRepository(Protocol):
+    lease_heartbeat_interval_seconds: float
+
+    def heartbeat(self, current_request_id: str | None = None) -> None: ...
+
+    def renew_lease(self, request: QueuedIngestionRequest) -> bool: ...
+
     def fail_exhausted_requests(self) -> int: ...
 
     def claim_next_request(self) -> QueuedIngestionRequest | None: ...
@@ -57,6 +64,36 @@ class RequestRepository(Protocol):
         error_code: str | None = None,
         provider_code: str | None = None,
     ) -> int: ...
+
+
+class _LeaseHeartbeat:
+    def __init__(self, repository: RequestRepository, request: QueuedIngestionRequest) -> None:
+        self.repository = repository
+        self.request = request
+        self.stopped = threading.Event()
+        self.lost = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        interval = self.repository.lease_heartbeat_interval_seconds
+        while not self.stopped.wait(interval):
+            try:
+                if not self.repository.renew_lease(self.request):
+                    self.lost.set()
+                    return
+            except Exception:
+                self.lost.set()
+                return
+
+    def __enter__(self) -> "_LeaseHeartbeat":
+        self.repository.heartbeat(self.request.id)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.stopped.set()
+        self.thread.join()
+        self.repository.heartbeat(None)
 
 
 def _prepare_request_dataset(
@@ -127,6 +164,7 @@ def process_next_ingestion_request(
 ) -> dict[str, str]:
     request = repository.claim_next_request()
     if request is None:
+        repository.heartbeat(None)
         return {"status": "idle"}
     if request.provider_code not in APPROVED_PROVIDER_CODES:
         repository.fail_request(request, "PROVIDER_NOT_APPROVED")
@@ -137,19 +175,32 @@ def process_next_ingestion_request(
         }
 
     try:
-        prepared = _prepare_request_dataset(
-            request,
-            repository,
-            provider_factory,
-            now or datetime.now(timezone.utc),
-        )
-        publication = repository.publish(request, prepared)
-        repository.complete_request(request, publication.dataset_version_id)
-        return {
-            "status": "succeeded",
-            "id": request.id,
-            "datasetVersionId": publication.dataset_version_id,
-        }
+        with _LeaseHeartbeat(repository, request) as lease:
+            prepared = _prepare_request_dataset(
+                request,
+                repository,
+                provider_factory,
+                now or datetime.now(timezone.utc),
+            )
+            if lease.lost.is_set():
+                return {
+                    "status": "failed",
+                    "id": request.id,
+                    "code": "worker_lost",
+                }
+            publication = repository.publish(request, prepared)
+            if lease.lost.is_set():
+                return {
+                    "status": "failed",
+                    "id": request.id,
+                    "code": "worker_lost",
+                }
+            repository.complete_request(request, publication.dataset_version_id)
+            return {
+                "status": "succeeded",
+                "id": request.id,
+                "datasetVersionId": publication.dataset_version_id,
+            }
     except ProviderUnavailableError as error:
         repository.retry_or_fail(request, error.code)
         return {
