@@ -49,6 +49,19 @@ describe("market data health client", () => {
     );
   });
 
+  it("accepts the complete configured health universe instead of three demo symbols", async () => {
+    const data = Array.from({ length: 18 }, (_, index) => ({
+      ...validHealthItem,
+      symbol: index === 0 ? "VCB" : `ASSET${index}`,
+      timeframe: index % 2 === 0 ? "1d" : "1h",
+    }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ data }), { status: 200 }));
+
+    await expect(getMarketDataHealth(fetcher)).resolves.toHaveLength(18);
+  });
+
   it("rejects provider metadata outside the freshness contract", async () => {
     const fetcher = vi
       .fn()

@@ -96,17 +96,24 @@ python quant-worker\process_ingestion_requests.py --limit 20 --drain --max-total
 python quant-worker\process_ingestion_requests.py --retry-failed --retry-limit 500 --limit 20 --drain --max-total 500 --env-file .env.local
 ```
 
-Schedule the shared wrapper instead of running a second worker service:
+Schedule the shared wrapper instead of running a second worker service. The wrapper performs a
+bounded retry/drain, verifies freshness/backlog/provider failures, and records scheduler outcomes.
+Daily runs also synchronize corporate actions and publish adjusted datasets:
 
 ```text
 Hourly at minute 10: powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command hourly
 Daily at 01:15 UTC:   powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
-Manual drain:          powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
+Manual run:            powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -MaxRequestTotal 500
 Start in:             <repository root>
 ```
 
-The repository documents scheduler commands but does not register operating-system tasks
-automatically. Deployment must configure and observe its own cron/platform schedule.
+Install the two Windows Task Scheduler jobs explicitly in the selected deployment environment:
+
+```powershell
+powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Install
+```
+
+The installer registers exactly one hourly and one daily task and ignores overlapping instances.
 
 ## Investor Intelligence
 

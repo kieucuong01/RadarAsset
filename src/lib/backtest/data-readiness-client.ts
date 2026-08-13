@@ -32,6 +32,17 @@ const quantDataReadinessSchema = z
         .strict(),
     ),
     backlogCount: z.number().int().nonnegative(),
+    expectedDatasetCount: z.number().int().nonnegative(),
+    missingDatasetCount: z.number().int().nonnegative(),
+    staleDatasetCount: z.number().int().nonnegative(),
+    missingBarCount: z.number().int().nonnegative(),
+    oldestBacklogAt: z.string().datetime().nullable(),
+    lastSchedulerSuccessAt: z.string().datetime().nullable(),
+    recentProviderFailures: z.array(
+      z
+        .object({ providerCode: z.string().min(1).max(80), count: z.number().int().positive() })
+        .strict(),
+    ),
   })
   .strict();
 
@@ -43,9 +54,7 @@ export function parseQuantDataReadiness(input: unknown): QuantDataReadiness {
   return parsed.data;
 }
 
-export async function getQuantDataReadiness(
-  fetcher: Fetcher = fetch,
-): Promise<QuantDataReadiness> {
+export async function getQuantDataReadiness(fetcher: Fetcher = fetch): Promise<QuantDataReadiness> {
   const response = await fetcher("/api/quant/data-readiness", { cache: "no-store" });
   if (!response.ok) throw new Error("Quant data readiness is unavailable.");
   return parseQuantDataReadiness(await response.json());
@@ -77,5 +86,19 @@ export function quantDataReadinessSummary(readiness: QuantDataReadiness) {
     tone: "ready" as const,
     label: `${activeDatasetCount.toLocaleString()} active datasets`,
     detail: "No ingestion backlog",
+  };
+}
+
+export function quantDataOperationsHealth(readiness: QuantDataReadiness) {
+  const providerFailureCount = readiness.recentProviderFailures.reduce(
+    (total, item) => total + item.count,
+    0,
+  );
+  const issueCount =
+    readiness.missingDatasetCount + readiness.staleDatasetCount + providerFailureCount;
+  return {
+    tone: issueCount > 0 ? ("degraded" as const) : ("healthy" as const),
+    issueCount,
+    providerFailureCount,
   };
 }

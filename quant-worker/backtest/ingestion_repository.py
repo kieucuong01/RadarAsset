@@ -72,6 +72,20 @@ class PostgresRequestRepository:
         self.lease_seconds = lease_seconds
         self.publisher = PostgresDatasetPublisher(connection)
 
+    def fail_exhausted_requests(self) -> int:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE market_ingestion_requests
+                SET status = 'failed', worker_id = NULL, lease_expires_at = NULL,
+                    error_code = 'worker_lost', updated_at = NOW()
+                WHERE status = 'running'
+                  AND lease_expires_at <= NOW()
+                  AND attempt_count >= 3
+                """
+            )
+            return cursor.rowcount
+
     def claim_next_request(self) -> QueuedIngestionRequest | None:
         with self.connection.transaction():
             with self.connection.cursor(row_factory=dict_row) as cursor:

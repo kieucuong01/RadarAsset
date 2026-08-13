@@ -1,5 +1,6 @@
 from backtest.providers import ProviderInstrumentDescriptor
 from sync_provider_instruments import (
+    load_service_tenant,
     queue_market_ingestion_requests,
     select_provider_instruments,
     sync_provider_instruments,
@@ -133,3 +134,35 @@ def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
     query, params = connection.cursor_instance.queries[0]
     assert "pi.is_active = true" in query
     assert params == ("demo@radarasset.local", "demo-workspace", "1d", "1d")
+
+
+def test_catalog_cli_uses_configured_service_tenant_for_scheduled_queue(monkeypatch) -> None:
+    import inspect
+
+    import sync_provider_instruments as module
+
+    source = inspect.getsource(module.main)
+
+    assert 'parser.add_argument("--env-file"' in source
+    assert "load_service_tenant(env_file)" in source
+    assert "load_database_url(env_file)" in source
+    assert "organization_slug=organization_slug" in source
+    assert "user_email=user_email" in source
+
+
+def test_service_tenant_loads_from_env_file_when_process_env_is_missing(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("QUANT_WORKER_ORGANIZATION_SLUG", raising=False)
+    monkeypatch.delenv("QUANT_WORKER_USER_EMAIL", raising=False)
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        'QUANT_WORKER_ORGANIZATION_SLUG="production-quant"\n'
+        "QUANT_WORKER_USER_EMAIL=quant-worker@example.com\n",
+        encoding="utf-8",
+    )
+
+    assert load_service_tenant(env_file) == (
+        "production-quant",
+        "quant-worker@example.com",
+    )

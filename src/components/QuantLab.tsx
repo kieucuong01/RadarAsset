@@ -6,6 +6,7 @@ import { Activity, BookOpen, Brain, ChartScatter, FlaskConical, Sliders } from "
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { QuantDataReadinessBadge } from "@/components/QuantDataReadinessBadge";
+import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,13 +63,13 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
           <DataStatusBadge
             status={tab === "predict" ? "UNAVAILABLE" : "SYSTEM"}
             detail={
-              tab === "predict"
-                ? t("quant.status.predictionUnavailable")
-                : t("quant.status.system")
+              tab === "predict" ? t("quant.status.predictionUnavailable") : t("quant.status.system")
             }
           />
         </div>
       </div>
+
+      {tab === "predict" ? null : <MarketDataHealthPanel />}
 
       <Tabs value={tab} onValueChange={(value) => setTab(normalizeQuantLabTab(value))}>
         <div className="mb-6 overflow-x-auto pb-1">

@@ -4,7 +4,9 @@ const { prisma } = vi.hoisted(() => ({
   prisma: {
     asset: { findMany: vi.fn(), groupBy: vi.fn() },
     dataset: { findMany: vi.fn() },
-    marketIngestionRequest: { groupBy: vi.fn() },
+    providerInstrument: { count: vi.fn() },
+    marketIngestionRequest: { groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -19,8 +21,10 @@ const vnmAsset = {
   venue: "HOSE",
   currency: "VND",
   maxLeverage: 2,
+  listingStatus: "active",
   datasets: [
     {
+      adjustmentPolicy: "raw",
       versions: [
         {
           id: "11111111-1111-4111-8111-111111111111",
@@ -42,6 +46,7 @@ const vn30Asset = {
   venue: "HOSE",
   currency: "VND",
   maxLeverage: 1,
+  listingStatus: "inactive",
   datasets: [],
 };
 
@@ -51,7 +56,11 @@ describe("supported Quant asset catalog", () => {
     prisma.asset.findMany.mockResolvedValue([]);
     prisma.asset.groupBy.mockResolvedValue([]);
     prisma.dataset.findMany.mockResolvedValue([]);
+    prisma.providerInstrument.count.mockResolvedValue(0);
     prisma.marketIngestionRequest.groupBy.mockResolvedValue([]);
+    prisma.marketIngestionRequest.findFirst.mockResolvedValue(null);
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([]);
+    prisma.$queryRaw.mockResolvedValue([]);
   });
 
   it("returns every matching system asset with timeframe-specific readiness", async () => {
@@ -68,12 +77,16 @@ describe("supported Quant asset catalog", () => {
         datasetVersionId: "11111111-1111-4111-8111-111111111111",
         backtestable: true,
         reasonCode: null,
+        listingStatus: "active",
+        availableAdjustments: ["raw"],
       }),
       expect.objectContaining({
         symbol: "VN30",
         datasetVersionId: null,
         backtestable: false,
         reasonCode: "DATASET_UNAVAILABLE",
+        listingStatus: "inactive",
+        availableAdjustments: [],
       }),
     ]);
     expect(prisma.asset.findMany).toHaveBeenCalledWith(
@@ -90,12 +103,44 @@ describe("supported Quant asset catalog", () => {
     );
   });
 
+  it("preserves inactive instruments in the catalog and exposes raw versus adjusted availability", async () => {
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        ...vnmAsset,
+        listingStatus: "inactive",
+        datasets: [
+          vnmAsset.datasets[0],
+          {
+            adjustmentPolicy: "total_return",
+            versions: [
+              {
+                ...vnmAsset.datasets[0].versions[0],
+                id: "22222222-2222-4222-8222-222222222222",
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "VNM", timeframe: "1d", from: "2025-01-01", to: "2026-01-01" },
+      new Date("2026-01-02T12:00:00.000Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      listingStatus: "inactive",
+      availableAdjustments: ["raw", "total_return"],
+    });
+  });
+
   it("distinguishes an insufficient immutable range from a missing dataset", async () => {
     prisma.asset.findMany.mockResolvedValue([
       {
         ...vnmAsset,
         datasets: [
           {
+            adjustmentPolicy: "raw",
             versions: [
               {
                 ...vnmAsset.datasets[0].versions[0],
@@ -125,21 +170,60 @@ describe("supported Quant asset catalog", () => {
       { market: "metal_spot", _count: { _all: 1 } },
     ]);
     prisma.dataset.findMany.mockResolvedValue([
-      { timeframe: "1d", asset: { market: "vn_equity" } },
-      { timeframe: "1d", asset: { market: "vn_equity" } },
-      { timeframe: "1h", asset: { market: "crypto_spot" } },
+      {
+        timeframe: "1d",
+        asset: { market: "vn_equity" },
+        versions: [
+          {
+            coverageEnd: new Date("2026-08-13T17:00:00Z"),
+            missingBarCount: 2,
+            sourceMetadata: { mode: "live" },
+          },
+        ],
+      },
+      {
+        timeframe: "1d",
+        asset: { market: "vn_equity" },
+        versions: [
+          {
+            coverageEnd: new Date("2026-08-13T17:00:00Z"),
+            missingBarCount: 0,
+            sourceMetadata: { mode: "live" },
+          },
+        ],
+      },
+      {
+        timeframe: "1h",
+        asset: { market: "crypto_spot" },
+        versions: [
+          {
+            coverageEnd: new Date("2026-08-14T11:00:00Z"),
+            missingBarCount: 1,
+            sourceMetadata: { mode: "live" },
+          },
+        ],
+      },
     ]);
+    prisma.providerInstrument.count.mockResolvedValue(418);
     prisma.marketIngestionRequest.groupBy.mockResolvedValue([
       { status: "queued", timeframe: "1d", _count: { _all: 398 } },
       { status: "running", timeframe: "1h", _count: { _all: 2 } },
       { status: "succeeded", timeframe: "1h", _count: { _all: 13 } },
     ]);
-
-    const result = await loadQuantDataReadiness({
-      userId: "user-a",
-      organizationId: "org-a",
-      role: "viewer",
+    prisma.marketIngestionRequest.findFirst.mockResolvedValue({
+      createdAt: new Date("2026-08-14T09:00:00Z"),
     });
+    prisma.marketIngestionRequest.findMany.mockResolvedValue([
+      { providerInstrument: { provider: { code: "vnstock-vci-free" } } },
+      { providerInstrument: { provider: { code: "vnstock-vci-free" } } },
+      { providerInstrument: { provider: { code: "binance-public" } } },
+    ]);
+    prisma.$queryRaw.mockResolvedValue([{ finished_at: new Date("2026-08-14T10:30:00Z") }]);
+
+    const result = await loadQuantDataReadiness(
+      { userId: "user-a", organizationId: "org-a", role: "viewer" },
+      new Date("2026-08-14T12:00:00Z"),
+    );
 
     expect(result.readyForBacktest).toBe(true);
     expect(result.instrumentsByMarket).toEqual({
@@ -158,6 +242,18 @@ describe("supported Quant asset catalog", () => {
       count: 398,
     });
     expect(result.backlogCount).toBe(400);
+    expect(result).toMatchObject({
+      expectedDatasetCount: 836,
+      missingDatasetCount: 833,
+      staleDatasetCount: 0,
+      missingBarCount: 3,
+      oldestBacklogAt: "2026-08-14T09:00:00.000Z",
+      lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
+      recentProviderFailures: [
+        { providerCode: "binance-public", count: 1 },
+        { providerCode: "vnstock-vci-free", count: 2 },
+      ],
+    });
     expect(prisma.marketIngestionRequest.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { organizationId: "org-a" },

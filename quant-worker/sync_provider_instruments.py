@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -33,6 +34,30 @@ PROVIDERS = {
         "https://www.dukascopy.com/swiss/english/marketwatch/historical/",
     ),
 }
+
+
+def load_service_tenant(env_file: Path = Path(".env.local")) -> tuple[str, str]:
+    configured = {
+        "QUANT_WORKER_ORGANIZATION_SLUG": os.getenv("QUANT_WORKER_ORGANIZATION_SLUG", "").strip(),
+        "QUANT_WORKER_USER_EMAIL": os.getenv("QUANT_WORKER_USER_EMAIL", "").strip(),
+    }
+    if not all(configured.values()) and env_file.exists():
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in configured or configured[key]:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                value = value[1:-1]
+            configured[key] = value.strip()
+    return (
+        configured["QUANT_WORKER_ORGANIZATION_SLUG"] or "demo-workspace",
+        configured["QUANT_WORKER_USER_EMAIL"] or "demo@radarasset.local",
+    )
 
 
 def provider_code(descriptor: ProviderInstrumentDescriptor) -> str:
@@ -323,8 +348,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Sync approved market-data provider catalogs.")
     parser.add_argument("--queue-ingestion", choices=("all", "daily", "hourly"))
+    parser.add_argument("--env-file", default=".env.local")
     args = parser.parse_args(argv)
     try:
+        env_file = Path(args.env_file)
+        organization_slug, user_email = load_service_tenant(env_file)
         descriptors = [
             *BinanceSpotAdapter().list_instruments(),
             *VnstockAdapter().list_instruments(),
@@ -337,11 +365,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 currency="USD",
             ),
         ]
-        url = psycopg_connection_url(load_database_url(Path(".env.local")))
+        url = psycopg_connection_url(load_database_url(env_file))
         with psycopg.connect(url, autocommit=False) as connection:
             count = sync_provider_instruments(connection, descriptors)
             queued = (
-                queue_market_ingestion_requests(connection, command=args.queue_ingestion)
+                queue_market_ingestion_requests(
+                    connection,
+                    command=args.queue_ingestion,
+                    organization_slug=organization_slug,
+                    user_email=user_email,
+                )
                 if args.queue_ingestion
                 else 0
             )

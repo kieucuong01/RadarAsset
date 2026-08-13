@@ -60,6 +60,8 @@ export type QuantAssetCatalogItem = {
   freshness: MarketDataFreshness;
   backtestable: boolean;
   reasonCode: "DATASET_UNAVAILABLE" | "DATASET_RANGE_INSUFFICIENT" | null;
+  listingStatus: "active" | "inactive" | "delisted" | "unknown";
+  availableAdjustments: Array<"raw" | "total_return">;
 };
 
 export type QuantAssetCatalogResponse = {
@@ -80,6 +82,13 @@ export type QuantDataReadinessResponse = {
     count: number;
   }>;
   backlogCount: number;
+  expectedDatasetCount: number;
+  missingDatasetCount: number;
+  staleDatasetCount: number;
+  missingBarCount: number;
+  oldestBacklogAt: string | null;
+  lastSchedulerSuccessAt: string | null;
+  recentProviderFailures: Array<{ providerCode: string; count: number }>;
 };
 
 export type PortfolioTransactionCreateInput = {

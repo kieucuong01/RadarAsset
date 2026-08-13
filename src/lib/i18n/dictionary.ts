@@ -47,6 +47,23 @@ export const dictionaries = {
         backlogDetail: "{count} job ingestion đang chờ/đang chạy.",
         readyDetail: "Không còn backlog ingestion.",
       },
+      dataHealth: {
+        title: "Sức khỏe dữ liệu thị trường",
+        description: "Độ mới, độ phủ, dữ liệu thiếu và lỗi nguồn trong 24 giờ gần nhất.",
+        healthy: "Ổn định",
+        degraded: "{count} vấn đề",
+        unavailable: "Không đọc được sức khỏe dữ liệu",
+        unavailableDetail: "Dashboard vận hành ingestion hiện không khả dụng.",
+        coverage: "Độ phủ dataset",
+        missingDatasets: "Thiếu {count} dataset",
+        stale: "Dataset lỗi thời",
+        missingBars: "Thiếu {count} bars",
+        backlog: "Hàng đợi ingestion",
+        oldestBacklog: "Cũ nhất: {date}",
+        noBacklog: "Không có hàng đợi",
+        providerFailures: "Lỗi nguồn 24 giờ",
+        lastScheduler: "Scheduler thành công: {date}",
+      },
       tabs: {
         optimizer: "Tối ưu danh mục",
         strategies: "Thư viện chiến lược",
@@ -607,7 +624,8 @@ export const dictionaries = {
       cancelledTitle: "Backtest đã hủy",
       cancelledDescription: "Run đã được hủy và sẽ không tiếp tục xử lý.",
       timedOutTitle: "Backtest quá thời gian",
-      timedOutDescription: "Run vượt quá thời gian xử lý cho phép. Hãy thu hẹp phạm vi hoặc thử lại.",
+      timedOutDescription:
+        "Run vượt quá thời gian xử lý cho phép. Hãy thu hẹp phạm vi hoặc thử lại.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",
@@ -757,6 +775,24 @@ export const dictionaries = {
         activeDatasets: "{count} active datasets",
         backlogDetail: "{count} ingestion jobs queued/running.",
         readyDetail: "No ingestion backlog.",
+      },
+      dataHealth: {
+        title: "Market data health",
+        description:
+          "Freshness, coverage, missing data, and provider failures in the last 24 hours.",
+        healthy: "Healthy",
+        degraded: "{count} issues",
+        unavailable: "Market data health unavailable",
+        unavailableDetail: "The ingestion operations dashboard cannot be loaded.",
+        coverage: "Dataset coverage",
+        missingDatasets: "{count} datasets missing",
+        stale: "Stale datasets",
+        missingBars: "{count} bars missing",
+        backlog: "Ingestion backlog",
+        oldestBacklog: "Oldest: {date}",
+        noBacklog: "No backlog",
+        providerFailures: "Provider failures (24h)",
+        lastScheduler: "Scheduler succeeded: {date}",
       },
       tabs: {
         optimizer: "Portfolio Optimizer",
@@ -1312,7 +1348,8 @@ export const dictionaries = {
       cancelledTitle: "Backtest cancelled",
       cancelledDescription: "The run was cancelled and will not continue processing.",
       timedOutTitle: "Backtest timed out",
-      timedOutDescription: "The run exceeded its processing deadline. Narrow the range or try again.",
+      timedOutDescription:
+        "The run exceeded its processing deadline. Narrow the range or try again.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",

@@ -7,7 +7,7 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 const nullableDateTime = z.string().datetime().nullable();
 
 const marketDataHealthItemSchema = z.object({
-  symbol: z.enum(["FPT", "BTC", "XAU"]),
+  symbol: z.string().trim().min(1).max(20),
   market: z.enum(["vn_equity", "crypto_spot", "metal_spot"]),
   timeframe: z.enum(["1h", "1d"]),
   providerCode: z.string().max(80).nullable(),
@@ -27,7 +27,7 @@ const marketDataHealthItemSchema = z.object({
 });
 
 const marketDataHealthResponseSchema = z.object({
-  data: z.array(marketDataHealthItemSchema).max(6),
+  data: z.array(marketDataHealthItemSchema).max(1_000),
 });
 
 const STATUS_META = {
