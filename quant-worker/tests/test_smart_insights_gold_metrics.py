@@ -9,11 +9,15 @@ import pytest
 
 from smart_insights.metrics.gold import (
     DatedPoint,
+    GoldRegimeInput,
     GoldPricePoint,
     aligned_beta,
     aligned_correlation,
+    cftc_position_metrics,
     calculate_xau_metrics,
+    gold_regime,
 )
+from smart_insights.metrics.common import InsufficientCoverageError
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "smart_insights" / "gold"
@@ -86,3 +90,44 @@ def test_cross_asset_metrics_are_unavailable_below_minimum_or_zero_variance() ->
 
     assert aligned_correlation(gold, benchmark, minimum_points=3).value is None
     assert aligned_beta(gold, benchmark, minimum_points=2).value is None
+
+
+def input_score(value: str, *, confidence: str = "100") -> GoldRegimeInput:
+    return GoldRegimeInput(Decimal(value), Decimal(confidence), (f"input:{value}",))
+
+
+def test_gold_regime_uses_exact_weight_and_direction() -> None:
+    result = gold_regime({
+        "momentum": input_score("40", confidence="90"),
+        "real_yields": input_score("-20", confidence="100"),
+        "usd_pressure": input_score("30", confidence="80"),
+        "etf_flow": input_score("60", confidence="70"),
+        "cftc_positioning": input_score("10", confidence="85"),
+        "central_bank_demand": input_score("50", confidence="60"),
+    })
+    assert result.score == Decimal("24.00")
+    assert result.label == "constructive"
+    assert result.configured_weight_coverage == Decimal("1.00")
+    assert result.data_confidence == Decimal("84.00")
+    assert len(result.input_ids) == 6
+
+
+def test_gold_regime_is_unavailable_below_sixty_percent_coverage() -> None:
+    with pytest.raises(InsufficientCoverageError):
+        gold_regime({
+            "momentum": input_score("20"),
+            "real_yields": input_score("10"),
+        })
+
+
+def test_cftc_gold_positioning_uses_net_open_interest_and_past_history() -> None:
+    result = cftc_position_metrics(
+        long_position=Decimal("180000"),
+        short_position=Decimal("60000"),
+        open_interest=Decimal("500000"),
+        prior_normalized_net=(Decimal("0.10"), Decimal("0.20")),
+    )
+    assert result.net_contracts == Decimal("120000")
+    assert result.normalized_net == Decimal("0.240000")
+    assert result.weekly_delta == Decimal("0.040000")
+    assert result.expanding_percentile == Decimal("1.000000")

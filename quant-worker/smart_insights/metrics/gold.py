@@ -5,7 +5,15 @@ from datetime import date
 from decimal import Decimal, localcontext
 from typing import Sequence
 
-from .common import annualized_volatility, drawdown, simple_return
+from smart_insights.gold_registry import GOLD_GROUP_WEIGHTS
+
+from .common import (
+    InsufficientCoverageError,
+    annualized_volatility,
+    drawdown,
+    empirical_percentile,
+    simple_return,
+)
 
 
 _SIX = Decimal("0.000001")
@@ -57,6 +65,38 @@ class CrossAssetMetric:
     value: Decimal | None
     point_count: int
     input_dataset_versions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CftcPositionMetrics:
+    net_contracts: Decimal
+    normalized_net: Decimal
+    weekly_delta: Decimal | None
+    expanding_percentile: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class GoldRegimeInput:
+    score: Decimal
+    confidence: Decimal
+    input_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not Decimal("-100") <= self.score <= Decimal("100"):
+            raise ValueError("Gold group score must be between -100 and 100.")
+        if not Decimal("0") <= self.confidence <= Decimal("100"):
+            raise ValueError("Gold confidence must be between zero and 100.")
+        if not self.input_ids:
+            raise ValueError("Gold group input IDs are required.")
+
+
+@dataclass(frozen=True, slots=True)
+class GoldRegimeResult:
+    score: Decimal
+    label: str
+    configured_weight_coverage: Decimal
+    data_confidence: Decimal
+    input_ids: tuple[str, ...]
 
 
 def calculate_xau_metrics(
@@ -160,3 +200,87 @@ def aligned_beta(
     y: Sequence[DatedPoint], x: Sequence[DatedPoint], *, minimum_points: int = 60
 ) -> CrossAssetMetric:
     return _metric(y, x, minimum_points=minimum_points, operation="beta")
+
+
+def cftc_position_metrics(
+    *,
+    long_position: Decimal,
+    short_position: Decimal,
+    open_interest: Decimal,
+    prior_normalized_net: Sequence[Decimal],
+) -> CftcPositionMetrics:
+    if open_interest <= 0 or long_position < 0 or short_position < 0:
+        raise ValueError("CFTC position values are invalid.")
+    with localcontext() as context:
+        context.prec = 34
+        net = long_position - short_position
+        normalized = (net / open_interest).quantize(_SIX)
+        delta = (
+            (normalized - prior_normalized_net[-1]).quantize(_SIX)
+            if prior_normalized_net
+            else None
+        )
+        percentile = empirical_percentile(
+            tuple(prior_normalized_net) + (normalized,), normalized
+        )
+    return CftcPositionMetrics(net, normalized, delta, percentile)
+
+
+def regime_label(score: Decimal) -> str:
+    if score <= Decimal("-40"):
+        return "strongly_negative"
+    if score <= Decimal("-15"):
+        return "negative"
+    if score < Decimal("15"):
+        return "neutral"
+    if score < Decimal("40"):
+        return "constructive"
+    return "strongly_positive"
+
+
+def gold_regime(
+    inputs: dict[str, GoldRegimeInput],
+    *,
+    minimum_coverage: Decimal = Decimal("0.60"),
+) -> GoldRegimeResult:
+    unknown = set(inputs) - set(GOLD_GROUP_WEIGHTS)
+    if unknown:
+        raise ValueError("Gold regime received an unknown score group.")
+    valid_weight = sum(
+        (GOLD_GROUP_WEIGHTS[group] for group in inputs), Decimal("0")
+    )
+    total_weight = sum(GOLD_GROUP_WEIGHTS.values(), Decimal("0"))
+    coverage = valid_weight / total_weight
+    if coverage < minimum_coverage or valid_weight == 0:
+        raise InsufficientCoverageError("Gold score coverage is below 60%.")
+    with localcontext() as context:
+        context.prec = 34
+        score = (
+            sum(
+                (
+                    GOLD_GROUP_WEIGHTS[group] * row.score
+                    for group, row in inputs.items()
+                ),
+                Decimal("0"),
+            )
+            / valid_weight
+        ).quantize(Decimal("0.01"))
+        confidence = (
+            sum(
+                (
+                    GOLD_GROUP_WEIGHTS[group] * row.confidence
+                    for group, row in inputs.items()
+                ),
+                Decimal("0"),
+            )
+            / total_weight
+        ).quantize(Decimal("0.01"))
+    return GoldRegimeResult(
+        score=score,
+        label=regime_label(score),
+        configured_weight_coverage=coverage.quantize(Decimal("0.01")),
+        data_confidence=min(Decimal("100"), confidence),
+        input_ids=tuple(
+            sorted({input_id for row in inputs.values() for input_id in row.input_ids})
+        ),
+    )
