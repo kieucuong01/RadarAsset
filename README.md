@@ -99,6 +99,14 @@ automatically. Deployment must configure and observe its own cron/platform sched
 
 ## Smart Insights Collection
 
+Smart Insights is implemented as a data-first Personal Decision Cockpit for Crypto, Macro, and
+Gold, backed by a Python AI Research Workbench. It publishes tenant-scoped daily briefings,
+deterministic regimes, point-in-time metrics, a CryptoCraft calendar contract, evidence details,
+preferences, and source-health APIs. The UI does not fall back to hard-coded market facts.
+
+See the [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md) for source
+activation status, Firecrawl setup, scheduler commands, AI fallback rules, replay, and rollback.
+
 Smart Insights stores normalized quantitative observations and private, content-addressed raw
 artifacts. Firecrawl runs as a separate private service; set `FIRECRAWL_API_URL` to its local or
 private HTTPS endpoint. The worker sends only code-owned allow-listed URLs and never accepts a URL

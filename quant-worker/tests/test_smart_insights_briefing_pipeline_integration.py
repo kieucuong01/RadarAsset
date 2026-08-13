@@ -2,7 +2,12 @@ from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from smart_insights.briefing_pipeline import BriefingSignal, generate_briefing, replay_briefing
+from smart_insights.briefing_pipeline import (
+    BriefingSignal,
+    _portfolio_snapshot,
+    generate_briefing,
+    replay_briefing,
+)
 from smart_insights.evidence import EvidenceObservation
 from smart_insights.openai_responses import AiUnavailable
 from smart_insights.personalization import CandidateSignal, UserInsightPreference
@@ -68,3 +73,10 @@ def test_identical_replay_does_not_create_a_revision() -> None:
     second = generate_briefing(repository, organization_id="org", user_id="user", local_date=date(2026, 8, 13), timezone_name="Asia/Bangkok", as_of=NOW, synthesizer=failing_ai)
     assert second.id == first.id
     assert len(repository.records) == 1
+
+
+def test_portfolio_snapshot_preserves_state_and_positions() -> None:
+    assert _portfolio_snapshot("missing", ()) == {
+        "portfolioState": "missing",
+        "positions": [],
+    }

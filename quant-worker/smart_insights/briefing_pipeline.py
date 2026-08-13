@@ -109,6 +109,15 @@ class BriefingRepository(Protocol):
     def load_briefing(self, briefing_id: str) -> BriefingRecord: ...
 
 
+def _portfolio_snapshot(
+    portfolio_state: str, portfolio: tuple[PortfolioPosition, ...]
+) -> dict[str, object]:
+    return {
+        "portfolioState": portfolio_state,
+        "positions": [asdict(row) for row in portfolio],
+    }
+
+
 def _evidence_unit(unit: str) -> str | None:
     normalized = unit.strip().casefold().replace(" ", "_")
     return {
@@ -301,7 +310,8 @@ class PostgresBriefingRepository:
                      draft.as_of, draft.timezone, revision, draft.fingerprint,
                      os.getenv("SMART_INSIGHTS_AI_MODEL"), draft.status,
                      _canonical({"portfolioState": draft.portfolio_state}), draft.data_confidence,
-                     _canonical([asdict(row) for row in draft.portfolio]), _canonical(asdict(draft.preferences))),
+                     _canonical(_portfolio_snapshot(draft.portfolio_state, draft.portfolio)),
+                     _canonical(asdict(draft.preferences))),
                 )
                 for item in draft.items:
                     evidence_ids: list[str] = []
