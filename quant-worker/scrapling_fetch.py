@@ -4,7 +4,7 @@ import base64
 import json
 import re
 import sys
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 
 _FARSIDE_PATHS = frozenset({"/btc/", "/eth/", "/sol/"})
@@ -15,6 +15,9 @@ _COINSHARES_PREFIXES = (
 _COINSHARES_INDEX = "/insights/research-data/"
 _STORYBLOK_IMAGE = re.compile(
     r"^/f/176807/[^?#]+\.(?:png|jpe?g|webp)/m/$", re.IGNORECASE
+)
+_CRYPTOCRAFT_EVENT = re.compile(
+    r"^/calendar/[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$", re.IGNORECASE
 )
 
 
@@ -46,6 +49,15 @@ def is_runner_url_allowed(url: str) -> bool:
         return index or article
     if host == "a.storyblok.com":
         return _STORYBLOK_IMAGE.fullmatch(parsed.path) is not None
+    if host == "www.cryptocraft.com":
+        week = parsed.path == "/calendar" and parse_qsl(
+            parsed.query, keep_blank_values=True
+        ) in ([('week', 'this')], [('week', 'next')])
+        event = (
+            _CRYPTOCRAFT_EVENT.fullmatch(parsed.path) is not None
+            and not parsed.query
+        )
+        return week or event
     return False
 
 

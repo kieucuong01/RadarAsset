@@ -4,6 +4,8 @@ from collections.abc import Callable, Mapping, Set
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import base64
+import codecs
+from email.message import Message
 import json
 import os
 from pathlib import Path
@@ -94,8 +96,12 @@ class ScraplingClient:
             raise SourceFetchError("INVALID_RESPONSE")
         body = _body(response)
         try:
-            html = body.decode("utf-8", errors="strict")
-        except UnicodeDecodeError as error:
+            message = Message()
+            message["content-type"] = _content_type_header(response)
+            charset = message.get_content_charset() or "utf-8"
+            codecs.lookup(charset)
+            html = body.decode(charset, errors="strict")
+        except (LookupError, UnicodeDecodeError) as error:
             raise SourceFetchError("INVALID_RESPONSE") from error
         if not html.strip():
             raise SourceFetchError("INVALID_RESPONSE")
@@ -183,10 +189,14 @@ def _body(response: Any) -> bytes:
 
 
 def _content_type(response: Any) -> str:
+    return _content_type_header(response).split(";", 1)[0].strip().casefold()
+
+
+def _content_type_header(response: Any) -> str:
     headers = getattr(response, "headers", None)
     if not isinstance(headers, Mapping):
         raise SourceFetchError("INVALID_RESPONSE")
-    value = next(
+    return next(
         (
             str(header_value)
             for name, header_value in headers.items()
@@ -194,4 +204,3 @@ def _content_type(response: Any) -> str:
         ),
         "",
     )
-    return value.split(";", 1)[0].strip().casefold()

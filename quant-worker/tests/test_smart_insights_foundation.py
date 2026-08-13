@@ -473,6 +473,36 @@ def test_scrapling_creates_bounded_private_html_snapshot() -> None:
     }
 
 
+def test_scrapling_decodes_html_with_declared_charset() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response(
+        body=b"<html><p>caf\xe9</p></html>",
+        headers={"content-type": "text/html; charset=ISO-8859-1"},
+    )
+    client = module.ScraplingClient(fetcher=lambda _url: response)
+
+    result = client.scrape(
+        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+    )
+
+    assert json.loads(result.content)["rawHtml"] == "<html><p>café</p></html>"
+
+
+def test_scrapling_rejects_unknown_declared_charset() -> None:
+    module = _scrapling_client_module()
+    response = _scrapling_response(
+        headers={"content-type": "text/html; charset=not-a-real-charset"},
+    )
+    client = module.ScraplingClient(fetcher=lambda _url: response)
+
+    with pytest.raises(SourceFetchError) as error:
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+
+    assert error.value.code == "INVALID_RESPONSE"
+
+
 def test_scrapling_rejects_outside_url_before_fetch() -> None:
     module = _scrapling_client_module()
     calls: list[str] = []
@@ -610,6 +640,15 @@ def test_scrapling_runner_url_allowlist_is_exact() -> None:
     assert runner.is_runner_url_allowed(
         "https://a.storyblok.com/f/176807/1600x2000/table.png/m/"
     )
+    assert runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/calendar?week=this"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/calendar?week=next"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/calendar/454-ch-cpi-yy"
+    )
     assert not runner.is_runner_url_allowed("http://farside.co.uk/btc/")
     assert not runner.is_runner_url_allowed("https://farside.co.uk/btc/extra")
     assert not runner.is_runner_url_allowed("https://evil.invalid/btc/")
@@ -618,6 +657,15 @@ def test_scrapling_runner_url_allowlist_is_exact() -> None:
     )
     assert not runner.is_runner_url_allowed(
         "https://a.storyblok.com/f/999999/1600x2000/table.png/m/"
+    )
+    assert not runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/calendar?week=last"
+    )
+    assert not runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/calendar/454-ch-cpi-yy?next=1"
+    )
+    assert not runner.is_runner_url_allowed(
+        "https://www.cryptocraft.com/thread/454-ch-cpi-yy"
     )
 
 
