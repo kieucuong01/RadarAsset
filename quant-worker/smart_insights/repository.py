@@ -487,10 +487,10 @@ class PostgresInsightRepository:
                     AND observed_at <= %s
                     AND quality_status IN ('passed', 'warning')
                 )
-                SELECT source_event_key, event, country, currency, impact,
+                SELECT id, source_event_key, event, country, currency, impact,
                        actual, forecast, previous, event_date, event_at,
                        time_status, source_timezone, detail_url, published_at,
-                       quality_status, quality_flags
+                       observed_at, quality_status, quality_flags
                 FROM ranked
                 WHERE rank = 1
                 ORDER BY event_date, event_at NULLS LAST, source_event_key
@@ -523,6 +523,8 @@ class PostgresInsightRepository:
                     ),
                     quality_status=str(row["quality_status"]),
                     quality_flags=tuple(row["quality_flags"]),
+                    id=str(row["id"]),
+                    observed_at=_as_utc(row["observed_at"]),
                 )
                 for row in cursor.fetchall()
             )
@@ -595,7 +597,7 @@ class PostgresInsightRepository:
                           methodology_version, freshness_sla_minutes, metadata,
                           created_at, updated_at
                         ) VALUES (
-                          %s, %s, 'crypto', %s, %s, %s, %s,
+                          %s, %s, %s, %s, %s, %s, %s,
                           %s, %s, %s::jsonb, NOW(), NOW()
                         )
                         ON CONFLICT (code) DO UPDATE SET
@@ -610,6 +612,7 @@ class PostgresInsightRepository:
                         (
                             str(uuid4()),
                             definition.code,
+                            definition.market,
                             definition.name,
                             definition.unit,
                             definition.frequency,

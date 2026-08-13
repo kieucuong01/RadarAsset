@@ -13,7 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 import pytest
 
-from collect_smart_insights import run_calendar_schedule
+from collect_smart_insights import run_calendar_live_smoke, run_calendar_schedule
 from smart_insights.artifacts import StoredArtifact
 from smart_insights.collectors.cryptocraft import CryptoCraftCollector
 from smart_insights.contracts import RawSnapshot
@@ -130,6 +130,19 @@ def test_raw_html_restores_impact_and_detail_when_markdown_loses_icons() -> None
     assert batch.events[0].detail_url == (
         "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m"
     )
+
+
+def test_calendar_live_smoke_uses_the_production_parser_without_writes() -> None:
+    outcome = run_calendar_live_smoke(
+        CryptoCraftCollector(
+            firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        ),
+        as_of=NOW,
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.records_fetched == 5
+    assert outcome.error_code is None
 
 
 def test_actual_revision_keeps_the_same_source_identity() -> None:

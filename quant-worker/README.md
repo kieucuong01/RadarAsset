@@ -128,3 +128,14 @@ sanitized error code. Daily production collection writes gzipped content-address
 `SMART_INSIGHTS_ARTIFACT_ROOT`, publishes accepted observations transactionally, and calculates a
 regime snapshot after the enabled collectors finish. Firecrawl sources use only fixed registry
 URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.
+
+Macro collection uses `FredCollector` for the fixed FRED registry, `CftcCollector` for fixed CFTC
+contracts/report types, and `CryptoCraftCollector` for the attributed visible calendar. The Macro
+pipeline publishes a confidence/coverage-gated directional regime snapshot plus an independent
+Event Risk snapshot. Run the three no-write smoke boundaries before enabling their source codes:
+
+```powershell
+python quant-worker\collect_smart_insights.py daily --source fred --live-smoke
+python quant-worker\collect_smart_insights.py weekly --source cftc-legacy --live-smoke
+python quant-worker\collect_smart_insights.py calendar-current --source cryptocraft --live-smoke
+```

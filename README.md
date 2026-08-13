@@ -154,6 +154,18 @@ event detail pages every fifteen minutes from T-30 through T+90. An early invoca
 successfully as `not_due`. Calendar timestamps use the explicit CryptoCraft timezone and are stored
 in UTC; all-day and tentative rows retain their source date without a fabricated instant.
 
+Macro observations use an allow-listed set of 15 FRED series and the official CFTC Legacy Futures
+Only contracts for BTC, USD Index, E-mini S&P 500, and Nasdaq-100 Mini. Set `FRED_API_KEY` before its
+live smoke. CFTC queries are bounded to 5,000 rows, select only code-owned fields, and require
+`FutOnly`; combined futures/options rows fail validation instead of being double-counted. FRED,
+CFTC, and CryptoCraft remain disabled until each production parser passes from the deployment
+environment.
+
+The deterministic `macro-risk-asset-regime-v1` score weights liquidity 30%, rates/real yields 25%,
+USD pressure 20%, growth/inflation surprise 15%, and positioning 10%. It requires 60% fresh-weight
+coverage. `Event Risk` is published separately as the maximum upcoming event severity over 24-hour,
+3-day, and 7-day windows, so it never changes the directional regime score.
+
 ## Investor Intelligence
 
 The local v1 backend stores research in PostgreSQL:

@@ -54,6 +54,7 @@ class MetricDefinitionInput:
     frequency: str
     direction: int
     freshness_sla_minutes: int
+    market: str = "crypto"
     methodology_version: str = METHODOLOGY_VERSION
     metadata: Mapping[str, object] = field(default_factory=dict)
 

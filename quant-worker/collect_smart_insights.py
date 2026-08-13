@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
 import os
@@ -21,6 +21,7 @@ from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollec
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
 from smart_insights.collectors.coinshares import CoinSharesCollector
+from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.cryptocraft import CryptoCraftCollector
 from smart_insights.collectors.defillama import (
     DefiLlamaChainsCollector,
@@ -28,12 +29,16 @@ from smart_insights.collectors.defillama import (
 )
 from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
+from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
-from smart_insights.contracts import SourceDefinition, SourceRunResult
+from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.firecrawl import FirecrawlClient
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
+from smart_insights.macro_pipeline import run_macro_pipeline
+from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
+from smart_insights.metrics.macro import MACRO_METRIC_DEFINITIONS
 from smart_insights.repository import PostgresInsightRepository
 from smart_insights.scheduling import due_calendar_jobs
 from smart_insights.sources import (
@@ -237,14 +242,40 @@ def run_live_smoke(
         return LiveSmokeOutcome(source_code, "failed", 0, None, error.code)
     except ObservationValidationError as error:
         return LiveSmokeOutcome(source_code, "failed", 0, None, error.code)
-    except ValueError:
-        return LiveSmokeOutcome(source_code, "failed", 0, None, "INVALID_RESPONSE")
+    except ValueError as error:
+        error_code = (
+            "CONFIG_MISSING" if str(error).startswith("FRED_API_KEY") else "INVALID_RESPONSE"
+        )
+        return LiveSmokeOutcome(source_code, "failed", 0, None, error_code)
     return LiveSmokeOutcome(
         source_code=source_code,
         status="succeeded",
         records_fetched=len(validated),
         effective_at=max(row.effective_at for row in validated),
         error_code=None,
+    )
+
+
+def run_calendar_live_smoke(
+    collector: CryptoCraftCollector, *, as_of: datetime
+) -> LiveSmokeOutcome:
+    try:
+        batch = collector.collect_week("current", observed_at=as_of)
+    except SourceFetchError as error:
+        return LiveSmokeOutcome("cryptocraft", "failed", 0, None, error.code)
+    except ValueError:
+        return LiveSmokeOutcome("cryptocraft", "failed", 0, None, "INVALID_RESPONSE")
+    if batch.error_code is not None or not batch.events:
+        return LiveSmokeOutcome(
+            "cryptocraft", "failed", 0, None,
+            batch.error_code or "MISSING_REQUIRED_FIELD",
+        )
+    timed = tuple(
+        event.event_at_utc for event in batch.events if event.event_at_utc is not None
+    )
+    effective_at = max(timed) if timed else as_of
+    return LiveSmokeOutcome(
+        "cryptocraft", "succeeded", len(batch.events), effective_at, None
     )
 
 
@@ -307,6 +338,59 @@ def _previous_large_address_balances(
     }
 
 
+def _bounded_environment_int(
+    name: str, default: int, *, minimum: int, maximum: int
+) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer.") from error
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} is outside its allowed range.")
+    return value
+
+
+def _merge_api_batches(
+    source_code: str,
+    batches: Sequence[CollectionBatch],
+    *,
+    observed_at: datetime,
+) -> CollectionBatch:
+    source = source_for_code(source_code)
+    payloads: list[object] = []
+    observations = []
+    error_code: str | None = None
+    for batch in batches:
+        if batch.source.code != source_code:
+            raise ValueError("Cannot merge batches from another source.")
+        try:
+            payloads.append(json.loads(batch.snapshot.content))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payloads.append({"contentHashOnly": True})
+        observations.extend(batch.observations)
+        error_code = error_code or batch.error_code
+    snapshot = RawSnapshot(
+        content=json.dumps(payloads, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        content_type="application/json",
+        source_url=source.urls[0],
+        effective_at=(
+            max((row.effective_at for row in observations), default=None)
+        ),
+        published_at=None,
+        observed_at=observed_at,
+        metadata={
+            "merged_batches": len(batches),
+            "parser_version": source.parser_version,
+        },
+    )
+    return CollectionBatch(
+        source,
+        snapshot,
+        tuple(observations) if error_code is None else (),
+        error_code,
+    )
+
+
 def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
 ) -> Mapping[str, BatchCollector]:
@@ -328,6 +412,47 @@ def build_batch_collectors(
             previous_balances=previous or None,
         )
 
+    def fred(as_of: datetime) -> CollectionBatch:
+        overlap_days = _bounded_environment_int(
+            "SMART_INSIGHTS_FRED_OVERLAP_DAYS", 14, minimum=1, maximum=365
+        )
+        collector = FredCollector(api_key=os.getenv("FRED_API_KEY", ""))
+        batches = tuple(
+            collector.collect(
+                series,
+                (as_of - timedelta(days=overlap_days)).date(),
+                as_of.date(),
+            )
+            for series in FRED_SERIES.values()
+        )
+        return _merge_api_batches("fred", batches, observed_at=as_of)
+
+    def cftc_legacy(as_of: datetime) -> CollectionBatch:
+        overlap_weeks = _bounded_environment_int(
+            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 8, minimum=1, maximum=520
+        )
+        collector = CftcCollector()
+        batches = tuple(
+            collector.collect(
+                market,
+                report_date_from=(as_of - timedelta(weeks=overlap_weeks)).date(),
+            )
+            for market in CFTC_MARKETS.values()
+            if market.source_code == "cftc-legacy"
+        )
+        return _merge_api_batches("cftc-legacy", batches, observed_at=as_of)
+
+    def cftc_disaggregated(as_of: datetime) -> CollectionBatch:
+        overlap_weeks = _bounded_environment_int(
+            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 8, minimum=1, maximum=520
+        )
+        collector = CftcCollector()
+        batch = collector.collect(
+            CFTC_MARKETS["GOLD"],
+            report_date_from=(as_of - timedelta(weeks=overlap_weeks)).date(),
+        )
+        return _merge_api_batches("cftc-disaggregated", (batch,), observed_at=as_of)
+
     return {
         "alternative-fng": lambda as_of: AlternativeFearGreedCollector().collect(as_of),
         "farside-btc-etf": lambda as_of: FarsideEtfCollector(
@@ -346,6 +471,9 @@ def build_batch_collectors(
         "deribit-public": lambda as_of: DeribitCollector().collect(as_of),
         "coinshares-weekly": coinshares,
         "bitinfocharts-top-addresses": bitinfocharts,
+        "fred": fred,
+        "cftc-legacy": cftc_legacy,
+        "cftc-disaggregated": cftc_disaggregated,
     }
 
 
@@ -476,11 +604,21 @@ def main(
         if args.dry_run or not args.source:
             return 2
         try:
-            outcome = run_live_smoke(
-                args.source,
-                as_of=datetime.now(timezone.utc),
-                batch_collectors=smoke_collectors or build_batch_collectors(),
-            )
+            smoke_time = datetime.now(timezone.utc)
+            if args.source == "cryptocraft":
+                firecrawl = FirecrawlClient(
+                    os.getenv("FIRECRAWL_API_URL", "http://127.0.0.1:3002"),
+                    api_key=os.getenv("FIRECRAWL_API_KEY"),
+                )
+                outcome = run_calendar_live_smoke(
+                    CryptoCraftCollector(firecrawl=firecrawl), as_of=smoke_time
+                )
+            else:
+                outcome = run_live_smoke(
+                    args.source,
+                    as_of=smoke_time,
+                    batch_collectors=smoke_collectors or build_batch_collectors(),
+                )
         except ValueError:
             return 2
         _emit_smoke(outcome)
@@ -498,7 +636,9 @@ def main(
                 database_url, autocommit=True, row_factory=dict_row
             )
             repository = PostgresInsightRepository(connection)
-            repository.upsert_metric_definitions(CRYPTO_METRIC_DEFINITIONS)
+            repository.upsert_metric_definitions(
+                CRYPTO_METRIC_DEFINITIONS + MACRO_METRIC_DEFINITIONS
+            )
             artifact_store = ArtifactStore(
                 Path(
                     os.getenv(
@@ -540,12 +680,14 @@ def main(
                 dry_run=args.dry_run,
                 collectors=active_collectors or {},
             )
-        if (
-            repository is not None
-            and args.schedule == "daily"
-            and exit_code == 0
-        ):
-            run_crypto_pipeline(repository, as_of=datetime.now(timezone.utc))
+        if repository is not None and exit_code == 0:
+            pipeline_time = datetime.now(timezone.utc)
+            if args.schedule == "daily":
+                run_crypto_pipeline(repository, as_of=pipeline_time)
+            if args.schedule in {
+                "daily", "weekly", "calendar-current", "calendar-next", "calendar-event"
+            }:
+                run_macro_pipeline(repository, as_of=pipeline_time)
     except ValueError:
         outcomes, exit_code = [], 2
     finally:

@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from collect_smart_insights import run_live_smoke
 from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.http import HttpResponse
@@ -90,6 +91,17 @@ def test_fred_rejects_unknown_series_and_requires_key() -> None:
         FredCollector(
             transport=FakeTransport("{}"), api_key="test", clock=lambda: NOW
         ).collect(unknown, date(2026, 8, 10), date(2026, 8, 13))
+
+    missing = run_live_smoke(
+        "fred",
+        as_of=NOW,
+        batch_collectors={
+            "fred": lambda _as_of: FredCollector(api_key="").collect(
+                FRED_SERIES["DGS10"], date(2026, 8, 10), date(2026, 8, 13)
+            )
+        },
+    )
+    assert missing.error_code == "CONFIG_MISSING"
 
 
 @pytest.mark.parametrize(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from types import MappingProxyType
 
 
@@ -93,3 +94,55 @@ CFTC_MARKETS = MappingProxyType(
         "GOLD": _cftc_market("GOLD", "cftc-disaggregated", "72hh-3qpy", "088691", "managed_money", "gold.cftc.managed_money", "gold.cftc.managed_money_net_oi"),
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SurpriseEventDefinition:
+    category: str
+    direction: int
+    series_key: str
+
+
+_EVENT_SLUG = re.compile(r"[^a-z0-9]+")
+
+
+def classify_surprise_event(
+    country: str, currency: str, event_name: str
+) -> SurpriseEventDefinition | None:
+    normalized = " ".join(event_name.casefold().split())
+    inflation_terms = (
+        "core cpi",
+        "cpi",
+        "core pce",
+        "pce price",
+        "core ppi",
+        "ppi",
+        "inflation expectations",
+    )
+    negative_growth_terms = (
+        "unemployment",
+        "jobless claims",
+        "unemployment claims",
+        "claimant count",
+    )
+    positive_growth_terms = (
+        "gdp",
+        "retail sales",
+        "nonfarm payroll",
+        "payroll",
+        "employment change",
+        "pmi",
+    )
+    if any(term in normalized for term in inflation_terms):
+        category, direction = "inflation", -1
+    elif any(term in normalized for term in negative_growth_terms):
+        category, direction = "growth", -1
+    elif any(term in normalized for term in positive_growth_terms):
+        category, direction = "growth", 1
+    else:
+        return None
+    slug = _EVENT_SLUG.sub("-", normalized).strip("-")
+    series_key = (
+        f"cryptocraft-surprise:{category}:{country.upper()}:{currency.upper()}:{slug}"
+    )
+    return SurpriseEventDefinition(category, direction, series_key)

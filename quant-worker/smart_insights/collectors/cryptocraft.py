@@ -58,6 +58,8 @@ class CalendarEventInput:
     published_at: datetime | None = None
     quality_status: str = "passed"
     quality_flags: tuple[str, ...] = ()
+    id: str | None = None
+    observed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
