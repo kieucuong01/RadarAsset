@@ -177,6 +177,7 @@ def process_ingestion_backlog(
     *,
     batch_limit: int,
     drain: bool,
+    watch: bool = False,
     max_total: int,
     sleep: Callable[[float], None] = time.sleep,
     poll_seconds: float = 5.0,
@@ -186,10 +187,10 @@ def process_ingestion_backlog(
 ) -> dict[str, int | str]:
     processed = 0
     failed = 0
-    while processed < max_total:
+    while watch or processed < max_total:
         batch_processed = 0
         for _ in range(batch_limit):
-            if processed >= max_total:
+            if not watch and processed >= max_total:
                 break
             outcome = process_next_ingestion_request(
                 repository,
@@ -197,6 +198,8 @@ def process_ingestion_backlog(
                 now=now,
             )
             if outcome["status"] == "idle":
+                if watch:
+                    break
                 return {
                     "status": "succeeded" if failed == 0 else "partial_failure",
                     "processed": processed,
@@ -207,9 +210,9 @@ def process_ingestion_backlog(
             failed += outcome["status"] != "succeeded"
             if emit is not None:
                 emit(outcome)
-            if request_delay_seconds > 0 and processed < max_total:
+            if request_delay_seconds > 0 and (watch or processed < max_total):
                 sleep(request_delay_seconds)
-        if not drain:
+        if not drain and not watch:
             break
         if batch_processed == 0:
             sleep(poll_seconds)
@@ -297,8 +300,9 @@ def main(
                 repository,
                 factory,
                 batch_limit=args.limit,
-                drain=args.drain or args.watch,
-                max_total=args.max_total if (args.drain or args.watch) else args.limit,
+                drain=args.drain,
+                watch=args.watch,
+                max_total=args.max_total if args.drain else (10_000 if args.watch else args.limit),
                 poll_seconds=args.poll_seconds,
                 request_delay_seconds=args.request_delay_seconds,
                 emit=lambda outcome: print(

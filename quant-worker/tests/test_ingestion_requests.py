@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from backtest.models import Bar
 from backtest.providers import ProviderUnavailableError
 from backtest.publication import PublicationResult
@@ -262,3 +264,25 @@ def test_drain_throttles_between_completed_provider_requests() -> None:
     )
 
     assert sleeps == [1.0]
+
+
+def test_watch_waits_when_queue_is_empty_instead_of_exiting() -> None:
+    repository = FakeRequestRepository(None)
+
+    def stop_after_poll(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        process_ingestion_backlog(
+            repository,
+            lambda _code: FakeProvider(bars()),
+            batch_limit=1,
+            drain=False,
+            watch=True,
+            max_total=1,
+            sleep=stop_after_poll,
+            poll_seconds=0.01,
+            now=NOW,
+        )
+
+    assert repository.claim_count == 1
