@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode
 
@@ -35,9 +36,15 @@ def _millisecond_time(value: object) -> datetime:
 
 
 class DeribitCollector:
-    def __init__(self, *, transport: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        transport: Any | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self.source = source_for_code("deribit-public")
         self._transport = transport or UrllibTransport()
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     def collect(self, as_of: datetime) -> CollectionBatch:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -54,6 +61,15 @@ class DeribitCollector:
             url = f"{self.source.urls[1]}?{urlencode({'instrument_name': instrument})}"
             responses[f"{instrument.lower()}_ticker"] = self._fetch(url)
 
+        provider_times = tuple(
+            _millisecond_time(payload["result"].get("timestamp"))
+            for key, payload in responses.items()
+            if key.endswith("_ticker")
+            and isinstance(payload, dict)
+            and isinstance(payload.get("result"), dict)
+        )
+        observed_at = max((as_of, self._clock(), *provider_times))
+
         snapshot = RawSnapshot(
             content=json.dumps(
                 responses, sort_keys=True, separators=(",", ":")
@@ -62,7 +78,7 @@ class DeribitCollector:
             source_url=self.source.urls[0],
             effective_at=None,
             published_at=None,
-            observed_at=as_of,
+            observed_at=observed_at,
             metadata={
                 "currencies": _CURRENCIES,
                 "instruments": tuple(_INSTRUMENTS),
@@ -70,7 +86,9 @@ class DeribitCollector:
             },
         )
         try:
-            observations = self._parse(responses, as_of=as_of, cutoff=cutoff)
+            observations = self._parse(
+                responses, as_of=observed_at, cutoff=cutoff
+            )
         except ValueError as error:
             return CollectionBatch(self.source, snapshot, (), str(error))
         return CollectionBatch(self.source, snapshot, tuple(observations))

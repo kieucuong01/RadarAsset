@@ -5,6 +5,7 @@ from decimal import Decimal
 import json
 from pathlib import Path
 
+from collect_smart_insights import run_live_smoke
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
@@ -333,7 +334,7 @@ def test_deribit_collects_closed_dvol_and_observation_time_perpetuals() -> None:
         }
     )
 
-    batch = DeribitCollector(transport=transport).collect(NOW)
+    batch = DeribitCollector(transport=transport, clock=lambda: NOW).collect(NOW)
 
     btc_dvol = [
         row
@@ -364,7 +365,7 @@ def test_deribit_rejects_unknown_instrument() -> None:
         }
     )
 
-    batch = DeribitCollector(transport=transport).collect(NOW)
+    batch = DeribitCollector(transport=transport, clock=lambda: NOW).collect(NOW)
 
     assert batch.error_code == "UNKNOWN_INSTRUMENT"
     assert batch.observations == ()
@@ -441,6 +442,19 @@ def test_bitinfocharts_excludes_reviewed_entities_and_reports_label_coverage() -
         for row in batch.observations
         if row.metric_code == "crypto.large_address.excluded_balance_btc"
     ) == Decimal("348598")
+    address_rows = [
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.address_balance_btc"
+    ]
+    assert {row.dimensions["label_status"] for row in address_rows} == {
+        "labelled",
+        "unknown",
+    }
+    assert {row.value for row in address_rows} == {
+        Decimal("120000"),
+        Decimal("50000"),
+    }
 
 
 def test_bitinfocharts_first_snapshot_has_balance_but_no_change() -> None:
@@ -456,3 +470,31 @@ def test_bitinfocharts_first_snapshot_has_balance_but_no_change() -> None:
         row.metric_code != "crypto.large_address.balance_change_btc"
         for row in batch.observations
     )
+
+
+def test_live_smoke_uses_production_parser_and_exposes_no_provider_body() -> None:
+    collector = AlternativeFearGreedCollector(
+        transport=FakeTransport(fixture_text("alternative-fng.json"))
+    )
+
+    outcome = run_live_smoke(
+        "alternative-fng",
+        as_of=NOW,
+        batch_collectors={"alternative-fng": collector.collect},
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.records_fetched == 2
+    assert outcome.effective_at == datetime(2026, 8, 12, tzinfo=timezone.utc)
+    assert not hasattr(outcome, "payload")
+
+
+def test_live_smoke_keeps_fixture_only_source_disabled_on_parser_error() -> None:
+    outcome = run_live_smoke(
+        "farside-btc-etf",
+        as_of=NOW,
+        batch_collectors={},
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.error_code == "SOURCE_NOT_IMPLEMENTED"

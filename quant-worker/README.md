@@ -110,3 +110,21 @@ python quant-worker\research_import.py --payload .\local-research\BTC-last30days
 ```
 
 The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `evidence`, `thesis`, `forecasts`, and `providerRuns`. It is designed for adapters around last30days, ai-berkshire, Kronos, and future market-data providers.
+
+## Smart Insights Crypto Worker
+
+`collect_smart_insights.py` owns the allow-listed Crypto collectors, immutable raw-artifact
+publication, metric definition seeding, point-in-time observation queries, and Crypto Regime Score
+publication. Fixture parsers do not enable a source; use the live-smoke boundary first:
+
+```powershell
+$env:PYTHONPATH=(Resolve-Path "quant-worker").Path
+python quant-worker\collect_smart_insights.py daily --live-smoke `
+  --source alternative-fng --env-file .env.local
+```
+
+Live smoke writes nothing and emits only source code, effective time, row count, status, and a
+sanitized error code. Daily production collection writes gzipped content-addressed artifacts under
+`SMART_INSIGHTS_ARTIFACT_ROOT`, publishes accepted observations transactionally, and calculates a
+regime snapshot after the enabled collectors finish. Firecrawl sources use only fixed registry
+URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.

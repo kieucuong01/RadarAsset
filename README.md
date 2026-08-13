@@ -110,16 +110,36 @@ Verify a registered source without fetching or writing data:
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -DryRun
 ```
 
+Run a bounded production-parser smoke with no database or artifact writes:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily `
+  -Source alternative-fng -LiveSmoke
+```
+
 Run enabled daily collectors after applying the Smart Insights migration:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
 ```
 
-No source is enabled until its production parser passes a bounded live smoke. The repository only
-documents scheduler commands and does not register a Windows scheduled task automatically. Source
-health is available to authenticated research viewers at `GET /api/smart-insights/data-health`;
-raw bodies, artifact paths, and provider diagnostics are not returned.
+The code-owned enabled set currently contains Alternative.me, mempool.space, DefiLlama stablecoin
+history, DefiLlama chain TVL, and Deribit public data; each passed its own bounded live smoke.
+Coin Metrics Community remains disabled after returning HTTP 403 for the requested on-chain metric
+set. Farside, CoinShares, and BitInfoCharts remain disabled until Firecrawl passes their production
+parser smoke. The official Firecrawl self-host baseline requires Docker Compose; alternatively set
+`FIRECRAWL_API_URL=https://api.firecrawl.dev` and provide `FIRECRAWL_API_KEY` for the hosted API.
+
+The Crypto Regime Score is deterministic and point-in-time. Its six groups are momentum 20%, flow
+25%, liquidity 15%, on-chain 20%, derivatives 10%, and sentiment 10%. A score is persisted as
+`active` only when fresh configured-weight coverage reaches 60%; otherwise it is explicitly
+`unavailable`. Source observations, active immutable price datasets, methodology version, and
+input IDs are retained for replay. LLM output never enters the score.
+
+The repository only documents scheduler commands and does not register a Windows scheduled task
+automatically. Source health is available to authenticated research viewers at
+`GET /api/smart-insights/data-health`; raw bodies, artifact paths, and provider diagnostics are not
+returned.
 
 ## Investor Intelligence
 

@@ -15,6 +15,12 @@ from psycopg.rows import dict_row
 
 from .artifacts import StoredArtifact
 from .contracts import ObservationInput, RawSnapshot, SourceDefinition
+from .metrics.crypto import (
+    MarketClose,
+    MetricDefinitionInput,
+    ObservationPoint,
+    SignalSnapshotInput,
+)
 from .validation import validate_observations
 
 
@@ -33,6 +39,10 @@ class UnknownAssetError(RuntimeError):
     pass
 
 
+class MethodologyConflictError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class PublicationResult:
     snapshot_id: str | None
@@ -44,6 +54,12 @@ class PublicationResult:
 
 def _utc_key(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _natural_key(
@@ -322,6 +338,259 @@ class PostgresInsightRepository:
                 parameters,
             )
             return [dict(row) for row in cursor.fetchall()]
+
+    def upsert_metric_definitions(
+        self, definitions: tuple[MetricDefinitionInput, ...]
+    ) -> None:
+        if len({definition.code for definition in definitions}) != len(definitions):
+            raise ValueError("Metric definition codes must be unique.")
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                for definition in definitions:
+                    cursor.execute(
+                        "SELECT methodology_version FROM metric_definitions WHERE code = %s FOR UPDATE",
+                        (definition.code,),
+                    )
+                    existing = cursor.fetchone()
+                    if (
+                        existing is not None
+                        and existing["methodology_version"]
+                        != definition.methodology_version
+                    ):
+                        raise MethodologyConflictError(
+                            f"Metric {definition.code} uses another methodology version."
+                        )
+                    cursor.execute(
+                        """
+                        INSERT INTO metric_definitions (
+                          id, code, market, name, unit, frequency, direction,
+                          methodology_version, freshness_sla_minutes, metadata,
+                          created_at, updated_at
+                        ) VALUES (
+                          %s, %s, 'crypto', %s, %s, %s, %s,
+                          %s, %s, %s::jsonb, NOW(), NOW()
+                        )
+                        ON CONFLICT (code) DO UPDATE SET
+                          name = EXCLUDED.name,
+                          unit = EXCLUDED.unit,
+                          frequency = EXCLUDED.frequency,
+                          direction = EXCLUDED.direction,
+                          freshness_sla_minutes = EXCLUDED.freshness_sla_minutes,
+                          metadata = EXCLUDED.metadata,
+                          updated_at = NOW()
+                        """,
+                        (
+                            str(uuid4()),
+                            definition.code,
+                            definition.name,
+                            definition.unit,
+                            definition.frequency,
+                            definition.direction,
+                            definition.methodology_version,
+                            definition.freshness_sla_minutes,
+                            json.dumps(
+                                dict(definition.metadata), separators=(",", ":")
+                            ),
+                        ),
+                    )
+
+    def metric_observations(
+        self, metric_code: str, *, as_of: datetime, limit: int = 5_000
+    ) -> tuple[ObservationPoint, ...]:
+        if as_of.tzinfo is None or as_of.utcoffset() is None or limit <= 0:
+            raise ValueError("Observation query bounds are invalid.")
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                WITH ranked AS (
+                  SELECT observation.id, metric.code AS metric_code,
+                         observation.value, observation.effective_at,
+                         observation.observed_at, provider.code AS provider_code,
+                         observation.quality_status, observation.natural_key,
+                         observation.revision, observation.dimensions,
+                         asset.symbol AS asset_symbol, snapshot.status AS snapshot_status,
+                         ROW_NUMBER() OVER (
+                           PARTITION BY observation.natural_key
+                           ORDER BY observation.revision DESC
+                         ) AS revision_rank
+                  FROM metric_observations observation
+                  JOIN metric_definitions metric
+                    ON metric.id = observation.metric_definition_id
+                  JOIN data_providers provider ON provider.id = observation.provider_id
+                  JOIN insight_raw_snapshots snapshot
+                    ON snapshot.id = observation.raw_snapshot_id
+                  LEFT JOIN assets asset ON asset.id = observation.asset_id
+                  WHERE metric.code = %s
+                    AND observation.effective_at <= %s
+                    AND observation.observed_at <= %s
+                )
+                SELECT id, metric_code, value, effective_at, observed_at,
+                       provider_code, quality_status, natural_key, revision,
+                       dimensions, asset_symbol
+                FROM ranked
+                WHERE revision_rank = 1
+                  AND quality_status IN ('passed', 'warning')
+                  AND snapshot_status = 'validated'
+                ORDER BY effective_at, natural_key
+                LIMIT %s
+                """,
+                (metric_code, as_of, as_of, limit),
+            )
+            rows = cursor.fetchall()
+        return tuple(
+            ObservationPoint(
+                id=str(row["id"]),
+                metric_code=str(row["metric_code"]),
+                value=Decimal(str(row["value"])),
+                effective_at=row["effective_at"],
+                observed_at=row["observed_at"],
+                provider_code=str(row["provider_code"]),
+                quality_status=str(row["quality_status"]),
+                natural_key=str(row["natural_key"]),
+                revision=int(row["revision"]),
+                dimensions=dict(row["dimensions"]),
+                asset_symbol=(
+                    str(row["asset_symbol"])
+                    if row["asset_symbol"] is not None
+                    else None
+                ),
+            )
+            for row in rows
+        )
+
+    def price_closes(
+        self, asset_symbol: str, *, as_of: datetime, limit: int = 500
+    ) -> tuple[MarketClose, ...]:
+        if as_of.tzinfo is None or as_of.utcoffset() is None or limit <= 0:
+            raise ValueError("Market close query bounds are invalid.")
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT bar.id, asset.symbol AS asset_symbol, bar.ts, bar.close,
+                       version.published_at AS observed_at
+                FROM dataset_bars bar
+                JOIN dataset_versions version ON version.id = bar.dataset_version_id
+                JOIN datasets dataset ON dataset.id = version.dataset_id
+                JOIN assets asset ON asset.id = dataset.asset_id
+                WHERE asset.symbol = %s
+                  AND dataset.timeframe = '1d'
+                  AND version.is_active = true
+                  AND version.quality_status IN ('passed', 'warning')
+                  AND version.published_at <= %s
+                  AND bar.ts <= %s
+                  AND bar.ingested_at <= %s
+                ORDER BY bar.ts DESC
+                LIMIT %s
+                """,
+                (asset_symbol, as_of, as_of, as_of, limit),
+            )
+            rows = list(reversed(cursor.fetchall()))
+        return tuple(
+            MarketClose(
+                id=str(row["id"]),
+                asset_symbol=str(row["asset_symbol"]),
+                ts=row["ts"],
+                close=Decimal(str(row["close"])),
+                observed_at=_as_utc(row["observed_at"]),
+            )
+            for row in rows
+        )
+
+    def latest_signal_snapshot(
+        self, *, market: str, as_of: datetime
+    ) -> dict[str, Any] | None:
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("Signal query time must be timezone-aware.")
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT score, label, effective_at, status
+                FROM signal_snapshots
+                WHERE market = %s AND signal_type = 'regime'
+                  AND effective_at < %s
+                ORDER BY effective_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (market, as_of),
+            )
+            row = cursor.fetchone()
+        return None if row is None else dict(row)
+
+    def publish_signal_snapshot(
+        self, snapshot: SignalSnapshotInput
+    ) -> tuple[str, str]:
+        inputs = [
+            {
+                "metricCode": row.metric_code,
+                "value": format(row.value, "f"),
+                "score": None if row.score is None else format(row.score, "f"),
+                "percentile": (
+                    None if row.percentile is None else format(row.percentile, "f")
+                ),
+                "configuredWeight": format(row.configured_weight, "f"),
+                "effectiveAt": row.effective_at.isoformat(timespec="microseconds"),
+                "observedAt": row.observed_at.isoformat(timespec="microseconds"),
+                "sourceObservationIds": row.source_observation_ids,
+                "qualityTier": format(row.quality_tier, "f"),
+                "validationStatus": row.validation_status,
+                "isFresh": row.is_fresh,
+            }
+            for row in snapshot.inputs
+        ]
+        asset_id: str | None = None
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                if snapshot.asset_symbol is not None:
+                    cursor.execute(
+                        "SELECT id FROM assets WHERE symbol = %s",
+                        (snapshot.asset_symbol,),
+                    )
+                    asset = cursor.fetchone()
+                    if asset is None:
+                        raise UnknownAssetError("Signal asset is not registered.")
+                    asset_id = str(asset["id"])
+                snapshot_id = str(uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO signal_snapshots (
+                      id, market, asset_id, effective_at, methodology_version,
+                      signal_type, score, label, data_confidence, coverage,
+                      inputs, status, idempotency_key, created_at
+                    ) VALUES (
+                      %s, %s, %s, %s, %s,
+                      %s, %s, %s, %s, %s,
+                      %s::jsonb, %s, %s, NOW()
+                    )
+                    ON CONFLICT (idempotency_key) DO NOTHING
+                    RETURNING id
+                    """,
+                    (
+                        snapshot_id,
+                        snapshot.market,
+                        asset_id,
+                        snapshot.effective_at,
+                        snapshot.methodology_version,
+                        snapshot.signal_type,
+                        snapshot.score,
+                        snapshot.label,
+                        snapshot.data_confidence,
+                        snapshot.coverage,
+                        json.dumps(inputs, separators=(",", ":")),
+                        snapshot.status,
+                        snapshot.idempotency_key,
+                    ),
+                )
+                inserted = cursor.fetchone()
+                if inserted is not None:
+                    return str(inserted["id"]), "succeeded"
+                cursor.execute(
+                    "SELECT id FROM signal_snapshots WHERE idempotency_key = %s",
+                    (snapshot.idempotency_key,),
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    raise RuntimeError("Signal idempotency lookup failed.")
+                return str(existing["id"]), "unchanged"
 
     def _last_run(
         self, source_code: str, *, successful_only: bool

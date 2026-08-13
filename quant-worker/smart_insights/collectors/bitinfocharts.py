@@ -126,6 +126,24 @@ class BitInfoChartsCollector:
             self._row("crypto.large_address.labelled_address_count", Decimal(labelled_count), effective_at, dimensions),
             self._row("crypto.large_address.label_coverage", coverage, effective_at, dimensions),
         ]
+        for row in parsed:
+            if row["excluded"] is True:
+                continue
+            address_dimensions = {
+                **dimensions,
+                "address": str(row["address"]),
+                "label_status": (
+                    "labelled" if row["label"] is not None else "unknown"
+                ),
+            }
+            observations.append(
+                self._row(
+                    "crypto.large_address.address_balance_btc",
+                    Decimal(row["balance"]),
+                    effective_at,
+                    address_dimensions,
+                )
+            )
         if previous_balances is not None:
             if any(value < 0 or not value.is_finite() for value in previous_balances.values()):
                 return CollectionBatch(self.source, snapshot, (), "INVALID_PREVIOUS_SNAPSHOT")

@@ -17,6 +17,17 @@ QUALITY_TIERS = MappingProxyType(
     }
 )
 
+# Each code is enabled only after its production parser passes a bounded live smoke.
+ENABLED_SOURCE_CODES = frozenset(
+    {
+        "alternative-fng",
+        "defillama-chains",
+        "defillama-stablecoins",
+        "deribit-public",
+        "mempool-space",
+    }
+)
+
 SOURCE_ROWS = (
     (
         "alternative-fng",
@@ -264,7 +275,7 @@ def _definition(row: tuple[object, ...]) -> SourceDefinition:
         parser_version=str(parser_version),
         quality_tier=QUALITY_TIERS[str(quality_label)],
         terms_url=str(terms_url),
-        enabled=False,
+        enabled=str(code) in ENABLED_SOURCE_CODES,
     )
 
 
@@ -301,8 +312,9 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             "/calendar/"
         )
     if source.code == "coinshares-weekly":
-        return parsed.hostname == "coinshares.com" and parsed.path.startswith(
-            "/insights/research-data/fund-flows-"
+        return parsed.hostname == "coinshares.com" and (
+            parsed.path.startswith("/insights/research-data/fund-flows-")
+            or parsed.path.startswith("/us/insights/research-data/fund-flows-")
         )
     if source.code.startswith("wgc-"):
         return (

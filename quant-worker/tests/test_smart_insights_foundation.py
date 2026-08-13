@@ -26,6 +26,7 @@ from smart_insights.artifacts import ArtifactIntegrityError, ArtifactStore
 from smart_insights.firecrawl import FirecrawlClient
 from smart_insights.http import SourceFetchError, UrllibTransport
 from smart_insights.sources import (
+    ENABLED_SOURCE_CODES,
     SOURCE_CODES,
     is_source_url_allowed,
     source_for_code,
@@ -128,7 +129,7 @@ def test_registry_rejects_unknown_and_non_https_sources() -> None:
         )
 
 
-def test_registry_is_code_owned_disabled_and_quality_weighted() -> None:
+def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert SOURCE_CODES == (
         "alternative-fng",
         "bitinfocharts-top-addresses",
@@ -148,14 +149,29 @@ def test_registry_is_code_owned_disabled_and_quality_weighted() -> None:
         "wgc-central-bank",
         "wgc-gold-etf",
     )
-    assert all(not source_for_code(code).enabled for code in SOURCE_CODES)
+    assert ENABLED_SOURCE_CODES == {
+        "alternative-fng",
+        "defillama-chains",
+        "defillama-stablecoins",
+        "deribit-public",
+        "mempool-space",
+    }
+    assert {
+        code for code in SOURCE_CODES if source_for_code(code).enabled
+    } == ENABLED_SOURCE_CODES
     assert source_for_code("fred").license_scope is LicenseScope.PUBLIC_OFFICIAL
     assert source_for_code("fred").quality_tier == Decimal("1.00")
     assert source_for_code("farside-btc-etf").quality_tier == Decimal("0.70")
     assert source_for_code("bitinfocharts-top-addresses").quality_tier == Decimal(
         "0.50"
     )
-    assert sources_for_schedule("daily") == ()
+    assert tuple(source.code for source in sources_for_schedule("daily")) == (
+        "alternative-fng",
+        "defillama-chains",
+        "defillama-stablecoins",
+        "deribit-public",
+        "mempool-space",
+    )
 
 
 def test_discovered_links_remain_inside_source_specific_paths() -> None:

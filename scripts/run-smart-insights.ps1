@@ -2,6 +2,8 @@ param(
     [ValidateSet("daily", "weekly", "monthly", "calendar-current", "calendar-next", "calendar-event")]
     [string]$Schedule = "daily",
     [string]$PythonExecutable = "python",
+    [string]$Source,
+    [switch]$LiveSmoke,
     [switch]$DryRun
 )
 
@@ -27,6 +29,15 @@ $arguments = @(
 )
 if ($DryRun) {
     $arguments += "--dry-run"
+}
+if ($Source) {
+    $arguments += @("--source", $Source)
+}
+if ($LiveSmoke) {
+    if (-not $Source) {
+        throw "LiveSmoke requires a registered Source code."
+    }
+    $arguments += "--live-smoke"
 }
 
 & $PythonExecutable @arguments
