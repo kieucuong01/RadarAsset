@@ -39,9 +39,15 @@ function asset(
     reasonCode: null,
     listingStatus: "active",
     availableAdjustments: ["raw"],
-    calendarVersion: market === "vn_equity" ? "hose-official-closures-2024-2026-v1" : "crypto-24x7-v1",
+    calendarVersion:
+      market === "vn_equity" ? "hose-official-closures-2024-2026-v1" : "crypto-24x7-v1",
     qualityIssueCount: 0,
     blockingQualityIssueCount: 0,
+    catalogCoverage: {
+      firstObservedAt: "2024-01-01T00:00:00.000Z",
+      completeForRequestedRange: true,
+      warningCode: null,
+    },
   };
 }
 
@@ -115,9 +121,7 @@ describe("portfolio backtest builder state", () => {
     expect(builderValidationReasons(state, "vi")).toContain(
       "Thêm ít nhất một tài sản có thể backtest.",
     );
-    expect(builderValidationReasons(state, "en")).toContain(
-      "Add at least one backtestable asset.",
-    );
+    expect(builderValidationReasons(state, "en")).toContain("Add at least one backtestable asset.");
   });
 
   it("blocks total-return mode when any leg only has raw data", () => {

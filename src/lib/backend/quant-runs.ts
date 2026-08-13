@@ -49,6 +49,7 @@ type ResolvedLeg = ResolvedPortfolioHashLeg & {
   initialNotional: number;
   strategyCode: string;
   strategyVersion: string;
+  listingFirstObservedAt: string | null;
 };
 
 function stringArray(value: unknown): string[] {
@@ -148,6 +149,11 @@ async function resolvePortfolioLegs(
       market: true,
       currency: true,
       maxLeverage: true,
+      listingPeriods: {
+        orderBy: { validFrom: "asc" },
+        take: 1,
+        select: { validFrom: true },
+      },
       datasets: {
         where: { timeframe: input.timeframe, adjustmentPolicy },
         take: 1,
@@ -205,9 +211,7 @@ async function resolvePortfolioLegs(
         `${leg.symbol} does not cover the requested range.`,
       );
     }
-    if (
-      dataset.issues.some((issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED")
-    ) {
+    if (dataset.issues.some((issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED")) {
       throw new PortfolioRunEligibilityError(
         "DATASET_CALENDAR_UNVERIFIED",
         `${leg.symbol} intersects an uncertified calendar range.`,
@@ -276,6 +280,7 @@ async function resolvePortfolioLegs(
       currency: asset.currency,
       strategyCode: leg.strategyCode,
       strategyVersion: leg.strategyVersion,
+      listingFirstObservedAt: asset.listingPeriods[0]?.validFrom.toISOString() ?? null,
     };
   });
 }
@@ -314,6 +319,22 @@ export async function createPortfolioQuantRun(
 ) {
   const normalizedInput = normalizeBacktestSubmission(input);
   const resolvedLegs = await resolvePortfolioLegs(context, normalizedInput);
+  const listingStarts = resolvedLegs
+    .map((leg) => leg.listingFirstObservedAt)
+    .filter((value): value is string => value !== null)
+    .sort();
+  const firstObservedAt =
+    listingStarts.length === resolvedLegs.length ? (listingStarts.at(-1) ?? null) : null;
+  const historicalCoverage = {
+    firstObservedAt,
+    completeForRequestedRange: Boolean(
+      firstObservedAt && dateBoundary(normalizedInput.from) >= new Date(firstObservedAt),
+    ),
+    warningCode: null as "SURVIVORSHIP_COVERAGE_PARTIAL" | null,
+  };
+  if (!historicalCoverage.completeForRequestedRange) {
+    historicalCoverage.warningCode = "SURVIVORSHIP_COVERAGE_PARTIAL";
+  }
   const portfolioHash = hashResolvedPortfolioRun(
     normalizedInput,
     resolvedLegs,
@@ -352,7 +373,7 @@ export async function createPortfolioQuantRun(
         datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
         engineVersion: PORTFOLIO_ENGINE_VERSION,
         deadlineAt: new Date(Date.now() + RUN_TIMEOUT_MS),
-        parameters: normalizedInput as Prisma.InputJsonValue,
+        parameters: { ...normalizedInput, historicalCoverage } as Prisma.InputJsonValue,
       },
       select: { id: true },
     });

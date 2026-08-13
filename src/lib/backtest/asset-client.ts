@@ -30,6 +30,13 @@ const quantAssetCatalogItemSchema = z
     calendarVersion: z.string().min(1).max(100).nullable(),
     qualityIssueCount: z.number().int().nonnegative(),
     blockingQualityIssueCount: z.number().int().nonnegative(),
+    catalogCoverage: z
+      .object({
+        firstObservedAt: z.string().datetime().nullable(),
+        completeForRequestedRange: z.boolean(),
+        warningCode: z.literal("SURVIVORSHIP_COVERAGE_PARTIAL").nullable(),
+      })
+      .strict(),
     listingStatus: z.enum(["active", "inactive", "delisted", "unknown"]),
     availableAdjustments: z.array(z.enum(["raw", "total_return"])).max(2),
   })
@@ -62,7 +69,18 @@ function isoDay(value: string | null) {
 
 export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | "en" = "vi") {
   if (item.backtestable) {
-    return { badge: locale === "vi" ? "Sẵn sàng" : "Ready", detail: `${item.rowCount.toLocaleString()} bars` };
+    if (item.catalogCoverage.warningCode === "SURVIVORSHIP_COVERAGE_PARTIAL") {
+      return {
+        badge: locale === "vi" ? "Độ phủ lịch sử một phần" : "Partial history coverage",
+        detail: item.catalogCoverage.firstObservedAt
+          ? `${item.rowCount.toLocaleString()} bars · ${locale === "vi" ? "catalog từ" : "catalog since"} ${isoDay(item.catalogCoverage.firstObservedAt)}`
+          : `${item.rowCount.toLocaleString()} bars · ${locale === "vi" ? "chưa rõ mốc catalog" : "catalog start unknown"}`,
+      };
+    }
+    return {
+      badge: locale === "vi" ? "Sẵn sàng" : "Ready",
+      detail: `${item.rowCount.toLocaleString()} bars`,
+    };
   }
   if (item.reasonCode === "DATASET_RANGE_INSUFFICIENT") {
     const start = isoDay(item.coverageStart);
@@ -84,10 +102,15 @@ export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | 
   if (item.reasonCode === "DATASET_CALENDAR_UNVERIFIED") {
     return {
       badge: locale === "vi" ? "Lịch chưa kiểm chứng" : "Calendar unverified",
-      detail: item.calendarVersion ?? (locale === "vi" ? "Chưa có phiên bản lịch" : "No calendar version"),
+      detail:
+        item.calendarVersion ??
+        (locale === "vi" ? "Chưa có phiên bản lịch" : "No calendar version"),
     };
   }
-  return { badge: locale === "vi" ? "Chưa có dataset" : "No dataset", detail: `${item.rowCount.toLocaleString()} bars` };
+  return {
+    badge: locale === "vi" ? "Chưa có dataset" : "No dataset",
+    detail: `${item.rowCount.toLocaleString()} bars`,
+  };
 }
 
 export function parseQuantAssetCatalog(input: unknown): QuantAssetCatalog {

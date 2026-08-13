@@ -86,6 +86,14 @@ const aggregateManifestSchema = z
   .object({
     engineVersion: z.literal("portfolio-v1"),
     assumptions: displayedAssumptionsSchema,
+    historicalCoverage: z
+      .object({
+        firstObservedAt: z.string().datetime().nullable(),
+        completeForRequestedRange: z.boolean(),
+        warningCode: z.literal("SURVIVORSHIP_COVERAGE_PARTIAL").nullable(),
+      })
+      .nullable()
+      .optional(),
   })
   .passthrough();
 
@@ -151,6 +159,11 @@ export type BacktestResultModel = {
     analytics: Record<string, unknown> | null;
     reportHtml: string | null;
     robustness: RobustnessDiagnostics | null;
+    historicalCoverage: {
+      firstObservedAt: string | null;
+      completeForRequestedRange: boolean;
+      warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL" | null;
+    } | null;
   };
   legs: Array<{
     id: string;
@@ -268,6 +281,7 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
         robustnessArtifact?.kind === "robustness"
           ? parsePayload(robustnessSchema, robustnessArtifact.payload, "robustness")
           : null,
+      historicalCoverage: aggregateManifest.historicalCoverage ?? null,
     },
     legs,
   };

@@ -68,6 +68,11 @@ export type QuantAssetCatalogItem = {
   calendarVersion: string | null;
   qualityIssueCount: number;
   blockingQualityIssueCount: number;
+  catalogCoverage: {
+    firstObservedAt: string | null;
+    completeForRequestedRange: boolean;
+    warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL" | null;
+  };
   listingStatus: "active" | "inactive" | "delisted" | "unknown";
   availableAdjustments: Array<"raw" | "total_return">;
 };

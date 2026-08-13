@@ -23,6 +23,7 @@ const vnmAsset = {
   currency: "VND",
   maxLeverage: 2,
   listingStatus: "active",
+  listingPeriods: [{ validFrom: new Date("2024-01-01T00:00:00.000Z") }],
   datasets: [
     {
       adjustmentPolicy: "raw",
@@ -50,6 +51,7 @@ const vn30Asset = {
   currency: "VND",
   maxLeverage: 1,
   listingStatus: "inactive",
+  listingPeriods: [{ validFrom: new Date("2024-01-01T00:00:00.000Z") }],
   datasets: [],
 };
 
@@ -86,6 +88,11 @@ describe("supported Quant asset catalog", () => {
         calendarVersion: "hose-official-closures-2024-2026-v1",
         qualityIssueCount: 0,
         blockingQualityIssueCount: 0,
+        catalogCoverage: {
+          firstObservedAt: "2024-01-01T00:00:00.000Z",
+          completeForRequestedRange: true,
+          warningCode: null,
+        },
       }),
       expect.objectContaining({
         symbol: "VN30",
@@ -215,6 +222,31 @@ describe("supported Quant asset catalog", () => {
     });
   });
 
+  it("keeps historical assets selectable but discloses partial survivorship coverage", async () => {
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        ...vnmAsset,
+        listingStatus: "inactive",
+        listingPeriods: [{ validFrom: new Date("2025-06-01T00:00:00Z") }],
+      },
+    ]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "VNM", timeframe: "1d", from: "2025-01-01", to: "2025-12-31" },
+      new Date("2026-01-02T12:00:00Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      backtestable: true,
+      listingStatus: "inactive",
+      catalogCoverage: {
+        firstObservedAt: "2025-06-01T00:00:00.000Z",
+        completeForRequestedRange: false,
+        warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+      },
+    });
+  });
+
   it("summarizes global dataset coverage and operational ingestion backlog", async () => {
     prisma.asset.groupBy.mockResolvedValue([
       { market: "vn_equity", _count: { _all: 404 } },
@@ -335,9 +367,7 @@ describe("supported Quant asset catalog", () => {
   });
 
   it("uses the latest terminal run, preserves the latest success, and tolerates a young backlog", async () => {
-    prisma.asset.groupBy.mockResolvedValue([
-      { market: "crypto_spot", _count: { _all: 1 } },
-    ]);
+    prisma.asset.groupBy.mockResolvedValue([{ market: "crypto_spot", _count: { _all: 1 } }]);
     prisma.providerInstrument.count.mockResolvedValue(1);
     prisma.dataset.findMany.mockResolvedValue([
       {

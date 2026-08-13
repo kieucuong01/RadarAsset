@@ -125,10 +125,18 @@ describe("portfolio backtest submission contract", () => {
       datasetChecksum: String(index).repeat(64),
       strategyVersionId: `strategy-${index}`,
       implementationHash: String(index + 1).repeat(64),
+      listingFirstObservedAt: "2024-01-01T00:00:00.000Z",
     }));
 
     expect(hashResolvedPortfolioRun(submission, legs, "portfolio-v1")).not.toBe(
       hashResolvedPortfolioRun(submission, legs, "portfolio-v2"),
+    );
+    expect(hashResolvedPortfolioRun(submission, legs, "portfolio-v1")).not.toBe(
+      hashResolvedPortfolioRun(
+        submission,
+        [{ ...legs[0], listingFirstObservedAt: "2025-01-01T00:00:00.000Z" }, ...legs.slice(1)],
+        "portfolio-v1",
+      ),
     );
   });
 

@@ -108,6 +108,11 @@ export async function loadQuantAssetCatalog(
       currency: true,
       maxLeverage: true,
       listingStatus: true,
+      listingPeriods: {
+        orderBy: { validFrom: "asc" },
+        take: 1,
+        select: { validFrom: true },
+      },
       datasets: {
         where: { timeframe: query.timeframe, adjustmentPolicy: { in: ["raw", "total_return"] } },
         select: {
@@ -190,11 +195,15 @@ export async function loadQuantAssetCatalog(
               ? "DATASET_CALENDAR_UNVERIFIED"
               : hasProviderGap
                 ? "DATASET_PROVIDER_GAP"
-            : null;
+                : null;
         const sourceMetadata =
           version?.sourceMetadata && typeof version.sourceMetadata === "object"
             ? (version.sourceMetadata as Record<string, unknown>)
             : {};
+        const firstObservedAt = asset.listingPeriods[0]?.validFrom ?? null;
+        const completeForRequestedRange = Boolean(
+          firstObservedAt && requestedStart >= firstObservedAt,
+        );
 
         return {
           symbol: asset.symbol,
@@ -228,6 +237,13 @@ export async function loadQuantAssetCatalog(
               issue.classification === "PROVIDER_GAP" ||
               issue.classification === "CALENDAR_RANGE_UNVERIFIED",
           ).length,
+          catalogCoverage: {
+            firstObservedAt: firstObservedAt?.toISOString() ?? null,
+            completeForRequestedRange,
+            warningCode: completeForRequestedRange
+              ? null
+              : ("SURVIVORSHIP_COVERAGE_PARTIAL" as const),
+          },
           listingStatus: ["active", "inactive", "delisted", "unknown"].includes(asset.listingStatus)
             ? (asset.listingStatus as "active" | "inactive" | "delisted" | "unknown")
             : "unknown",
@@ -425,8 +441,7 @@ export async function loadQuantDataReadiness(
         errorCode: latestScheduler.error_code,
       }
     : null;
-  const lastSchedulerSuccessAt =
-    latestScheduler?.last_success_at?.toISOString() ?? null;
+  const lastSchedulerSuccessAt = latestScheduler?.last_success_at?.toISOString() ?? null;
   const schedulerRecent = Boolean(
     latestScheduler?.last_success_at &&
     now.getTime() - latestScheduler.last_success_at.getTime() <= 25 * 60 * 60 * 1000,

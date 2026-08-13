@@ -733,6 +733,9 @@ export const dictionaries = {
         return: "Return",
       },
       advanced: {
+        survivorshipTitle: "Độ phủ universe lịch sử chưa đầy đủ",
+        survivorshipDescription:
+          "Catalog chỉ được xác nhận từ {date}; kết quả trước mốc này có thể chịu survivorship bias.",
         title: "Phân tích nâng cao",
         availableAria: "Phân tích nâng cao khả dụng",
         reportTitle: "Báo cáo QuantStats IS / OOS",
@@ -1646,6 +1649,9 @@ export const dictionaries = {
         return: "Return",
       },
       advanced: {
+        survivorshipTitle: "Historical universe coverage is partial",
+        survivorshipDescription:
+          "The catalog is certified only from {date}; earlier results may contain survivorship bias.",
         title: "Advanced Analysis",
         availableAria: "Available advanced analysis",
         reportTitle: "QuantStats IS / OOS report",
