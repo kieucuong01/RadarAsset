@@ -59,6 +59,22 @@ export type QuantAssetCatalogResponse = {
   items: QuantAssetCatalogItem[];
 };
 
+export type QuantDataReadinessResponse = {
+  readyForBacktest: boolean;
+  instrumentsByMarket: Record<MarketDataMarket, number>;
+  activeDatasetsByMarketTimeframe: Array<{
+    market: MarketDataMarket;
+    timeframe: MarketDataTimeframe;
+    count: number;
+  }>;
+  ingestionRequestsByStatusTimeframe: Array<{
+    status: string;
+    timeframe: MarketDataTimeframe;
+    count: number;
+  }>;
+  backlogCount: number;
+};
+
 export type PortfolioTransactionCreateInput = {
   symbol: string;
   type: TransactionType;

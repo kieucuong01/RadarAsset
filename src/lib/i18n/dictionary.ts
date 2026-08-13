@@ -36,6 +36,17 @@ export const dictionaries = {
         system: "Dữ liệu và tác vụ được xử lý qua API/worker của hệ thống.",
         predictionUnavailable: "AI Prediction chưa được nối vào provider production.",
       },
+      dataReadiness: {
+        loading: "Đang kiểm tra dữ liệu",
+        loadingDetail: "Đang đọc coverage dataset và hàng đợi ingestion.",
+        unavailable: "Chưa đọc được dữ liệu",
+        unavailableDetail: "Không tải được trạng thái readiness của Quant.",
+        blocked: "Chưa có dataset active",
+        blockedDetail: "Cần chạy ingestion trước khi backtest.",
+        activeDatasets: "{count} dataset active",
+        backlogDetail: "{count} job ingestion đang chờ/đang chạy.",
+        readyDetail: "Không còn backlog ingestion.",
+      },
       tabs: {
         optimizer: "Tối ưu danh mục",
         strategies: "Thư viện chiến lược",
@@ -716,6 +727,17 @@ export const dictionaries = {
       status: {
         system: "Data and jobs are processed through the platform API and workers.",
         predictionUnavailable: "AI Prediction is not connected to a production provider yet.",
+      },
+      dataReadiness: {
+        loading: "Checking data",
+        loadingDetail: "Reading dataset coverage and ingestion queue.",
+        unavailable: "Data status unavailable",
+        unavailableDetail: "Quant readiness status could not be loaded.",
+        blocked: "No active datasets",
+        blockedDetail: "Run ingestion before backtesting.",
+        activeDatasets: "{count} active datasets",
+        backlogDetail: "{count} ingestion jobs queued/running.",
+        readyDetail: "No ingestion backlog.",
       },
       tabs: {
         optimizer: "Portfolio Optimizer",

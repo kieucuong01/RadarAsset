@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Activity, BookOpen, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { QuantDataReadinessBadge } from "@/components/QuantDataReadinessBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -56,12 +57,17 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
           <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{t("quant.title")}</h1>
           <p className="max-w-3xl text-sm text-muted-foreground">{t("quant.hero.description")}</p>
         </div>
-        <DataStatusBadge
-          status={tab === "predict" ? "UNAVAILABLE" : "SYSTEM"}
-          detail={
-            tab === "predict" ? t("quant.status.predictionUnavailable") : t("quant.status.system")
-          }
-        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {tab === "predict" ? null : <QuantDataReadinessBadge />}
+          <DataStatusBadge
+            status={tab === "predict" ? "UNAVAILABLE" : "SYSTEM"}
+            detail={
+              tab === "predict"
+                ? t("quant.status.predictionUnavailable")
+                : t("quant.status.system")
+            }
+          />
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={(value) => setTab(normalizeQuantLabTab(value))}>

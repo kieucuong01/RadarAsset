@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
   loadQuantAssetCatalog: vi.fn(),
+  loadQuantDataReadiness: vi.fn(),
   optimizeQuantAllocation: vi.fn(),
   searchProviderInstruments: vi.fn(),
   resolveProviderInstrument: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock("@/lib/backend/quant-assets", async (importOriginal) => {
   return {
     ...original,
     loadQuantAssetCatalog: mocks.loadQuantAssetCatalog,
+    loadQuantDataReadiness: mocks.loadQuantDataReadiness,
   };
 });
 
@@ -111,6 +113,7 @@ import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
 import { GET as quantAssetsGet } from "./quant/assets/route";
+import { GET as quantDataReadinessGet } from "./quant/data-readiness/route";
 import { POST as quantOptimizePost } from "./quant/allocations/optimize/route";
 import { POST as workerImportPost } from "./research/runs/import/route";
 import { PortfolioRunEligibilityError } from "@/lib/backend/quant-runs";
@@ -143,6 +146,13 @@ describe("tenant API authorization", () => {
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
+    mocks.loadQuantDataReadiness.mockResolvedValue({
+      readyForBacktest: true,
+      instrumentsByMarket: { vn_equity: 404, crypto_spot: 13, metal_spot: 1 },
+      activeDatasetsByMarketTimeframe: [],
+      ingestionRequestsByStatusTimeframe: [],
+      backlogCount: 0,
+    });
     mocks.optimizeQuantAllocation.mockResolvedValue({
       method: "risk_parity",
       source: {
@@ -261,6 +271,14 @@ describe("tenant API authorization", () => {
       from: "2025-01-01",
       to: "2026-01-01",
     });
+  });
+
+  it("allows viewer reads of Quant data readiness under backtest capability", async () => {
+    const response = await quantDataReadinessGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
+    expect(mocks.loadQuantDataReadiness).toHaveBeenCalledWith(viewerContext);
   });
 
   it("allows viewer assignment reads and scopes the service call", async () => {
