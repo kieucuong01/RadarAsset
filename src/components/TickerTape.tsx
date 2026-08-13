@@ -6,25 +6,10 @@ import { resolveTickerSnapshot, type TickerSnapshot } from "@/lib/ticker-present
 
 type Tick = { sym: string; price: number; chg: number };
 
-const SEED: Tick[] = [
-  { sym: "BTC", price: 67420, chg: 2.5 },
-  { sym: "ETH", price: 3512, chg: 1.8 },
-  { sym: "SOL", price: 168.4, chg: 3.2 },
-  { sym: "SPX", price: 5328.1, chg: -0.4 },
-  { sym: "NDX", price: 18620, chg: -0.6 },
-  { sym: "VN30", price: 1328.2, chg: 1.2 },
-  { sym: "VNINDEX", price: 1284.5, chg: 0.9 },
-  { sym: "GOLD", price: 2402, chg: 0.7 },
-  { sym: "DXY", price: 104.21, chg: -0.2 },
-  { sym: "WTI", price: 78.45, chg: 1.1 },
-  { sym: "EURUSD", price: 1.0843, chg: 0.15 },
-  { sym: "US10Y", price: 4.32, chg: 0.03 },
-];
-
 const INITIAL_SNAPSHOT: TickerSnapshot<Tick> = {
-  rows: SEED,
-  status: "SAMPLE",
-  detail: "Đang hiển thị dữ liệu mẫu.",
+  rows: [],
+  status: "UNAVAILABLE",
+  detail: "Đang chờ dữ liệu thị trường đã xác thực.",
 };
 
 export function TickerTape() {
@@ -43,14 +28,14 @@ export function TickerTape() {
           price: row.price,
           chg: row.changePercent,
         }));
-        setSnapshot(resolveTickerSnapshot(ticks, SEED));
+        setSnapshot(resolveTickerSnapshot(ticks));
       })
       .catch(() => {
         if (!alive) return;
         setSnapshot({
-          rows: SEED,
-          status: "SAMPLE",
-          detail: "Ticker API không khả dụng; đang hiển thị dữ liệu mẫu.",
+          rows: [],
+          status: "UNAVAILABLE",
+          detail: "Ticker API không khả dụng; không có dữ liệu mẫu được thay thế.",
         });
       });
     return () => {
@@ -66,7 +51,12 @@ export function TickerTape() {
         <DataStatusBadge status={snapshot.status} detail={snapshot.detail} />
       </div>
       <div className="min-w-0 flex-1 overflow-hidden">
-        <div className="ticker-track flex w-max items-center gap-8 whitespace-nowrap py-2.5 will-change-transform">
+        <div className="ticker-track flex min-h-9 w-max items-center gap-8 whitespace-nowrap py-2.5 will-change-transform">
+          {strip.length === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              Chưa có dữ liệu thị trường đã xác thực.
+            </span>
+          ) : null}
           {strip.map((tick, index) => {
             const up = tick.chg >= 0;
             return (

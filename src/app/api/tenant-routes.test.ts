@@ -16,6 +16,14 @@ const mocks = vi.hoisted(() => ({
   listQuantRuns: vi.fn(),
   getQuantRun: vi.fn(),
   loadMarketDataHealth: vi.fn(),
+  loadSmartInsightsDataHealth: vi.fn(),
+  loadBriefing: vi.fn(),
+  loadRegimes: vi.fn(),
+  loadMetrics: vi.fn(),
+  loadCalendar: vi.fn(),
+  loadEvidence: vi.fn(),
+  loadPreferences: vi.fn(),
+  savePreferences: vi.fn(),
   loadResearchRuns: vi.fn(),
   importResearchRun: vi.fn(),
   getWorkerImportContext: vi.fn(),
@@ -56,6 +64,24 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
 vi.mock("@/lib/backend/worker-context", () => ({
   getWorkerImportContext: mocks.getWorkerImportContext,
 }));
+
+vi.mock("@/lib/backend/smart-insights-data-health", () => ({
+  loadSmartInsightsDataHealth: mocks.loadSmartInsightsDataHealth,
+}));
+
+vi.mock("@/lib/backend/smart-insights", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/smart-insights")>();
+  return {
+    ...original,
+    loadBriefing: mocks.loadBriefing,
+    loadRegimes: mocks.loadRegimes,
+    loadMetrics: mocks.loadMetrics,
+    loadCalendar: mocks.loadCalendar,
+    loadEvidence: mocks.loadEvidence,
+    loadPreferences: mocks.loadPreferences,
+    savePreferences: mocks.savePreferences,
+  };
+});
 
 vi.mock("@/lib/backend/strategy-forward-tests", () => ({
   applyStrategyAssignment: mocks.applyStrategyAssignment,
@@ -112,6 +138,15 @@ import { POST as quantPost } from "./quant/runs/route";
 import { GET as quantDetailGet } from "./quant/runs/[id]/route";
 import { GET as strategyCatalogGet } from "./quant/strategies/route";
 import { GET as marketDataHealthGet } from "./market/data-health/route";
+import { GET as smartInsightsDataHealthGet } from "./smart-insights/data-health/route";
+import { GET as smartInsightsBriefingGet } from "./smart-insights/briefing/route";
+import { GET as smartInsightsMetricsGet } from "./smart-insights/metrics/route";
+import { GET as smartInsightsCalendarGet } from "./smart-insights/calendar/route";
+import { GET as smartInsightsEvidenceGet } from "./smart-insights/evidence/[id]/route";
+import {
+  GET as smartInsightsPreferencesGet,
+  PUT as smartInsightsPreferencesPut,
+} from "./smart-insights/preferences/route";
 import { GET as quantAssetsGet } from "./quant/assets/route";
 import { GET as quantDataReadinessGet } from "./quant/data-readiness/route";
 import { POST as quantOptimizePost } from "./quant/allocations/optimize/route";
@@ -145,6 +180,14 @@ describe("tenant API authorization", () => {
     mocks.removeWatchlistItem.mockResolvedValue(true);
     mocks.createQuantRun.mockResolvedValue({ id: "run-a" });
     mocks.loadMarketDataHealth.mockResolvedValue([]);
+    mocks.loadSmartInsightsDataHealth.mockResolvedValue({ generatedAt: "now", sources: [] });
+    mocks.loadBriefing.mockResolvedValue(null);
+    mocks.loadRegimes.mockResolvedValue([]);
+    mocks.loadMetrics.mockResolvedValue([]);
+    mocks.loadCalendar.mockResolvedValue([]);
+    mocks.loadEvidence.mockResolvedValue(null);
+    mocks.loadPreferences.mockResolvedValue({ preference: {}, persisted: false, canWrite: false });
+    mocks.savePreferences.mockResolvedValue({ preference: {}, persisted: true, canWrite: true });
     mocks.loadQuantAssetCatalog.mockResolvedValue({ items: [] });
     mocks.loadQuantDataReadiness.mockResolvedValue({
       readyForBacktest: true,
@@ -197,6 +240,51 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "watchlist", "read");
     expect(mocks.loadWatchlist).toHaveBeenCalledWith(viewerContext);
+  });
+
+  it("tenant-scopes cockpit briefing and evidence reads", async () => {
+    expect(
+      (await smartInsightsBriefingGet(new Request("http://localhost/api/smart-insights/briefing")))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await smartInsightsEvidenceGet(
+          new Request("http://localhost/api/smart-insights/evidence/e-a"),
+          {
+            params: Promise.resolve({ id: "e-a" }),
+          },
+        )
+      ).status,
+    ).toBe(404);
+    expect(mocks.loadBriefing).toHaveBeenCalledWith(viewerContext, null);
+    expect(mocks.loadEvidence).toHaveBeenCalledWith(viewerContext, "e-a");
+  });
+
+  it("rejects metric and calendar windows over 31 days", async () => {
+    const metrics = await smartInsightsMetricsGet(
+      new Request(
+        "http://localhost/api/smart-insights/metrics?market=crypto&from=2026-01-01&to=2026-03-01",
+      ),
+    );
+    const calendar = await smartInsightsCalendarGet(
+      new Request("http://localhost/api/smart-insights/calendar?from=2026-01-01&to=2026-03-01"),
+    );
+    expect(metrics.status).toBe(400);
+    expect(calendar.status).toBe(400);
+  });
+
+  it("keeps preference writes behind research write permission", async () => {
+    expect((await smartInsightsPreferencesGet()).status).toBe(200);
+    const response = await smartInsightsPreferencesPut(
+      new Request("http://localhost/api/smart-insights/preferences", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale: "vi" }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "research", "write");
   });
 
   it("searches only the local provider catalog under watchlist read capability", async () => {
@@ -543,6 +631,14 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "backtest", "read");
     expect(mocks.loadMarketDataHealth).toHaveBeenCalledOnce();
+  });
+
+  it("allows viewer Smart Insights health reads through research capability", async () => {
+    const response = await smartInsightsDataHealthGet();
+
+    expect(response.status).toBe(200);
+    expect(mocks.requireTenantCapability).toHaveBeenCalledWith(viewerContext, "research", "read");
+    expect(mocks.loadSmartInsightsDataHealth).toHaveBeenCalledOnce();
   });
 
   it("does not expose market data health without a tenant session", async () => {

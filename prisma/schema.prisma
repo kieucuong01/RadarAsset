@@ -25,6 +25,8 @@ model AppUser {
   customStrategies        CustomStrategy[]         @relation("CustomStrategyCreator")
   notifications           Notification[]
   marketIngestionRequests MarketIngestionRequest[]
+  insightPreferences      UserInsightPreference[]
+  dailyBriefings          DailyBriefing[]
 
   @@map("app_users")
 }
@@ -101,6 +103,8 @@ model Organization {
   strategyForwardSnapshots StrategyForwardSnapshot[]
   notifications            Notification[]
   marketIngestionRequests  MarketIngestionRequest[]
+  insightPreferences       UserInsightPreference[]
+  dailyBriefings           DailyBriefing[]
 
   @@map("organizations")
 }
@@ -167,6 +171,8 @@ model Asset {
   quantRunLegs        QuantRunLeg[]
   strategyAssignments StrategyAssignment[]
   strategySignals     StrategySignal[]
+  metricObservations  MetricObservation[]
+  signalSnapshots     SignalSnapshot[]
 
   @@index([assetClass])
   @@map("assets")
@@ -266,21 +272,22 @@ model WatchlistItem {
 }
 
 model AiInsight {
-  id            String         @id @default(uuid()) @db.Uuid
-  assetId       String?        @map("asset_id") @db.Uuid
-  researchRunId String?        @map("research_run_id") @db.Uuid
-  source        String
-  title         String
-  summary       String
-  sentiment     String
-  confidence    Int?
-  catalyst      String?
-  risk          String?
-  publishedAt   DateTime       @default(now()) @map("published_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  asset         Asset?         @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  researchRun   ResearchRun?   @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
-  evidenceItems EvidenceItem[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  assetId            String?             @map("asset_id") @db.Uuid
+  researchRunId      String?             @map("research_run_id") @db.Uuid
+  source             String
+  title              String
+  summary            String
+  sentiment          String
+  confidence         Int?
+  catalyst           String?
+  risk               String?
+  publishedAt        DateTime            @default(now()) @map("published_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  asset              Asset?              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  researchRun        ResearchRun?        @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  evidenceItems      EvidenceItem[]
+  dailyBriefingItems DailyBriefingItem[]
 
   @@index([assetId, publishedAt(sort: Desc)])
   @@index([researchRunId])
@@ -308,6 +315,7 @@ model ResearchRun {
   theses         InvestmentThesis[]
   forecasts      ForecastPoint[]
   providerRuns   ProviderRun[]
+  dailyBriefings DailyBriefing[]
 
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -402,6 +410,10 @@ model ProviderRun {
   status         String
   recordsFetched Int          @default(0) @map("records_fetched")
   errorMessage   String?      @map("error_message")
+  errorCode      String?      @map("error_code")
+  retryCount     Int          @default(0) @map("retry_count")
+  durationMs     Int?         @map("duration_ms")
+  metadata       Json         @default("{}")
   startedAt      DateTime?    @map("started_at")
   finishedAt     DateTime?    @map("finished_at")
   createdAt      DateTime     @default(now()) @map("created_at")
@@ -413,16 +425,35 @@ model ProviderRun {
 }
 
 model EconomicEvent {
-  id        String   @id @default(uuid()) @db.Uuid
-  event     String
-  country   String
-  impact    String
-  forecast  String?
-  previous  String?
-  eventAt   DateTime @map("event_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String              @id @default(uuid()) @db.Uuid
+  sourceCode     String              @map("source_code")
+  sourceEventKey String              @map("source_event_key")
+  event          String
+  country        String
+  currency       String
+  impact         String
+  actual         String?
+  forecast       String?
+  previous       String?
+  eventDate      DateTime            @map("event_date") @db.Date
+  eventAt        DateTime?           @map("event_at") @db.Timestamptz(3)
+  timeStatus     String              @map("time_status")
+  sourceTimezone String              @map("source_timezone")
+  detailUrl      String?             @map("detail_url") @db.Text
+  rawSnapshotId  String?             @map("raw_snapshot_id") @db.Uuid
+  publishedAt    DateTime?           @map("published_at") @db.Timestamptz(3)
+  observedAt     DateTime            @map("observed_at") @db.Timestamptz(3)
+  revision       Int                 @default(1)
+  qualityStatus  String              @default("passed") @map("quality_status")
+  qualityFlags   Json                @default("[]") @map("quality_flags")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  rawSnapshot    InsightRawSnapshot? @relation(fields: [rawSnapshotId], references: [id], onDelete: Restrict)
 
-  @@index([eventAt])
+  @@unique([sourceCode, sourceEventKey, revision])
+  @@index([eventDate, impact])
+  @@index([eventAt, impact])
+  @@index([sourceCode, sourceEventKey, revision(sort: Desc)])
+  @@index([rawSnapshotId])
   @@map("economic_events")
 }
 
@@ -656,18 +687,194 @@ model Notification {
 }
 
 model DataProvider {
-  id           String               @id @default(uuid()) @db.Uuid
-  code         String               @unique
-  name         String
-  termsUrl     String?              @map("terms_url")
-  licenseScope String               @default("research_only") @map("license_scope")
-  status       String               @default("active")
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @updatedAt @map("updated_at")
-  instruments  ProviderInstrument[]
-  versions     DatasetVersion[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  code                String               @unique
+  name                String
+  termsUrl            String?              @map("terms_url")
+  licenseScope        String               @default("research_only") @map("license_scope")
+  status              String               @default("active")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  instruments         ProviderInstrument[]
+  versions            DatasetVersion[]
+  rawInsightSnapshots InsightRawSnapshot[]
+  metricObservations  MetricObservation[]
 
   @@map("data_providers")
+}
+
+model InsightRawSnapshot {
+  id             String              @id @default(uuid()) @db.Uuid
+  providerId     String              @map("provider_id") @db.Uuid
+  sourceUrl      String              @map("source_url") @db.Text
+  effectiveAt    DateTime?           @map("effective_at") @db.Timestamptz(3)
+  publishedAt    DateTime?           @map("published_at") @db.Timestamptz(3)
+  observedAt     DateTime            @map("observed_at") @db.Timestamptz(3)
+  contentHash    String              @map("content_hash")
+  contentType    String              @map("content_type")
+  storageLocator String              @map("storage_locator") @db.Text
+  parserVersion  String              @map("parser_version")
+  status         String
+  errorCode      String?             @map("error_code")
+  metadata       Json                @default("{}")
+  provider       DataProvider        @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  observations   MetricObservation[]
+  economicEvents EconomicEvent[]
+
+  @@unique([providerId, sourceUrl, contentHash])
+  @@index([providerId, observedAt(sort: Desc)])
+  @@index([status, observedAt])
+  @@map("insight_raw_snapshots")
+}
+
+model MetricDefinition {
+  id                  String              @id @default(uuid()) @db.Uuid
+  code                String              @unique
+  market              String
+  name                String
+  unit                String
+  frequency           String
+  direction           Int                 @default(1)
+  methodologyVersion  String              @map("methodology_version")
+  freshnessSlaMinutes Int                 @map("freshness_sla_minutes")
+  metadata            Json                @default("{}")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  observations        MetricObservation[]
+
+  @@index([market, code])
+  @@map("metric_definitions")
+}
+
+model MetricObservation {
+  id                 String             @id @default(uuid()) @db.Uuid
+  metricDefinitionId String             @map("metric_definition_id") @db.Uuid
+  providerId         String             @map("provider_id") @db.Uuid
+  assetId            String?            @map("asset_id") @db.Uuid
+  rawSnapshotId      String             @map("raw_snapshot_id") @db.Uuid
+  effectiveAt        DateTime           @map("effective_at") @db.Timestamptz(3)
+  effectiveStart     DateTime?          @map("effective_start") @db.Timestamptz(3)
+  effectiveEnd       DateTime?          @map("effective_end") @db.Timestamptz(3)
+  publishedAt        DateTime?          @map("published_at") @db.Timestamptz(3)
+  observedAt         DateTime           @map("observed_at") @db.Timestamptz(3)
+  revision           Int                @default(1)
+  value              Decimal            @db.Decimal(40, 10)
+  naturalKey         String             @map("natural_key")
+  dimensionKey       String             @map("dimension_key")
+  dimensions         Json               @default("{}")
+  qualityStatus      String             @map("quality_status")
+  qualityFlags       Json               @default("[]") @map("quality_flags")
+  metricDefinition   MetricDefinition   @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+  provider           DataProvider       @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  asset              Asset?             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  rawSnapshot        InsightRawSnapshot @relation(fields: [rawSnapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([naturalKey, revision])
+  @@index([metricDefinitionId, assetId, effectiveAt(sort: Desc)])
+  @@index([rawSnapshotId])
+  @@map("metric_observations")
+}
+
+model SignalSnapshot {
+  id                 String              @id @default(uuid()) @db.Uuid
+  market             String
+  assetId            String?             @map("asset_id") @db.Uuid
+  effectiveAt        DateTime            @map("effective_at") @db.Timestamptz(3)
+  methodologyVersion String              @map("methodology_version")
+  signalType         String              @map("signal_type")
+  score              Decimal?            @db.Decimal(8, 4)
+  label              String
+  dataConfidence     Decimal             @map("data_confidence") @db.Decimal(5, 2)
+  coverage           Decimal             @db.Decimal(5, 4)
+  inputs             Json                @default("{}")
+  status             String
+  idempotencyKey     String              @unique @map("idempotency_key")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  asset              Asset?              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  briefingItems      DailyBriefingItem[]
+
+  @@index([market, assetId, effectiveAt(sort: Desc)])
+  @@index([status, effectiveAt(sort: Desc)])
+  @@map("signal_snapshots")
+}
+
+model UserInsightPreference {
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  markets           Json         @default("[]")
+  assets            Json         @default("[]")
+  locale            String       @default("vi")
+  baseCurrency      String       @default("USD") @map("base_currency")
+  investmentHorizon String       @map("investment_horizon")
+  riskTolerance     String       @map("risk_tolerance")
+  alertPreferences  Json         @default("{}") @map("alert_preferences")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("user_insight_preferences")
+}
+
+model DailyBriefing {
+  id                 String              @id @default(uuid()) @db.Uuid
+  organizationId     String              @map("organization_id") @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  researchRunId      String              @unique @map("research_run_id") @db.Uuid
+  effectiveDate      DateTime            @map("effective_date") @db.Date
+  effectiveAt        DateTime            @map("effective_at") @db.Timestamptz(3)
+  timezone           String
+  revision           Int
+  fingerprint        String
+  modelName          String?             @map("model_name")
+  promptVersion      String              @map("prompt_version")
+  methodologyVersion String              @map("methodology_version")
+  status             String
+  marketSummary      Json                @default("{}") @map("market_summary")
+  dataConfidence     Decimal             @map("data_confidence") @db.Decimal(5, 2)
+  portfolioSnapshot  Json                @default("{}") @map("portfolio_snapshot")
+  preferenceSnapshot Json                @default("{}") @map("preference_snapshot")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user               AppUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchRun        ResearchRun         @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  items              DailyBriefingItem[]
+
+  @@unique([organizationId, userId, effectiveDate, revision])
+  @@index([organizationId, userId, effectiveDate, revision(sort: Desc)])
+  @@map("daily_briefings")
+}
+
+model DailyBriefingItem {
+  id                       String         @id @default(uuid()) @db.Uuid
+  dailyBriefingId          String         @map("daily_briefing_id") @db.Uuid
+  signalSnapshotId         String         @map("signal_snapshot_id") @db.Uuid
+  aiInsightId              String?        @map("ai_insight_id") @db.Uuid
+  rank                     Int
+  section                  String
+  relevanceScore           Decimal        @map("relevance_score") @db.Decimal(5, 2)
+  relevanceComponents      Json           @default("{}") @map("relevance_components")
+  supportingEvidenceIds    Json           @default("[]") @map("supporting_evidence_ids")
+  contradictingEvidenceIds Json           @default("[]") @map("contradicting_evidence_ids")
+  affectedAssets           Json           @default("[]") @map("affected_assets")
+  timeHorizon              String         @map("time_horizon")
+  riskScenarios            Json           @default("[]") @map("risk_scenarios")
+  suggestedCheckTemplate   String         @map("suggested_check_template")
+  explanationStatus        String         @map("explanation_status")
+  confidence               Decimal        @db.Decimal(5, 2)
+  outcomes                 Json           @default("{}")
+  createdAt                DateTime       @default(now()) @map("created_at")
+  dailyBriefing            DailyBriefing  @relation(fields: [dailyBriefingId], references: [id], onDelete: Cascade)
+  signalSnapshot           SignalSnapshot @relation(fields: [signalSnapshotId], references: [id], onDelete: Restrict)
+  aiInsight                AiInsight?     @relation(fields: [aiInsightId], references: [id], onDelete: Restrict)
+
+  @@unique([dailyBriefingId, rank])
+  @@index([signalSnapshotId])
+  @@index([aiInsightId])
+  @@map("daily_briefing_items")
 }
 
 model ProviderInstrument {

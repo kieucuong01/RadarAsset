@@ -108,6 +108,93 @@ Start in:             <repository root>
 The repository documents scheduler commands but does not register operating-system tasks
 automatically. Deployment must configure and observe its own cron/platform schedule.
 
+## Smart Insights Collection
+
+Smart Insights is implemented as a data-first Personal Decision Cockpit for Crypto, Macro, and
+Gold, backed by a Python AI Research Workbench. It publishes tenant-scoped daily briefings,
+deterministic regimes, point-in-time metrics, a CryptoCraft calendar contract, evidence details,
+preferences, and source-health APIs. The UI does not fall back to hard-coded market facts.
+
+See the [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md) for source
+activation status, Crawl4AI setup, scheduler commands, AI fallback rules, replay, and rollback.
+
+Smart Insights stores normalized quantitative observations and private, content-addressed raw
+artifacts. Crawl4AI runs locally inside the Python worker with an ephemeral headless Chromium
+context. The worker sends only code-owned allow-listed URLs and never accepts a URL from an API
+request or scheduler argument.
+
+Verify a registered source without fetching or writing data:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -DryRun
+```
+
+Run a bounded production-parser smoke with no database or artifact writes:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily `
+  -Source alternative-fng -LiveSmoke
+```
+
+Run enabled daily collectors after applying the Smart Insights migration:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
+```
+
+The code-owned enabled set currently contains Alternative.me, Coin Metrics Community active
+addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, Deribit public
+data, and the CryptoCraft economic calendar; each passed its own bounded live smoke. Browser sources
+that are blocked or no longer expose a machine-readable quantitative table remain disabled.
+
+Install and verify the pinned local browser crawler before running browser-backed sources:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
+$env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
+.\.venv\Scripts\crawl4ai-setup.exe
+.\.venv\Scripts\crawl4ai-doctor.exe
+```
+
+This product includes software developed by
+[UncleCode as part of the Crawl4AI project](https://github.com/unclecode/crawl4ai).
+
+The Crypto Regime Score is deterministic and point-in-time. Its six groups are momentum 20%, flow
+25%, liquidity 15%, on-chain 20%, derivatives 10%, and sentiment 10%. A score is persisted as
+`active` only when fresh configured-weight coverage reaches 60%; otherwise it is explicitly
+`unavailable`. Source observations, active immutable price datasets, methodology version, and
+input IDs are retained for replay. LLM output never enters the score.
+
+The repository only documents scheduler commands and does not register a Windows scheduled task
+automatically. Source health is available to authenticated research viewers at
+`GET /api/smart-insights/data-health`; raw bodies, artifact paths, and provider diagnostics are not
+returned.
+
+For CryptoCraft, invoke the current-calendar boundary every 15 minutes:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule calendar-current
+```
+
+The worker persists due state in provider-run metadata rather than process memory. It refreshes the
+current week no more often than every two hours, the next week every twelve hours, and high-impact
+event detail pages every fifteen minutes from T-30 through T+90. An early invocation exits
+successfully as `not_due`. Calendar timestamps use the explicit CryptoCraft timezone and are stored
+in UTC; all-day and tentative rows retain their source date without a fabricated instant.
+
+Macro observations use an allow-listed set of 15 FRED series and the official CFTC Legacy Futures
+Only contracts for BTC, USD Index, E-mini S&P 500, and Nasdaq-100 Mini. Set `FRED_API_KEY` before its
+live smoke. CFTC queries are bounded to 5,000 rows, select only code-owned fields, and require
+`FutOnly`; combined futures/options rows fail validation instead of being double-counted. FRED,
+CFTC and FRED remain disabled until each production parser passes from the deployment environment;
+CryptoCraft is enabled.
+
+The deterministic `macro-risk-asset-regime-v1` score weights liquidity 30%, rates/real yields 25%,
+USD pressure 20%, growth/inflation surprise 15%, and positioning 10%. It requires 60% fresh-weight
+coverage. `Event Risk` is published separately as the maximum upcoming event severity over 24-hour,
+3-day, and 7-day windows, so it never changes the directional regime score.
+
 ## Investor Intelligence
 
 The local v1 backend stores research in PostgreSQL:

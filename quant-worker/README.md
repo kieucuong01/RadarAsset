@@ -121,3 +121,32 @@ python quant-worker\research_import.py --payload .\local-research\BTC-last30days
 ```
 
 The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `evidence`, `thesis`, `forecasts`, and `providerRuns`. It is designed for adapters around last30days, ai-berkshire, Kronos, and future market-data providers.
+
+## Smart Insights Crypto Worker
+
+`collect_smart_insights.py` owns the allow-listed Crypto collectors, immutable raw-artifact
+publication, metric definition seeding, point-in-time observation queries, and Crypto Regime Score
+publication. Fixture parsers do not enable a source; use the live-smoke boundary first:
+
+```powershell
+$env:PYTHONPATH=(Resolve-Path "quant-worker").Path
+python quant-worker\collect_smart_insights.py daily --live-smoke `
+  --source alternative-fng --env-file .env.local
+```
+
+Live smoke writes nothing and emits only source code, effective time, row count, status, and a
+sanitized error code. Daily production collection writes gzipped content-addressed artifacts under
+`SMART_INSIGHTS_ARTIFACT_ROOT`, publishes accepted observations transactionally, and calculates a
+regime snapshot after the enabled collectors finish. Crawl4AI sources use only fixed registry
+URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.
+
+Macro collection uses `FredCollector` for the fixed FRED registry, `CftcCollector` for fixed CFTC
+contracts/report types, and `CryptoCraftCollector` for the attributed visible calendar. The Macro
+pipeline publishes a confidence/coverage-gated directional regime snapshot plus an independent
+Event Risk snapshot. Run the three no-write smoke boundaries before enabling their source codes:
+
+```powershell
+python quant-worker\collect_smart_insights.py daily --source fred --live-smoke
+python quant-worker\collect_smart_insights.py weekly --source cftc-legacy --live-smoke
+python quant-worker\collect_smart_insights.py calendar-current --source cryptocraft --live-smoke
+```

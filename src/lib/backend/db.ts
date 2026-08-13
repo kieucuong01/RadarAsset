@@ -262,14 +262,13 @@ function preferActiveDatasetBars<
 >(datasetBars: ActiveDatasetBarRow[], marketBars: TMarketBar[]) {
   if (!datasetBars.length) return marketBars;
   const datasetAssetIds = new Set(datasetBars.map((bar) => bar.assetId));
-  return [
-    ...datasetBars,
-    ...marketBars.filter((bar) => !datasetAssetIds.has(bar.assetId)),
-  ].sort((left, right) => {
-    const assetOrder = left.assetId.localeCompare(right.assetId);
-    if (assetOrder !== 0) return assetOrder;
-    return left.ts.getTime() - right.ts.getTime();
-  });
+  return [...datasetBars, ...marketBars.filter((bar) => !datasetAssetIds.has(bar.assetId))].sort(
+    (left, right) => {
+      const assetOrder = left.assetId.localeCompare(right.assetId);
+      if (assetOrder !== 0) return assetOrder;
+      return left.ts.getTime() - right.ts.getTime();
+    },
+  );
 }
 
 function latestBarsByAssetId(
@@ -675,26 +674,32 @@ export async function loadAssetIntelligence(symbol: string): Promise<AssetIntell
 export async function loadEvents() {
   const prisma = getPrisma();
   const events = await prisma.economicEvent.findMany({
+    where: { sourceCode: { not: "seed" }, eventAt: { not: null } },
     orderBy: { eventAt: "asc" },
     take: 50,
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    country: event.country,
-    event: event.event,
-    impact: event.impact,
-    forecast: event.forecast,
-    previous: event.previous,
-    eventAt: event.eventAt.toISOString(),
-    date: dayLabel(event.eventAt),
-    time: event.eventAt.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "UTC",
-    }),
-  }));
+  return events.flatMap((event) => {
+    if (!event.eventAt) return [];
+    return [
+      {
+        id: event.id,
+        country: event.country,
+        event: event.event,
+        impact: event.impact === "medium" ? "mid" : event.impact,
+        forecast: event.forecast,
+        previous: event.previous,
+        eventAt: event.eventAt.toISOString(),
+        date: dayLabel(event.eventAt),
+        time: event.eventAt.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: "UTC",
+        }),
+      },
+    ];
+  });
 }
 
 export async function loadWatchlist(context: TenantContext) {

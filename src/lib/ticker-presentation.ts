@@ -2,16 +2,16 @@ import type { DataStatus } from "@/lib/mvp-ui";
 
 export type TickerSnapshot<T> = {
   rows: T[];
-  status: Extract<DataStatus, "SYSTEM" | "SAMPLE">;
+  status: Extract<DataStatus, "SYSTEM" | "UNAVAILABLE">;
   detail: string;
 };
 
-export function resolveTickerSnapshot<T>(rows: T[], fallback: T[]): TickerSnapshot<T> {
+export function resolveTickerSnapshot<T>(rows: T[]): TickerSnapshot<T> {
   if (rows.length === 0) {
     return {
-      rows: fallback,
-      status: "SAMPLE",
-      detail: "Ticker API không có dữ liệu; đang hiển thị dữ liệu mẫu.",
+      rows: [],
+      status: "UNAVAILABLE",
+      detail: "Ticker API không có dữ liệu đã xác thực.",
     };
   }
 
