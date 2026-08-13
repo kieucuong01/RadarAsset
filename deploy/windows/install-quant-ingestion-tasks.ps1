@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version Latest
 
 if ($Install -eq $Verify) {

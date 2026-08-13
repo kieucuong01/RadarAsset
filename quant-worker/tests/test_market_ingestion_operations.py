@@ -63,6 +63,8 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert installer.count("New-ScheduledTaskTrigger") == 2
     assert "[switch]$Verify" in installer
     assert "RestartCount" in installer
+    assert '$ErrorActionPreference = "Stop"' in installer
+    assert '$PSNativeCommandUseErrorActionPreference = $true' in installer
     assert "if ($Verify)" in installer
     assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
 
