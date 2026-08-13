@@ -166,8 +166,6 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-sol-etf",
         "fred",
         "mempool-space",
-        "wgc-central-bank",
-        "wgc-gold-etf",
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
@@ -225,15 +223,6 @@ def test_discovered_links_remain_inside_source_specific_paths() -> None:
         coinshares,
         "https://a.storyblok.com/f/999999/1600x2000/hash/ranked-flows-detail.png/m/",
     )
-
-    wgc = source_for_code("wgc-gold-etf")
-    assert is_source_url_allowed(
-        wgc, "https://www.gold.org/download/file/12345/gold-etf-flows.xlsx"
-    )
-    assert not is_source_url_allowed(
-        wgc, "https://www.gold.org/download/file/12345/gold-etf-flows.pdf"
-    )
-
 
 def test_coinshares_discovery_accepts_current_two_digit_year_slugs() -> None:
     class Crawler:

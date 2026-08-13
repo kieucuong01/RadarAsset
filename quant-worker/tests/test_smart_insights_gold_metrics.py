@@ -101,15 +101,13 @@ def test_gold_regime_uses_exact_weight_and_direction() -> None:
         "momentum": input_score("40", confidence="90"),
         "real_yields": input_score("-20", confidence="100"),
         "usd_pressure": input_score("30", confidence="80"),
-        "etf_flow": input_score("60", confidence="70"),
         "cftc_positioning": input_score("10", confidence="85"),
-        "central_bank_demand": input_score("50", confidence="60"),
     })
-    assert result.score == Decimal("24.00")
-    assert result.label == "constructive"
+    assert result.score == Decimal("13.50")
+    assert result.label == "neutral"
     assert result.configured_weight_coverage == Decimal("1.00")
-    assert result.data_confidence == Decimal("84.00")
-    assert len(result.input_ids) == 6
+    assert result.data_confidence == Decimal("89.50")
+    assert len(result.input_ids) == 4
 
 
 def test_gold_regime_is_unavailable_below_sixty_percent_coverage() -> None:

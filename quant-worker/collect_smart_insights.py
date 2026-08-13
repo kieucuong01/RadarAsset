@@ -38,7 +38,6 @@ from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
-from smart_insights.collectors.world_gold_council import WorldGoldCouncilCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.crawl4ai_client import Crawl4AIClient
@@ -499,12 +498,6 @@ def build_batch_collectors(
         "fred": fred,
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
-        "wgc-gold-etf": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-gold-etf", crawler=crawler
-        ).collect(as_of),
-        "wgc-central-bank": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-central-bank", crawler=crawler
-        ).collect(as_of),
     }
 
 

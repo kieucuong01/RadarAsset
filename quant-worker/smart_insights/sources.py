@@ -223,30 +223,6 @@ SOURCE_ROWS = (
         "official_api",
         "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
     ),
-    (
-        "wgc-gold-etf",
-        "World Gold Council ETF Holdings and Flows",
-        Market.GOLD,
-        CollectionMode.CRAWL4AI,
-        ("https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows",),
-        "source_period",
-        "wgc-etf-v1",
-        20_160,
-        "crawl4ai_table",
-        "https://www.gold.org/terms-and-conditions",
-    ),
-    (
-        "wgc-central-bank",
-        "World Gold Council Gold Reserves",
-        Market.GOLD,
-        CollectionMode.CRAWL4AI,
-        ("https://www.gold.org/goldhub/data/gold-reserves-by-country",),
-        "source_period",
-        "wgc-central-bank-v1",
-        172_800,
-        "crawl4ai_table",
-        "https://www.gold.org/terms-and-conditions",
-    ),
 )
 
 
@@ -327,10 +303,4 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             is not None
         )
         return article or image
-    if source.code.startswith("wgc-"):
-        return (
-            parsed.hostname == "www.gold.org"
-            and parsed.path.startswith("/download/file/")
-            and parsed.path.lower().endswith(".xlsx")
-        )
     return False

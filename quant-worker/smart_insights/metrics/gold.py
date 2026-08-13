@@ -44,9 +44,6 @@ def _definition(
 
 
 GOLD_METRIC_DEFINITIONS = (
-    _definition("gold.etf_flow_tonnes", "Global Gold ETF flow", "tonnes", "source_period", 1, 20_160, source="wgc-gold-etf"),
-    _definition("gold.etf_holdings_tonnes", "Global Gold ETF holdings", "tonnes", "source_period", 0, 20_160, source="wgc-gold-etf", evidence_only=True),
-    _definition("gold.central_bank_net_purchase_tonnes", "Central bank net Gold purchases", "tonnes", "source_period", 1, 172_800, source="wgc-central-bank"),
     _definition("gold.cftc.managed_money.open_interest", "Gold CFTC open interest", "contracts", "weekly", 0, 14_400, source="cftc-disaggregated", evidence_only=True),
     _definition("gold.cftc.managed_money.long_contracts", "Gold CFTC managed money longs", "contracts", "weekly", 0, 14_400, source="cftc-disaggregated", evidence_only=True),
     _definition("gold.cftc.managed_money.short_contracts", "Gold CFTC managed money shorts", "contracts", "weekly", 0, 14_400, source="cftc-disaggregated", evidence_only=True),
