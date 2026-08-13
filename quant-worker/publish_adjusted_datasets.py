@@ -21,6 +21,18 @@ def _load_actions(connection: Any, asset: str) -> tuple[list[CorporateActionReco
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """
+            SELECT instrument.metadata
+            FROM provider_instruments AS instrument
+            JOIN data_providers AS provider ON provider.id = instrument.provider_id
+            JOIN assets AS asset ON asset.id = instrument.asset_id
+            WHERE provider.code = 'vnstock-vci-free' AND asset.symbol = %s
+            LIMIT 1
+            """,
+            (asset,),
+        )
+        instrument = cursor.fetchone()
+        cursor.execute(
+            """
             SELECT action.*, instrument.metadata
             FROM corporate_actions AS action
             JOIN assets AS asset ON asset.id = action.asset_id
@@ -31,7 +43,9 @@ def _load_actions(connection: Any, asset: str) -> tuple[list[CorporateActionReco
             (asset,),
         )
         rows = cursor.fetchall()
-    coverage = rows[0]["metadata"].get("corporateActionCoverage", {}) if rows else {}
+    coverage = (
+        instrument["metadata"].get("corporateActionCoverage", {}) if instrument else {}
+    )
     complete = coverage.get("complete") is True
     actions = [
         CorporateActionRecord(

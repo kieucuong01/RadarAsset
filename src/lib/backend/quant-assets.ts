@@ -132,7 +132,14 @@ export async function loadQuantAssetCatalog(
         const rawDataset = asset.datasets.find((dataset) => dataset.adjustmentPolicy === "raw");
         const version = rawDataset?.versions[0] ?? null;
         const availableAdjustments = asset.datasets
-          .filter((dataset) => dataset.versions.length > 0)
+          .filter((dataset) => {
+            const policyVersion = dataset.versions[0];
+            return Boolean(
+              policyVersion &&
+              policyVersion.coverageStart <= requestedStart &&
+              policyVersion.coverageEnd >= requestedEnd,
+            );
+          })
           .map((dataset) => dataset.adjustmentPolicy)
           .filter(
             (policy): policy is "raw" | "total_return" =>

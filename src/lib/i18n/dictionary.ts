@@ -679,6 +679,8 @@ export const dictionaries = {
         noFakeTitle: "Không tạo dữ liệu giả",
         noFakeDescription:
           "“Giá total-return” chỉ chạy khi có dataset immutable phù hợp; nếu không, server trả lỗi trước khi tạo run.",
+        survivorshipNotice:
+          "Catalog giữ lại mã inactive kể từ khi hệ thống bắt đầu snapshot. Giai đoạn trước snapshot chưa phải historical constituent universe hoàn chỉnh.",
         costModel: "Cost model theo thị trường",
         invalidTitle: "Chưa thể chạy backtest",
         footer: "Kết quả là normalized simulation capital, không phải số dư hoặc lệnh tại broker.",
@@ -1403,6 +1405,8 @@ export const dictionaries = {
         noFakeTitle: "No synthetic price data",
         noFakeDescription:
           "“Total-return prices” only run when a compatible immutable dataset exists; otherwise the server rejects the run before creation.",
+        survivorshipNotice:
+          "The catalog retains inactive symbols from the first system snapshot onward. Earlier periods are not yet a complete historical constituent universe.",
         costModel: "Market cost model",
         invalidTitle: "Backtest cannot run yet",
         footer: "Results are normalized simulation capital, not broker balances or orders.",

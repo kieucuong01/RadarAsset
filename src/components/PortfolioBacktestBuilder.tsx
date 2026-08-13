@@ -765,7 +765,9 @@ export function PortfolioBacktestBuilder({
           <Alert>
             <AlertCircle />
             <AlertTitle>{t("backtest.builder.noFakeTitle")}</AlertTitle>
-            <AlertDescription>{t("backtest.builder.noFakeDescription")}</AlertDescription>
+            <AlertDescription>
+              {t("backtest.builder.noFakeDescription")} {t("backtest.builder.survivorshipNotice")}
+            </AlertDescription>
           </Alert>
           {adjustmentUnavailableSymbols.length > 0 ? (
             <Alert variant="destructive">
