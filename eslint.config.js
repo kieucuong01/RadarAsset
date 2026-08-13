@@ -7,7 +7,18 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".next", "node_modules", ".output", ".vinxi", ".worktrees/**"] },
+  {
+    ignores: [
+      "dist",
+      ".next",
+      "node_modules",
+      ".output",
+      ".vinxi",
+      ".venv/**",
+      ".scrapling-venv/**",
+      ".worktrees/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

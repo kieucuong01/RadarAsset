@@ -58,7 +58,10 @@ describe("Smart Insights data health", () => {
     expect(response.sources).toHaveLength(15);
     expect(
       response.sources
-        .filter((source) => source.sourceCode.startsWith("farside-") || source.sourceCode === "coinshares-weekly")
+        .filter(
+          (source) =>
+            source.sourceCode.startsWith("farside-") || source.sourceCode === "coinshares-weekly",
+        )
         .map((source) => [source.sourceCode, source.collectionMode]),
     ).toEqual([
       ["coinshares-weekly", "scrapling"],
