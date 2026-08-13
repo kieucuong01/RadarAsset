@@ -6,6 +6,7 @@ import { buildTickerResponse } from "./market";
 import {
   buildPortfolioResponse,
   buildTradeAwarePerformance,
+  PortfolioDomainError,
   PortfolioInputError,
   replayPortfolioLedger,
 } from "./portfolio";
@@ -98,7 +99,16 @@ function assertTransactionType(value: string): TransactionType {
 }
 
 function assertQuantRunStatus(value: string): QuantRunStatus {
-  if (value === "running" || value === "succeeded" || value === "failed") return value;
+  if (
+    value === "running" ||
+    value === "succeeded" ||
+    value === "failed" ||
+    value === "cancel_requested" ||
+    value === "cancelled" ||
+    value === "timed_out"
+  ) {
+    return value;
+  }
   return "queued";
 }
 
@@ -397,6 +407,26 @@ export async function loadPortfolioResponse(
   });
 }
 
+export function validateSourceSignalExecution(
+  signal: {
+    status: string;
+    signalType: string;
+    assetId: string;
+    assignment: { portfolioId: string };
+  },
+  expected: { portfolioId: string; assetId: string; side: TransactionType },
+) {
+  if (signal.status === "executed" || signal.status === "dismissed") {
+    throw new PortfolioDomainError("SIGNAL_ALREADY_ACTED", "SIGNAL_ALREADY_ACTED");
+  }
+  if (signal.assignment.portfolioId !== expected.portfolioId || signal.assetId !== expected.assetId) {
+    throw new PortfolioDomainError("SIGNAL_SCOPE_MISMATCH", "SIGNAL_SCOPE_MISMATCH");
+  }
+  if (signal.signalType !== expected.side) {
+    throw new PortfolioDomainError("SIGNAL_SIDE_MISMATCH", "SIGNAL_SIDE_MISMATCH");
+  }
+}
+
 export async function createPortfolioTransaction(
   context: TenantContext,
   input: PortfolioTransactionCreateInput,
@@ -414,6 +444,33 @@ export async function createPortfolioTransaction(
 
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "portfolios" WHERE "id" = ${portfolio.id} FOR UPDATE`;
+    let sourceSignal: {
+      id: string;
+      status: string;
+      signalType: string;
+      assetId: string;
+      assignment: { portfolioId: string };
+    } | null = null;
+    if (input.sourceSignalId) {
+      sourceSignal = await tx.strategySignal.findFirst({
+        where: { id: input.sourceSignalId, organizationId: context.organizationId },
+        select: {
+          id: true,
+          status: true,
+          signalType: true,
+          assetId: true,
+          assignment: { select: { portfolioId: true } },
+        },
+      });
+      if (!sourceSignal) {
+        throw new PortfolioDomainError("SIGNAL_SCOPE_MISMATCH", "SIGNAL_SCOPE_MISMATCH");
+      }
+      validateSourceSignalExecution(sourceSignal, {
+        portfolioId: portfolio.id,
+        assetId: asset.id,
+        side: input.type,
+      });
+    }
     await tx.portfolioTransaction.create({
       data: {
         portfolioId: portfolio.id,
@@ -423,6 +480,7 @@ export async function createPortfolioTransaction(
         price: input.price,
         fee: input.fee ?? 0,
         note: input.note,
+        sourceSignalId: sourceSignal?.id,
         executedAt: input.executedAt ? new Date(input.executedAt) : new Date(),
       },
     });
@@ -472,6 +530,12 @@ export async function createPortfolioTransaction(
           quantity: position.quantity,
           averageCost: position.averageCost,
         })),
+      });
+    }
+    if (sourceSignal) {
+      await tx.strategySignal.update({
+        where: { id: sourceSignal.id },
+        data: { status: "executed", executionAt: new Date() },
       });
     }
   });
@@ -1590,6 +1654,8 @@ function quantRunToResponse(run: {
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     createdAt: run.createdAt?.toISOString() ?? new Date(0).toISOString(),
+    cacheHit: false,
+    sourceRunId: null,
     legs: [],
     artifacts: (run.artifacts ?? []).map((artifact) => ({
       id: artifact.id,

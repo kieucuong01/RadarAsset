@@ -94,6 +94,18 @@ describe("POST /api/portfolio/transactions", () => {
     );
   });
 
+  it("accepts a source signal id for atomic signal-linked execution", async () => {
+    const response = await POST(
+      request({ sourceSignalId: "00000000-0000-4000-8000-000000000009" }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.createPortfolioTransaction).toHaveBeenCalledWith(
+      editorContext,
+      expect.objectContaining({ sourceSignalId: "00000000-0000-4000-8000-000000000009" }),
+    );
+  });
+
   it("rejects a calendar date after the user's local today", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-08T18:00:00.000Z"));

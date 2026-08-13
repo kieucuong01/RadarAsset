@@ -334,6 +334,9 @@ export const dictionaries = {
       holding: "Holding",
       apply: "Áp dụng chiến lược",
       reviewRequired: "Cần review",
+      review: "Đã xem",
+      dismiss: "Bỏ qua",
+      decisionError: "Không thể cập nhật trạng thái tín hiệu.",
       noSignal:
         "Chưa có tín hiệu BUY/SELL mới. Assignment sẽ được đánh giá khi dataset thị trường immutable mới được publish.",
     },
@@ -353,6 +356,9 @@ export const dictionaries = {
       noSignal: "Chưa có tín hiệu mới",
       strategy: "Chiến lược",
       buyHold: "Buy & Hold",
+      forwardReturn: "Lợi nhuận forward",
+      backtestReturn: "Lợi nhuận backtest nguồn",
+      backtestGap: "Chênh lệch so với backtest",
     },
     optimizer: {
       title: "Bộ tối ưu Awesome-Quant",
@@ -1020,6 +1026,9 @@ export const dictionaries = {
       holding: "Holding",
       apply: "Apply strategy",
       reviewRequired: "Review required",
+      review: "Mark reviewed",
+      dismiss: "Dismiss",
+      decisionError: "Unable to update signal status.",
       noSignal:
         "No new BUY/SELL signal yet. Active assignments are evaluated whenever a new immutable market dataset is published.",
     },
@@ -1039,6 +1048,9 @@ export const dictionaries = {
       noSignal: "No new signal yet",
       strategy: "Strategy",
       buyHold: "Buy & Hold",
+      forwardReturn: "Forward return",
+      backtestReturn: "Source backtest return",
+      backtestGap: "Gap vs backtest",
     },
     optimizer: {
       title: "Awesome-Quant Optimizer",

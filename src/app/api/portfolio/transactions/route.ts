@@ -37,6 +37,7 @@ const transactionSchema = z
     timezoneOffsetMinutes: z.number().int().min(-840).max(840).optional(),
     timeframe: z.enum(["1W", "1M", "YTD", "1Y"]).default("1M"),
     note: z.string().trim().max(500).optional().nullable(),
+    sourceSignalId: z.string().uuid().optional(),
   })
   .superRefine((value, context) => {
     if (value.executedAt && value.executionDate) {

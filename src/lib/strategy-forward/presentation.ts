@@ -11,3 +11,20 @@ export function buildForwardChart(snapshots: ForwardTest["snapshots"]) {
     buyHold: (row.benchmarkEquity / benchmarkBase) * 100,
   }));
 }
+
+export function buildForwardComparison(
+  snapshots: ForwardTest["snapshots"],
+  baseline: { totalReturnPct: number } | null,
+) {
+  const chart = buildForwardChart(snapshots);
+  const latest = chart.at(-1);
+  if (!latest || !baseline) return null;
+  const forwardReturnPct = latest.strategy - 100;
+  const buyHoldReturnPct = latest.buyHold - 100;
+  return {
+    forwardReturnPct,
+    buyHoldReturnPct,
+    backtestReturnPct: baseline.totalReturnPct,
+    backtestGapPctPoints: forwardReturnPct - baseline.totalReturnPct,
+  };
+}

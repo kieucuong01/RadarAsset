@@ -14,6 +14,7 @@ import type {
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import { getStrategyCatalog, type StrategyCatalogItem } from "@/lib/backtest/client";
 import { useI18n } from "@/lib/i18n/context";
+import { updateStrategySignalStatusClient } from "@/lib/strategy-forward/client";
 
 function loadAssignments() {
   return fetch("/api/portfolio/strategy-assignments", { cache: "no-store" }).then(
@@ -116,6 +117,19 @@ export function StrategyAssignmentPanel({
       toast.error(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function decideSignal(
+    assignmentId: string,
+    signalId: string,
+    status: "reviewed" | "dismissed",
+  ) {
+    try {
+      await updateStrategySignalStatusClient(assignmentId, signalId, status);
+      await refreshAssignments();
+    } catch (decisionError) {
+      toast.error(decisionError instanceof Error ? decisionError.message : t("strategyAlerts.decisionError"));
     }
   }
 
@@ -248,20 +262,28 @@ export function StrategyAssignmentPanel({
                           </span>
                         </div>
                         {signal.status === "suggested" ? (
-                          <PortfolioTransactionDialog
-                            holdings={holdings}
-                            disabled={disabled}
-                            timeframe={timeframe}
-                            onRecorded={onRecorded}
-                            preset={{
-                              side: signal.signalType,
-                              symbol: signal.symbol,
-                              price: signal.signalPrice ?? 0,
-                              signalId: signal.id,
-                              assignmentId: assignment.id,
-                            }}
-                            onSignalExecuted={() => void refreshAssignments()}
-                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => void decideSignal(assignment.id, signal.id, "reviewed")}>
+                              {t("strategyAlerts.review")}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => void decideSignal(assignment.id, signal.id, "dismissed")}>
+                              {t("strategyAlerts.dismiss")}
+                            </Button>
+                            <PortfolioTransactionDialog
+                              holdings={holdings}
+                              disabled={disabled}
+                              timeframe={timeframe}
+                              onRecorded={onRecorded}
+                              preset={{
+                                side: signal.signalType,
+                                symbol: signal.symbol,
+                                price: signal.signalPrice ?? 0,
+                                signalId: signal.id,
+                                assignmentId: assignment.id,
+                              }}
+                              onSignalExecuted={() => void refreshAssignments()}
+                            />
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">{signal.status}</span>
                         )}

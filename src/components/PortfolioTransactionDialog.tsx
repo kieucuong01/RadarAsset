@@ -212,6 +212,7 @@ export function PortfolioTransactionDialog({
           ...buildExecutionDateRequest(date, new Date().getTimezoneOffset()),
           timeframe,
           note: null,
+          sourceSignalId: preset?.signalId,
         }),
       });
       if (!response.ok) {
@@ -221,17 +222,7 @@ export function PortfolioTransactionDialog({
 
       const portfolio = (await response.json()) as PortfolioResponse;
       onRecorded(portfolio);
-      if (preset?.signalId && preset.assignmentId) {
-        const signalResponse = await fetch(
-          `/api/portfolio/strategy-assignments/${preset.assignmentId}/signals/${preset.signalId}`,
-          {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ status: "executed" }),
-          },
-        );
-        if (signalResponse.ok) onSignalExecuted?.(preset.signalId);
-      }
+      if (preset?.signalId) onSignalExecuted?.(preset.signalId);
       toast.success(
         t("transactionsDialog.toastSuccess", {
           side: side === "buy" ? t("common.buy") : t("common.sell"),
