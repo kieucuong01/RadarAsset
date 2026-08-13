@@ -53,6 +53,11 @@ def _decimal_value(value: Any) -> Decimal | None:
     return parsed if parsed.is_finite() else None
 
 
+def _positive_decimal(value: Any) -> Decimal | None:
+    parsed = _decimal_value(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
 def _search_text(record: dict[str, Any]) -> str:
     raw = " ".join(
         str(record.get(key, ""))
@@ -154,8 +159,8 @@ def normalize_vci_event(asset: str, event: dict[str, Any]) -> CorporateActionRec
     if not event_id:
         return None
 
-    ratio = _decimal_value(event.get("exercise_ratio"))
-    value = _decimal_value(event.get("value_per_share"))
+    ratio = _positive_decimal(event.get("exercise_ratio"))
+    value = _positive_decimal(event.get("value_per_share"))
     action_type: CorporateActionType | None = None
     cash_per_share: Decimal | None = None
     distribution_ratio: Decimal | None = None

@@ -26,18 +26,38 @@ class AdjustmentResult:
 def _event_factor(
     previous_close: Decimal, actions: list[CorporateActionRecord]
 ) -> Decimal:
-    cash = sum((item.cash_per_share or Decimal(0) for item in actions), Decimal(0))
+    cash = sum(
+        (
+            item.cash_per_share
+            for item in actions
+            if item.action_type == "cash_dividend" and item.cash_per_share is not None
+        ),
+        Decimal(0),
+    )
     distribution = sum(
-        (item.distribution_ratio or Decimal(0) for item in actions), Decimal(0)
+        (
+            item.distribution_ratio
+            for item in actions
+            if item.action_type in {"stock_dividend", "split"}
+            and item.distribution_ratio is not None
+        ),
+        Decimal(0),
     )
     subscription_ratio = sum(
-        (item.subscription_ratio or Decimal(0) for item in actions), Decimal(0)
+        (
+            item.subscription_ratio
+            for item in actions
+            if item.action_type == "rights_issue" and item.subscription_ratio is not None
+        ),
+        Decimal(0),
     )
     subscription_value = sum(
         (
-            (item.subscription_ratio or Decimal(0))
-            * (item.subscription_price or Decimal(0))
+            item.subscription_ratio * item.subscription_price
             for item in actions
+            if item.action_type == "rights_issue"
+            and item.subscription_ratio is not None
+            and item.subscription_price is not None
         ),
         Decimal(0),
     )
