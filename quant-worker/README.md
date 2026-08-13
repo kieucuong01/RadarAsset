@@ -7,6 +7,8 @@ This worker is intentionally separate from the Next.js app. Keep expensive inges
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\python.exe -m venv .scrapling-venv
+.\.scrapling-venv\Scripts\python.exe -m pip install -r quant-worker\requirements-scrapling.txt
 $env:DATABASE_URL="postgresql://postgres:postgres@localhost:5432/quant_insight_radar?schema=public"
 python quant-worker\worker.py
 ```

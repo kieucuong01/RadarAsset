@@ -19,7 +19,9 @@ Copy `.env.example` to `.env.local` and configure:
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
 
-Crawl4AI, Scrapling, and RapidOCR run locally in the Python worker and receive only source URLs
+Crawl4AI and RapidOCR run in the main Python environment. Scrapling runs in the isolated
+`.scrapling-venv` environment because Crawl4AI 0.8.9 and Scrapling 0.4.14 require incompatible
+major versions of `lxml`. All receive only source URLs
 registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
 provider images, OCR tokens, and content-addressed artifacts remain private.
 
@@ -27,6 +29,8 @@ Install and verify the pinned browser runtime once per worker environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\python.exe -m venv .scrapling-venv
+.\.scrapling-venv\Scripts\python.exe -m pip install -r quant-worker\requirements-scrapling.txt
 New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
 $env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
@@ -34,7 +38,8 @@ $env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\rapidocr.exe check
 ```
 
-Crawl4AI is reserved for CryptoCraft. Farside and CoinShares use Scrapling's HTTP Fetcher with
+Crawl4AI is reserved for CryptoCraft. Farside and CoinShares use Scrapling's isolated JSON runner
+and HTTP Fetcher with
 Chrome impersonation and stealth headers, without proxies or a challenge solver. RapidOCR uses the
 local ONNX Runtime CPU backend; its packaged models must pass `rapidocr check` before CoinShares is
 eligible for live smoke.

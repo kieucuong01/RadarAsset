@@ -41,7 +41,11 @@ The adapter will:
 - expose a bounded binary-download operation for CoinShares images, subject to the same URL and size checks;
 - map provider/network failures to stable error codes without leaking upstream page content into logs.
 
-`scrapling` is pinned in the Python worker requirements. Its optional browser/StealthyFetcher runtime is not required for these two successful HTTP paths.
+`scrapling` is pinned in `quant-worker/requirements-scrapling.txt` and runs in a dedicated
+`.scrapling-venv`. This isolation is required because Crawl4AI 0.8.9 pins `lxml` 5.x while
+Scrapling 0.4.14 requires `lxml` 6.x. The main worker invokes a fixed runner path without a shell,
+sends only a code-allow-listed URL as JSON, and accepts only bounded JSON/base64 output. Its
+optional browser/StealthyFetcher runtime is not required for these two HTTP paths.
 
 ### Farside table normalization
 

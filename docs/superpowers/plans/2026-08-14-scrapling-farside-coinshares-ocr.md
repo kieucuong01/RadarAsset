@@ -441,11 +441,15 @@ git commit -m "docs: operate Scrapling fund flow sources"
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\python.exe -m venv .scrapling-venv
+.\.scrapling-venv\Scripts\python.exe -m pip install -r quant-worker\requirements-scrapling.txt
 .\.venv\Scripts\rapidocr.exe check
-.\.venv\Scripts\python.exe -c "from scrapling.fetchers import Fetcher; from rapidocr import RapidOCR; print('scrapling+ocr ok')"
+.\.scrapling-venv\Scripts\python.exe -c "from scrapling.fetchers import Fetcher; print('scrapling ok')"
+.\.venv\Scripts\python.exe -c "from rapidocr import RapidOCR; print('ocr ok')"
 ```
 
-Expected: zero exit codes and ONNX Runtime CPU reported by RapidOCR.
+Expected: zero exit codes and ONNX Runtime CPU reported by RapidOCR. Scrapling is intentionally
+isolated because its `lxml` 6.x requirement conflicts with Crawl4AI 0.8.9's `lxml` 5.x pin.
 
 - [ ] **Step 2: Run the complete relevant regression suite**
 

@@ -520,6 +520,60 @@ def test_scrapling_download_requires_allowlisted_image_content_type() -> None:
     assert asset.observed_at == NOW
 
 
+def test_scrapling_default_fetcher_uses_isolated_json_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _scrapling_client_module()
+    calls: list[tuple[list[str], bytes, float]] = []
+
+    def run(
+        command: list[str], *, input: bytes, capture_output: bool, timeout: float
+    ) -> SimpleNamespace:
+        assert capture_output is True
+        calls.append((command, input, timeout))
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "bodyBase64": "PGh0bWw+PC9odG1sPg==",
+                    "headers": {"content-type": "text/html"},
+                    "status": 200,
+                    "url": "https://farside.co.uk/btc/",
+                }
+            ).encode(),
+            stderr=b"",
+        )
+
+    monkeypatch.setenv("SMART_INSIGHTS_SCRAPLING_PYTHON", "isolated-python.exe")
+    monkeypatch.setattr(module.subprocess, "run", run)
+
+    response = module._fetch("https://farside.co.uk/btc/")
+
+    assert response.body == b"<html></html>"
+    assert response.status == 200
+    assert calls[0][0][0] == "isolated-python.exe"
+    assert json.loads(calls[0][1]) == {"url": "https://farside.co.uk/btc/"}
+    assert calls[0][2] == 45
+
+
+def test_scrapling_runner_url_allowlist_is_exact() -> None:
+    runner = importlib.import_module("scrapling_fetch")
+
+    assert runner.is_runner_url_allowed("https://farside.co.uk/btc/")
+    assert runner.is_runner_url_allowed(
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://a.storyblok.com/f/176807/1600x2000/table.png/m/"
+    )
+    assert not runner.is_runner_url_allowed("http://farside.co.uk/btc/")
+    assert not runner.is_runner_url_allowed("https://farside.co.uk/btc/extra")
+    assert not runner.is_runner_url_allowed("https://evil.invalid/btc/")
+    assert not runner.is_runner_url_allowed(
+        "https://a.storyblok.com/f/999999/1600x2000/table.png/m/"
+    )
+
+
 def _crawl4ai_result(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
         "success": True,

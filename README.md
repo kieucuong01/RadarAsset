@@ -160,12 +160,18 @@ Install and verify the pinned local browser crawler before running browser-backe
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\python.exe -m venv .scrapling-venv
+.\.scrapling-venv\Scripts\python.exe -m pip install -r quant-worker\requirements-scrapling.txt
 New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
 $env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
 .\.venv\Scripts\crawl4ai-doctor.exe
 .\.venv\Scripts\rapidocr.exe check
 ```
+
+Scrapling is isolated because its required `lxml` major version conflicts with Crawl4AI 0.8.9.
+The main worker exchanges bounded JSON/base64 messages with that local runner; it does not invoke
+a shell or accept arbitrary URLs.
 
 This product includes software developed by
 [UncleCode as part of the Crawl4AI project](https://github.com/unclecode/crawl4ai).
