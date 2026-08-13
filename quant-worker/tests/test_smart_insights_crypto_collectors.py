@@ -90,7 +90,7 @@ class FakeCrawler:
             effective_at=None,
             published_at=None,
             observed_at=NOW,
-            metadata={"collector": "crawl4ai"},
+            metadata={"collector": "scrapling"},
         )
 
 
@@ -187,6 +187,19 @@ def test_batch_collectors_use_injected_local_crawler() -> None:
     assert batch.error_code is None
     assert len(batch.observations) > 0
     assert crawler.calls == ["https://farside.co.uk/btc/"]
+
+
+def test_bitinfocharts_uses_the_injected_scrapling_client() -> None:
+    scrapling = FakeCrawler(fixture_text("bitinfocharts.md"))
+
+    batch = build_batch_collectors(scrapling_client=scrapling)[
+        "bitinfocharts-top-addresses"
+    ](NOW)
+
+    assert batch.error_code is None
+    assert scrapling.calls == [
+        "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
+    ]
 
 
 def test_farside_normalizes_live_multirow_html_and_ignores_open_date() -> None:

@@ -50,7 +50,7 @@ class FakeCrawler:
             effective_at=None,
             published_at=None,
             observed_at=NOW,
-            metadata={"collector": "crawl4ai"},
+            metadata={"collector": "scrapling"},
         )
 
 
@@ -132,7 +132,7 @@ def test_raw_html_restores_impact_and_detail_when_markdown_loses_icons() -> None
     )
 
 
-def test_crawl4ai_embedded_calendar_state_handles_merged_markdown_table() -> None:
+def test_embedded_calendar_state_handles_merged_markdown_table() -> None:
     markdown = """Calendar Time Zone: Asia/Novosibirsk (GMT +7)
 | 11:38pm | Actual |
 | --- | --- |

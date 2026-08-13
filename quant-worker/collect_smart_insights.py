@@ -40,7 +40,6 @@ from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
-from smart_insights.crawl4ai_client import Crawl4AIClient
 from smart_insights.scrapling_client import ScraplingClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
@@ -417,10 +416,8 @@ def _merge_api_batches(
 def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
     *,
-    browser_client: Any | None = None,
     scrapling_client: Any | None = None,
 ) -> Mapping[str, BatchCollector]:
-    crawler = browser_client or Crawl4AIClient()
     scrapling = scrapling_client or ScraplingClient()
 
     def coinshares(as_of: datetime) -> CollectionBatch:
@@ -431,7 +428,7 @@ def build_batch_collectors(
 
     def bitinfocharts(as_of: datetime) -> CollectionBatch:
         previous = _previous_large_address_balances(repository, as_of)
-        return BitInfoChartsCollector(crawler=crawler).collect(
+        return BitInfoChartsCollector(crawler=scrapling).collect(
             as_of,
             previous_balances=previous or None,
         )
@@ -647,7 +644,7 @@ def main(
         try:
             smoke_time = datetime.now(timezone.utc)
             if args.source == "cryptocraft":
-                crawler = Crawl4AIClient()
+                crawler = ScraplingClient()
                 outcome = run_calendar_live_smoke(
                     CryptoCraftCollector(crawler=crawler), as_of=smoke_time
                 )
@@ -749,7 +746,7 @@ def main(
                         CollectionOutcome(source.code, "failed", 0, "SOURCE_DISABLED")
                     ], 1
                 else:
-                    crawler = Crawl4AIClient()
+                    crawler = ScraplingClient()
                     outcomes, exit_code = run_calendar_schedule(
                         args.schedule,
                         as_of=datetime.now(timezone.utc),

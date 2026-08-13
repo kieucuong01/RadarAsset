@@ -102,7 +102,7 @@ describe("Smart Insights data health", () => {
     const cryptocraft = response.sources.find((source) => source.sourceCode === "cryptocraft");
 
     expect(cryptocraft).toMatchObject({
-      collectionMode: "crawl4ai",
+      collectionMode: "scrapling",
       lastEffectiveAt: null,
       lastObservedAt: null,
       lastStatus: "unavailable",

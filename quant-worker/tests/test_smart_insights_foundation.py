@@ -189,6 +189,11 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert source_for_code("fred").license_scope is LicenseScope.PUBLIC_OFFICIAL
     assert source_for_code("fred").quality_tier == Decimal("1.00")
     assert source_for_code("farside-btc-etf").quality_tier == Decimal("0.70")
+    assert (
+        source_for_code("bitinfocharts-top-addresses").collection_mode
+        is CollectionMode.SCRAPLING
+    )
+    assert source_for_code("cryptocraft").collection_mode is CollectionMode.SCRAPLING
     assert source_for_code("bitinfocharts-top-addresses").quality_tier == Decimal(
         "0.50"
     )
@@ -426,12 +431,6 @@ def test_http_transport_maps_timeout_and_invalid_json_to_stable_codes() -> None:
     assert json_error.value.code == "INVALID_RESPONSE"
 
 
-def _crawl4ai_client_class():
-    return importlib.import_module(
-        "smart_insights.crawl4ai_client"
-    ).Crawl4AIClient
-
-
 def _scrapling_client_module():
     return importlib.import_module("smart_insights.scrapling_client")
 
@@ -667,107 +666,6 @@ def test_scrapling_runner_url_allowlist_is_exact() -> None:
     assert not runner.is_runner_url_allowed(
         "https://www.cryptocraft.com/thread/454-ch-cpi-yy"
     )
-
-
-def _crawl4ai_result(**overrides: object) -> SimpleNamespace:
-    values: dict[str, object] = {
-        "success": True,
-        "url": "https://www.cryptocraft.com/calendar?week=this",
-        "status_code": 200,
-        "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
-        "html": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
-        "error_message": "",
-    }
-    values.update(overrides)
-    return SimpleNamespace(**values)
-
-
-def test_crawl4ai_rejects_url_outside_source_allowlist_before_browser_run() -> None:
-    calls: list[str] = []
-    client = _crawl4ai_client_class()(runner=lambda url: calls.append(url))
-    with pytest.raises(ValueError, match="allow-listed"):
-        client.scrape(
-            source_for_code("cryptocraft"), "https://evil.invalid/source"
-        )
-    assert calls == []
-
-
-def test_crawl4ai_creates_private_snapshot_for_matching_source_url() -> None:
-    response = _crawl4ai_result()
-    client = _crawl4ai_client_class()(runner=lambda _url: response, clock=lambda: NOW)
-
-    result = client.scrape(
-        source_for_code("cryptocraft"),
-        "https://www.cryptocraft.com/calendar?week=this",
-    )
-
-    assert result.source_url == "https://www.cryptocraft.com/calendar?week=this"
-    assert result.observed_at == NOW
-    assert json.loads(result.content) == {
-        "markdown": response.markdown,
-        "metadata": {
-            "sourceURL": "https://www.cryptocraft.com/calendar?week=this",
-            "statusCode": 200,
-        },
-        "rawHtml": response.html,
-    }
-    assert result.metadata == {
-        "collector": "crawl4ai",
-        "parser_version": "cryptocraft-v1",
-    }
-
-
-def test_crawl4ai_rejects_changed_final_url() -> None:
-    mismatched = _crawl4ai_client_class()(
-        runner=lambda _url: _crawl4ai_result(url="https://evil.invalid/source"),
-        clock=lambda: NOW,
-    )
-    with pytest.raises(SourceFetchError) as error:
-        mismatched.scrape(
-            source_for_code("cryptocraft"),
-            "https://www.cryptocraft.com/calendar?week=this",
-        )
-    assert error.value.code == "REDIRECT_REJECTED"
-
-
-def test_crawl4ai_rejects_empty_extraction() -> None:
-    client = _crawl4ai_client_class()(
-        runner=lambda _url: _crawl4ai_result(markdown="", html=""),
-        clock=lambda: NOW,
-    )
-    with pytest.raises(SourceFetchError) as error:
-        client.scrape(
-            source_for_code("cryptocraft"),
-            "https://www.cryptocraft.com/calendar?week=this",
-        )
-    assert error.value.code == "INVALID_RESPONSE"
-
-
-def test_crawl4ai_caps_serialized_snapshot_size() -> None:
-    client = _crawl4ai_client_class()(
-        runner=lambda _url: _crawl4ai_result(markdown="x" * 500),
-        clock=lambda: NOW,
-        max_bytes=100,
-    )
-    with pytest.raises(SourceFetchError) as error:
-        client.scrape(
-            source_for_code("cryptocraft"),
-            "https://www.cryptocraft.com/calendar?week=this",
-        )
-    assert error.value.code == "RESPONSE_TOO_LARGE"
-
-
-def test_crawl4ai_cache_defaults_to_workspace_local_data(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CRAWL4_AI_BASE_DIRECTORY", raising=False)
-
-    target = _crawl4ai_client_class().configure_crawl4ai_home()
-
-    assert target == (tmp_path / ".local-data" / "crawl4ai").resolve()
-    assert target.is_dir()
-    assert os.environ["CRAWL4_AI_BASE_DIRECTORY"] == str(target)
 
 
 def test_artifact_store_is_atomic_and_content_addressed(tmp_path: Path) -> None:

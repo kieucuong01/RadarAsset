@@ -13,7 +13,6 @@ QUALITY_TIERS = MappingProxyType(
         "official_api": Decimal("1.00"),
         "direct_api": Decimal("1.00"),
         "community_api": Decimal("0.85"),
-        "crawl4ai_table": Decimal("0.70"),
         "scrapling_table": Decimal("0.70"),
         "heuristic": Decimal("0.50"),
     }
@@ -167,7 +166,7 @@ SOURCE_ROWS = (
         "bitinfocharts-top-addresses",
         "BitInfoCharts Richest Bitcoin Addresses",
         Market.CRYPTO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         ("https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html",),
         "daily",
         "bitinfocharts-v1",
@@ -179,7 +178,7 @@ SOURCE_ROWS = (
         "cryptocraft",
         "CryptoCraft Economic Calendar",
         Market.MACRO,
-        CollectionMode.CRAWL4AI,
+        CollectionMode.SCRAPLING,
         (
             "https://www.cryptocraft.com/calendar?week=this",
             "https://www.cryptocraft.com/calendar?week=next",
@@ -187,7 +186,7 @@ SOURCE_ROWS = (
         "calendar",
         "cryptocraft-v1",
         120,
-        "crawl4ai_table",
+        "scrapling_table",
         "https://www.cryptocraft.com/legal.php",
     ),
     (
