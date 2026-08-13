@@ -1116,3 +1116,61 @@ describe("database tenant isolation", () => {
     expect(organizationBTransactions).toBe(0);
   });
 });
+
+describe("economic event revisions", () => {
+  it("retains immutable CryptoCraft revisions", async () => {
+    const sourceEventKey = `cryptocraft:USD:core-cpi-${suffix}:2026-08-13T12:30:00Z`;
+    const base = {
+      sourceCode: "cryptocraft",
+      sourceEventKey,
+      event: "Core CPI m/m",
+      country: "US",
+      currency: "USD",
+      impact: "high",
+      eventDate: new Date("2026-08-13T00:00:00Z"),
+      eventAt: new Date("2026-08-13T12:30:00Z"),
+      timeStatus: "timed",
+      sourceTimezone: "America/New_York",
+      forecast: "0.3%",
+      previous: "0.3%",
+      observedAt: new Date("2026-08-13T12:31:00Z"),
+    } as const;
+
+    try {
+      const first = await prisma.economicEvent.create({
+        data: { ...base, actual: "0.2%", revision: 1 },
+      });
+      expect(first.sourceEventKey).toBe(sourceEventKey);
+
+      await expect(
+        prisma.economicEvent.create({
+          data: { ...base, actual: "0.2%", revision: 1 },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      const second = await prisma.economicEvent.create({
+        data: {
+          ...base,
+          actual: "0.3%",
+          observedAt: new Date("2026-08-13T12:45:00Z"),
+          revision: 2,
+        },
+      });
+      expect(second.revision).toBe(2);
+
+      const retained = await prisma.economicEvent.findMany({
+        where: { sourceCode: "cryptocraft", sourceEventKey },
+        orderBy: { revision: "asc" },
+        select: { actual: true, revision: true },
+      });
+      expect(retained).toEqual([
+        { actual: "0.2%", revision: 1 },
+        { actual: "0.3%", revision: 2 },
+      ]);
+    } finally {
+      await prisma.economicEvent.deleteMany({
+        where: { sourceCode: "cryptocraft", sourceEventKey },
+      });
+    }
+  });
+});

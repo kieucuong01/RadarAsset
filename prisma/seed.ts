@@ -105,7 +105,7 @@ const eventSeed = [
   {
     event: "Crude Oil Inventories",
     country: "US",
-    impact: "mid",
+    impact: "medium",
     forecast: "-1.2M",
     previous: "0.8M",
     eventAt: "2026-06-13T10:00:00.000Z",
@@ -565,7 +565,15 @@ async function main() {
   await prisma.economicEvent.createMany({
     data: eventSeed.map((event) => ({
       ...event,
+      sourceCode: "seed",
+      sourceEventKey: `seed:${event.country}:${event.event}:${event.eventAt}`,
+      currency: event.country === "US" ? "USD" : event.country === "EU" ? "EUR" : "VND",
+      eventDate: new Date(event.eventAt.slice(0, 10)),
       eventAt: new Date(event.eventAt),
+      timeStatus: "timed",
+      sourceTimezone: "UTC",
+      observedAt: new Date(event.eventAt),
+      qualityStatus: "sample",
     })),
   });
 

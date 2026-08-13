@@ -425,16 +425,35 @@ model ProviderRun {
 }
 
 model EconomicEvent {
-  id        String   @id @default(uuid()) @db.Uuid
-  event     String
-  country   String
-  impact    String
-  forecast  String?
-  previous  String?
-  eventAt   DateTime @map("event_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String              @id @default(uuid()) @db.Uuid
+  sourceCode     String              @map("source_code")
+  sourceEventKey String              @map("source_event_key")
+  event          String
+  country        String
+  currency       String
+  impact         String
+  actual         String?
+  forecast       String?
+  previous       String?
+  eventDate      DateTime            @map("event_date") @db.Date
+  eventAt        DateTime?           @map("event_at") @db.Timestamptz(3)
+  timeStatus     String              @map("time_status")
+  sourceTimezone String              @map("source_timezone")
+  detailUrl      String?             @map("detail_url") @db.Text
+  rawSnapshotId  String?             @map("raw_snapshot_id") @db.Uuid
+  publishedAt    DateTime?           @map("published_at") @db.Timestamptz(3)
+  observedAt     DateTime            @map("observed_at") @db.Timestamptz(3)
+  revision       Int                 @default(1)
+  qualityStatus  String              @default("passed") @map("quality_status")
+  qualityFlags   Json                @default("[]") @map("quality_flags")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  rawSnapshot    InsightRawSnapshot? @relation(fields: [rawSnapshotId], references: [id], onDelete: Restrict)
 
-  @@index([eventAt])
+  @@unique([sourceCode, sourceEventKey, revision])
+  @@index([eventDate, impact])
+  @@index([eventAt, impact])
+  @@index([sourceCode, sourceEventKey, revision(sort: Desc)])
+  @@index([rawSnapshotId])
   @@map("economic_events")
 }
 
@@ -700,6 +719,7 @@ model InsightRawSnapshot {
   metadata       Json                @default("{}")
   provider       DataProvider        @relation(fields: [providerId], references: [id], onDelete: Restrict)
   observations   MetricObservation[]
+  economicEvents EconomicEvent[]
 
   @@unique([providerId, sourceUrl, contentHash])
   @@index([providerId, observedAt(sort: Desc)])
