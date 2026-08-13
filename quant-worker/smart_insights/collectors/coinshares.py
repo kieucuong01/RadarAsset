@@ -46,17 +46,17 @@ def _millions(value: str) -> Decimal:
 
 
 class CoinSharesCollector:
-    def __init__(self, *, firecrawl: Any, report_url: str) -> None:
+    def __init__(self, *, crawler: Any, report_url: str) -> None:
         self.source = source_for_code("coinshares-weekly")
         if not is_source_url_allowed(self.source, report_url):
             raise ValueError("Report URL is not allow-listed.")
-        self._firecrawl = firecrawl
+        self._crawler = crawler
         self._report_url = report_url
 
     def collect(self, as_of: datetime) -> CollectionBatch:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware.")
-        snapshot = self._firecrawl.scrape(self.source, self._report_url)
+        snapshot = self._crawler.scrape(self.source, self._report_url)
         try:
             payload = json.loads(snapshot.content)
         except (UnicodeDecodeError, json.JSONDecodeError):

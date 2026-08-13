@@ -61,9 +61,9 @@ def _category(label: str | None) -> str | None:
 
 
 class BitInfoChartsCollector:
-    def __init__(self, *, firecrawl: Any) -> None:
+    def __init__(self, *, crawler: Any) -> None:
         self.source = source_for_code("bitinfocharts-top-addresses")
-        self._firecrawl = firecrawl
+        self._crawler = crawler
 
     def collect(
         self,
@@ -73,7 +73,7 @@ class BitInfoChartsCollector:
     ) -> CollectionBatch:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware.")
-        snapshot = self._firecrawl.scrape(self.source, self.source.urls[0])
+        snapshot = self._crawler.scrape(self.source, self.source.urls[0])
         try:
             payload = json.loads(snapshot.content)
         except (UnicodeDecodeError, json.JSONDecodeError):

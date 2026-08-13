@@ -41,7 +41,7 @@ from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.collectors.world_gold_council import WorldGoldCouncilCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
-from smart_insights.firecrawl import FirecrawlClient
+from smart_insights.crawl4ai_client import Crawl4AIClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
@@ -299,9 +299,9 @@ _COINSHARES_REPORT = re.compile(
 )
 
 
-def _discover_coinshares_report(firecrawl: FirecrawlClient) -> str:
+def _discover_coinshares_report(crawler: Crawl4AIClient) -> str:
     source = source_for_code("coinshares-weekly")
-    snapshot = firecrawl.scrape(source, source.urls[0])
+    snapshot = crawler.scrape(source, source.urls[0])
     try:
         payload = json.loads(snapshot.content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -406,21 +406,20 @@ def _merge_api_batches(
 
 def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
+    *,
+    browser_client: Any | None = None,
 ) -> Mapping[str, BatchCollector]:
-    firecrawl = FirecrawlClient(
-        os.getenv("FIRECRAWL_API_URL", "http://127.0.0.1:3002"),
-        api_key=os.getenv("FIRECRAWL_API_KEY"),
-    )
+    crawler = browser_client or Crawl4AIClient()
 
     def coinshares(as_of: datetime) -> CollectionBatch:
-        report_url = _discover_coinshares_report(firecrawl)
+        report_url = _discover_coinshares_report(crawler)
         return CoinSharesCollector(
-            firecrawl=firecrawl, report_url=report_url
+            crawler=crawler, report_url=report_url
         ).collect(as_of)
 
     def bitinfocharts(as_of: datetime) -> CollectionBatch:
         previous = _previous_large_address_balances(repository, as_of)
-        return BitInfoChartsCollector(firecrawl=firecrawl).collect(
+        return BitInfoChartsCollector(crawler=crawler).collect(
             as_of,
             previous_balances=previous or None,
         )
@@ -469,13 +468,13 @@ def build_batch_collectors(
     return {
         "alternative-fng": lambda as_of: AlternativeFearGreedCollector().collect(as_of),
         "farside-btc-etf": lambda as_of: FarsideEtfCollector(
-            "BTC", firecrawl=firecrawl
+            "BTC", crawler=crawler
         ).collect(as_of),
         "farside-eth-etf": lambda as_of: FarsideEtfCollector(
-            "ETH", firecrawl=firecrawl
+            "ETH", crawler=crawler
         ).collect(as_of),
         "farside-sol-etf": lambda as_of: FarsideEtfCollector(
-            "SOL", firecrawl=firecrawl
+            "SOL", crawler=crawler
         ).collect(as_of),
         "coinmetrics-community": lambda as_of: CoinMetricsCollector().collect(as_of),
         "mempool-space": lambda as_of: MempoolSpaceCollector().collect(as_of),
@@ -488,10 +487,10 @@ def build_batch_collectors(
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
         "wgc-gold-etf": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-gold-etf", firecrawl=firecrawl
+            "wgc-gold-etf", crawler=crawler
         ).collect(as_of),
         "wgc-central-bank": lambda as_of: WorldGoldCouncilCollector(
-            "wgc-central-bank", firecrawl=firecrawl
+            "wgc-central-bank", crawler=crawler
         ).collect(as_of),
     }
 
@@ -642,12 +641,9 @@ def main(
         try:
             smoke_time = datetime.now(timezone.utc)
             if args.source == "cryptocraft":
-                firecrawl = FirecrawlClient(
-                    os.getenv("FIRECRAWL_API_URL", "http://127.0.0.1:3002"),
-                    api_key=os.getenv("FIRECRAWL_API_KEY"),
-                )
+                crawler = Crawl4AIClient()
                 outcome = run_calendar_live_smoke(
-                    CryptoCraftCollector(firecrawl=firecrawl), as_of=smoke_time
+                    CryptoCraftCollector(crawler=crawler), as_of=smoke_time
                 )
             else:
                 outcome = run_live_smoke(
@@ -747,16 +743,13 @@ def main(
                         CollectionOutcome(source.code, "failed", 0, "SOURCE_DISABLED")
                     ], 1
                 else:
-                    firecrawl = FirecrawlClient(
-                        os.getenv("FIRECRAWL_API_URL", "http://127.0.0.1:3002"),
-                        api_key=os.getenv("FIRECRAWL_API_KEY"),
-                    )
+                    crawler = Crawl4AIClient()
                     outcomes, exit_code = run_calendar_schedule(
                         args.schedule,
                         as_of=datetime.now(timezone.utc),
                         repository=repository,
                         artifact_store=artifact_store,
-                        collector=CryptoCraftCollector(firecrawl=firecrawl),
+                        collector=CryptoCraftCollector(crawler=crawler),
                     )
             else:
                 active_collectors = build_production_collectors(

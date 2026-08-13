@@ -105,12 +105,12 @@ deterministic regimes, point-in-time metrics, a CryptoCraft calendar contract, e
 preferences, and source-health APIs. The UI does not fall back to hard-coded market facts.
 
 See the [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md) for source
-activation status, Firecrawl setup, scheduler commands, AI fallback rules, replay, and rollback.
+activation status, Crawl4AI setup, scheduler commands, AI fallback rules, replay, and rollback.
 
 Smart Insights stores normalized quantitative observations and private, content-addressed raw
-artifacts. Firecrawl runs as a separate private service; set `FIRECRAWL_API_URL` to its local or
-private HTTPS endpoint. The worker sends only code-owned allow-listed URLs and never accepts a URL
-from an API request or scheduler argument.
+artifacts. Crawl4AI runs locally inside the Python worker with an ephemeral headless Chromium
+context. The worker sends only code-owned allow-listed URLs and never accepts a URL from an API
+request or scheduler argument.
 
 Verify a registered source without fetching or writing data:
 
@@ -134,9 +134,18 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
 The code-owned enabled set currently contains Alternative.me, Coin Metrics Community active
 addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, and Deribit
 public data; each passed its own bounded live smoke. Farside, CoinShares, and BitInfoCharts remain
-disabled until Firecrawl passes their production parser smoke. The official Firecrawl self-host
-baseline requires Docker Compose; alternatively set `FIRECRAWL_API_URL=https://api.firecrawl.dev`
-and provide `FIRECRAWL_API_KEY` for the hosted API.
+disabled until Crawl4AI passes their production parser smoke.
+
+Install and verify the pinned local browser crawler before running browser-backed sources:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\crawl4ai-setup.exe
+.\.venv\Scripts\crawl4ai-doctor.exe
+```
+
+This product includes software developed by
+[UncleCode as part of the Crawl4AI project](https://github.com/unclecode/crawl4ai).
 
 The Crypto Regime Score is deterministic and point-in-time. Its six groups are momentum 20%, flow
 25%, liquidity 15%, on-chain 20%, derivatives 10%, and sentiment 10%. A score is persisted as

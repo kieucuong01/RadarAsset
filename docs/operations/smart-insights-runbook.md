@@ -14,16 +14,20 @@ Copy `.env.example` to `.env.local` and configure:
 - `SMART_INSIGHTS_TIMEZONE`: product day boundary, normally `Asia/Bangkok`.
 - `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
-- `FIRECRAWL_API_URL`: private Firecrawl endpoint; the self-hosted default is
-  `http://127.0.0.1:3002`.
-- `FIRECRAWL_API_KEY`: only when the selected Firecrawl deployment requires authentication.
 - `FRED_API_KEY`: required before the FRED collector can pass live smoke.
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
 
-Firecrawl receives only source URLs registered in code. Scheduler and API inputs cannot provide an
-arbitrary crawl URL. Keep Firecrawl and raw artifacts private; do not expose either endpoint to the
-browser.
+Crawl4AI runs locally in the Python worker and receives only source URLs registered in code.
+Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw artifacts remain private.
+
+Install and verify the pinned browser runtime once per worker environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+.\.venv\Scripts\crawl4ai-setup.exe
+.\.venv\Scripts\crawl4ai-doctor.exe
+```
 
 ## Source activation gate
 
@@ -46,13 +50,13 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Firecrawl unavailable during smoke |
-| `bitinfocharts-top-addresses` | Daily | Firecrawl unavailable during smoke |
-| `coinshares-weekly` | Weekly | Firecrawl unavailable during smoke |
-| `cryptocraft` | Due-state calendar schedule | Firecrawl unavailable during smoke |
+| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Awaiting Crawl4AI live smoke |
+| `bitinfocharts-top-addresses` | Daily | Awaiting Crawl4AI live smoke |
+| `coinshares-weekly` | Weekly | Awaiting Crawl4AI live smoke |
+| `cryptocraft` | Due-state calendar schedule | Awaiting Crawl4AI live smoke |
 | `fred` | Daily | Requires deployment `FRED_API_KEY` and live smoke |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider/network smoke did not pass |
-| `wgc-gold-etf`, `wgc-central-bank` | Source period | Firecrawl unavailable during smoke |
+| `wgc-gold-etf`, `wgc-central-bank` | Source period | Awaiting Crawl4AI live smoke |
 
 Smoke a single registered source without writing observations:
 

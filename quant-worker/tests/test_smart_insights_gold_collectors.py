@@ -55,7 +55,7 @@ def workbook(rows: tuple[tuple[object, ...], ...], *, extra: dict[str, bytes] | 
     return output.getvalue()
 
 
-class FakeFirecrawl:
+class FakeCrawler:
     def __init__(self, markdown: str) -> None:
         self.markdown = markdown
 
@@ -109,7 +109,7 @@ def test_wgc_etf_parser_preserves_reported_month_without_daily_expansion() -> No
     ))
     batch = WorldGoldCouncilCollector(
         "wgc-gold-etf",
-        firecrawl=FakeFirecrawl(fixture_text("wgc_etf_landing.md")),
+        crawler=FakeCrawler(fixture_text("wgc_etf_landing.md")),
         transport=FakeTransport(content),
     ).collect(NOW)
 
@@ -131,7 +131,7 @@ def test_wgc_central_bank_quarantines_malformed_value() -> None:
     ))
     batch = WorldGoldCouncilCollector(
         "wgc-central-bank",
-        firecrawl=FakeFirecrawl(fixture_text("wgc_central_bank_landing.md")),
+        crawler=FakeCrawler(fixture_text("wgc_central_bank_landing.md")),
         transport=FakeTransport(content),
     ).collect(NOW)
 
@@ -143,7 +143,7 @@ def test_wgc_landing_requires_exactly_one_allow_listed_xlsx_link() -> None:
     duplicated = fixture_text("wgc_etf_landing.md") + "\n[Other](https://www.gold.org/download/file/other.xlsx)"
     batch = WorldGoldCouncilCollector(
         "wgc-gold-etf",
-        firecrawl=FakeFirecrawl(duplicated),
+        crawler=FakeCrawler(duplicated),
         transport=FakeTransport(workbook((("A",),))),
     ).collect(NOW)
     assert batch.error_code == "SCHEMA_DRIFT"

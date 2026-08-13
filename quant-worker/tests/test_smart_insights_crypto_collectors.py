@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from collect_smart_insights import run_live_smoke
+from collect_smart_insights import build_batch_collectors, run_live_smoke
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
@@ -49,11 +49,13 @@ class FakeTransport:
         )
 
 
-class FakeFirecrawl:
+class FakeCrawler:
     def __init__(self, markdown: str) -> None:
         self.markdown = markdown
+        self.calls: list[str] = []
 
     def scrape(self, source: object, url: str) -> RawSnapshot:
+        self.calls.append(url)
         payload = {
             "markdown": self.markdown,
             "rawHtml": "<table></table>",
@@ -66,8 +68,18 @@ class FakeFirecrawl:
             effective_at=None,
             published_at=None,
             observed_at=NOW,
-            metadata={"collector": "firecrawl"},
+            metadata={"collector": "crawl4ai"},
         )
+
+
+def test_batch_collectors_use_injected_local_crawler() -> None:
+    crawler = FakeCrawler(fixture_text("farside-btc.md"))
+
+    batch = build_batch_collectors(browser_client=crawler)["farside-btc-etf"](NOW)
+
+    assert batch.error_code is None
+    assert len(batch.observations) > 0
+    assert crawler.calls == ["https://farside.co.uk/btc/"]
 
 
 class RoutingTransport:
@@ -165,7 +177,7 @@ def test_alternative_fng_rejects_invalid_and_duplicate_provider_dates() -> None:
 
 def test_farside_btc_reconciles_funds_to_reported_total() -> None:
     batch = FarsideEtfCollector(
-        "BTC", firecrawl=FakeFirecrawl(fixture_text("farside-btc.md"))
+        "BTC", crawler=FakeCrawler(fixture_text("farside-btc.md"))
     ).collect(NOW)
     totals = [
         row
@@ -190,7 +202,7 @@ def test_farside_supports_btc_eth_sol_and_quarantines_bad_total() -> None:
     for asset, total in expected.items():
         batch = FarsideEtfCollector(
             asset,
-            firecrawl=FakeFirecrawl(fixture_text(f"farside-{asset.lower()}.md")),
+            crawler=FakeCrawler(fixture_text(f"farside-{asset.lower()}.md")),
         ).collect(NOW)
         assert batch.error_code is None
         assert next(
@@ -201,7 +213,7 @@ def test_farside_supports_btc_eth_sol_and_quarantines_bad_total() -> None:
 
     broken_markdown = fixture_text("farside-btc.md").replace("**842.0**", "**800.0**")
     broken = FarsideEtfCollector(
-        "BTC", firecrawl=FakeFirecrawl(broken_markdown)
+        "BTC", crawler=FakeCrawler(broken_markdown)
     ).collect(NOW)
     rejected_date = datetime(2026, 8, 12, tzinfo=timezone.utc)
     assert broken.error_code == "RECONCILIATION_FAILED"
@@ -380,7 +392,7 @@ def test_coinshares_keeps_weekly_period_separate_from_crawl_time() -> None:
         "fund-flows-10-08-2026/"
     )
     batch = CoinSharesCollector(
-        firecrawl=FakeFirecrawl(fixture_text("coinshares.md")),
+        crawler=FakeCrawler(fixture_text("coinshares.md")),
         report_url=report_url,
     ).collect(NOW)
 
@@ -408,7 +420,7 @@ def test_coinshares_rejects_report_without_explicit_period() -> None:
         "Data available as at close 8 August 2026.", "Weekly data."
     )
     batch = CoinSharesCollector(
-        firecrawl=FakeFirecrawl(markdown),
+        crawler=FakeCrawler(markdown),
         report_url=(
             "https://coinshares.com/insights/research-data/"
             "fund-flows-10-08-2026/"
@@ -426,7 +438,7 @@ def test_bitinfocharts_excludes_reviewed_entities_and_reports_label_coverage() -
         "1BoatSLRHtKNngkdXEeobR76b53LETtpyT": Decimal("10000"),
     }
     batch = BitInfoChartsCollector(
-        firecrawl=FakeFirecrawl(fixture_text("bitinfocharts.md"))
+        crawler=FakeCrawler(fixture_text("bitinfocharts.md"))
     ).collect(NOW, previous_balances=previous)
     proxy = next(
         row
@@ -462,7 +474,7 @@ def test_bitinfocharts_excludes_reviewed_entities_and_reports_label_coverage() -
 
 def test_bitinfocharts_first_snapshot_has_balance_but_no_change() -> None:
     batch = BitInfoChartsCollector(
-        firecrawl=FakeFirecrawl(fixture_text("bitinfocharts.md"))
+        crawler=FakeCrawler(fixture_text("bitinfocharts.md"))
     ).collect(NOW)
 
     assert any(

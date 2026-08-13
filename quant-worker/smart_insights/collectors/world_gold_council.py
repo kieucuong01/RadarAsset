@@ -75,19 +75,19 @@ class WorldGoldCouncilCollector:
         self,
         source_code: str,
         *,
-        firecrawl: Any,
+        crawler: Any,
         transport: Any | None = None,
     ) -> None:
         if source_code not in _SOURCES:
             raise ValueError("Unsupported World Gold Council source.")
         self.source = source_for_code(source_code)
-        self._firecrawl = firecrawl
+        self._crawler = crawler
         self._transport = transport or UrllibTransport()
 
     def collect(self, as_of: datetime) -> CollectionBatch:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware.")
-        landing = self._firecrawl.scrape(self.source, self.source.urls[0])
+        landing = self._crawler.scrape(self.source, self.source.urls[0])
         try:
             payload = json.loads(landing.content)
         except (UnicodeDecodeError, json.JSONDecodeError):

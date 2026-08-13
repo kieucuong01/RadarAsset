@@ -216,9 +216,9 @@ def _event_identity(
 
 
 class CryptoCraftCollector:
-    def __init__(self, *, firecrawl: Any) -> None:
+    def __init__(self, *, crawler: Any) -> None:
         self.source = source_for_code("cryptocraft")
-        self._firecrawl = firecrawl
+        self._crawler = crawler
 
     def collect_week(self, week: str, *, observed_at: datetime) -> CalendarBatch:
         if week not in _WEEK_URLS:
@@ -226,7 +226,7 @@ class CryptoCraftCollector:
         if observed_at.tzinfo is None or observed_at.utcoffset() is None:
             raise ValueError("observed_at must be timezone-aware.")
         url = _WEEK_URLS[week]
-        snapshot = self._firecrawl.scrape(self.source, url)
+        snapshot = self._crawler.scrape(self.source, url)
         return self._parse_snapshot(snapshot, observed_at=observed_at)
 
     def collect_detail(
@@ -236,7 +236,7 @@ class CryptoCraftCollector:
             raise ValueError("observed_at must be timezone-aware.")
         if not is_source_url_allowed(self.source, detail_url):
             raise ValueError("REDIRECT_REJECTED")
-        snapshot = self._firecrawl.scrape(self.source, detail_url)
+        snapshot = self._crawler.scrape(self.source, detail_url)
         return self._parse_snapshot(snapshot, observed_at=observed_at)
 
     def _parse_snapshot(

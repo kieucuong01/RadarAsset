@@ -30,7 +30,7 @@ def fixture_text(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-class FakeFirecrawl:
+class FakeCrawler:
     def __init__(self, markdown: str, *, raw_html: str = "<table></table>") -> None:
         self.markdown = markdown
         self.raw_html = raw_html
@@ -50,13 +50,13 @@ class FakeFirecrawl:
             effective_at=None,
             published_at=None,
             observed_at=NOW,
-            metadata={"collector": "firecrawl"},
+            metadata={"collector": "crawl4ai"},
         )
 
 
 def test_current_week_parses_timezone_date_carry_and_values() -> None:
-    firecrawl = FakeFirecrawl(fixture_text("cryptocraft-current.md"))
-    batch = CryptoCraftCollector(firecrawl=firecrawl).collect_week(
+    firecrawl = FakeCrawler(fixture_text("cryptocraft-current.md"))
+    batch = CryptoCraftCollector(crawler=firecrawl).collect_week(
         "current", observed_at=NOW
     )
 
@@ -78,7 +78,7 @@ def test_current_week_parses_timezone_date_carry_and_values() -> None:
 
 def test_all_day_tentative_blank_actual_and_duplicate_names_are_preserved() -> None:
     batch = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
     ).collect_week("current", observed_at=NOW)
 
     core = [row for row in batch.events if row.name == "Core CPI m/m"]
@@ -94,7 +94,7 @@ def test_all_day_tentative_blank_actual_and_duplicate_names_are_preserved() -> N
 
 def test_timezone_database_handles_daylight_saving_not_fixed_offset() -> None:
     batch = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-next.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-next.md"))
     ).collect_week("next", observed_at=datetime(2026, 11, 1, tzinfo=timezone.utc))
 
     payrolls = next(row for row in batch.events if row.name == "Nonfarm Payrolls")
@@ -122,7 +122,7 @@ def test_raw_html_restores_impact_and_detail_when_markdown_loses_icons() -> None
 </tr></table>
 """
     batch = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(markdown, raw_html=raw_html)
+        crawler=FakeCrawler(markdown, raw_html=raw_html)
     ).collect_week("current", observed_at=NOW)
 
     assert batch.error_code is None
@@ -135,7 +135,7 @@ def test_raw_html_restores_impact_and_detail_when_markdown_loses_icons() -> None
 def test_calendar_live_smoke_uses_the_production_parser_without_writes() -> None:
     outcome = run_calendar_live_smoke(
         CryptoCraftCollector(
-            firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+            crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
         ),
         as_of=NOW,
     )
@@ -147,10 +147,10 @@ def test_calendar_live_smoke_uses_the_production_parser_without_writes() -> None
 
 def test_actual_revision_keeps_the_same_source_identity() -> None:
     first = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
     ).collect_week("current", observed_at=NOW)
     revised = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-actual-revision.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-actual-revision.md"))
     ).collect_week("current", observed_at=NOW)
 
     before = next(row for row in first.events if row.name == "Core CPI m/m")
@@ -164,7 +164,7 @@ def test_missing_timezone_and_duplicate_conflict_fail_closed() -> None:
     no_timezone = fixture_text("cryptocraft-current.md").replace(
         "Calendar Time Zone: America/New_York (GMT -4)\n", ""
     )
-    missing = CryptoCraftCollector(firecrawl=FakeFirecrawl(no_timezone)).collect_week(
+    missing = CryptoCraftCollector(crawler=FakeCrawler(no_timezone)).collect_week(
         "current", observed_at=NOW
     )
     assert missing.error_code == "MISSING_TIMEZONE"
@@ -180,7 +180,7 @@ def test_missing_timezone_and_duplicate_conflict_fail_closed() -> None:
         + "\n| Thu Aug 13 | 8:30am | US | High | Core CPI m/m | 0.4% | 0.3% | 0.3% | "
         + "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m |",
     )
-    duplicate = CryptoCraftCollector(firecrawl=FakeFirecrawl(conflict)).collect_week(
+    duplicate = CryptoCraftCollector(crawler=FakeCrawler(conflict)).collect_week(
         "current", observed_at=NOW
     )
     assert duplicate.error_code == "DUPLICATE_CONFLICT"
@@ -197,10 +197,10 @@ def test_calendar_urls_are_fixed_and_detail_urls_are_allow_listed() -> None:
     assert not is_source_url_allowed(source, "https://www.cryptocraft.com/thread/1001")
     with pytest.raises(ValueError, match="INVALID_WEEK"):
         CryptoCraftCollector(
-            firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+            crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
         ).collect_week("other", observed_at=NOW)
-    detail_firecrawl = FakeFirecrawl(fixture_text("cryptocraft-actual-revision.md"))
-    detail = CryptoCraftCollector(firecrawl=detail_firecrawl).collect_detail(
+    detail_firecrawl = FakeCrawler(fixture_text("cryptocraft-actual-revision.md"))
+    detail = CryptoCraftCollector(crawler=detail_firecrawl).collect_detail(
         "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m",
         observed_at=NOW,
     )
@@ -232,7 +232,7 @@ def test_calendar_cadence_selects_current_and_next_jobs_at_boundaries() -> None:
 
 def test_high_impact_detail_window_is_inclusive_and_medium_is_excluded() -> None:
     batch = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
     ).collect_week("current", observed_at=NOW)
     high = next(row for row in batch.events if row.name == "Core CPI m/m")
     medium = next(
@@ -267,7 +267,7 @@ def test_high_impact_detail_window_is_inclusive_and_medium_is_excluded() -> None
 
 def test_event_detail_job_respects_fifteen_minute_last_success() -> None:
     event = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
     ).collect_week("current", observed_at=NOW).events[0]
     assert event.event_at_utc is not None
     job_code = f"cryptocraft-event:{event.source_event_key}"
@@ -339,10 +339,10 @@ def _artifact(snapshot: RawSnapshot, source_code: str) -> StoredArtifact:
 
 def test_calendar_publication_is_idempotent_and_retains_actual_revision() -> None:
     first = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-current.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
     ).collect_week("current", observed_at=NOW)
     revised = CryptoCraftCollector(
-        firecrawl=FakeFirecrawl(fixture_text("cryptocraft-actual-revision.md"))
+        crawler=FakeCrawler(fixture_text("cryptocraft-actual-revision.md"))
     ).collect_week("current", observed_at=NOW)
     source = replace(
         first.source,

@@ -48,18 +48,18 @@ def _millions_usd(value: str) -> Decimal:
 
 
 class FarsideEtfCollector:
-    def __init__(self, asset: str, *, firecrawl: Any) -> None:
+    def __init__(self, asset: str, *, crawler: Any) -> None:
         normalized = asset.upper()
         if normalized not in _SOURCE_CODES:
             raise ValueError("Unsupported ETF asset.")
         self.asset = normalized
         self.source = source_for_code(_SOURCE_CODES[normalized])
-        self._firecrawl = firecrawl
+        self._crawler = crawler
 
     def collect(self, as_of: datetime) -> CollectionBatch:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware.")
-        snapshot = self._firecrawl.scrape(self.source, self.source.urls[0])
+        snapshot = self._crawler.scrape(self.source, self.source.urls[0])
         try:
             payload = json.loads(snapshot.content)
         except (UnicodeDecodeError, json.JSONDecodeError):
