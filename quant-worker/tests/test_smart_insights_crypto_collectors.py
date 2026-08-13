@@ -72,14 +72,88 @@ class FakeCrawler:
         )
 
 
+class FakeCrawlerHtml:
+    def __init__(self, html: str) -> None:
+        self.html = html
+        self.calls: list[str] = []
+
+    def scrape(self, source: object, url: str) -> RawSnapshot:
+        self.calls.append(url)
+        return RawSnapshot(
+            content=json.dumps(
+                {
+                    "rawHtml": self.html,
+                    "metadata": {"sourceURL": url},
+                }
+            ).encode("utf-8"),
+            content_type="application/json",
+            source_url=url,
+            effective_at=None,
+            published_at=None,
+            observed_at=NOW,
+            metadata={"collector": "scrapling"},
+        )
+
+
 def test_batch_collectors_use_injected_local_crawler() -> None:
     crawler = FakeCrawler(fixture_text("farside-btc.md"))
 
-    batch = build_batch_collectors(browser_client=crawler)["farside-btc-etf"](NOW)
+    batch = build_batch_collectors(scrapling_client=crawler)["farside-btc-etf"](NOW)
 
     assert batch.error_code is None
     assert len(batch.observations) > 0
     assert crawler.calls == ["https://farside.co.uk/btc/"]
+
+
+def test_farside_normalizes_live_multirow_html_and_ignores_open_date() -> None:
+    crawler = FakeCrawlerHtml(fixture_text("farside-live.html"))
+
+    batch = FarsideEtfCollector("BTC", crawler=crawler).collect(NOW)
+
+    assert batch.error_code is None
+    assert {row.dimensions["fund"] for row in batch.observations} == {
+        "IBIT",
+        "FBTC",
+        "BITB",
+        "ARKB",
+        "TOTAL",
+    }
+    assert {row.effective_at for row in batch.observations} == {
+        datetime(2026, 8, 11, tzinfo=timezone.utc),
+        datetime(2026, 8, 12, tzinfo=timezone.utc),
+    }
+    assert next(
+        row.value
+        for row in batch.observations
+        if row.effective_at == datetime(2026, 8, 12, tzinfo=timezone.utc)
+        and row.dimensions["fund"] == "TOTAL"
+    ) == Decimal("842000000")
+
+
+def test_farside_html_rejects_schema_drift_duplicate_dates_and_bad_total() -> None:
+    html = fixture_text("farside-live.html")
+    missing_headers = html.replace("<th>IBIT</th>", "<th></th>")
+    duplicate_date = html.replace("11 Aug 2026", "12 Aug 2026")
+    bad_total = html.replace("<td>842.0</td>", "<td>800.0</td>")
+
+    missing = FarsideEtfCollector(
+        "BTC", crawler=FakeCrawlerHtml(missing_headers)
+    ).collect(NOW)
+    duplicate = FarsideEtfCollector(
+        "BTC", crawler=FakeCrawlerHtml(duplicate_date)
+    ).collect(NOW)
+    unreconciled = FarsideEtfCollector(
+        "BTC", crawler=FakeCrawlerHtml(bad_total)
+    ).collect(NOW)
+
+    assert missing.error_code == "SCHEMA_DRIFT"
+    assert missing.observations == ()
+    assert duplicate.error_code == "DUPLICATE_PERIOD"
+    assert duplicate.observations == ()
+    assert unreconciled.error_code == "RECONCILIATION_FAILED"
+    assert unreconciled.rejected_periods == (
+        datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
 
 
 class RoutingTransport:

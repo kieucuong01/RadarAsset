@@ -7,6 +7,7 @@ from typing import Any
 
 from smart_insights.contracts import ObservationInput
 from smart_insights.parsers.markdown_table import parse_markdown_table
+from smart_insights.parsers.html_table import normalize_farside_table
 from smart_insights.sources import source_for_code
 
 from . import CollectionBatch
@@ -65,12 +66,26 @@ class FarsideEtfCollector:
         except (UnicodeDecodeError, json.JSONDecodeError):
             return CollectionBatch(self.source, snapshot, (), "INVALID_RESPONSE")
         markdown = payload.get("markdown") if isinstance(payload, dict) else None
-        if not isinstance(markdown, str) or not markdown.strip():
+        raw_html = payload.get("rawHtml") if isinstance(payload, dict) else None
+        if not (
+            isinstance(markdown, str) and markdown.strip()
+        ) and not (isinstance(raw_html, str) and raw_html.strip()):
             return CollectionBatch(self.source, snapshot, (), "SCHEMA_DRIFT")
         try:
-            table = parse_markdown_table(
-                markdown, required_headers=("Date", "Total")
-            )
+            if isinstance(raw_html, str) and raw_html.strip():
+                try:
+                    table = normalize_farside_table(raw_html)
+                except ValueError:
+                    if not isinstance(markdown, str) or not markdown.strip():
+                        raise
+                    table = parse_markdown_table(
+                        markdown, required_headers=("Date", "Total")
+                    )
+            else:
+                assert isinstance(markdown, str)
+                table = parse_markdown_table(
+                    markdown, required_headers=("Date", "Total")
+                )
         except ValueError as error:
             return CollectionBatch(self.source, snapshot, (), str(error))
 

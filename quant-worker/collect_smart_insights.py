@@ -42,6 +42,7 @@ from smart_insights.collectors.world_gold_council import WorldGoldCouncilCollect
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.crawl4ai_client import Crawl4AIClient
+from smart_insights.scrapling_client import ScraplingClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
@@ -299,7 +300,7 @@ _COINSHARES_REPORT = re.compile(
 )
 
 
-def _discover_coinshares_report(crawler: Crawl4AIClient) -> str:
+def _discover_coinshares_report(crawler: Any) -> str:
     source = source_for_code("coinshares-weekly")
     snapshot = crawler.scrape(source, source.urls[0])
     try:
@@ -411,13 +412,15 @@ def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
     *,
     browser_client: Any | None = None,
+    scrapling_client: Any | None = None,
 ) -> Mapping[str, BatchCollector]:
     crawler = browser_client or Crawl4AIClient()
+    scrapling = scrapling_client or ScraplingClient()
 
     def coinshares(as_of: datetime) -> CollectionBatch:
-        report_url = _discover_coinshares_report(crawler)
+        report_url = _discover_coinshares_report(scrapling)
         return CoinSharesCollector(
-            crawler=crawler, report_url=report_url
+            crawler=scrapling, report_url=report_url
         ).collect(as_of)
 
     def bitinfocharts(as_of: datetime) -> CollectionBatch:
@@ -471,13 +474,13 @@ def build_batch_collectors(
     return {
         "alternative-fng": lambda as_of: AlternativeFearGreedCollector().collect(as_of),
         "farside-btc-etf": lambda as_of: FarsideEtfCollector(
-            "BTC", crawler=crawler
+            "BTC", crawler=scrapling
         ).collect(as_of),
         "farside-eth-etf": lambda as_of: FarsideEtfCollector(
-            "ETH", crawler=crawler
+            "ETH", crawler=scrapling
         ).collect(as_of),
         "farside-sol-etf": lambda as_of: FarsideEtfCollector(
-            "SOL", crawler=crawler
+            "SOL", crawler=scrapling
         ).collect(as_of),
         "coinmetrics-community": lambda as_of: CoinMetricsCollector().collect(as_of),
         "mempool-space": lambda as_of: MempoolSpaceCollector().collect(as_of),
