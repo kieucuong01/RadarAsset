@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from email.message import Message
+import hashlib
+import json
+from pathlib import Path
+import socket
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -15,6 +21,9 @@ from smart_insights.contracts import (
     SourceDefinition,
     SourceRunResult,
 )
+from smart_insights.artifacts import ArtifactIntegrityError, ArtifactStore
+from smart_insights.firecrawl import FirecrawlClient
+from smart_insights.http import SourceFetchError, UrllibTransport
 from smart_insights.sources import (
     SOURCE_CODES,
     is_source_url_allowed,
@@ -24,6 +33,78 @@ from smart_insights.sources import (
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+class FakeResponse:
+    def __init__(
+        self,
+        body: bytes,
+        *,
+        url: str = "https://example.test/source",
+        status: int = 200,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self._body = body
+        self._offset = 0
+        self._url = url
+        self.status = status
+        self.headers = headers or {}
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def geturl(self) -> str:
+        return self._url
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            size = len(self._body) - self._offset
+        chunk = self._body[self._offset : self._offset + size]
+        self._offset += len(chunk)
+        return chunk
+
+
+class FakeOpener:
+    def __init__(self, *outcomes: FakeResponse | Exception) -> None:
+        self.outcomes = list(outcomes)
+        self.attempts = 0
+
+    def open(self, _request: object, *, timeout: float) -> FakeResponse:
+        assert timeout > 0
+        self.attempts += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class FakeJsonTransport:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def post_json(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        return self.payload
+
+
+def http_error(url: str, status: int, headers: dict[str, str] | None = None) -> HTTPError:
+    message = Message()
+    for name, value in (headers or {}).items():
+        message[name] = value
+    return HTTPError(url, status, "upstream detail must stay private", message, None)
+
+
+def snapshot(content: bytes = b"payload") -> RawSnapshot:
+    return RawSnapshot(
+        content=content,
+        content_type="application/json",
+        source_url="https://farside.co.uk/btc/",
+        effective_at=None,
+        published_at=None,
+        observed_at=NOW,
+    )
 
 
 def test_registry_rejects_unknown_and_non_https_sources() -> None:
@@ -155,3 +236,147 @@ def test_snapshot_and_source_run_require_aware_ordered_timestamps() -> None:
             started_at=NOW,
             finished_at=NOW - timedelta(seconds=1),
         )
+
+
+def test_http_transport_rejects_redirects_and_oversized_bodies() -> None:
+    redirected = UrllibTransport(
+        opener=FakeOpener(
+            FakeResponse(b"{}", url="https://redirected.example.test/source")
+        )
+    )
+    with pytest.raises(SourceFetchError) as redirect_error:
+        redirected.fetch(
+            "https://example.test/source", timeout_seconds=1, max_bytes=100
+        )
+    assert redirect_error.value.code == "REDIRECT_REJECTED"
+    assert "redirected.example.test" not in str(redirect_error.value)
+
+    oversized = UrllibTransport(
+        opener=FakeOpener(
+            FakeResponse(b"12345", headers={"Content-Length": "5"})
+        )
+    )
+    with pytest.raises(SourceFetchError) as size_error:
+        oversized.fetch(
+            "https://example.test/source", timeout_seconds=1, max_bytes=4
+        )
+    assert size_error.value.code == "RESPONSE_TOO_LARGE"
+
+
+def test_http_transport_retries_rate_limit_and_caps_retry_after() -> None:
+    url = "https://example.test/source"
+    opener = FakeOpener(
+        http_error(url, 429, {"Retry-After": "120"}),
+        http_error(url, 429, {"Retry-After": "120"}),
+        http_error(url, 429, {"Retry-After": "120"}),
+    )
+    sleeps: list[float] = []
+    transport = UrllibTransport(opener=opener, sleep=sleeps.append)
+
+    with pytest.raises(SourceFetchError) as error:
+        transport.fetch(url, timeout_seconds=1, max_bytes=100)
+
+    assert error.value.code == "RATE_LIMITED"
+    assert opener.attempts == 3
+    assert sleeps == [60.0, 60.0]
+    assert "upstream detail" not in str(error.value)
+
+
+def test_http_transport_maps_timeout_and_invalid_json_to_stable_codes() -> None:
+    timeout_transport = UrllibTransport(
+        opener=FakeOpener(URLError(socket.timeout("private timeout detail")))
+    )
+    with pytest.raises(SourceFetchError) as timeout_error:
+        timeout_transport.fetch(
+            "https://example.test/source", timeout_seconds=1, max_bytes=100
+        )
+    assert timeout_error.value.code == "TIMEOUT"
+
+    json_transport = UrllibTransport(
+        opener=FakeOpener(FakeResponse(b"not-json"))
+    )
+    with pytest.raises(SourceFetchError) as json_error:
+        json_transport.post_json(
+            "https://example.test/source",
+            {"request": "value"},
+            headers={},
+            timeout_seconds=1,
+            max_bytes=100,
+        )
+    assert json_error.value.code == "INVALID_RESPONSE"
+
+
+def test_firecrawl_rejects_url_outside_source_allowlist() -> None:
+    client = FirecrawlClient(
+        "http://127.0.0.1:3002", transport=FakeJsonTransport({})
+    )
+    with pytest.raises(ValueError, match="allow-listed"):
+        client.scrape(
+            source_for_code("farside-btc-etf"), "https://evil.invalid/source"
+        )
+
+
+def test_firecrawl_creates_private_snapshot_only_for_matching_source_url() -> None:
+    response = {
+        "success": True,
+        "data": {
+            "markdown": "| Date | Flow |\n|---|---:|\n| 13 Aug | 10 |",
+            "rawHtml": "<table><tr><td>13 Aug</td><td>10</td></tr></table>",
+            "metadata": {"sourceURL": "https://farside.co.uk/btc/"},
+        },
+    }
+    client = FirecrawlClient(
+        "http://127.0.0.1:3002",
+        transport=FakeJsonTransport(response),
+        clock=lambda: NOW,
+    )
+
+    result = client.scrape(
+        source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+    )
+
+    assert result.source_url == "https://farside.co.uk/btc/"
+    assert result.observed_at == NOW
+    assert json.loads(result.content) == response["data"]
+
+    mismatched = FirecrawlClient(
+        "http://127.0.0.1:3002",
+        transport=FakeJsonTransport(
+            {
+                "success": True,
+                "data": {
+                    "markdown": "unexpected",
+                    "metadata": {"sourceURL": "https://evil.invalid/source"},
+                },
+            }
+        ),
+        clock=lambda: NOW,
+    )
+    with pytest.raises(SourceFetchError) as error:
+        mismatched.scrape(
+            source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
+        )
+    assert error.value.code == "REDIRECT_REJECTED"
+
+
+def test_artifact_store_is_atomic_and_content_addressed(tmp_path: Path) -> None:
+    stored = ArtifactStore(tmp_path).write(snapshot(), "farside-btc-etf")
+
+    assert stored.content_hash == hashlib.sha256(b"payload").hexdigest()
+    assert stored.locator == (
+        f"farside-btc-etf/2026/08/{stored.content_hash}.json.gz"
+    )
+    assert ArtifactStore(tmp_path).read(stored.locator) == b"payload"
+    assert not list(tmp_path.rglob("*.tmp"))
+
+
+def test_artifact_store_rejects_traversal_and_hash_mismatch(tmp_path: Path) -> None:
+    store = ArtifactStore(tmp_path)
+    with pytest.raises(ValueError, match="inside"):
+        store.read("../outside.json.gz")
+
+    stored = store.write(snapshot(), "farside-btc-etf")
+    artifact_path = tmp_path.joinpath(*stored.locator.split("/"))
+    artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered")
+    with pytest.raises(ArtifactIntegrityError, match="checksum"):
+        store.read(stored.locator)
