@@ -308,10 +308,17 @@ def _discover_coinshares_report(crawler: Any) -> str:
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise SourceFetchError("INVALID_RESPONSE") from error
     markdown = payload.get("markdown") if isinstance(payload, dict) else None
-    if not isinstance(markdown, str):
+    raw_html = payload.get("rawHtml") if isinstance(payload, dict) else None
+    documents = tuple(
+        value
+        for value in (markdown, raw_html)
+        if isinstance(value, str) and value.strip()
+    )
+    if not documents:
         raise SourceFetchError("SCHEMA_DRIFT")
+    document = "\n".join(documents)
     candidates: list[tuple[datetime, str]] = []
-    for match in _COINSHARES_REPORT.finditer(markdown):
+    for match in _COINSHARES_REPORT.finditer(document):
         try:
             year = int(match.group(3))
             if year < 100:

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import importlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 from collect_smart_insights import build_batch_collectors, run_live_smoke
@@ -30,6 +32,26 @@ FIXTURES = Path(__file__).parent / "fixtures" / "smart_insights" / "crypto"
 
 def fixture_text(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def fixture_json(name: str) -> object:
+    return json.loads(fixture_text(name))
+
+
+def coinshares_ocr_module():
+    return importlib.import_module("smart_insights.coinshares_ocr")
+
+
+def ocr_tokens(name: str) -> tuple[object, ...]:
+    module = coinshares_ocr_module()
+    return tuple(
+        module.OcrToken(
+            text=row["text"],
+            confidence=Decimal(row["confidence"]),
+            box=tuple(row["box"]),
+        )
+        for row in fixture_json(name)
+    )
 
 
 class FakeTransport:
@@ -93,6 +115,68 @@ class FakeCrawlerHtml:
             observed_at=NOW,
             metadata={"collector": "scrapling"},
         )
+
+
+class FakeCoinSharesCrawler:
+    def __init__(self, html: str) -> None:
+        self.html = html
+        self.downloads: list[str] = []
+
+    def scrape(self, source: object, url: str) -> RawSnapshot:
+        return RawSnapshot(
+            content=json.dumps({"rawHtml": self.html}).encode("utf-8"),
+            content_type="application/json",
+            source_url=url,
+            effective_at=None,
+            published_at=None,
+            observed_at=NOW,
+            metadata={"collector": "scrapling"},
+        )
+
+    def download(
+        self, source: object, url: str, *, content_types: object
+    ) -> SimpleNamespace:
+        self.downloads.append(url)
+        content = b"asset-image" if "ranked-flows-detail" in url else b"region-image"
+        return SimpleNamespace(
+            content=content,
+            content_type="image/png",
+            source_url=url,
+            observed_at=NOW,
+            metadata={"collector": "scrapling"},
+        )
+
+
+class FakeOcrEngine:
+    version = "fake-ocr-v1"
+
+    def __init__(
+        self, asset_tokens: tuple[object, ...], region_tokens: tuple[object, ...]
+    ) -> None:
+        self.asset_tokens = asset_tokens
+        self.region_tokens = region_tokens
+
+    def recognize(self, image: bytes) -> tuple[object, ...]:
+        return self.asset_tokens if image == b"asset-image" else self.region_tokens
+
+
+def collect_coinshares(
+    *,
+    asset_tokens: tuple[object, ...] | None = None,
+    region_tokens: tuple[object, ...] | None = None,
+    html: str | None = None,
+):
+    report_url = (
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
+    )
+    return CoinSharesCollector(
+        crawler=FakeCoinSharesCrawler(html or fixture_text("coinshares-article.html")),
+        report_url=report_url,
+        ocr_engine=FakeOcrEngine(
+            asset_tokens or ocr_tokens("coinshares-asset-ocr.json"),
+            region_tokens or ocr_tokens("coinshares-region-ocr.json"),
+        ),
+    ).collect(NOW)
 
 
 def test_batch_collectors_use_injected_local_crawler() -> None:
@@ -460,19 +544,46 @@ def test_deribit_rejects_unknown_instrument() -> None:
     assert batch.observations == ()
 
 
-def test_coinshares_keeps_weekly_period_separate_from_crawl_time() -> None:
-    report_url = (
-        "https://coinshares.com/insights/research-data/"
-        "fund-flows-10-08-2026/"
+def test_coinshares_discovers_only_ranked_asset_and_country_table_images() -> None:
+    module = coinshares_ocr_module()
+
+    images = module.discover_coinshares_images(
+        fixture_text("coinshares-article.html"),
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/",
     )
-    batch = CoinSharesCollector(
-        crawler=FakeCrawler(fixture_text("coinshares.md")),
-        report_url=report_url,
-    ).collect(NOW)
+
+    assert images == {
+        "asset": (
+            "https://a.storyblok.com/f/176807/1600x2000/2a1ca92d93/"
+            "ranked-flows-detail-01062026.png/m/"
+        ),
+        "region": (
+            "https://a.storyblok.com/f/176807/1600x2000/7665f2456d/"
+            "flows-by-exchange-country-01062026.png/m/"
+        ),
+    }
+
+
+def test_coinshares_reconstructs_tables_and_keeps_weekly_period() -> None:
+    module = coinshares_ocr_module()
+    asset = module.reconstruct_coinshares_table(
+        ocr_tokens("coinshares-asset-ocr.json"), dimension="asset"
+    )
+    region = module.reconstruct_coinshares_table(
+        ocr_tokens("coinshares-region-ocr.json"), dimension="region"
+    )
+
+    assert asset.global_flow_usd == Decimal("-1200000000")
+    assert asset.global_aum_usd is None
+    assert region.global_flow_usd == asset.global_flow_usd
+    assert region.global_aum_usd == Decimal("115000000000")
+    assert asset.effective_at == datetime(2026, 5, 29, tzinfo=timezone.utc)
+
+    batch = collect_coinshares()
 
     assert batch.snapshot.observed_at == NOW
     assert {row.effective_at for row in batch.observations} == {
-        datetime(2026, 8, 8, tzinfo=timezone.utc)
+        datetime(2026, 5, 29, tzinfo=timezone.utc)
     }
     bitcoin = next(
         row
@@ -480,29 +591,116 @@ def test_coinshares_keeps_weekly_period_separate_from_crawl_time() -> None:
         if row.metric_code == "crypto.coinshares.net_flow_usd"
         and row.dimensions.get("asset") == "Bitcoin"
     )
-    assert bitcoin.value == Decimal("793400000")
+    assert bitcoin.value == Decimal("-1000000000")
     assert bitcoin.dimensions["source_unit"] == "US$m"
+    assert bitcoin.published_at == datetime(2026, 6, 1, tzinfo=timezone.utc)
     assert any(
         row.metric_code == "crypto.coinshares.aum_usd"
         and row.dimensions.get("region") == "United States"
         for row in batch.observations
     )
+    payload = json.loads(batch.snapshot.content)
+    assert {image["kind"] for image in payload["images"]} == {"asset", "region"}
+    assert all(len(image["sha256"]) == 64 for image in payload["images"])
 
 
-def test_coinshares_rejects_report_without_explicit_period() -> None:
-    markdown = fixture_text("coinshares.md").replace(
-        "Data available as at close 8 August 2026.", "Weekly data."
+def test_coinshares_ocr_fails_closed_on_confidence_layout_unit_and_totals() -> None:
+    module = coinshares_ocr_module()
+    asset = list(ocr_tokens("coinshares-asset-ocr.json"))
+    region = list(ocr_tokens("coinshares-region-ocr.json"))
+
+    low_confidence = list(asset)
+    low_confidence[5] = module.OcrToken(
+        text=low_confidence[5].text,
+        confidence=Decimal("0.89"),
+        box=low_confidence[5].box,
     )
-    batch = CoinSharesCollector(
-        crawler=FakeCrawler(markdown),
-        report_url=(
-            "https://coinshares.com/insights/research-data/"
-            "fund-flows-10-08-2026/"
-        ),
-    ).collect(NOW)
+    missing_header = tuple(row for row in asset if row.text != "AUM")
+    invalid_unit = list(asset)
+    invalid_unit[0] = module.OcrToken(
+        text="Ranked Flows detail",
+        confidence=invalid_unit[0].confidence,
+        box=invalid_unit[0].box,
+    )
+    bad_total = list(region)
+    bad_total[11] = module.OcrToken(
+        text="-1,100.0",
+        confidence=bad_total[11].confidence,
+        box=bad_total[11].box,
+    )
+    ambiguous_number = list(asset)
+    ambiguous_number[5] = module.OcrToken(
+        text="-1,O00.0",
+        confidence=ambiguous_number[5].confidence,
+        box=ambiguous_number[5].box,
+    )
+    duplicate_label = list(asset)
+    duplicate_label[7] = module.OcrToken(
+        text="Bitcoin",
+        confidence=duplicate_label[7].confidence,
+        box=duplicate_label[7].box,
+    )
 
-    assert batch.error_code == "MISSING_PERIOD"
+    cases = (
+        (collect_coinshares(asset_tokens=tuple(low_confidence)), "OCR_LOW_CONFIDENCE"),
+        (collect_coinshares(asset_tokens=missing_header), "OCR_LAYOUT_DRIFT"),
+        (collect_coinshares(asset_tokens=tuple(invalid_unit)), "INVALID_UNIT"),
+        (collect_coinshares(region_tokens=tuple(bad_total)), "RECONCILIATION_FAILED"),
+        (collect_coinshares(asset_tokens=tuple(ambiguous_number)), "OCR_LAYOUT_DRIFT"),
+        (collect_coinshares(asset_tokens=tuple(duplicate_label)), "DUPLICATE_SERIES"),
+    )
+
+    for batch, error_code in cases:
+        assert batch.error_code == error_code
+        assert batch.observations == ()
+
+
+def test_coinshares_rejects_article_without_publication_date() -> None:
+    html = fixture_text("coinshares-article.html").replace(
+        "Published on Jun 1st, 2026", "Publication pending"
+    )
+    batch = collect_coinshares(html=html)
+
+    assert batch.error_code == "MISSING_PUBLISHED_AT"
     assert batch.observations == ()
+
+
+def test_coinshares_rejects_missing_region_image_and_future_publication() -> None:
+    missing_region = fixture_text("coinshares-article.html").replace(
+        '<img src="https://a.storyblok.com/f/176807/1600x2000/7665f2456d/flows-by-exchange-country-01062026.png/m/" alt="Flows by exchange country 01062026">',
+        "",
+    )
+    future = fixture_text("coinshares-article.html").replace(
+        "Published on Jun 1st, 2026", "Published on Sep 1st, 2026"
+    )
+
+    missing = collect_coinshares(html=missing_region)
+    future_batch = collect_coinshares(html=future)
+
+    assert missing.error_code == "MISSING_TABLE"
+    assert missing.observations == ()
+    assert future_batch.error_code == "INVALID_TIMESTAMP"
+    assert future_batch.observations == ()
+
+
+def test_rapidocr_adapter_normalizes_documented_boxes_texts_and_scores() -> None:
+    module = coinshares_ocr_module()
+    engine = module.RapidOcrEngine.__new__(module.RapidOcrEngine)
+    engine._engine = lambda _image: SimpleNamespace(
+        boxes=(((10.2, 20.1), (30.4, 19.8), (31.0, 40.2), (9.7, 40.0)),),
+        txts=("Bitcoin",),
+        scores=(0.98,),
+    )
+
+    tokens = engine.recognize(b"image")
+
+    assert tokens == (
+        module.OcrToken(
+            text="Bitcoin",
+            confidence=Decimal("0.98"),
+            box=(10, 20, 31, 40),
+        ),
+    )
 
 
 def test_bitinfocharts_excludes_reviewed_entities_and_reports_label_coverage() -> None:

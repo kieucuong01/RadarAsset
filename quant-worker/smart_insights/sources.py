@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 from types import MappingProxyType
 from urllib.parse import urlsplit
 
@@ -315,10 +316,17 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             "/calendar/"
         )
     if source.code == "coinshares-weekly":
-        return parsed.hostname == "coinshares.com" and (
+        article = parsed.hostname == "coinshares.com" and (
             parsed.path.startswith("/insights/research-data/fund-flows-")
             or parsed.path.startswith("/us/insights/research-data/fund-flows-")
         )
+        image = (
+            parsed.hostname == "a.storyblok.com"
+            and parsed.path.startswith("/f/176807/")
+            and re.search(r"\.(?:png|jpe?g|webp)/m/?$", parsed.path, re.IGNORECASE)
+            is not None
+        )
+        return article or image
     if source.code.startswith("wgc-"):
         return (
             parsed.hostname == "www.gold.org"

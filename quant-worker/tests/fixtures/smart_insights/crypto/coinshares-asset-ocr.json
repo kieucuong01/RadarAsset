@@ -1,0 +1,13 @@
+[
+  {"text":"Ranked Flows detail (US$m)","confidence":"0.99","box":[10,10,500,40]},
+  {"text":"ASSET","confidence":"0.99","box":[10,70,100,90]},
+  {"text":"WEEK FLOWS","confidence":"0.99","box":[200,70,310,90]},
+  {"text":"AUM","confidence":"0.99","box":[400,70,460,90]},
+  {"text":"Bitcoin","confidence":"0.98","box":[10,110,100,130]},
+  {"text":"-1,000.0","confidence":"0.98","box":[210,110,290,130]},
+  {"text":"100,000.0","confidence":"0.98","box":[400,110,500,130]},
+  {"text":"Ethereum","confidence":"0.98","box":[10,150,120,170]},
+  {"text":"-200.0","confidence":"0.98","box":[210,150,290,170]},
+  {"text":"15,000.0","confidence":"0.98","box":[400,150,490,170]},
+  {"text":"Source: CoinShares, data available as of close 29 May 2026","confidence":"0.97","box":[10,230,550,250]}
+]

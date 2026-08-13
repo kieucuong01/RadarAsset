@@ -1,0 +1,16 @@
+[
+  {"text":"Flows by Exchange Country (US$m)","confidence":"0.99","box":[10,10,520,40]},
+  {"text":"COUNTRY","confidence":"0.99","box":[10,70,110,90]},
+  {"text":"WEEK FLOWS","confidence":"0.99","box":[200,70,310,90]},
+  {"text":"AUM","confidence":"0.99","box":[400,70,460,90]},
+  {"text":"United States","confidence":"0.98","box":[10,110,150,130]},
+  {"text":"-1,199.0","confidence":"0.98","box":[210,110,290,130]},
+  {"text":"110,000.0","confidence":"0.98","box":[400,110,500,130]},
+  {"text":"Other","confidence":"0.98","box":[10,150,100,170]},
+  {"text":"-1.0","confidence":"0.98","box":[210,150,290,170]},
+  {"text":"5,000.0","confidence":"0.98","box":[400,150,490,170]},
+  {"text":"Total","confidence":"0.98","box":[10,190,100,210]},
+  {"text":"-1,200.0","confidence":"0.98","box":[210,190,290,210]},
+  {"text":"115,000.0","confidence":"0.98","box":[400,190,500,210]},
+  {"text":"Source: CoinShares, data available as of close 29 May 2026","confidence":"0.97","box":[10,270,550,290]}
+]

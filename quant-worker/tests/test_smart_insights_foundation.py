@@ -217,6 +217,14 @@ def test_discovered_links_remain_inside_source_specific_paths() -> None:
     assert not is_source_url_allowed(
         coinshares, "https://coinshares.com/company/investor-relations/"
     )
+    assert is_source_url_allowed(
+        coinshares,
+        "https://a.storyblok.com/f/176807/1600x2000/hash/ranked-flows-detail.png/m/",
+    )
+    assert not is_source_url_allowed(
+        coinshares,
+        "https://a.storyblok.com/f/999999/1600x2000/hash/ranked-flows-detail.png/m/",
+    )
 
     wgc = source_for_code("wgc-gold-etf")
     assert is_source_url_allowed(
@@ -245,6 +253,25 @@ def test_coinshares_discovery_accepts_current_two_digit_year_slugs() -> None:
 
     assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
         "https://coinshares.com/insights/research-data/fund-flows-01-06-26/"
+    )
+
+
+def test_coinshares_discovery_reads_scrapling_raw_html() -> None:
+    class Crawler:
+        @staticmethod
+        def scrape(_source: object, url: str) -> RawSnapshot:
+            content = json.dumps(
+                {
+                    "rawHtml": (
+                        '<a href="/insights/research-data/fund-flows-25-05-26/">older</a>'
+                        '<a href="/us/insights/research-data/fund-flows-01-06-26/">latest</a>'
+                    )
+                }
+            ).encode()
+            return replace(snapshot(content), source_url=url)
+
+    assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
+        "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
     )
 
 
