@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
@@ -30,6 +30,7 @@ from smart_insights.sources import (
     source_for_code,
     sources_for_schedule,
 )
+from smart_insights.validation import ObservationValidationError, validate_observations
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
@@ -380,3 +381,44 @@ def test_artifact_store_rejects_traversal_and_hash_mismatch(tmp_path: Path) -> N
     artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered")
     with pytest.raises(ArtifactIntegrityError, match="checksum"):
         store.read(stored.locator)
+
+
+def test_validation_rejects_naive_time_before_non_finite_value() -> None:
+    with pytest.raises(ObservationValidationError) as error:
+        validate_observations(
+            source_for_code("alternative-fng"),
+            [
+                ObservationInput(
+                    metric_code="crypto.fear_greed.index",
+                    value=Decimal("NaN"),
+                    effective_at=datetime(2026, 8, 13),
+                )
+            ],
+        )
+    assert error.value.code == "INVALID_TIMESTAMP"
+
+
+def test_validation_rejects_duplicates_unknown_metrics_and_source_row_overflow() -> None:
+    source = replace(source_for_code("alternative-fng"), max_rows=1)
+    row = ObservationInput(
+        metric_code="crypto.fear_greed.index",
+        value=Decimal("10"),
+        effective_at=NOW,
+    )
+    with pytest.raises(ObservationValidationError) as overflow:
+        validate_observations(source, [row, row])
+    assert overflow.value.code == "INVALID_RESPONSE"
+
+    with pytest.raises(ObservationValidationError) as unknown:
+        validate_observations(
+            source_for_code("alternative-fng"),
+            [row],
+            known_metric_codes={"crypto.other"},
+        )
+    assert unknown.value.code == "MISSING_REQUIRED_FIELD"
+
+    with pytest.raises(ObservationValidationError) as duplicate:
+        validate_observations(
+            source_for_code("alternative-fng"), [row, row]
+        )
+    assert duplicate.value.code == "DUPLICATE_CONFLICT"

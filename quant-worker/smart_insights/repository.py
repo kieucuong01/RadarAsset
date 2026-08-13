@@ -1,0 +1,529 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal
+import hashlib
+import json
+import re
+from typing import Any
+from uuid import uuid4
+
+import psycopg
+from psycopg.rows import dict_row
+
+from .artifacts import StoredArtifact
+from .contracts import ObservationInput, RawSnapshot, SourceDefinition
+from .validation import validate_observations
+
+
+_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+
+
+class ConcurrentPublicationError(RuntimeError):
+    pass
+
+
+class UnknownMetricError(RuntimeError):
+    pass
+
+
+class UnknownAssetError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationResult:
+    snapshot_id: str | None
+    provider_run_id: str
+    status: str
+    observations_inserted: int
+    observations_unchanged: int
+
+
+def _utc_key(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _natural_key(
+    row: ObservationInput, *, source_code: str, asset_id: str | None
+) -> str:
+    canonical = "|".join(
+        (
+            row.metric_code,
+            source_code,
+            asset_id or "GLOBAL",
+            _utc_key(row.effective_at),
+            row.dimension_key,
+        )
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class PostgresInsightRepository:
+    def __init__(
+        self,
+        connection: psycopg.Connection[Any],
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        if not connection.autocommit:
+            raise ValueError("Smart Insights repository requires an autocommit connection.")
+        self.connection = connection
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+
+    def publish(
+        self,
+        source: SourceDefinition,
+        snapshot: RawSnapshot,
+        artifact: StoredArtifact,
+        rows: Sequence[ObservationInput],
+    ) -> PublicationResult:
+        validated = validate_observations(source, rows)
+        self._verify_artifact(source, snapshot, artifact)
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                self._acquire_period_locks(cursor, source, validated)
+                provider_id = self._upsert_provider(cursor, source)
+                metrics = self._metric_ids(cursor, validated)
+                assets = self._asset_ids(cursor, validated)
+                snapshot_id = self._upsert_snapshot(
+                    cursor, provider_id, source, snapshot, artifact, status="fetched"
+                )
+                inserted = 0
+                unchanged = 0
+                for row in validated:
+                    asset_id = assets.get(row.asset_symbol) if row.asset_symbol else None
+                    natural_key = _natural_key(
+                        row, source_code=source.code, asset_id=asset_id
+                    )
+                    cursor.execute(
+                        """
+                        SELECT revision, value, raw_snapshot_id, quality_status, quality_flags
+                        FROM metric_observations
+                        WHERE natural_key = %s
+                        ORDER BY revision DESC
+                        LIMIT 1
+                        FOR UPDATE
+                        """,
+                        (natural_key,),
+                    )
+                    latest = cursor.fetchone()
+                    if latest is not None and (
+                        Decimal(str(latest["value"])) == row.value
+                        and str(latest["raw_snapshot_id"]) == snapshot_id
+                        and latest["quality_status"] == row.quality_status
+                        and tuple(latest["quality_flags"]) == row.quality_flags
+                    ):
+                        unchanged += 1
+                        continue
+                    revision = 1 if latest is None else int(latest["revision"]) + 1
+                    cursor.execute(
+                        """
+                        INSERT INTO metric_observations (
+                          id, metric_definition_id, provider_id, asset_id,
+                          raw_snapshot_id, effective_at, effective_start, effective_end,
+                          published_at, observed_at, revision, value, natural_key,
+                          dimension_key, dimensions, quality_status, quality_flags
+                        ) VALUES (
+                          %s, %s, %s, %s,
+                          %s, %s, %s, %s,
+                          %s, %s, %s, %s, %s,
+                          %s, %s::jsonb, %s, %s::jsonb
+                        )
+                        """,
+                        (
+                            str(uuid4()),
+                            metrics[row.metric_code],
+                            provider_id,
+                            asset_id,
+                            snapshot_id,
+                            row.effective_at,
+                            row.effective_start,
+                            row.effective_end,
+                            row.published_at,
+                            snapshot.observed_at,
+                            revision,
+                            row.value,
+                            natural_key,
+                            row.dimension_key,
+                            json.dumps(dict(row.dimensions), separators=(",", ":")),
+                            row.quality_status,
+                            json.dumps(row.quality_flags, separators=(",", ":")),
+                        ),
+                    )
+                    inserted += 1
+                cursor.execute(
+                    """
+                    UPDATE insight_raw_snapshots
+                    SET status = 'validated', error_code = NULL
+                    WHERE id = %s
+                    """,
+                    (snapshot_id,),
+                )
+                status = "succeeded" if inserted else "unchanged"
+                provider_run_id = self._insert_provider_run(
+                    cursor,
+                    source_code=source.code,
+                    status="succeeded",
+                    records_fetched=len(validated),
+                    error_code=None,
+                    retry_count=0,
+                    started_at=snapshot.observed_at,
+                    finished_at=self._clock(),
+                    metadata={
+                        "publicationStatus": status,
+                        "snapshotId": snapshot_id,
+                        "observationsInserted": inserted,
+                        "observationsUnchanged": unchanged,
+                    },
+                )
+        return PublicationResult(
+            snapshot_id=snapshot_id,
+            provider_run_id=provider_run_id,
+            status=status,
+            observations_inserted=inserted,
+            observations_unchanged=unchanged,
+        )
+
+    def quarantine(
+        self,
+        source: SourceDefinition,
+        snapshot: RawSnapshot,
+        artifact: StoredArtifact,
+        *,
+        error_code: str,
+    ) -> PublicationResult:
+        self._validate_error_code(error_code)
+        self._verify_artifact(source, snapshot, artifact)
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                provider_id = self._upsert_provider(cursor, source)
+                snapshot_id = self._upsert_snapshot(
+                    cursor,
+                    provider_id,
+                    source,
+                    snapshot,
+                    artifact,
+                    status="quarantined",
+                    error_code=error_code,
+                )
+                cursor.execute(
+                    """
+                    UPDATE insight_raw_snapshots
+                    SET status = 'quarantined', error_code = %s
+                    WHERE id = %s AND status <> 'validated'
+                    """,
+                    (error_code, snapshot_id),
+                )
+                provider_run_id = self._insert_provider_run(
+                    cursor,
+                    source_code=source.code,
+                    status="quarantined",
+                    records_fetched=0,
+                    error_code=error_code,
+                    retry_count=0,
+                    started_at=snapshot.observed_at,
+                    finished_at=self._clock(),
+                    metadata={"snapshotId": snapshot_id},
+                )
+        return PublicationResult(
+            snapshot_id=snapshot_id,
+            provider_run_id=provider_run_id,
+            status="quarantined",
+            observations_inserted=0,
+            observations_unchanged=0,
+        )
+
+    def record_failure(
+        self,
+        source: SourceDefinition,
+        *,
+        error_code: str,
+        started_at: datetime,
+        finished_at: datetime,
+        retry_count: int,
+    ) -> PublicationResult:
+        self._validate_error_code(error_code)
+        if (
+            started_at.tzinfo is None
+            or started_at.utcoffset() is None
+            or finished_at.tzinfo is None
+            or finished_at.utcoffset() is None
+            or finished_at < started_at
+            or retry_count < 0
+        ):
+            raise ValueError("Failure telemetry is invalid.")
+        with self.connection.transaction():
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                self._upsert_provider(cursor, source)
+                provider_run_id = self._insert_provider_run(
+                    cursor,
+                    source_code=source.code,
+                    status="failed",
+                    records_fetched=0,
+                    error_code=error_code,
+                    retry_count=retry_count,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    metadata={},
+                )
+        return PublicationResult(
+            snapshot_id=None,
+            provider_run_id=provider_run_id,
+            status="failed",
+            observations_inserted=0,
+            observations_unchanged=0,
+        )
+
+    def last_source_run(self, source_code: str) -> dict[str, Any] | None:
+        return self._last_run(source_code, successful_only=False)
+
+    def last_successful_source_run(self, source_code: str) -> dict[str, Any] | None:
+        return self._last_run(source_code, successful_only=True)
+
+    def source_health_rows(self, source_code: str | None = None) -> list[dict[str, Any]]:
+        parameters: tuple[object, ...] = () if source_code is None else (source_code,)
+        where = "" if source_code is None else "WHERE provider.code = %s"
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                f"""
+                SELECT provider.code AS source_code,
+                       provider.name AS source_name,
+                       MAX(observation.effective_at) AS last_effective_at,
+                       MAX(observation.observed_at) AS last_observed_at,
+                       latest_run.status AS last_run_status,
+                       latest_run.error_code AS last_error_code,
+                       latest_quarantine.observed_at AS last_quarantined_at
+                FROM data_providers provider
+                LEFT JOIN metric_observations observation
+                  ON observation.provider_id = provider.id
+                 AND observation.quality_status IN ('passed', 'warning')
+                LEFT JOIN LATERAL (
+                  SELECT status, error_code
+                  FROM provider_runs
+                  WHERE provider_runs.provider = provider.code
+                  ORDER BY finished_at DESC NULLS LAST, created_at DESC
+                  LIMIT 1
+                ) latest_run ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT observed_at
+                  FROM insight_raw_snapshots
+                  WHERE provider_id = provider.id AND status = 'quarantined'
+                  ORDER BY observed_at DESC
+                  LIMIT 1
+                ) latest_quarantine ON TRUE
+                {where}
+                GROUP BY provider.code, provider.name, latest_run.status,
+                         latest_run.error_code, latest_quarantine.observed_at
+                ORDER BY provider.code
+                """,
+                parameters,
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def _last_run(
+        self, source_code: str, *, successful_only: bool
+    ) -> dict[str, Any] | None:
+        status_filter = "AND status = 'succeeded'" if successful_only else ""
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                f"""
+                SELECT provider, status, records_fetched, error_code, retry_count,
+                       duration_ms, started_at, finished_at, created_at, metadata
+                FROM provider_runs
+                WHERE provider = %s {status_filter}
+                ORDER BY finished_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                """,
+                (source_code,),
+            )
+            row = cursor.fetchone()
+        return None if row is None else dict(row)
+
+    @staticmethod
+    def _validate_error_code(error_code: str) -> None:
+        if not _ERROR_CODE.fullmatch(error_code):
+            raise ValueError("Error code is not supported.")
+
+    @staticmethod
+    def _verify_artifact(
+        source: SourceDefinition, snapshot: RawSnapshot, artifact: StoredArtifact
+    ) -> None:
+        expected_hash = hashlib.sha256(snapshot.content).hexdigest()
+        if (
+            artifact.content_hash != expected_hash
+            or artifact.byte_count != len(snapshot.content)
+            or not artifact.locator.startswith(f"{source.code}/")
+        ):
+            raise ValueError("Stored artifact does not match the source snapshot.")
+
+    @staticmethod
+    def _acquire_period_locks(
+        cursor: psycopg.Cursor[Any],
+        source: SourceDefinition,
+        rows: Sequence[ObservationInput],
+    ) -> None:
+        effective_days = sorted(
+            {row.effective_at.astimezone(timezone.utc).date().isoformat() for row in rows}
+        )
+        for effective_day in effective_days:
+            lock_key = f"smart-insights:{source.code}:{effective_day}"
+            cursor.execute(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended(%s, 0)) AS acquired",
+                (lock_key,),
+            )
+            row = cursor.fetchone()
+            if row is None or not row["acquired"]:
+                raise ConcurrentPublicationError("Source period is already publishing.")
+
+    @staticmethod
+    def _upsert_provider(
+        cursor: psycopg.Cursor[Any], source: SourceDefinition
+    ) -> str:
+        cursor.execute(
+            """
+            INSERT INTO data_providers (
+              id, code, name, terms_url, license_scope, status, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, 'active', NOW(), NOW())
+            ON CONFLICT (code) DO UPDATE SET
+              name = EXCLUDED.name,
+              terms_url = COALESCE(EXCLUDED.terms_url, data_providers.terms_url),
+              license_scope = CASE
+                WHEN data_providers.license_scope = 'public_official'
+                  OR EXCLUDED.license_scope = 'public_official'
+                THEN 'public_official'
+                ELSE data_providers.license_scope
+              END,
+              updated_at = NOW()
+            RETURNING id
+            """,
+            (
+                str(uuid4()),
+                source.code,
+                source.name,
+                source.terms_url,
+                source.license_scope.value,
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Data provider upsert did not return an id.")
+        return str(row["id"])
+
+    @staticmethod
+    def _metric_ids(
+        cursor: psycopg.Cursor[Any], rows: Sequence[ObservationInput]
+    ) -> dict[str, str]:
+        codes = sorted({row.metric_code for row in rows})
+        cursor.execute(
+            "SELECT id, code FROM metric_definitions WHERE code = ANY(%s)", (codes,)
+        )
+        resolved = {str(row["code"]): str(row["id"]) for row in cursor.fetchall()}
+        missing = set(codes) - set(resolved)
+        if missing:
+            raise UnknownMetricError("One or more metrics are not registered.")
+        return resolved
+
+    @staticmethod
+    def _asset_ids(
+        cursor: psycopg.Cursor[Any], rows: Sequence[ObservationInput]
+    ) -> dict[str, str]:
+        symbols = sorted({row.asset_symbol for row in rows if row.asset_symbol})
+        if not symbols:
+            return {}
+        cursor.execute("SELECT id, symbol FROM assets WHERE symbol = ANY(%s)", (symbols,))
+        resolved = {str(row["symbol"]): str(row["id"]) for row in cursor.fetchall()}
+        if set(symbols) - set(resolved):
+            raise UnknownAssetError("One or more assets are not registered.")
+        return resolved
+
+    @staticmethod
+    def _upsert_snapshot(
+        cursor: psycopg.Cursor[Any],
+        provider_id: str,
+        source: SourceDefinition,
+        snapshot: RawSnapshot,
+        artifact: StoredArtifact,
+        *,
+        status: str,
+        error_code: str | None = None,
+    ) -> str:
+        cursor.execute(
+            """
+            INSERT INTO insight_raw_snapshots (
+              id, provider_id, source_url, effective_at, published_at, observed_at,
+              content_hash, content_type, storage_locator, parser_version,
+              status, error_code, metadata
+            ) VALUES (
+              %s, %s, %s, %s, %s, %s,
+              %s, %s, %s, %s,
+              %s, %s, %s::jsonb
+            )
+            ON CONFLICT (provider_id, source_url, content_hash) DO UPDATE
+              SET provider_id = EXCLUDED.provider_id
+            RETURNING id
+            """,
+            (
+                str(uuid4()),
+                provider_id,
+                snapshot.source_url,
+                snapshot.effective_at,
+                snapshot.published_at,
+                snapshot.observed_at,
+                artifact.content_hash,
+                snapshot.content_type,
+                artifact.locator,
+                source.parser_version,
+                status,
+                error_code,
+                json.dumps(dict(snapshot.metadata), separators=(",", ":")),
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Snapshot upsert did not return an id.")
+        return str(row["id"])
+
+    @staticmethod
+    def _insert_provider_run(
+        cursor: psycopg.Cursor[Any],
+        *,
+        source_code: str,
+        status: str,
+        records_fetched: int,
+        error_code: str | None,
+        retry_count: int,
+        started_at: datetime,
+        finished_at: datetime,
+        metadata: dict[str, object],
+    ) -> str:
+        provider_run_id = str(uuid4())
+        duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1_000))
+        cursor.execute(
+            """
+            INSERT INTO provider_runs (
+              id, research_run_id, provider, status, records_fetched,
+              error_message, error_code, retry_count, duration_ms, metadata,
+              started_at, finished_at, created_at
+            ) VALUES (
+              %s, NULL, %s, %s, %s,
+              NULL, %s, %s, %s, %s::jsonb,
+              %s, %s, NOW()
+            )
+            """,
+            (
+                provider_run_id,
+                source_code,
+                status,
+                records_fetched,
+                error_code,
+                retry_count,
+                duration_ms,
+                json.dumps(metadata, separators=(",", ":")),
+                started_at,
+                finished_at,
+            ),
+        )
+        return provider_run_id
