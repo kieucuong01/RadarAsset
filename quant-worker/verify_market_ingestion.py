@@ -197,6 +197,18 @@ def verify_health(
     return errors
 
 
+def health_json_output(health: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    output = {**health, "status": "succeeded" if not errors else "failed", "errors": errors}
+    for key in (
+        "oldest_backlog_at",
+        "oldest_due_backlog_at",
+        "last_scheduler_success_at",
+        "worker_heartbeat_at",
+    ):
+        output[key] = health[key].isoformat() if health.get(key) else None
+    return output
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Verify production market ingestion health.")
     parser.add_argument("--env-file", default=".env.local")
@@ -242,20 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             maximum_backlog_age_hours=args.maximum_backlog_age_hours,
             maximum_recent_failures=args.maximum_recent_failures,
         )
-        output = {
-            **health,
-            "oldest_backlog_at": health["oldest_backlog_at"].isoformat()
-            if health["oldest_backlog_at"]
-            else None,
-            "last_scheduler_success_at": health["last_scheduler_success_at"].isoformat()
-            if health["last_scheduler_success_at"]
-            else None,
-            "worker_heartbeat_at": health["worker_heartbeat_at"].isoformat()
-            if health["worker_heartbeat_at"]
-            else None,
-            "status": "succeeded" if not errors else "failed",
-            "errors": errors,
-        }
+        output = health_json_output(health, errors)
         print(json.dumps(output, separators=(",", ":")))
         return 0 if not errors else 1
     except SchedulerAlreadyRunning as error:

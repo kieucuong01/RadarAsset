@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, start_scheduler_run, verify_health
+from verify_market_ingestion import health_json_output
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +41,22 @@ def test_health_verifier_requires_live_worker_when_due_work_exists() -> None:
     )
 
     assert errors == ["worker_stale"]
+
+
+def test_health_json_serializes_all_operational_timestamps() -> None:
+    now = datetime(2026, 8, 14, 9, 5, tzinfo=timezone.utc)
+
+    output = health_json_output(
+        {
+            "oldest_backlog_at": now,
+            "oldest_due_backlog_at": now,
+            "last_scheduler_success_at": now,
+            "worker_heartbeat_at": now,
+        },
+        [],
+    )
+
+    assert output["oldest_due_backlog_at"] == now.isoformat()
 
 
 def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:
