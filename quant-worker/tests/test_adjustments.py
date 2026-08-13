@@ -91,3 +91,14 @@ def test_unverified_action_never_changes_prices() -> None:
 
     assert [row.close for row in result.rows] == [Decimal("100"), Decimal("90")]
     assert result.skipped_unverified == 1
+
+
+def test_cash_dividend_is_converted_from_vnd_to_vnstock_thousand_vnd_price_units() -> None:
+    result = adjust_total_return_bars(
+        [daily(2, "13.5"), daily(3, "12.5")],
+        [action(action_type="cash_dividend", cash_per_share=Decimal("1000"))],
+        coverage_complete=True,
+        cash_value_scale=Decimal("1000"),
+    )
+
+    assert result.rows[0].close == Decimal("12.5000000000000000000000000000000000")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import Decimal
 
 from .adjustments import adjust_total_return_bars
 from .corporate_actions import CorporateActionRecord
@@ -20,6 +21,11 @@ def build_adjusted_publication(
         raw.rows,
         action_rows,
         coverage_complete=corporate_action_coverage_complete,
+        cash_value_scale=(
+            Decimal("1000")
+            if raw.market == "vn_equity" and raw.provider_code == "vnstock-vci-free"
+            else Decimal("1")
+        ),
     )
     metadata = {
         **raw.source_metadata,
@@ -31,6 +37,9 @@ def build_adjusted_publication(
         "corporateActionCoverageComplete": corporate_action_coverage_complete,
         "calendarVersion": HOSE_CALENDAR_VERSION,
         "timezone": "Asia/Ho_Chi_Minh",
+        "priceUnit": "thousand_vnd" if raw.market == "vn_equity" else raw.currency,
+        "corporateActionCashUnit": raw.currency,
+        "cashValueScaleToPriceUnit": 1000 if raw.market == "vn_equity" else 1,
         "appliedEventCount": result.applied_event_count,
         "skippedUnverifiedEventCount": result.skipped_unverified,
     }

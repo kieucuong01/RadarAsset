@@ -30,7 +30,7 @@ def test_adjusted_publication_links_raw_manifest_actions_and_calendar() -> None:
         action_type="cash_dividend",
         status="verified",
         ex_right_date=date(2025, 1, 3),
-        cash_per_share=Decimal("10"),
+        cash_per_share=Decimal("10000"),
         source_payload={},
     )
 

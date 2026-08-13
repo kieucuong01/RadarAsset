@@ -24,7 +24,10 @@ class AdjustmentResult:
 
 
 def _event_factor(
-    previous_close: Decimal, actions: list[CorporateActionRecord]
+    previous_close: Decimal,
+    actions: list[CorporateActionRecord],
+    *,
+    cash_value_scale: Decimal,
 ) -> Decimal:
     cash = sum(
         (
@@ -34,6 +37,7 @@ def _event_factor(
         ),
         Decimal(0),
     )
+    cash /= cash_value_scale
     distribution = sum(
         (
             item.distribution_ratio
@@ -53,7 +57,7 @@ def _event_factor(
     )
     subscription_value = sum(
         (
-            item.subscription_ratio * item.subscription_price
+            item.subscription_ratio * item.subscription_price / cash_value_scale
             for item in actions
             if item.action_type == "rights_issue"
             and item.subscription_ratio is not None
@@ -77,9 +81,12 @@ def adjust_total_return_bars(
     actions: Iterable[CorporateActionRecord],
     *,
     coverage_complete: bool,
+    cash_value_scale: Decimal = Decimal("1"),
 ) -> AdjustmentResult:
     if not coverage_complete:
         raise AdjustmentUnavailable("Corporate action coverage is incomplete.")
+    if not cash_value_scale.is_finite() or cash_value_scale <= 0:
+        raise AdjustmentUnavailable("Corporate action currency scale is invalid.")
     normalized = normalize_bars(rows)
     if not normalized:
         raise AdjustmentUnavailable("Raw dataset is empty.")
@@ -105,7 +112,16 @@ def adjust_total_return_bars(
         ]
         if not previous:
             continue
-        factors.append((ex_date, _event_factor(previous[-1].close, by_date[ex_date])))
+        factors.append(
+            (
+                ex_date,
+                _event_factor(
+                    previous[-1].close,
+                    by_date[ex_date],
+                    cash_value_scale=cash_value_scale,
+                ),
+            )
+        )
 
     adjusted: list[Bar] = []
     with localcontext() as context:
