@@ -1,0 +1,46 @@
+{
+  "btc_dvol": {
+    "jsonrpc": "2.0",
+    "result": {
+      "data": [
+        [1786406400000, 54.0, 57.0, 52.0, 55.5],
+        [1786492800000, 55.5, 59.0, 54.0, 58.0],
+        [1786579200000, 58.0, 60.0, 56.0, 59.0]
+      ],
+      "continuation": null
+    },
+    "id": 1
+  },
+  "eth_dvol": {
+    "jsonrpc": "2.0",
+    "result": {
+      "data": [
+        [1786406400000, 60.0, 64.0, 59.0, 62.0],
+        [1786492800000, 62.0, 66.0, 61.0, 65.0],
+        [1786579200000, 65.0, 67.0, 63.0, 66.0]
+      ],
+      "continuation": null
+    },
+    "id": 2
+  },
+  "btc_ticker": {
+    "jsonrpc": "2.0",
+    "result": {
+      "instrument_name": "BTC-PERPETUAL",
+      "timestamp": 1786613400000,
+      "open_interest": 18234.5,
+      "current_funding": 0.000012
+    },
+    "id": 3
+  },
+  "eth_ticker": {
+    "jsonrpc": "2.0",
+    "result": {
+      "instrument_name": "ETH-PERPETUAL",
+      "timestamp": 1786613400000,
+      "open_interest": 243500.25,
+      "current_funding": -0.000008
+    },
+    "id": 4
+  }
+}

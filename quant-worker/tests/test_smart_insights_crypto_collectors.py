@@ -6,16 +6,20 @@ import json
 from pathlib import Path
 
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
+from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
+from smart_insights.collectors.coinshares import CoinSharesCollector
 from smart_insights.collectors.defillama import (
     DefiLlamaChainsCollector,
     DefiLlamaStablecoinsCollector,
 )
 from smart_insights.collectors.farside import FarsideEtfCollector
+from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot
 from smart_insights.http import HttpResponse
 from smart_insights.parsers.markdown_table import parse_markdown_table
+from smart_insights.validation import validate_observations
 
 
 NOW = datetime(2026, 8, 13, 9, 30, tzinfo=timezone.utc)
@@ -297,6 +301,7 @@ def test_defillama_normalizes_closed_stablecoin_series_and_observed_chain_tvl() 
     ) == 150_000_000
     assert {row.effective_at for row in chains.observations} == {NOW}
     assert all(row.dimensions["frequency"] == "observed_daily" for row in chains.observations)
+    assert validate_observations(chains.source, chains.observations) == chains.observations
 
 
 def test_defillama_rejects_negative_and_duplicate_series() -> None:
@@ -315,3 +320,139 @@ def test_defillama_rejects_negative_and_duplicate_series() -> None:
     ).collect(NOW)
     assert duplicate.error_code == "DUPLICATE_SERIES"
     assert duplicate.observations == ()
+
+
+def test_deribit_collects_closed_dvol_and_observation_time_perpetuals() -> None:
+    payload = json.loads(fixture_text("deribit.json"))
+    transport = RoutingTransport(
+        {
+            "currency=BTC": json.dumps(payload["btc_dvol"]),
+            "currency=ETH": json.dumps(payload["eth_dvol"]),
+            "instrument_name=BTC-PERPETUAL": json.dumps(payload["btc_ticker"]),
+            "instrument_name=ETH-PERPETUAL": json.dumps(payload["eth_ticker"]),
+        }
+    )
+
+    batch = DeribitCollector(transport=transport).collect(NOW)
+
+    btc_dvol = [
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.derivatives.btc_dvol"
+    ]
+    assert [row.value for row in btc_dvol] == [Decimal("55.5"), Decimal("58.0")]
+    assert all(row.effective_at.hour == 0 for row in btc_dvol)
+    ticker_rows = [
+        row for row in batch.observations if row.dimensions.get("frequency") == "instant"
+    ]
+    assert {row.dimensions["instrument"] for row in ticker_rows} == {
+        "BTC-PERPETUAL",
+        "ETH-PERPETUAL",
+    }
+    assert all(row.effective_at == NOW for row in ticker_rows)
+
+
+def test_deribit_rejects_unknown_instrument() -> None:
+    payload = json.loads(fixture_text("deribit.json"))
+    payload["btc_ticker"]["result"]["instrument_name"] = "BTC-UNDECLARED"
+    transport = RoutingTransport(
+        {
+            "currency=BTC": json.dumps(payload["btc_dvol"]),
+            "currency=ETH": json.dumps(payload["eth_dvol"]),
+            "instrument_name=BTC-PERPETUAL": json.dumps(payload["btc_ticker"]),
+            "instrument_name=ETH-PERPETUAL": json.dumps(payload["eth_ticker"]),
+        }
+    )
+
+    batch = DeribitCollector(transport=transport).collect(NOW)
+
+    assert batch.error_code == "UNKNOWN_INSTRUMENT"
+    assert batch.observations == ()
+
+
+def test_coinshares_keeps_weekly_period_separate_from_crawl_time() -> None:
+    report_url = (
+        "https://coinshares.com/insights/research-data/"
+        "fund-flows-10-08-2026/"
+    )
+    batch = CoinSharesCollector(
+        firecrawl=FakeFirecrawl(fixture_text("coinshares.md")),
+        report_url=report_url,
+    ).collect(NOW)
+
+    assert batch.snapshot.observed_at == NOW
+    assert {row.effective_at for row in batch.observations} == {
+        datetime(2026, 8, 8, tzinfo=timezone.utc)
+    }
+    bitcoin = next(
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.coinshares.net_flow_usd"
+        and row.dimensions.get("asset") == "Bitcoin"
+    )
+    assert bitcoin.value == Decimal("793400000")
+    assert bitcoin.dimensions["source_unit"] == "US$m"
+    assert any(
+        row.metric_code == "crypto.coinshares.aum_usd"
+        and row.dimensions.get("region") == "United States"
+        for row in batch.observations
+    )
+
+
+def test_coinshares_rejects_report_without_explicit_period() -> None:
+    markdown = fixture_text("coinshares.md").replace(
+        "Data available as at close 8 August 2026.", "Weekly data."
+    )
+    batch = CoinSharesCollector(
+        firecrawl=FakeFirecrawl(markdown),
+        report_url=(
+            "https://coinshares.com/insights/research-data/"
+            "fund-flows-10-08-2026/"
+        ),
+    ).collect(NOW)
+
+    assert batch.error_code == "MISSING_PERIOD"
+    assert batch.observations == ()
+
+
+def test_bitinfocharts_excludes_reviewed_entities_and_reports_label_coverage() -> None:
+    previous = {
+        "bc1q0000000000000000000000000000000000001": Decimal("119000"),
+        "3M219KR5vEneNb47ewrPfWyb5jQ2DjxRP6": Decimal("51000"),
+        "1BoatSLRHtKNngkdXEeobR76b53LETtpyT": Decimal("10000"),
+    }
+    batch = BitInfoChartsCollector(
+        firecrawl=FakeFirecrawl(fixture_text("bitinfocharts.md"))
+    ).collect(NOW, previous_balances=previous)
+    proxy = next(
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.balance_change_btc"
+    )
+
+    assert proxy.value == Decimal("-10000")
+    assert proxy.dimensions["cohort"] == "reviewed_non_exchange"
+    assert Decimal(proxy.dimensions["label_coverage"]) < Decimal("1")
+    assert proxy.dimensions["entrant_count"] == "0"
+    assert proxy.dimensions["exit_count"] == "1"
+    assert "whale" not in proxy.dimensions.values()
+    assert next(
+        row.value
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.excluded_balance_btc"
+    ) == Decimal("348598")
+
+
+def test_bitinfocharts_first_snapshot_has_balance_but_no_change() -> None:
+    batch = BitInfoChartsCollector(
+        firecrawl=FakeFirecrawl(fixture_text("bitinfocharts.md"))
+    ).collect(NOW)
+
+    assert any(
+        row.metric_code == "crypto.large_address.tracked_balance_btc"
+        for row in batch.observations
+    )
+    assert all(
+        row.metric_code != "crypto.large_address.balance_change_btc"
+        for row in batch.observations
+    )
