@@ -178,6 +178,9 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     }
     assert {
@@ -195,6 +198,9 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     )
 

@@ -28,6 +28,9 @@ ENABLED_SOURCE_CODES = frozenset(
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "farside-btc-etf",
+        "farside-eth-etf",
+        "farside-sol-etf",
         "mempool-space",
     }
 )

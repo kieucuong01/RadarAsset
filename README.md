@@ -153,7 +153,8 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
 
 The code-owned enabled set currently contains Alternative.me, Coin Metrics Community active
 addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, Deribit public
-data, and the CryptoCraft economic calendar; each passed its own bounded live smoke. Browser sources
+data, the CryptoCraft economic calendar, and daily Farside BTC/ETH/SOL ETF flows; each passed its
+own bounded live smoke. Browser sources
 that are blocked or no longer expose a machine-readable quantitative table remain disabled.
 
 Install and verify the pinned local browser crawler before running browser-backed sources:

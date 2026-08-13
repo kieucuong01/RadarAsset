@@ -61,14 +61,16 @@ Current verified and enabled sources:
 | `defillama-chains` | Crypto/on-chain | Daily | API |
 | `deribit-public` | Crypto/derivatives | Daily | API |
 | `cryptocraft` | Macro/calendar | Due-state calendar schedule | Crawl4AI |
+| `farside-btc-etf` | Crypto/Bitcoin ETF flows | Daily | Scrapling |
+| `farside-eth-etf` | Crypto/Ethereum ETF flows | Daily | Scrapling |
+| `farside-sol-etf` | Crypto/Solana ETF flows | Daily | Scrapling |
 
 Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Scrapling parser implemented; each source awaits its own deployment-environment smoke and publication |
 | `bitinfocharts-top-addresses` | Daily | Cloudflare JS challenge (`NETWORK_ERROR`) on 2026-08-13 |
-| `coinshares-weekly` | Weekly | Scrapling plus local OCR implemented; awaits a confidence/layout/reconciliation live smoke |
+| `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
 
@@ -93,6 +95,10 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
 After a smoke succeeds, add only that source code to `ENABLED_SOURCE_CODES`, run tests, and deploy
 the code change. To roll back a provider, remove its code from that set. Never delete historical
 observations or immutable artifacts as part of source rollback.
+
+Activation evidence on 2026-08-14: migration status reported all 22 migrations applied; bounded
+live smoke and PostgreSQL publication both succeeded for Farside BTC (169 observations), ETH
+(143), and SOL (91), each effective 2026-08-12. CoinShares remains disabled.
 
 ## Scheduler matrix
 
