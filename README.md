@@ -96,14 +96,15 @@ python quant-worker\process_ingestion_requests.py --limit 20 --drain --max-total
 python quant-worker\process_ingestion_requests.py --retry-failed --retry-limit 500 --limit 20 --drain --max-total 500 --env-file .env.local
 ```
 
-Schedule the shared wrapper instead of running a second worker service. The wrapper performs a
-bounded retry/drain, verifies freshness/backlog/provider failures, and records scheduler outcomes.
-Daily runs also synchronize corporate actions and publish adjusted datasets:
+Schedule the shared wrapper while keeping the ingestion worker running continuously. Scheduled
+runs synchronize the catalog, enqueue due requests, and record scheduler outcomes without waiting
+for the full universe. Daily runs also synchronize corporate actions and publish adjusted
+datasets. Use `-DrainRequests` only for a bounded manual recovery:
 
 ```text
 Hourly at minute 10: powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command hourly
 Daily at 01:15 UTC:   powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
-Manual run:            powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -MaxRequestTotal 500
+Manual bounded drain:  powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 Start in:             <repository root>
 ```
 
@@ -117,8 +118,9 @@ powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1
 The installer registers exactly one hourly and one daily task, ignores overlapping instances, and
 restarts failed tasks up to three times. `-Verify` is read-only. Quant Lab reports missing/stale
 datasets, missing bars, backlog age, grouped provider failures, and the latest scheduler terminal
-result. `readyForBacktest` is intentionally strict: any missing/stale dataset, active backlog,
-provider failure, failed scheduler, or scheduler older than 25 hours keeps readiness degraded.
+result. `readyForBacktest` is intentionally strict: missing/stale datasets, an over-age backlog,
+or no scheduler success within 25 hours keeps readiness degraded. Recent provider failures remain
+visible even when previously published data is still fresh.
 
 Vietnam total-return datasets remain inactive when corporate-action coverage does not contain the
 raw dataset range, a price-affecting action is unverified, or quality checks fail. Raw versions stay

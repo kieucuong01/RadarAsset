@@ -16,12 +16,10 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
-$taskCliPath = Join-Path $taskRepositoryRoot "quant-worker\ingest_market_data.py"
 $taskCatalogSyncPath = Join-Path $taskRepositoryRoot "quant-worker\sync_provider_instruments.py"
 $taskRequestCliPath = Join-Path $taskRepositoryRoot "quant-worker\process_ingestion_requests.py"
 $taskCorporateActionPath = Join-Path $taskRepositoryRoot "quant-worker\sync_corporate_actions.py"
 $taskAdjustedDatasetPath = Join-Path $taskRepositoryRoot "quant-worker\publish_adjusted_datasets.py"
-$taskVerificationPath = Join-Path $taskRepositoryRoot "scripts\verify-market-ingestion.ps1"
 $taskOperationsCliPath = Join-Path $taskRepositoryRoot "quant-worker\verify_market_ingestion.py"
 $taskEnvPath = Join-Path $taskRepositoryRoot ".env.local"
 $taskVenvPython = Join-Path $taskRepositoryRoot ".venv\Scripts\python.exe"
@@ -33,11 +31,6 @@ else {
 }
 $taskRuntimeDirectory = Join-Path ([IO.Path]::GetTempPath()) "radarasset-market-ingestion"
 New-Item -ItemType Directory -Path $taskRuntimeDirectory -Force | Out-Null
-$taskArguments = @($taskCliPath, $Command, "--env-file", $taskEnvPath)
-if ($DryRun) {
-    $taskArguments += "--dry-run"
-}
-
 $taskExitCode = 0
 $taskQueuedCount = 0
 $taskRetriedCount = 0
@@ -54,17 +47,6 @@ if (-not $DryRun) {
     $schedulerRunId = ($schedulerRun | ConvertFrom-Json).runId
 }
 try {
-Push-Location $taskRuntimeDirectory
-try {
-    & $taskPython @taskArguments
-    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        $taskExitCode = $LASTEXITCODE
-    }
-}
-finally {
-    Pop-Location
-}
-
 if (-not $DryRun) {
     Push-Location $taskRuntimeDirectory
     try {
@@ -84,6 +66,7 @@ if (-not $DryRun) {
     }
 }
 
+if ($DrainRequests) {
 if (-not $DryRun) {
     Push-Location $taskRuntimeDirectory
     try {
@@ -111,6 +94,7 @@ if (-not $DryRun) {
         Pop-Location
     }
 }
+}
 
 if (-not $DryRun -and $Command -in @("daily", "all")) {
     Push-Location $taskRuntimeDirectory
@@ -134,12 +118,6 @@ if (-not $DryRun -and $Command -in @("daily", "all")) {
     }
 }
 
-if (-not $DryRun) {
-    & $taskVerificationPath -PythonExecutable $taskPython -EnvFile $taskEnvPath
-    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0 -and $taskExitCode -eq 0) {
-        $taskExitCode = $LASTEXITCODE
-    }
-}
 }
 catch {
     if ($taskExitCode -eq 0) { $taskExitCode = 1 }

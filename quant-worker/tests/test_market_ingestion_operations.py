@@ -21,14 +21,14 @@ def test_health_verifier_rejects_recent_terminal_provider_failures() -> None:
     assert errors == ["provider_failures"]
 
 
-def test_scheduler_wrapper_drains_retries_and_verifies_every_scheduled_batch() -> None:
+def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:
     source = (ROOT / "scripts" / "run-market-ingestion.ps1").read_text(encoding="utf-8")
 
     assert '"--retry-failed"' in source
     assert '"--retry-limit"' in source
     assert '"--drain"' in source
     assert '"--max-total"' in source
-    assert "verify-market-ingestion.ps1" in source
+    assert '[switch]$DrainRequests' in source
     assert "$OrganizationSlug" in source
     assert "$UserEmail" in source
     assert '"--start-command"' in source
@@ -67,6 +67,21 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert '$PSNativeCommandUseErrorActionPreference = $true' in installer
     assert "if ($Verify)" in installer
     assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
+
+
+def test_scheduled_wrapper_enqueues_without_draining_the_full_universe() -> None:
+    wrapper = (ROOT / "scripts" / "run-market-ingestion.ps1").read_text(encoding="utf-8")
+
+    assert '[switch]$DrainRequests' in wrapper
+    assert 'if ($DrainRequests) {' in wrapper
+    drain_block = wrapper.split('if ($DrainRequests) {', 1)[1]
+    assert '"--retry-failed"' in drain_block
+    assert '"--drain"' in drain_block
+    enqueue_path = wrapper.split('if ($DrainRequests) {', 1)[0]
+    assert '"--retry-failed"' not in enqueue_path
+    assert '"--drain"' not in enqueue_path
+    assert "& $taskPython @taskArguments" not in enqueue_path
+    assert "$taskVerificationPath" not in wrapper
 
 
 def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None:

@@ -94,15 +94,16 @@ means a partial provider failure/unavailable capability; successful feeds are st
 Exit `1` means invalid configuration or a fatal database/bootstrap failure. Errors are sanitized;
 provider response bodies and environment values are never logged.
 
-Use `scripts\run-market-ingestion.ps1` as the scheduler boundary. It resolves the repository root,
-performs a bounded retry/drain, verifies the post-run health contract, records scheduler outcomes,
-and does not print `.env.local`. Daily/all runs additionally refresh corporate actions and publish
+Use `scripts\run-market-ingestion.ps1` as the scheduler boundary and keep
+`process_ingestion_requests.py --watch` running as the data worker. The wrapper resolves the
+repository root, enqueues due requests, records scheduler outcomes, and does not wait for the full
+universe or print `.env.local`. Daily/all runs additionally refresh corporate actions and publish
 adjusted datasets:
 
 ```powershell
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
-powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -MaxRequestTotal 500
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 ```
 
 For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
