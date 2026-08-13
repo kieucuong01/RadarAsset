@@ -446,6 +446,9 @@ model QuantRun {
   errorMessage      String?            @map("error_message")
   workerId          String?            @map("worker_id")
   leaseExpiresAt    DateTime?          @map("lease_expires_at")
+  lastHeartbeatAt   DateTime?          @map("last_heartbeat_at") @db.Timestamptz(3)
+  cancelRequestedAt DateTime?          @map("cancel_requested_at") @db.Timestamptz(3)
+  deadlineAt        DateTime?          @map("deadline_at") @db.Timestamptz(3)
   attemptCount      Int                @default(0) @map("attempt_count")
   startedAt         DateTime?          @map("started_at")
   finishedAt        DateTime?          @map("finished_at")
@@ -460,6 +463,8 @@ model QuantRun {
   @@index([userId, createdAt(sort: Desc)])
   @@index([strategyVersionId])
   @@index([status, createdAt])
+  @@index([status, leaseExpiresAt, createdAt])
+  @@index([organizationId, strategyHash, engineVersion, status])
   @@map("quant_runs")
 }
 

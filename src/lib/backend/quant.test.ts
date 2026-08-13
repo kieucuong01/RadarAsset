@@ -13,4 +13,13 @@ describe("quant backend domain", () => {
     expect(canTransitionQuantRun("succeeded", "running")).toBe(false);
     expect(canTransitionQuantRun("failed", "queued")).toBe(false);
   });
+
+  it("models cooperative cancellation and timeout as terminal lifecycle transitions", () => {
+    expect(canTransitionQuantRun("queued", "cancelled")).toBe(true);
+    expect(canTransitionQuantRun("running", "cancel_requested")).toBe(true);
+    expect(canTransitionQuantRun("running", "timed_out")).toBe(true);
+    expect(canTransitionQuantRun("cancel_requested", "cancelled")).toBe(true);
+    expect(canTransitionQuantRun("cancelled", "running")).toBe(false);
+    expect(canTransitionQuantRun("timed_out", "queued")).toBe(false);
+  });
 });

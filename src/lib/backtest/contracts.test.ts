@@ -5,7 +5,7 @@ import {
   createRollingBacktestRange,
   normalizeBacktestSubmission,
 } from "./contracts";
-import { hashBacktestSubmission } from "./hash";
+import { hashBacktestSubmission, hashResolvedPortfolioRun } from "./hash";
 
 const validPortfolioSubmission = {
   timeframe: "1d" as const,
@@ -114,6 +114,22 @@ describe("portfolio backtest submission contract", () => {
         assumptions: { ...defaultAssumptions, monthlyContribution: 500 },
       }),
     ).not.toBe(first);
+  });
+
+  it("invalidates the resolved run fingerprint when the engine version changes", () => {
+    const submission = normalizeBacktestSubmission(validPortfolioSubmission);
+    const legs = submission.legs.map((leg, index) => ({
+      ...leg,
+      assetId: `asset-${index}`,
+      datasetVersionId: `dataset-${index}`,
+      datasetChecksum: String(index).repeat(64),
+      strategyVersionId: `strategy-${index}`,
+      implementationHash: String(index + 1).repeat(64),
+    }));
+
+    expect(hashResolvedPortfolioRun(submission, legs, "portfolio-v1")).not.toBe(
+      hashResolvedPortfolioRun(submission, legs, "portfolio-v2"),
+    );
   });
 
   it("accepts an explicit cash reserve and market-specific assumptions", () => {

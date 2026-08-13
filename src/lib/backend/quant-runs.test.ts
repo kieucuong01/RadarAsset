@@ -9,8 +9,8 @@ const { prisma } = vi.hoisted(() => {
   const client = {
     strategyVersion: { findMany: vi.fn() },
     asset: { findMany: vi.fn() },
-    quantRun: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
-    quantRunLeg: { createMany: vi.fn() },
+    quantRun: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    quantRunLeg: { createMany: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   };
   return { prisma: client };
@@ -20,6 +20,7 @@ vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
 
 import {
   PortfolioRunEligibilityError,
+  cancelPortfolioQuantRun,
   createPortfolioQuantRun,
   listPortfolioQuantRuns,
   loadPortfolioQuantRun,
@@ -187,8 +188,12 @@ describe("portfolio quant run persistence", () => {
     prisma.asset.findMany.mockResolvedValue(assets);
     prisma.quantRun.create.mockResolvedValue({ id: "run-1" });
     prisma.quantRunLeg.createMany.mockResolvedValue({ count: 2 });
-    prisma.quantRun.findFirst.mockResolvedValue(runRecord());
+    prisma.quantRun.findFirst.mockImplementation(({ where }: { where?: { status?: string } }) =>
+      Promise.resolve(where?.status === "succeeded" ? null : runRecord()),
+    );
     prisma.quantRun.findMany.mockResolvedValue([runRecord()]);
+    prisma.quantRun.updateMany.mockResolvedValue({ count: 1 });
+    prisma.quantRunLeg.updateMany.mockResolvedValue({ count: 2 });
   });
 
   it("creates one aggregate run and every independently resolved leg in one transaction", async () => {
@@ -230,6 +235,81 @@ describe("portfolio quant run persistence", () => {
       ],
     });
     expect(result.legs.map((leg) => leg.symbol)).toEqual(["BTC", "VNM"]);
+    expect(result).toMatchObject({ cacheHit: false, sourceRunId: null });
+  });
+
+  it("reuses only a succeeded fingerprint from the active organization", async () => {
+    prisma.quantRun.findFirst.mockResolvedValueOnce(
+      runRecord({ status: "succeeded", progress: 100, finishedAt: new Date() }),
+    );
+
+    const result = await createPortfolioQuantRun(context, submission);
+
+    expect(prisma.quantRun.findFirst).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: "organization-a",
+          status: "succeeded",
+          engineVersion: "portfolio-v1",
+          strategyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+      }),
+    );
+    expect(prisma.quantRun.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ id: "run-1", cacheHit: true, sourceRunId: "run-1" });
+  });
+
+  it("cancels a queued run immediately inside the active organization", async () => {
+    prisma.quantRun.findFirst
+      .mockResolvedValueOnce(runRecord({ status: "queued" }))
+      .mockResolvedValueOnce(
+        runRecord({ status: "cancelled", progress: 100, finishedAt: new Date() }),
+      );
+
+    const result = await cancelPortfolioQuantRun(context, "run-1");
+
+    expect(prisma.quantRun.updateMany).toHaveBeenCalledWith({
+      where: { id: "run-1", organizationId: "organization-a", status: "queued" },
+      data: expect.objectContaining({ status: "cancelled", progress: 100 }),
+    });
+    expect(prisma.quantRunLeg.updateMany).toHaveBeenCalledWith({
+      where: { quantRunId: "run-1", status: "queued" },
+      data: expect.objectContaining({ status: "cancelled", progress: 100 }),
+    });
+    expect(result.status).toBe("cancelled");
+  });
+
+  it("requests cooperative cancellation for an owned running run", async () => {
+    prisma.quantRun.findFirst
+      .mockResolvedValueOnce(runRecord({ status: "running" }))
+      .mockResolvedValueOnce(runRecord({ status: "cancel_requested" }));
+
+    const result = await cancelPortfolioQuantRun(context, "run-1");
+
+    expect(prisma.quantRun.updateMany).toHaveBeenCalledWith({
+      where: { id: "run-1", organizationId: "organization-a", status: "running" },
+      data: expect.objectContaining({ status: "cancel_requested" }),
+    });
+    expect(result.status).toBe("cancel_requested");
+  });
+
+  it("does not lose cancellation when a queued run is claimed concurrently", async () => {
+    prisma.quantRun.findFirst
+      .mockResolvedValueOnce(runRecord({ status: "queued" }))
+      .mockResolvedValueOnce(runRecord({ status: "cancel_requested" }));
+    prisma.quantRun.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    const result = await cancelPortfolioQuantRun(context, "run-1");
+
+    expect(prisma.quantRun.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: "run-1", organizationId: "organization-a", status: "running" },
+      data: expect.objectContaining({ status: "cancel_requested" }),
+    });
+    expect(prisma.quantRunLeg.updateMany).not.toHaveBeenCalled();
+    expect(result.status).toBe("cancel_requested");
   });
 
   it("rejects unavailable adjusted-price datasets before opening a transaction", async () => {

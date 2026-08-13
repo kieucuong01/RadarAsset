@@ -9,9 +9,15 @@ import { BacktestResultsEmpty } from "@/components/backtest-results/BacktestResu
 import { PortfolioBacktestBuilder } from "@/components/PortfolioBacktestBuilder";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { getBacktestRun, isActiveRun, type BacktestRun } from "@/lib/backtest/client";
+import {
+  cancelBacktestRun,
+  getBacktestRun,
+  isActiveRun,
+  type BacktestRun,
+} from "@/lib/backtest/client";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
 import { backtestOutputState } from "@/lib/backtest/result-presentation";
 import { useI18n } from "@/lib/i18n/context";
@@ -24,6 +30,7 @@ export function BacktestWorkbench({
   strategyPreset?: BacktestStrategyPreset | null;
 }) {
   const [run, setRun] = useState<BacktestRun | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const outputState = backtestOutputState(run?.status ?? null);
   const { t } = useI18n();
 
@@ -43,6 +50,18 @@ export function BacktestWorkbench({
       controller.abort();
     };
   }, [run, t]);
+
+  async function cancelRun() {
+    if (!run || run.status === "cancel_requested") return;
+    setCancelling(true);
+    try {
+      setRun(await cancelBacktestRun(run.id));
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : t("backtest.updateStatusError"));
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
@@ -77,7 +96,18 @@ export function BacktestWorkbench({
                     })}
                   </CardDescription>
                 </div>
-                <Badge variant="secondary">{run.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{run.status}</Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={cancelling || run.status === "cancel_requested"}
+                    onClick={() => void cancelRun()}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -89,8 +119,24 @@ export function BacktestWorkbench({
         {run && outputState === "failed" ? (
           <Alert variant="destructive">
             <AlertCircle />
-            <AlertTitle>{t("backtest.failedTitle")}</AlertTitle>
-            <AlertDescription>{t("backtest.failedDescription")}</AlertDescription>
+            <AlertTitle>
+              {t(
+                run.status === "cancelled"
+                  ? "backtest.cancelledTitle"
+                  : run.status === "timed_out"
+                    ? "backtest.timedOutTitle"
+                    : "backtest.failedTitle",
+              )}
+            </AlertTitle>
+            <AlertDescription>
+              {t(
+                run.status === "cancelled"
+                  ? "backtest.cancelledDescription"
+                  : run.status === "timed_out"
+                    ? "backtest.timedOutDescription"
+                    : "backtest.failedDescription",
+              )}
+            </AlertDescription>
           </Alert>
         ) : null}
 

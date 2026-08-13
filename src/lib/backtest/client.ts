@@ -110,7 +110,15 @@ const runLegSchema = z
     strategyParameters: z.record(z.string(), z.unknown()),
     implementationHash: z.string().length(64),
     datasetVersionId: z.string().min(1),
-    status: z.enum(["queued", "running", "succeeded", "failed"]),
+    status: z.enum([
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancel_requested",
+      "cancelled",
+      "timed_out",
+    ]),
     progress: z.number().int().min(0).max(100),
     metrics: z.record(z.string(), z.unknown()).nullable(),
     errorCode: z.string().nullable(),
@@ -154,7 +162,15 @@ const backtestRunSchema = z
     strategyName: z.string(),
     strategyCode: z.string().nullable(),
     strategyVersion: z.string().nullable(),
-    status: z.enum(["queued", "running", "succeeded", "failed"]),
+    status: z.enum([
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancel_requested",
+      "cancelled",
+      "timed_out",
+    ]),
     timeframe: z.enum(["1d", "1h"]),
     progress: z.number().int().min(0).max(100),
     strategyHash: z.string().nullable(),
@@ -166,6 +182,8 @@ const backtestRunSchema = z
     startedAt: z.string().nullable(),
     finishedAt: z.string().nullable(),
     createdAt: z.string(),
+    cacheHit: z.boolean(),
+    sourceRunId: z.string().nullable(),
     legs: z.array(runLegSchema),
     artifacts: z.array(artifactSchema),
   })
@@ -199,7 +217,7 @@ export async function getStrategyCatalog(fetcher: Fetcher = fetch): Promise<Stra
 }
 
 export function isActiveRun(status: BacktestRun["status"]) {
-  return status === "queued" || status === "running";
+  return status === "queued" || status === "running" || status === "cancel_requested";
 }
 
 export async function submitBacktest(
@@ -229,5 +247,16 @@ export async function getBacktestRun(
   if (!response.ok) {
     throw new Error("Backtest status is unavailable.");
   }
+  return parseBacktestRun(await response.json());
+}
+
+export async function cancelBacktestRun(
+  id: string,
+  fetcher: Fetcher = fetch,
+): Promise<BacktestRun> {
+  const response = await fetcher(`/api/quant/runs/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Backtest cancellation failed.");
   return parseBacktestRun(await response.json());
 }
