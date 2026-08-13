@@ -8,15 +8,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [
-      "dist",
-      ".next",
-      "node_modules",
-      ".output",
-      ".vinxi",
-      ".venv/**",
-      ".worktrees/**",
-    ],
+    ignores: ["dist", ".next", "node_modules", ".output", ".vinxi", ".venv/**", ".worktrees/**"],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
