@@ -63,6 +63,8 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert installer.count("New-ScheduledTaskTrigger") == 2
     assert "[switch]$Verify" in installer
     assert "RestartCount" in installer
+    assert "if ($Verify)" in installer
+    assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
 
 
 def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None:
@@ -81,6 +83,7 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
     assert "Exit 1" in wrapper
+    assert '.venv\\Scripts\\python.exe' in wrapper
 
 
 def test_scheduler_start_recovers_abandoned_running_rows() -> None:

@@ -24,7 +24,13 @@ $taskAdjustedDatasetPath = Join-Path $taskRepositoryRoot "quant-worker\publish_a
 $taskVerificationPath = Join-Path $taskRepositoryRoot "scripts\verify-market-ingestion.ps1"
 $taskOperationsCliPath = Join-Path $taskRepositoryRoot "quant-worker\verify_market_ingestion.py"
 $taskEnvPath = Join-Path $taskRepositoryRoot ".env.local"
-$taskPython = (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
+$taskVenvPython = Join-Path $taskRepositoryRoot ".venv\Scripts\python.exe"
+$taskPython = if ($PythonExecutable -eq "python" -and (Test-Path -LiteralPath $taskVenvPython -PathType Leaf)) {
+    $taskVenvPython
+}
+else {
+    (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
+}
 $taskRuntimeDirectory = Join-Path ([IO.Path]::GetTempPath()) "radarasset-market-ingestion"
 New-Item -ItemType Directory -Path $taskRuntimeDirectory -Force | Out-Null
 $taskArguments = @($taskCliPath, $Command, "--env-file", $taskEnvPath)

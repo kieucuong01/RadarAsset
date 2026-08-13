@@ -8,13 +8,22 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-if (-not $Install -and -not $Verify) {
+if ($Install -eq $Verify) {
     throw "Choose -Install or -Verify for the selected deployment environment."
 }
 
 $wrapper = Join-Path $RepositoryRoot "scripts\run-market-ingestion.ps1"
 if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
     throw "Market ingestion wrapper was not found."
+}
+
+if ($Verify) {
+    $taskNames = @("RadarAsset Quant Ingestion Hourly", "RadarAsset Quant Ingestion Daily")
+    foreach ($taskName in $taskNames) {
+        & schtasks.exe /Query /TN $taskName /FO LIST
+        if ($LASTEXITCODE -ne 0) { throw "Scheduled task '$taskName' is not installed." }
+    }
+    return
 }
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)
@@ -41,10 +50,8 @@ $dailyStart = $dailyUtc.ToLocalTime().DateTime
 $hourlyTrigger = New-ScheduledTaskTrigger -Once -At $hourlyStart -RepetitionInterval (New-TimeSpan -Hours 1)
 $dailyTrigger = New-ScheduledTaskTrigger -Daily -At $dailyStart
 
-if ($Install) {
-    Register-ScheduledTask -TaskName "RadarAsset Quant Ingestion Hourly" -Action $hourlyAction -Trigger $hourlyTrigger -Settings $settings -Principal $principal -Force | Out-Null
-    Register-ScheduledTask -TaskName "RadarAsset Quant Ingestion Daily" -Action $dailyAction -Trigger $dailyTrigger -Settings $settings -Principal $principal -Force | Out-Null
-}
+Register-ScheduledTask -TaskName "RadarAsset Quant Ingestion Hourly" -Action $hourlyAction -Trigger $hourlyTrigger -Settings $settings -Principal $principal -Force | Out-Null
+Register-ScheduledTask -TaskName "RadarAsset Quant Ingestion Daily" -Action $dailyAction -Trigger $dailyTrigger -Settings $settings -Principal $principal -Force | Out-Null
 
 Get-ScheduledTask -TaskName "RadarAsset Quant Ingestion Hourly", "RadarAsset Quant Ingestion Daily" |
     Select-Object TaskName, State
