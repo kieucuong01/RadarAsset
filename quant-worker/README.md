@@ -49,7 +49,7 @@ The live ingestion CLIs publish immutable, research-only datasets independently 
   `ADAUSDT`, `LINKUSDT`, `LTCUSDT`, `AVAXUSDT`, `TRXUSDT`, `ZECUSDT`, `XMRUSDT`, and
   `XLMUSDT` when the pair is currently trading.
 - Vnstock VCI: current HOSE equities discovered from the provider listing catalog.
-- Dukascopy through Vnstock: `XAUUSD`.
+- Dukascopy public datafeed: `XAUUSD` daily and hourly bid candles.
 
 Run a provider-only smoke without database writes:
 
@@ -77,11 +77,15 @@ To drain a large queued universe without running forever, use a bounded total:
 
 ```powershell
 python quant-worker\process_ingestion_requests.py --limit 20 --drain --max-total 500 --env-file .env.local
+
+# Requeue a bounded failed batch after provider connectivity recovers
+python quant-worker\process_ingestion_requests.py --retry-failed --retry-limit 500 --limit 20 --drain --max-total 500 --env-file .env.local
 ```
 
 Initial backfills target ten years for HOSE, the longest configured free-provider crypto history
-from `2017-01-01`, and XAU daily history from `2010-01-01`. Incremental runs merge only a recent
-overlap. XAU/USD hourly remains unsupported until a genuine hourly free source is added.
+from `2017-01-01`. XAU daily requests start at the provider's `1999-06-03` boundary and hourly
+requests at `2003-05-05`; the current public feed's first returned XAU bar is in May 2003.
+Incremental runs merge only a recent overlap.
 
 Exit code `0` means every selected feed succeeded, was unchanged, or was already locked. Exit `2`
 means a partial provider failure/unavailable capability; successful feeds are still committed.
@@ -103,7 +107,7 @@ Set **Start in** to the repository root. If `python` is not on the task account'
 PostgreSQL advisory locks are a final overlap guard, not a substitute for clean scheduling.
 
 `MARKET_INGEST_MAX_PAGES` defaults to `128` (`1..512`) and
-`MARKET_INGEST_MAX_ROWS` defaults to `100000` (`100..250000`). The CLI accepts only code-owned
+`MARKET_INGEST_MAX_ROWS` defaults to `250000` (`100..250000`). The CLI accepts only code-owned
 assets, timeframes, symbols, and HTTPS provider endpoints. No selected MVP provider requires an API
 key. The provider terms remain `research_only`; none grants commercial redistribution rights.
 

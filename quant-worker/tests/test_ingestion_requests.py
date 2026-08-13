@@ -9,6 +9,7 @@ from process_ingestion_requests import (
     QueuedIngestionRequest,
     process_ingestion_backlog,
     process_next_ingestion_request,
+    requeue_failed_requests,
 )
 
 
@@ -72,6 +73,7 @@ class FakeRequestRepository:
         self.failed: tuple[str, str] | None = None
         self.retried: tuple[str, str] | None = None
         self.prepared = None
+        self.requeued: tuple[int, str | None, str | None] | None = None
 
     def claim_next_request(self) -> QueuedIngestionRequest | None:
         self.claim_count += 1
@@ -100,6 +102,12 @@ class FakeRequestRepository:
 
     def fail_request(self, queued: QueuedIngestionRequest, code: str) -> None:
         self.failed = (queued.id, code)
+
+    def requeue_failed_requests(
+        self, *, limit: int, error_code: str | None, provider_code: str | None
+    ) -> int:
+        self.requeued = (limit, error_code, provider_code)
+        return min(limit, 7)
 
 
 def test_request_worker_claims_once_and_publishes_dataset() -> None:
@@ -150,8 +158,8 @@ def test_request_worker_retries_sanitized_provider_failures() -> None:
 
     response = process_next_ingestion_request(repository, lambda _code: provider, now=NOW)
 
-    assert response == {"status": "failed", "id": "request-1", "code": "PROVIDER_UNAVAILABLE"}
-    assert repository.retried == ("request-1", "PROVIDER_UNAVAILABLE")
+    assert response == {"status": "failed", "id": "request-1", "code": "rate_limited"}
+    assert repository.retried == ("request-1", "rate_limited")
 
 
 def test_request_worker_is_idle_without_queue_work() -> None:
@@ -159,6 +167,34 @@ def test_request_worker_is_idle_without_queue_work() -> None:
     assert process_next_ingestion_request(repository, lambda _code: FakeProvider(bars()), now=NOW) == {
         "status": "idle"
     }
+
+
+def test_requeue_failed_requests_is_bounded_and_keeps_attempt_history() -> None:
+    repository = FakeRequestRepository(None)
+
+    count = requeue_failed_requests(
+        repository,
+        limit=20,
+        error_code="network_error",
+        provider_code="vnstock-vci-free",
+    )
+
+    assert count == 7
+    assert repository.requeued == (20, "network_error", "vnstock-vci-free")
+
+
+def test_requeue_repository_skips_duplicate_active_requests() -> None:
+    import inspect
+
+    from backtest.ingestion_repository import PostgresRequestRepository
+
+    source = inspect.getsource(PostgresRequestRepository.requeue_failed_requests)
+
+    assert "active_request" in source
+    assert "NOT EXISTS" in source
+    assert "DISTINCT ON" in source
+    assert "dataset_versions" in source
+    assert "version.is_active" in source
 
 
 def test_drain_processes_until_idle_without_sleeping() -> None:
@@ -205,3 +241,24 @@ def test_drain_stops_at_max_total_guard() -> None:
 
     assert result == {"status": "succeeded", "processed": 2, "failed": 0}
     assert len(repository.completed) == 2
+
+
+def test_drain_throttles_between_completed_provider_requests() -> None:
+    first = request()
+    second = QueuedIngestionRequest(**{**request().__dict__, "id": "request-2"})
+    repository = FakeRequestRepository([first, second])
+    sleeps: list[float] = []
+
+    process_ingestion_backlog(
+        repository,
+        lambda _code: FakeProvider(bars()),
+        batch_limit=2,
+        drain=True,
+        max_total=2,
+        sleep=sleeps.append,
+        poll_seconds=0.01,
+        request_delay_seconds=1.0,
+        now=NOW,
+    )
+
+    assert sleeps == [1.0]

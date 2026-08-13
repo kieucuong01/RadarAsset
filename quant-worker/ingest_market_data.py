@@ -18,6 +18,7 @@ from backtest.ingestion_repository import PostgresIngestionRepository
 from backtest.providers import (
     BinanceSpotAdapter,
     CcxtSpotAdapter,
+    DukascopyXauAdapter,
     FallbackMarketDataProvider,
     VnstockAdapter,
 )
@@ -52,8 +53,8 @@ def read_bounded_environment_integer(
 
 
 def supports_scheduled_timeframe(asset: str, timeframe: str) -> bool:
-    feed = FEEDS[asset]
-    return not (feed.market == "metal_spot" and timeframe == "1h")
+    del asset, timeframe
+    return True
 
 
 def load_database_url(env_file: Path) -> str:
@@ -142,6 +143,8 @@ def provider_for_code(provider_code: str, max_pages: int, max_rows: int) -> Any:
         )
     if provider_code in {"vnstock-vci-free", "msn-via-vnstock"}:
         return VnstockAdapter(max_rows=max_rows)
+    if provider_code == "dukascopy-public":
+        return DukascopyXauAdapter(max_rows=max_rows)
     raise ValueError("Provider is not approved for market ingestion.")
 
 
@@ -197,7 +200,7 @@ def main(
         )
         max_rows = read_bounded_environment_integer(
             "MARKET_INGEST_MAX_ROWS",
-            default=100_000,
+            default=250_000,
             minimum=100,
             maximum=250_000,
         )

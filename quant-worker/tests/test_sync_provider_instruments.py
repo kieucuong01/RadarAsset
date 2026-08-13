@@ -90,8 +90,8 @@ def test_bulk_queue_selects_supported_timeframes_for_all_synced_instruments() ->
     assert "provider_instruments" in query
     assert "market_ingestion_requests" in query
     assert params == ("demo@radarasset.local", "demo-workspace", "all", "all")
-    assert "msn-via-vnstock" in query
-    assert "timeframe.timeframe = '1h'" in query
+    assert "dukascopy-public" in query
+    assert "NOT (provider.code = 'msn-via-vnstock'" not in query
 
 
 def test_catalog_sync_prunes_stale_approved_provider_instruments() -> None:
@@ -111,3 +111,7 @@ def test_catalog_sync_prunes_stale_approved_provider_instruments() -> None:
     assert any("DELETE FROM market_ingestion_requests" in query for query in queries)
     assert any("DELETE FROM provider_instruments" in query for query in queries)
     assert any("jsonb_to_recordset" in query for query in queries)
+    assert any(
+        "UPDATE data_providers" in query and "msn-via-vnstock" in query
+        for query in queries
+    )

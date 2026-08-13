@@ -4,6 +4,7 @@ import { getPrisma } from "@/lib/db/prisma";
 
 export const APPROVED_PROVIDER_CODES = [
   "binance-public",
+  "dukascopy-public",
   "msn-via-vnstock",
   "vnstock-vci-free",
 ] as const;
@@ -91,10 +92,7 @@ function mapRow(row: {
     market: mappedMarket,
     venue: row.asset.venue,
     currency: row.asset.currency,
-    supportedTimeframes:
-      mappedMarket === "metal_spot" && row.provider.code === "msn-via-vnstock"
-        ? ["1d"]
-        : ["1d", "1h"],
+    supportedTimeframes: ["1d", "1h"],
   };
 }
 

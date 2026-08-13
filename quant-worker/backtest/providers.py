@@ -461,6 +461,123 @@ class FallbackMarketDataProvider:
             return self.fallback.fetch(**kwargs)
 
 
+def _default_dukascopy_fetcher(**kwargs: Any) -> Any:
+    try:
+        import dukascopy_python
+    except ImportError as error:
+        raise ProviderUnavailableError(
+            "provider_unavailable", "Dukascopy dependency is unavailable."
+        ) from error
+    return dukascopy_python.fetch(**kwargs)
+
+
+class DukascopyXauAdapter:
+    intervals = {"1d": "1DAY", "1h": "1HOUR"}
+
+    def __init__(
+        self,
+        *,
+        fetcher: Callable[..., Any] = _default_dukascopy_fetcher,
+        max_rows: int = 250_000,
+    ) -> None:
+        if not 100 <= max_rows <= 250_000:
+            raise ValueError("Dukascopy max_rows is outside the supported range.")
+        self.fetcher = fetcher
+        self.max_rows = max_rows
+
+    @staticmethod
+    def _records(frame: Any) -> list[dict[str, Any]]:
+        if hasattr(frame, "reset_index"):
+            frame = frame.reset_index()
+        if hasattr(frame, "to_dict"):
+            records = frame.to_dict("records")
+        else:
+            records = frame
+        return records if isinstance(records, list) else []
+
+    def fetch(
+        self,
+        *,
+        symbol: str,
+        asset: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        now: datetime | None = None,
+    ) -> list[Bar]:
+        if asset.strip().upper() != "XAU" or symbol.strip().upper() != "XAUUSD":
+            raise ValueError("Dukascopy adapter only supports canonical XAUUSD.")
+        if timeframe not in self.intervals:
+            raise ValueError("Unsupported Dukascopy timeframe.")
+        if start.tzinfo is None or end.tzinfo is None or start >= end:
+            raise ValueError("Dukascopy fetch requires an ordered timezone-aware range.")
+
+        chunk_days = 365 if timeframe == "1h" else 3653
+        cursor = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        rows: list[Bar] = []
+        try:
+            while cursor < end_utc:
+                chunk_end = min(end_utc, cursor + timedelta(days=chunk_days))
+                frame = self.fetcher(
+                    instrument="XAU/USD",
+                    interval=self.intervals[timeframe],
+                    offer_side="B",
+                    start=cursor,
+                    end=chunk_end,
+                    max_retries=3,
+                    limit=30_000,
+                )
+                for record in self._records(frame):
+                    raw_timestamp = record.get("timestamp")
+                    if not isinstance(raw_timestamp, datetime):
+                        raise ValueError("Dukascopy row is missing a timestamp.")
+                    timestamp = raw_timestamp
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    rows.append(
+                        Bar(
+                            asset="XAU",
+                            timestamp=timestamp.astimezone(timezone.utc),
+                            timeframe=timeframe,
+                            open=Decimal(str(record["open"])),
+                            high=Decimal(str(record["high"])),
+                            low=Decimal(str(record["low"])),
+                            close=Decimal(str(record["close"])),
+                            volume=(
+                                None
+                                if record.get("volume") is None
+                                else Decimal(str(record["volume"]))
+                            ),
+                            source="dukascopy-public-bid",
+                        )
+                    )
+                    if len(rows) > self.max_rows:
+                        raise ProviderUnavailableError(
+                            "response_limit", "Dukascopy response exceeded the row limit."
+                        )
+                cursor = chunk_end
+        except ProviderUnavailableError:
+            raise
+        except Exception as error:
+            raise ProviderUnavailableError(
+                "network_error", "Dukascopy request failed."
+            ) from error
+        if not rows:
+            raise ProviderUnavailableError(
+                "provider_unavailable", "Dukascopy returned no bars."
+            )
+        try:
+            normalized = normalize_bars(rows)
+        except (ArithmeticError, TypeError, ValueError) as error:
+            raise ProviderUnavailableError(
+                "invalid_response", "Dukascopy returned invalid market data."
+            ) from error
+        return only_closed_bars(
+            normalized, timeframe=timeframe, now=now or datetime.now(timezone.utc)
+        )
+
+
 def _load_vnstock_market(
     import_market: Callable[[], Any] | None = None,
 ) -> Any:
@@ -497,12 +614,14 @@ class VnstockAdapter:
         *,
         market_factory: Callable[[], Any] = _default_market_factory,
         listing_factory: Callable[[], Any] | None = _default_listing_factory,
+        sleep: Callable[[float], None] = time.sleep,
         max_rows: int = 100_000,
     ) -> None:
         if not 100 <= max_rows <= 250_000:
             raise ValueError("Vnstock max_rows is outside the supported range.")
         self.market_factory = market_factory
         self.listing_factory = listing_factory
+        self.sleep = sleep
         self.max_rows = max_rows
 
     @staticmethod
@@ -604,7 +723,7 @@ class VnstockAdapter:
                 currency=feed.currency,
             )
             for feed in sorted(FEEDS.values(), key=lambda item: item.symbol)
-            if feed.provider_code in {"vnstock-vci-free", "msn-via-vnstock"}
+            if feed.provider_code == "vnstock-vci-free"
         ]
         if not dynamic_hose:
             return fallback_feeds
@@ -680,26 +799,34 @@ class VnstockAdapter:
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
 
-        try:
-            market = self.market_factory()
-            instrument = (
-                market.commodity(symbol)
-                if is_metal
-                else market.equity(symbol, source="VCI")
-            )
-            frame = instrument.ohlcv(
-                start=start.date().isoformat(),
-                end=end.date().isoformat(),
-                interval=timeframe,
-                count=self.max_rows,
-            )
-            records = frame.to_dict("records")
-        except ProviderUnavailableError:
-            raise
-        except Exception as error:
+        records: Any = None
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                market = self.market_factory()
+                instrument = (
+                    market.commodity(symbol)
+                    if is_metal
+                    else market.equity(symbol, source="VCI")
+                )
+                frame = instrument.ohlcv(
+                    start=start.date().isoformat(),
+                    end=end.date().isoformat(),
+                    interval=timeframe,
+                    count=self.max_rows,
+                )
+                records = frame.to_dict("records")
+                break
+            except ProviderUnavailableError:
+                raise
+            except Exception as error:
+                last_error = error
+                if attempt < 2:
+                    self.sleep(float(attempt + 1))
+        if records is None:
             raise ProviderUnavailableError(
                 "provider_unavailable", "Provider request failed."
-            ) from error
+            ) from last_error
 
         if not isinstance(records, list) or not records:
             raise ProviderUnavailableError(
@@ -723,6 +850,12 @@ class VnstockAdapter:
                     for field in ("open", "high", "low", "close")
                 )
                 if any(not value.is_finite() or value <= 0 for value in prices):
+                    continue
+                open_price, high_price, low_price, close_price = prices
+                if not (
+                    low_price <= open_price <= high_price
+                    and low_price <= close_price <= high_price
+                ):
                     continue
                 sanitized = dict(record)
                 if sanitized.get("volume") is not None:

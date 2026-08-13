@@ -108,7 +108,11 @@ def ingestion_window(
     if market == "crypto_spot":
         initial_start = datetime(2017, 1, 1, tzinfo=timezone.utc)
     elif market == "metal_spot":
-        initial_start = datetime(2010, 1, 1, tzinfo=timezone.utc)
+        initial_start = (
+            datetime(2003, 5, 5, tzinfo=timezone.utc)
+            if timeframe == "1h"
+            else datetime(1999, 6, 3, tzinfo=timezone.utc)
+        )
     else:
         initial_start = now - timedelta(days=3653)
     history_is_truncated = bool(

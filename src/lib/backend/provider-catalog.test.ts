@@ -6,7 +6,11 @@ const { prisma } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
 
-import { resolveProviderInstrument, searchProviderInstruments } from "./provider-catalog";
+import {
+  APPROVED_PROVIDER_CODES,
+  resolveProviderInstrument,
+  searchProviderInstruments,
+} from "./provider-catalog";
 
 const row = {
   id: "instrument-vnm",
@@ -32,6 +36,10 @@ const row = {
 describe("approved provider instrument catalog", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("approves the live Dukascopy XAU provider", () => {
+    expect(APPROVED_PROVIDER_CODES).toContain("dukascopy-public");
+  });
+
   it("searches only active approved provider instruments with a bounded limit", async () => {
     prisma.providerInstrument.findMany.mockResolvedValue([row]);
 
@@ -51,7 +59,9 @@ describe("approved provider instrument catalog", () => {
         where: expect.objectContaining({
           provider: {
             status: "active",
-            code: { in: ["binance-public", "msn-via-vnstock", "vnstock-vci-free"] },
+            code: {
+              in: ["binance-public", "dukascopy-public", "msn-via-vnstock", "vnstock-vci-free"],
+            },
           },
           OR: [
             { providerSymbol: { contains: "VNM", mode: "insensitive" } },

@@ -204,6 +204,68 @@ class PostgresRequestRepository:
                 (code, request.id, request.worker_id),
             )
 
+    def requeue_failed_requests(
+        self,
+        *,
+        limit: int,
+        error_code: str | None = None,
+        provider_code: str | None = None,
+    ) -> int:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH candidates AS (
+                  SELECT DISTINCT ON (
+                    request.organization_id, request.user_id,
+                    request.provider_instrument_id, request.timeframe
+                  ) request.id, request.updated_at
+                  FROM market_ingestion_requests request
+                  JOIN provider_instruments instrument
+                    ON instrument.id = request.provider_instrument_id
+                  JOIN data_providers provider ON provider.id = instrument.provider_id
+                  WHERE request.status = 'failed'
+                    AND (%s::text IS NULL OR request.error_code = %s::text)
+                    AND (%s::text IS NULL OR provider.code = %s::text)
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM market_ingestion_requests active_request
+                      WHERE active_request.organization_id = request.organization_id
+                        AND active_request.user_id = request.user_id
+                        AND active_request.provider_instrument_id = request.provider_instrument_id
+                        AND active_request.timeframe = request.timeframe
+                        AND active_request.status IN ('queued', 'running')
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM datasets dataset
+                      JOIN dataset_versions version
+                        ON version.dataset_id = dataset.id
+                       AND version.is_active
+                      WHERE dataset.asset_id = instrument.asset_id
+                        AND dataset.timeframe = request.timeframe
+                        AND dataset.adjustment_policy = 'raw'
+                    )
+                  ORDER BY request.organization_id, request.user_id,
+                           request.provider_instrument_id, request.timeframe,
+                           request.updated_at DESC, request.id DESC
+                ),
+                selected AS (
+                  SELECT id FROM candidates
+                  ORDER BY updated_at ASC, id ASC
+                  LIMIT %s
+                  FOR UPDATE SKIP LOCKED
+                )
+                UPDATE market_ingestion_requests request
+                SET status = 'queued', available_at = NOW(), attempt_count = 0,
+                    worker_id = NULL, lease_expires_at = NULL,
+                    error_code = NULL, updated_at = NOW()
+                FROM selected
+                WHERE request.id = selected.id
+                """,
+                (error_code, error_code, provider_code, provider_code, limit),
+            )
+            return cursor.rowcount
+
 
 class PostgresIngestionRepository:
     def __init__(self, connection: psycopg.Connection[Any]) -> None:

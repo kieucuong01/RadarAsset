@@ -8,9 +8,11 @@ from typing import Any
 import pytest
 
 from backtest.catalog import FEEDS
+from ingest_market_data import provider_for_code
 from backtest.providers import (
     BinanceSpotAdapter,
     CcxtSpotAdapter,
+    DukascopyXauAdapter,
     FallbackMarketDataProvider,
     HttpJsonResponse,
     ProviderInstrumentDescriptor,
@@ -18,6 +20,21 @@ from backtest.providers import (
     VnstockAdapter,
     _load_vnstock_market,
 )
+
+
+class FakeDukascopyFrame:
+    def to_dict(self, orient: str) -> list[dict[str, Any]]:
+        assert orient == "records"
+        return [
+            {
+                "timestamp": utc(2026, 8, 10),
+                "open": 2400,
+                "high": 2410,
+                "low": 2390,
+                "close": 2405,
+                "volume": 12.5,
+            }
+        ]
 
 
 class FailingProvider:
@@ -384,6 +401,66 @@ def test_vnstock_rejects_xau_hourly_instead_of_resampling_daily_msn_data() -> No
     assert market.commodity_calls == []
 
 
+def test_dukascopy_xau_adapter_supports_real_daily_and_hourly_bars() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fetcher(**kwargs: Any) -> FakeDukascopyFrame:
+        calls.append(kwargs)
+        return FakeDukascopyFrame()
+
+    adapter = DukascopyXauAdapter(fetcher=fetcher)
+
+    daily = adapter.fetch(
+        symbol="XAUUSD",
+        asset="XAU",
+        timeframe="1d",
+        start=utc(2026, 8, 1),
+        end=utc(2026, 8, 11),
+        now=utc(2026, 8, 12),
+    )
+    hourly = adapter.fetch(
+        symbol="XAUUSD",
+        asset="XAU",
+        timeframe="1h",
+        start=utc(2026, 8, 10),
+        end=utc(2026, 8, 11),
+        now=utc(2026, 8, 12),
+    )
+
+    assert [row.source for row in daily + hourly] == [
+        "dukascopy-public-bid",
+        "dukascopy-public-bid",
+    ]
+    assert calls[0]["instrument"] == "XAU/USD"
+    assert calls[0]["interval"] == "1DAY"
+    assert calls[1]["interval"] == "1HOUR"
+
+
+def test_dukascopy_xau_adapter_maps_dependency_errors_to_sanitized_failure() -> None:
+    def fetcher(**_kwargs: Any) -> Any:
+        raise RuntimeError("secret upstream detail")
+
+    with pytest.raises(ProviderUnavailableError) as raised:
+        DukascopyXauAdapter(fetcher=fetcher).fetch(
+            symbol="XAUUSD",
+            asset="XAU",
+            timeframe="1d",
+            start=utc(2026, 8, 1),
+            end=utc(2026, 8, 11),
+            now=utc(2026, 8, 12),
+        )
+
+    assert raised.value.code == "network_error"
+    assert str(raised.value) == "Dukascopy request failed."
+
+
+def test_xau_provider_code_uses_dukascopy_history_adapter() -> None:
+    assert isinstance(
+        provider_for_code("dukascopy-public", max_pages=10, max_rows=1_000),
+        DukascopyXauAdapter,
+    )
+
+
 def test_vnstock_routes_fpt_through_vci() -> None:
     market = FakeMarket(
         [
@@ -452,7 +529,6 @@ def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
         ("FPT", "FPT Corporation", "vn_equity", "HOSE"),
         ("VNM", "Vietnam Dairy Products", "vn_equity", "HOSE"),
     ]
-    assert any(item.canonical_symbol == "XAU" for item in descriptors)
 
 
 def test_vnstock_rejects_missing_required_columns() -> None:
@@ -507,6 +583,41 @@ def test_vnstock_drops_missing_price_sentinels_and_normalizes_negative_volume() 
     assert rows[0].volume is None
 
 
+def test_vnstock_drops_provider_rows_with_impossible_ohlc_ordering() -> None:
+    market = FakeMarket(
+        [
+            {
+                "time": "2019-07-15T00:00:00",
+                "open": 7.98,
+                "high": 7.92,
+                "low": 7.87,
+                "close": 7.90,
+                "volume": 763410,
+            },
+            {
+                "time": "2019-07-16T00:00:00",
+                "open": 7.90,
+                "high": 8.10,
+                "low": 7.80,
+                "close": 8.00,
+                "volume": 500000,
+            },
+        ]
+    )
+
+    rows = VnstockAdapter(market_factory=lambda: market).fetch(
+        symbol="SSI",
+        asset="SSI",
+        timeframe="1d",
+        start=utc(2019, 7, 15),
+        end=utc(2019, 7, 17),
+        now=utc(2019, 7, 18),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].timestamp == utc(2019, 7, 15, 17)
+
+
 def test_vnstock_maps_provider_failures_to_a_sanitized_error() -> None:
     market = FakeMarket([], RuntimeError("upstream token=do-not-store"))
 
@@ -522,6 +633,45 @@ def test_vnstock_maps_provider_failures_to_a_sanitized_error() -> None:
 
     assert raised.value.code == "provider_unavailable"
     assert str(raised.value) == "Provider request failed."
+
+
+def test_vnstock_retries_transient_provider_failures() -> None:
+    attempts = 0
+    sleeps: list[float] = []
+
+    def market_factory() -> FakeMarket:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return FakeMarket([], RuntimeError("temporary upstream failure"))
+        return FakeMarket(
+            [
+                {
+                    "time": "2026-08-10T00:00:00",
+                    "open": 100,
+                    "high": 101,
+                    "low": 99,
+                    "close": 100,
+                    "volume": 10,
+                }
+            ]
+        )
+
+    rows = VnstockAdapter(
+        market_factory=market_factory,
+        sleep=sleeps.append,
+    ).fetch(
+        symbol="FPT",
+        asset="FPT",
+        timeframe="1d",
+        start=utc(2026, 8, 1),
+        end=utc(2026, 8, 11),
+        now=utc(2026, 8, 12),
+    )
+
+    assert len(rows) == 1
+    assert attempts == 3
+    assert sleeps == [1.0, 2.0]
 
 
 def test_vnstock_enforces_the_row_limit_before_normalization() -> None:
@@ -551,10 +701,10 @@ def test_vnstock_enforces_the_row_limit_before_normalization() -> None:
     assert raised.value.code == "response_limit"
 
 
-def test_feed_catalog_records_xauusd_msn_provenance() -> None:
+def test_feed_catalog_records_xauusd_dukascopy_provenance() -> None:
     assert FEEDS["XAU"].provider_symbol == "XAUUSD"
-    assert FEEDS["XAU"].client_provider == "vnstock"
-    assert FEEDS["XAU"].upstream_provider == "msn"
+    assert FEEDS["XAU"].client_provider == "dukascopy-python"
+    assert FEEDS["XAU"].upstream_provider == "dukascopy"
 
 
 def test_feed_catalog_includes_liquid_vietnam_equities() -> None:

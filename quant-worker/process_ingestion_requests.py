@@ -27,7 +27,7 @@ from ingest_market_data import (
 
 
 APPROVED_PROVIDER_CODES = frozenset(
-    {"binance-public", "msn-via-vnstock", "vnstock-vci-free"}
+    {"binance-public", "dukascopy-public", "msn-via-vnstock", "vnstock-vci-free"}
 )
 
 
@@ -47,6 +47,14 @@ class RequestRepository(Protocol):
     def retry_or_fail(self, request: QueuedIngestionRequest, code: str) -> None: ...
 
     def fail_request(self, request: QueuedIngestionRequest, code: str) -> None: ...
+
+    def requeue_failed_requests(
+        self,
+        *,
+        limit: int,
+        error_code: str | None = None,
+        provider_code: str | None = None,
+    ) -> int: ...
 
 
 def _prepare_request_dataset(
@@ -140,12 +148,12 @@ def process_next_ingestion_request(
             "id": request.id,
             "datasetVersionId": publication.dataset_version_id,
         }
-    except ProviderUnavailableError:
-        repository.retry_or_fail(request, "PROVIDER_UNAVAILABLE")
+    except ProviderUnavailableError as error:
+        repository.retry_or_fail(request, error.code)
         return {
             "status": "failed",
             "id": request.id,
-            "code": "PROVIDER_UNAVAILABLE",
+            "code": error.code,
         }
     except ValueError:
         repository.fail_request(request, "INGESTION_INVALID")
@@ -172,6 +180,7 @@ def process_ingestion_backlog(
     max_total: int,
     sleep: Callable[[float], None] = time.sleep,
     poll_seconds: float = 5.0,
+    request_delay_seconds: float = 0.0,
     now: datetime | None = None,
     emit: Callable[[dict[str, str]], None] | None = None,
 ) -> dict[str, int | str]:
@@ -198,6 +207,8 @@ def process_ingestion_backlog(
             failed += outcome["status"] != "succeeded"
             if emit is not None:
                 emit(outcome)
+            if request_delay_seconds > 0 and processed < max_total:
+                sleep(request_delay_seconds)
         if not drain:
             break
         if batch_processed == 0:
@@ -209,6 +220,22 @@ def process_ingestion_backlog(
     }
 
 
+def requeue_failed_requests(
+    repository: RequestRepository,
+    *,
+    limit: int,
+    error_code: str | None = None,
+    provider_code: str | None = None,
+) -> int:
+    if not 1 <= limit <= 10_000:
+        raise ValueError("Retry limit is outside the supported range.")
+    return repository.requeue_failed_requests(
+        limit=limit,
+        error_code=error_code,
+        provider_code=provider_code,
+    )
+
+
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Process queued market ingestion requests.")
     parser.add_argument("--limit", type=int, default=20)
@@ -217,6 +244,11 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--drain", action="store_true")
     parser.add_argument("--max-total", type=int, default=500)
     parser.add_argument("--poll-seconds", type=float, default=5.0)
+    parser.add_argument("--request-delay-seconds", type=float, default=1.1)
+    parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--retry-limit", type=int, default=500)
+    parser.add_argument("--retry-error-code")
+    parser.add_argument("--retry-provider-code", choices=tuple(sorted(APPROVED_PROVIDER_CODES)))
     return parser
 
 
@@ -229,8 +261,11 @@ def main(
     if (
         not 1 <= args.limit <= 20
         or not 1 <= args.max_total <= 10_000
+        or not 1 <= args.retry_limit <= 10_000
         or args.poll_seconds <= 0
         or args.poll_seconds > 60
+        or args.request_delay_seconds < 0
+        or args.request_delay_seconds > 60
     ):
         print(json.dumps({"status": "fatal", "errorCode": "configuration_error"}))
         return 2
@@ -239,12 +274,25 @@ def main(
             "MARKET_INGEST_MAX_PAGES", default=128, minimum=1, maximum=512
         )
         max_rows = read_bounded_environment_integer(
-            "MARKET_INGEST_MAX_ROWS", default=100_000, minimum=100, maximum=250_000
+            "MARKET_INGEST_MAX_ROWS", default=250_000, minimum=100, maximum=250_000
         )
         database_url = psycopg_connection_url(load_database_url(Path(args.env_file)))
         factory = lambda code: provider_for_code(code, max_pages, max_rows)
         with connection_factory(database_url, autocommit=True) as connection:
             repository = PostgresRequestRepository(connection)
+            if args.retry_failed:
+                count = requeue_failed_requests(
+                    repository,
+                    limit=args.retry_limit,
+                    error_code=args.retry_error_code,
+                    provider_code=args.retry_provider_code,
+                )
+                print(
+                    json.dumps(
+                        {"status": "requeued", "count": count},
+                        separators=(",", ":"),
+                    )
+                )
             summary = process_ingestion_backlog(
                 repository,
                 factory,
@@ -252,6 +300,7 @@ def main(
                 drain=args.drain or args.watch,
                 max_total=args.max_total if (args.drain or args.watch) else args.limit,
                 poll_seconds=args.poll_seconds,
+                request_delay_seconds=args.request_delay_seconds,
                 emit=lambda outcome: print(
                     json.dumps(outcome, separators=(",", ":"), sort_keys=True)
                 ),

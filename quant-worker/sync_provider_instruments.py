@@ -28,6 +28,10 @@ PROVIDERS = {
         "MSN via Vnstock",
         "https://vnstocks.com/docs/vnstock-data/market-layer-v3",
     ),
+    "dukascopy-public": (
+        "Dukascopy Public Datafeed",
+        "https://www.dukascopy.com/swiss/english/marketwatch/historical/",
+    ),
 }
 
 
@@ -35,7 +39,7 @@ def provider_code(descriptor: ProviderInstrumentDescriptor) -> str:
     if descriptor.market == "crypto_spot":
         return "binance-public"
     if descriptor.market == "metal_spot":
-        return "msn-via-vnstock"
+        return "dukascopy-public"
     if descriptor.market == "vn_equity":
         return "vnstock-vci-free"
     raise ValueError("Unsupported provider instrument market.")
@@ -72,6 +76,14 @@ def sync_provider_instruments(
     synchronized = 0
     with connection.transaction():
         with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE data_providers
+                SET status = 'disabled', updated_at = NOW()
+                WHERE code = 'msn-via-vnstock'
+                """,
+                (),
+            )
             selected_catalog = json.dumps(
                 [
                     {
@@ -196,7 +208,7 @@ def sync_provider_instruments(
                     ON selected.provider_code = provider.code
                    AND selected.provider_symbol = pi.provider_symbol
                    AND selected.canonical_symbol = asset.symbol
-                  WHERE provider.code IN ('binance-public', 'vnstock-vci-free', 'msn-via-vnstock')
+                  WHERE provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND selected.provider_code IS NULL
                 )
                 DELETE FROM market_ingestion_requests request
@@ -220,7 +232,7 @@ def sync_provider_instruments(
                 USING data_providers provider, assets asset
                 WHERE pi.provider_id = provider.id
                   AND pi.asset_id = asset.id
-                  AND provider.code IN ('binance-public', 'vnstock-vci-free', 'msn-via-vnstock')
+                  AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                   AND NOT EXISTS (
                     SELECT 1
                     FROM selected
@@ -270,10 +282,9 @@ def queue_market_ingestion_requests(
                     VALUES ('1d'), ('1h')
                   ) AS timeframe(timeframe)
                   WHERE provider.status = 'active'
-                    AND provider.code IN ('binance-public', 'vnstock-vci-free', 'msn-via-vnstock')
+                    AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
                     AND (%s = 'all' OR %s = timeframe.timeframe)
-                    AND NOT (provider.code = 'msn-via-vnstock' AND timeframe.timeframe = '1h')
                 )
                 INSERT INTO market_ingestion_requests (
                   id, organization_id, user_id, provider_instrument_id, timeframe,
@@ -310,6 +321,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         descriptors = [
             *BinanceSpotAdapter().list_instruments(),
             *VnstockAdapter().list_instruments(),
+            ProviderInstrumentDescriptor(
+                provider_symbol="XAUUSD",
+                canonical_symbol="XAU",
+                name="Gold Spot / US Dollar",
+                market="metal_spot",
+                venue="OTC",
+                currency="USD",
+            ),
         ]
         url = psycopg_connection_url(load_database_url(Path(".env.local")))
         with psycopg.connect(url, autocommit=False) as connection:

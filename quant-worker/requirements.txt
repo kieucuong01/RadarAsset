@@ -3,6 +3,7 @@ pandas>=2.2,<3
 psycopg[binary]>=3.2
 pytest>=8.0
 ccxt==4.5.73
+dukascopy-python==4.0.1
 fastapi==0.141.1
 quantstats==0.0.81
 skfolio==0.20.1

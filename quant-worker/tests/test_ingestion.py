@@ -312,11 +312,19 @@ def test_live_run_marks_stale_rows_once_before_processing() -> None:
 def test_ingestion_windows_use_initial_backfill_and_incremental_overlap() -> None:
     initial = ingestion_window("1d", now=NOW, active=None, market="vn_equity")
     crypto_initial = ingestion_window("1h", now=NOW, active=None, market="crypto_spot")
+    metal_daily_initial = ingestion_window(
+        "1d", now=NOW, active=None, market="metal_spot"
+    )
+    metal_hourly_initial = ingestion_window(
+        "1h", now=NOW, active=None, market="metal_spot"
+    )
     incremental = ingestion_window("1h", now=NOW, active=snapshot("BTC"))
 
     assert initial.fetch_start == NOW - timedelta(days=3653)
     assert initial.overlap_start == initial.fetch_start
     assert crypto_initial.fetch_start == datetime(2017, 1, 1, tzinfo=timezone.utc)
+    assert metal_daily_initial.fetch_start == datetime(1999, 6, 3, tzinfo=timezone.utc)
+    assert metal_hourly_initial.fetch_start == datetime(2003, 5, 5, tzinfo=timezone.utc)
     assert incremental.fetch_start == NOW - timedelta(days=3)
     assert incremental.overlap_start == NOW - timedelta(days=3)
 
