@@ -1,0 +1,26 @@
+{
+  "fees": {
+    "fastestFee": 12,
+    "halfHourFee": 10,
+    "hourFee": 8,
+    "economyFee": 3,
+    "minimumFee": 1
+  },
+  "mempool": {
+    "count": 45678,
+    "vsize": 98765432,
+    "total_fee": 12345678
+  },
+  "mining": {
+    "hashrates": [
+      {"timestamp": 1786406400, "avgHashrate": 9.1e20},
+      {"timestamp": 1786492800, "avgHashrate": 9.2e20},
+      {"timestamp": 1786579200, "avgHashrate": 9.3e20}
+    ],
+    "difficulty": [
+      {"time": 1786492800, "difficulty": 1.3e14}
+    ],
+    "currentHashrate": 9.35e20,
+    "currentDifficulty": 1.3e14
+  }
+}

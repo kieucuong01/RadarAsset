@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "asset": "btc",
+      "time": "2026-08-12T00:00:00.000000000Z",
+      "TxTfrValAdjUSD": "23800000000.25",
+      "AdrActCnt": "815400",
+      "CapMVRVCur": "2.11",
+      "NVTAdj": "42.8",
+      "SOPR": "1.03",
+      "NUPL": "0.54"
+    },
+    {
+      "asset": "btc",
+      "time": "2026-08-13T00:00:00.000000000Z",
+      "TxTfrValAdjUSD": "24000000000",
+      "AdrActCnt": "820000",
+      "CapMVRVCur": "2.12",
+      "NVTAdj": "43.1",
+      "SOPR": "1.04",
+      "NUPL": "0.55"
+    }
+  ]
+}

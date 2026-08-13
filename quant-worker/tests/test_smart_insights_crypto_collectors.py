@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 from pathlib import Path
 
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
+from smart_insights.collectors.coinmetrics import CoinMetricsCollector
+from smart_insights.collectors.defillama import (
+    DefiLlamaChainsCollector,
+    DefiLlamaStablecoinsCollector,
+)
 from smart_insights.collectors.farside import FarsideEtfCollector
+from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot
 from smart_insights.http import HttpResponse
 from smart_insights.parsers.markdown_table import parse_markdown_table
@@ -54,6 +61,42 @@ class FakeFirecrawl:
             published_at=None,
             observed_at=NOW,
             metadata={"collector": "firecrawl"},
+        )
+
+
+class RoutingTransport:
+    def __init__(self, payloads: dict[str, str]) -> None:
+        self.payloads = payloads
+        self.calls: list[str] = []
+
+    def fetch(
+        self, url: str, *, timeout_seconds: float, max_bytes: int
+    ) -> HttpResponse:
+        assert timeout_seconds > 0
+        assert max_bytes <= 10_000_000
+        self.calls.append(url)
+        match = next(key for key in self.payloads if key in url)
+        return HttpResponse(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=self.payloads[match].encode("utf-8"),
+            url=url,
+        )
+
+
+class SequencedTransport:
+    def __init__(self, payloads: list[dict[str, object]]) -> None:
+        self.payloads = payloads
+
+    def fetch(
+        self, url: str, *, timeout_seconds: float, max_bytes: int
+    ) -> HttpResponse:
+        payload = self.payloads.pop(0)
+        return HttpResponse(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(payload).encode("utf-8"),
+            url=url,
         )
 
 
@@ -158,3 +201,117 @@ def test_farside_supports_btc_eth_sol_and_quarantines_bad_total() -> None:
     assert broken.error_code == "RECONCILIATION_FAILED"
     assert rejected_date in broken.rejected_periods
     assert all(row.effective_at != rejected_date for row in broken.observations)
+
+
+def test_coinmetrics_collects_only_closed_daily_metrics() -> None:
+    batch = CoinMetricsCollector(
+        transport=FakeTransport(fixture_text("coinmetrics.json"))
+    ).collect(NOW)
+
+    cutoff = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+    assert {row.effective_at.hour for row in batch.observations} == {0}
+    assert all(row.effective_at < cutoff for row in batch.observations)
+    assert next(
+        row.value
+        for row in batch.observations
+        if row.metric_code == "crypto.onchain.mvrv"
+    ) == Decimal("2.11")
+    assert all(row.asset_symbol == "BTC" for row in batch.observations)
+    assert {
+        row.dimensions["provider_metric"] for row in batch.observations
+    } == {"TxTfrValAdjUSD", "AdrActCnt", "CapMVRVCur", "NVTAdj", "SOPR", "NUPL"}
+
+
+def test_coinmetrics_paging_cannot_move_backward() -> None:
+    next_url = (
+        "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+        "?next_page_token=owned-token"
+    )
+    transport = SequencedTransport(
+        [
+            {
+                "data": [
+                    {"asset": "btc", "time": "2026-08-12T00:00:00Z", "NVTAdj": "40"}
+                ],
+                "next_page_url": next_url,
+            },
+            {
+                "data": [
+                    {"asset": "btc", "time": "2026-08-11T00:00:00Z", "NVTAdj": "39"}
+                ]
+            },
+        ]
+    )
+
+    batch = CoinMetricsCollector(transport=transport).collect(NOW)
+
+    assert batch.error_code == "PAGINATION_ORDER"
+    assert batch.observations == ()
+
+
+def test_mempool_intraday_and_daily_history_keep_their_real_observation_times() -> None:
+    payload = json.loads(fixture_text("mempool.json"))
+    transport = RoutingTransport(
+        {
+            "/fees/recommended": json.dumps(payload["fees"]),
+            "/api/mempool": json.dumps(payload["mempool"]),
+            "/mining/hashrate/3y": json.dumps(payload["mining"]),
+        }
+    )
+    batch = MempoolSpaceCollector(transport=transport).collect(NOW)
+
+    instant = [
+        row for row in batch.observations if row.dimensions.get("frequency") == "instant"
+    ]
+    daily = [
+        row for row in batch.observations if row.dimensions.get("frequency") == "daily"
+    ]
+    assert instant
+    assert {row.effective_at for row in instant} == {NOW}
+    assert all(row.effective_at.hour == 0 and row.effective_at < NOW for row in daily)
+    assert next(
+        row.value
+        for row in daily
+        if row.metric_code == "crypto.network.hashrate_hs"
+        and row.effective_at == datetime(2026, 8, 12, tzinfo=timezone.utc)
+    ) == Decimal("9.2e20")
+
+
+def test_defillama_normalizes_closed_stablecoin_series_and_observed_chain_tvl() -> None:
+    stablecoins = DefiLlamaStablecoinsCollector(
+        transport=FakeTransport(fixture_text("defillama-stablecoins.json"))
+    ).collect(NOW)
+    assert [row.value for row in stablecoins.observations] == [
+        153_000_000_000,
+        154_100_000_000,
+    ]
+    assert all(row.effective_at < NOW.replace(hour=0, minute=0, second=0, microsecond=0) for row in stablecoins.observations)
+
+    chains = DefiLlamaChainsCollector(
+        transport=FakeTransport(fixture_text("defillama-chains.json"))
+    ).collect(NOW)
+    assert next(
+        row.value
+        for row in chains.observations
+        if row.dimensions.get("chain") == "TOTAL"
+    ) == 150_000_000
+    assert {row.effective_at for row in chains.observations} == {NOW}
+    assert all(row.dimensions["frequency"] == "observed_daily" for row in chains.observations)
+
+
+def test_defillama_rejects_negative_and_duplicate_series() -> None:
+    stable_payload = json.loads(fixture_text("defillama-stablecoins.json"))
+    stable_payload[0]["totalCirculatingUSD"]["peggedUSD"] = -1
+    negative = DefiLlamaStablecoinsCollector(
+        transport=FakeTransport(json.dumps(stable_payload))
+    ).collect(NOW)
+    assert negative.error_code == "INVALID_VALUE"
+    assert negative.observations == ()
+
+    chain_payload = json.loads(fixture_text("defillama-chains.json"))
+    chain_payload.append(dict(chain_payload[0]))
+    duplicate = DefiLlamaChainsCollector(
+        transport=FakeTransport(json.dumps(chain_payload))
+    ).collect(NOW)
+    assert duplicate.error_code == "DUPLICATE_SERIES"
+    assert duplicate.observations == ()
