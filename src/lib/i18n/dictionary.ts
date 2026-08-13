@@ -18,16 +18,16 @@ export const dictionaries = {
       language: "Ngôn ngữ",
     },
     routes: {
-      insights: "Smart Insights",
+      insights: "Tổng quan",
       insightsMobile: "Tổng quan",
-      portfolio: "Mock Portfolio",
+      portfolio: "Danh mục mô phỏng",
       portfolioMobile: "Danh mục",
-      quantLab: "Quant Lab",
-      quantLabMobile: "Quant Lab",
+      quantLab: "Phòng Quant",
+      quantLabMobile: "Phòng Quant",
     },
     quant: {
-      eyebrow: "Quantitative Simulation Workbench",
-      title: "Quant Lab",
+      eyebrow: "Phòng mô phỏng định lượng",
+      title: "Phòng Quant",
       hero: {
         description:
           "Tối ưu và backtest danh mục từ immutable market datasets. Kết quả là mô phỏng nghiên cứu, không phải khuyến nghị hoặc lệnh tại broker.",
@@ -37,11 +37,11 @@ export const dictionaries = {
         predictionUnavailable: "AI Prediction chưa được nối vào provider production.",
       },
       tabs: {
-        optimizer: "Portfolio Optimizer",
-        strategies: "Strategy Lab",
-        backtest: "Backtest & Risk Engine",
-        factors: "VN Factor Lab",
-        predict: "AI Prediction",
+        optimizer: "Tối ưu danh mục",
+        strategies: "Thư viện chiến lược",
+        backtest: "Backtest & Rủi ro",
+        factors: "Yếu tố VN",
+        predict: "Dự báo AI",
       },
       prediction: {
         title: "AI Prediction chưa sẵn sàng",
