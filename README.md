@@ -132,14 +132,16 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
 ```
 
 The code-owned enabled set currently contains Alternative.me, Coin Metrics Community active
-addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, and Deribit
-public data; each passed its own bounded live smoke. Farside, CoinShares, and BitInfoCharts remain
-disabled until Crawl4AI passes their production parser smoke.
+addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, Deribit public
+data, and the CryptoCraft economic calendar; each passed its own bounded live smoke. Browser sources
+that are blocked or no longer expose a machine-readable quantitative table remain disabled.
 
 Install and verify the pinned local browser crawler before running browser-backed sources:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
+$env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
 .\.venv\Scripts\crawl4ai-doctor.exe
 ```
@@ -158,8 +160,7 @@ automatically. Source health is available to authenticated research viewers at
 `GET /api/smart-insights/data-health`; raw bodies, artifact paths, and provider diagnostics are not
 returned.
 
-For CryptoCraft, invoke the current-calendar boundary every 15 minutes after the source passes its
-Firecrawl live smoke:
+For CryptoCraft, invoke the current-calendar boundary every 15 minutes:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule calendar-current
@@ -175,8 +176,8 @@ Macro observations use an allow-listed set of 15 FRED series and the official CF
 Only contracts for BTC, USD Index, E-mini S&P 500, and Nasdaq-100 Mini. Set `FRED_API_KEY` before its
 live smoke. CFTC queries are bounded to 5,000 rows, select only code-owned fields, and require
 `FutOnly`; combined futures/options rows fail validation instead of being double-counted. FRED,
-CFTC, and CryptoCraft remain disabled until each production parser passes from the deployment
-environment.
+CFTC and FRED remain disabled until each production parser passes from the deployment environment;
+CryptoCraft is enabled.
 
 The deterministic `macro-risk-asset-regime-v1` score weights liquidity 30%, rates/real yields 25%,
 USD pressure 20%, growth/inflation surprise 15%, and positioning 10%. It requires 60% fresh-weight

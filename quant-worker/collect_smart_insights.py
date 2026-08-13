@@ -294,7 +294,7 @@ def run_calendar_live_smoke(
 
 _COINSHARES_REPORT = re.compile(
     r"(?:https://coinshares\.com)?(?:/us)?/insights/research-data/"
-    r"fund-flows-(\d{1,2})-(\d{1,2})-(\d{4})/",
+    r"fund-flows-(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})/",
     re.IGNORECASE,
 )
 
@@ -312,8 +312,11 @@ def _discover_coinshares_report(crawler: Crawl4AIClient) -> str:
     candidates: list[tuple[datetime, str]] = []
     for match in _COINSHARES_REPORT.finditer(markdown):
         try:
+            year = int(match.group(3))
+            if year < 100:
+                year += 2_000
             report_date = datetime(
-                int(match.group(3)), int(match.group(2)), int(match.group(1)),
+                year, int(match.group(2)), int(match.group(1)),
                 tzinfo=timezone.utc,
             )
         except ValueError:

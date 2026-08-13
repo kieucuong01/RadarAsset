@@ -22,6 +22,11 @@ _TIMEZONE = re.compile(r"Calendar\s+Time\s+Zone:\s*([A-Za-z_]+(?:/[A-Za-z_+-]+)+
 _DATE = re.compile(r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*([A-Za-z]{3,9})\s+(\d{1,2})$", re.I)
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})\s*(am|pm)$", re.I)
 _LINK = re.compile(r"\[[^\]]+\]\((https://www\.cryptocraft\.com/calendar/[^\s\)]+)\)", re.I)
+_EMBEDDED_DAYS = re.compile(
+    r"window\.calendarComponentStates\[\d+\]\s*=\s*\{\s*days\s*:\s*",
+    re.I,
+)
+_HTML_TAG = re.compile(r"<[^>]+>")
 _SLUG = re.compile(r"[^a-z0-9]+")
 _COUNTRY_CURRENCY = {
     "AU": "AUD",
@@ -71,7 +76,7 @@ class CalendarBatch:
 
 
 class _CalendarHtmlParser(HTMLParser):
-    """Extract only known calendar cell roles from Firecrawl raw HTML."""
+    """Extract only known calendar cell roles from crawler raw HTML."""
 
     _ROLES = (
         "date",
@@ -215,6 +220,45 @@ def _event_identity(
     return f"cryptocraft:{currency}:{_slug(name)}:{instant}"
 
 
+def _embedded_calendar_rows(raw_html: str, *, max_rows: int) -> tuple[dict[str, str], ...]:
+    match = _EMBEDDED_DAYS.search(raw_html)
+    if match is None:
+        return ()
+    try:
+        days, _ = json.JSONDecoder().raw_decode(raw_html, match.end())
+    except json.JSONDecodeError as error:
+        raise ValueError("INVALID_RESPONSE") from error
+    if not isinstance(days, list):
+        raise ValueError("INVALID_RESPONSE")
+
+    rows: list[dict[str, str]] = []
+    for day in days:
+        if not isinstance(day, dict) or not isinstance(day.get("events"), list):
+            raise ValueError("INVALID_RESPONSE")
+        date_text = _HTML_TAG.sub("", str(day.get("date", ""))).strip()
+        for event in day["events"]:
+            if len(rows) >= max_rows:
+                raise ValueError("RESPONSE_TOO_LARGE")
+            if not isinstance(event, dict):
+                raise ValueError("INVALID_RESPONSE")
+            detail = str(event.get("soloUrl", "")).strip()
+            rows.append(
+                {
+                    "date": date_text,
+                    "time": str(event.get("timeLabel", "")),
+                    "country": str(event.get("country", "")),
+                    "currency": str(event.get("currency", "")),
+                    "impact": str(event.get("impactName", "")),
+                    "event": str(event.get("name", "")),
+                    "actual": str(event.get("actual", "")),
+                    "forecast": str(event.get("forecast", "")),
+                    "previous": str(event.get("previous", "")),
+                    "detail": urljoin("https://www.cryptocraft.com", detail) if detail else "",
+                }
+            )
+    return tuple(rows)
+
+
 class CryptoCraftCollector:
     def __init__(self, *, crawler: Any) -> None:
         self.source = source_for_code("cryptocraft")
@@ -271,7 +315,9 @@ class CryptoCraftCollector:
         except ZoneInfoNotFoundError:
             return CalendarBatch(self.source, snapshot, (), "INVALID_TIMEZONE")
         try:
-            rows = self._markdown_rows(markdown)
+            rows = _embedded_calendar_rows(raw_html, max_rows=1_000)
+            if not rows:
+                rows = self._markdown_rows(markdown)
             events = self._normalize_rows(
                 rows,
                 observed_at=observed_at.astimezone(zone),

@@ -7,6 +7,7 @@ from email.message import Message
 import hashlib
 import importlib
 import json
+import os
 from pathlib import Path
 import socket
 from types import SimpleNamespace
@@ -171,6 +172,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
         "coinmetrics-community",
+        "cryptocraft",
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
@@ -222,6 +224,27 @@ def test_discovered_links_remain_inside_source_specific_paths() -> None:
     )
     assert not is_source_url_allowed(
         wgc, "https://www.gold.org/download/file/12345/gold-etf-flows.pdf"
+    )
+
+
+def test_coinshares_discovery_accepts_current_two_digit_year_slugs() -> None:
+    class Crawler:
+        @staticmethod
+        def scrape(_source: object, url: str) -> RawSnapshot:
+            content = json.dumps(
+                {
+                    "markdown": (
+                        "[older](https://coinshares.com/insights/research-data/"
+                        "fund-flows-25-05-26/)\n"
+                        "[latest](https://coinshares.com/insights/research-data/"
+                        "fund-flows-01-06-26/)"
+                    )
+                }
+            ).encode()
+            return replace(snapshot(content), source_url=url)
+
+    assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
+        "https://coinshares.com/insights/research-data/fund-flows-01-06-26/"
     )
 
 
@@ -433,6 +456,19 @@ def test_crawl4ai_caps_serialized_snapshot_size() -> None:
             source_for_code("farside-btc-etf"), "https://farside.co.uk/btc/"
         )
     assert error.value.code == "RESPONSE_TOO_LARGE"
+
+
+def test_crawl4ai_cache_defaults_to_workspace_local_data(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CRAWL4_AI_BASE_DIRECTORY", raising=False)
+
+    target = _crawl4ai_client_class().configure_crawl4ai_home()
+
+    assert target == (tmp_path / ".local-data" / "crawl4ai").resolve()
+    assert target.is_dir()
+    assert os.environ["CRAWL4_AI_BASE_DIRECTORY"] == str(target)
 
 
 def test_artifact_store_is_atomic_and_content_addressed(tmp_path: Path) -> None:

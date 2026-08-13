@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
 import json
+import os
+from pathlib import Path
 from typing import Any
 
 from .contracts import CollectionMode, RawSnapshot, SourceDefinition
@@ -19,6 +21,7 @@ def _markdown_text(value: Any) -> str:
 
 
 async def _crawl(url: str) -> Any:
+    Crawl4AIClient.configure_crawl4ai_home()
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
     browser_config = BrowserConfig(headless=True, verbose=False)
@@ -38,6 +41,16 @@ def _run_crawl4ai(url: str) -> Any:
 
 
 class Crawl4AIClient:
+    @staticmethod
+    def configure_crawl4ai_home() -> Path:
+        configured = os.getenv(
+            "CRAWL4_AI_BASE_DIRECTORY", ".local-data/crawl4ai"
+        )
+        target = Path(configured).resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        os.environ["CRAWL4_AI_BASE_DIRECTORY"] = str(target)
+        return target
+
     def __init__(
         self,
         *,

@@ -55,13 +55,13 @@ class FakeCrawler:
 
 
 def test_current_week_parses_timezone_date_carry_and_values() -> None:
-    firecrawl = FakeCrawler(fixture_text("cryptocraft-current.md"))
-    batch = CryptoCraftCollector(crawler=firecrawl).collect_week(
+    crawler = FakeCrawler(fixture_text("cryptocraft-current.md"))
+    batch = CryptoCraftCollector(crawler=crawler).collect_week(
         "current", observed_at=NOW
     )
 
     assert batch.error_code is None
-    assert firecrawl.calls == ["https://www.cryptocraft.com/calendar?week=this"]
+    assert crawler.calls == ["https://www.cryptocraft.com/calendar?week=this"]
     assert len(batch.events) == 5
     high = next(row for row in batch.events if row.name == "Core CPI m/m")
     assert high.event_at_utc == datetime(2026, 8, 13, 12, 30, tzinfo=timezone.utc)
@@ -132,6 +132,40 @@ def test_raw_html_restores_impact_and_detail_when_markdown_loses_icons() -> None
     )
 
 
+def test_crawl4ai_embedded_calendar_state_handles_merged_markdown_table() -> None:
+    markdown = """Calendar Time Zone: Asia/Novosibirsk (GMT +7)
+| 11:38pm | Actual |
+| --- | --- |
+| Sun Aug 9 |
+| | 8:30am | Low | CH CPI y/y | 0.5% | 0.8% | 1.0% |
+"""
+    raw_html = r"""
+<section>Calendar Time Zone: Asia/Novosibirsk (GMT +7)</section>
+<script>window.calendarComponentStates[1] = {
+days: [{"date":"Sun <span>Aug 9<\/span>","events":[{
+  "id":150198,"name":"CH CPI y\/y","country":"CH","currency":"CNY",
+  "impactName":"low","timeLabel":"8:30am","actual":"0.5%",
+  "forecast":"0.8%","previous":"1.0%",
+  "soloUrl":"\/calendar\/454-ch-cpi-yy"
+}]}]};</script>
+"""
+
+    batch = CryptoCraftCollector(
+        crawler=FakeCrawler(markdown, raw_html=raw_html)
+    ).collect_week("current", observed_at=NOW)
+
+    assert batch.error_code is None
+    assert len(batch.events) == 1
+    event = batch.events[0]
+    assert event.name == "CH CPI y/y"
+    assert event.country == "CH"
+    assert event.currency == "CNY"
+    assert event.impact == "low"
+    assert event.event_date == date(2026, 8, 9)
+    assert event.event_at_utc == datetime(2026, 8, 9, 1, 30, tzinfo=timezone.utc)
+    assert event.detail_url == "https://www.cryptocraft.com/calendar/454-ch-cpi-yy"
+
+
 def test_calendar_live_smoke_uses_the_production_parser_without_writes() -> None:
     outcome = run_calendar_live_smoke(
         CryptoCraftCollector(
@@ -189,7 +223,7 @@ def test_missing_timezone_and_duplicate_conflict_fail_closed() -> None:
 
 def test_calendar_urls_are_fixed_and_detail_urls_are_allow_listed() -> None:
     source = source_for_code("cryptocraft")
-    assert source.enabled is False
+    assert source.enabled is True
     assert is_source_url_allowed(
         source, "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m"
     )
@@ -199,13 +233,13 @@ def test_calendar_urls_are_fixed_and_detail_urls_are_allow_listed() -> None:
         CryptoCraftCollector(
             crawler=FakeCrawler(fixture_text("cryptocraft-current.md"))
         ).collect_week("other", observed_at=NOW)
-    detail_firecrawl = FakeCrawler(fixture_text("cryptocraft-actual-revision.md"))
-    detail = CryptoCraftCollector(crawler=detail_firecrawl).collect_detail(
+    detail_crawler = FakeCrawler(fixture_text("cryptocraft-actual-revision.md"))
+    detail = CryptoCraftCollector(crawler=detail_crawler).collect_detail(
         "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m",
         observed_at=NOW,
     )
     assert detail.error_code is None
-    assert detail_firecrawl.calls == [
+    assert detail_crawler.calls == [
         "https://www.cryptocraft.com/calendar/1001-us-core-cpi-m-m"
     ]
 

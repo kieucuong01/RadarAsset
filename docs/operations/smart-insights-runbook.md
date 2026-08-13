@@ -14,6 +14,7 @@ Copy `.env.example` to `.env.local` and configure:
 - `SMART_INSIGHTS_TIMEZONE`: product day boundary, normally `Asia/Bangkok`.
 - `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
+- `CRAWL4_AI_BASE_DIRECTORY`: writable local Crawl4AI state directory.
 - `FRED_API_KEY`: required before the FRED collector can pass live smoke.
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
@@ -25,6 +26,8 @@ Install and verify the pinned browser runtime once per worker environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r quant-worker\requirements.txt
+New-Item -ItemType Directory -Force .local-data\crawl4ai | Out-Null
+$env:CRAWL4_AI_BASE_DIRECTORY=(Resolve-Path ".local-data\crawl4ai").Path
 .\.venv\Scripts\crawl4ai-setup.exe
 .\.venv\Scripts\crawl4ai-doctor.exe
 ```
@@ -45,18 +48,18 @@ Current verified and enabled sources:
 | `defillama-stablecoins` | Crypto/liquidity | Daily | API |
 | `defillama-chains` | Crypto/on-chain | Daily | API |
 | `deribit-public` | Crypto/derivatives | Daily | API |
+| `cryptocraft` | Macro/calendar | Due-state calendar schedule | Crawl4AI |
 
 Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Awaiting Crawl4AI live smoke |
-| `bitinfocharts-top-addresses` | Daily | Awaiting Crawl4AI live smoke |
-| `coinshares-weekly` | Weekly | Awaiting Crawl4AI live smoke |
-| `cryptocraft` | Due-state calendar schedule | Awaiting Crawl4AI live smoke |
-| `fred` | Daily | Requires deployment `FRED_API_KEY` and live smoke |
-| `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider/network smoke did not pass |
-| `wgc-gold-etf`, `wgc-central-bank` | Source period | Awaiting Crawl4AI live smoke |
+| `farside-btc-etf`, `farside-eth-etf`, `farside-sol-etf` | Daily | Anti-bot returned a 15-byte empty document (`NETWORK_ERROR`) on 2026-08-13 |
+| `bitinfocharts-top-addresses` | Daily | Cloudflare JS challenge (`NETWORK_ERROR`) on 2026-08-13 |
+| `coinshares-weekly` | Weekly | Article loads, but quantitative tables are images (`MISSING_PERIOD`) |
+| `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
+| `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
+| `wgc-gold-etf`, `wgc-central-bank` | Source period | No allow-listed XLSX link exposed (`SCHEMA_DRIFT`) |
 
 Smoke a single registered source without writing observations:
 

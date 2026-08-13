@@ -22,6 +22,7 @@ ENABLED_SOURCE_CODES = frozenset(
     {
         "alternative-fng",
         "coinmetrics-community",
+        "cryptocraft",
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
