@@ -1,7 +1,7 @@
 # Quant Data and Strategy Production Design
 
-**Date:** 2026-08-14  
-**Status:** Approved for planning  
+**Date:** 2026-08-14
+**Status:** Approved for planning
 **Scope:** Quant Lab ingestion operations, Vietnam adjusted datasets, Quant UI localization, and database-backed custom strategies.
 
 ## 1. Objective
