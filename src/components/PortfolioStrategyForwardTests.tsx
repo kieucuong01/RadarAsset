@@ -12,17 +12,19 @@ import {
 } from "recharts";
 import { getStrategyForwardTests, type ForwardTest } from "@/lib/strategy-forward/client";
 import { buildForwardChart } from "@/lib/strategy-forward/presentation";
+import { useI18n } from "@/lib/i18n/context";
 
 export function PortfolioStrategyForwardTests() {
+  const { t } = useI18n();
   const [items, setItems] = useState<ForwardTest[]>([]);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     void getStrategyForwardTests()
       .then(setItems)
-      .catch(() => setError("Không thể tải kết quả forward test."));
+      .catch(() => setError(t("forwardTesting.loadError")));
     return () => controller.abort();
-  }, []);
+  }, [t]);
   if (error)
     return (
       <section className="rounded-2xl border border-bear/30 bg-card p-6 text-sm text-bear">
@@ -32,21 +34,17 @@ export function PortfolioStrategyForwardTests() {
   if (!items.length)
     return (
       <section className="rounded-2xl border border-dashed bg-card p-6">
-        <h2 className="font-semibold">Forward Testing</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Apply một backtest thành công để theo dõi tín hiệu mới trên Mock Portfolio.
-        </p>
+        <h2 className="font-semibold">{t("forwardTesting.title")}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t("forwardTesting.emptyDescription")}</p>
       </section>
     );
   return (
     <section className="space-y-4" aria-labelledby="forward-tests-title">
       <div>
         <h2 id="forward-tests-title" className="text-xl font-bold">
-          Forward Testing
+          {t("forwardTesting.title")}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Hiệu quả từ lúc áp dụng chiến lược, không nhập giao dịch lịch sử.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("forwardTesting.description")}</p>
       </div>
       {items.map((item) => (
         <ForwardCard key={item.assignmentId} item={item} />
@@ -56,6 +54,7 @@ export function PortfolioStrategyForwardTests() {
 }
 
 function ForwardCard({ item }: { item: ForwardTest }) {
+  const { t } = useI18n();
   const chart = useMemo(() => buildForwardChart(item.snapshots), [item.snapshots]);
   const latest = item.snapshots.at(-1);
   return (
@@ -71,20 +70,23 @@ function ForwardCard({ item }: { item: ForwardTest }) {
           </h3>
         </div>
         <div className="text-right text-xs text-muted-foreground">
-          Dữ liệu tới
+          {t("forwardTesting.dataUntil")}
           <br />
           {item.lastEvaluatedBarAt
             ? new Date(item.lastEvaluatedBarAt).toLocaleString("vi-VN")
-            : "Đang chờ"}
+            : t("forwardTesting.waiting")}
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Metric
-          label="PnL loại trừ góp vốn"
+          label={t("forwardTesting.pnlExContributions")}
           value={latest ? latest.pnlExcludingContributions : 0}
         />
-        <Metric label="Vốn góp định kỳ" value={latest ? latest.cumulativeContributions : 0} />
-        <Metric label="Phí mô phỏng" value={latest ? latest.cumulativeFees : 0} />
+        <Metric
+          label={t("forwardTesting.contributions")}
+          value={latest ? latest.cumulativeContributions : 0}
+        />
+        <Metric label={t("forwardTesting.fees")} value={latest ? latest.cumulativeFees : 0} />
       </div>
       <div className="mt-4 h-52">
         {chart.length > 1 ? (
@@ -96,14 +98,14 @@ function ForwardCard({ item }: { item: ForwardTest }) {
               <Tooltip />
               <Area
                 dataKey="strategy"
-                name="Strategy"
+                name={t("forwardTesting.strategy")}
                 stroke="var(--primary)"
                 fill="var(--primary)"
                 fillOpacity={0.12}
               />
               <Area
                 dataKey="buyHold"
-                name="Buy & Hold"
+                name={t("forwardTesting.buyHold")}
                 stroke="var(--muted-foreground)"
                 fillOpacity={0}
               />
@@ -111,18 +113,19 @@ function ForwardCard({ item }: { item: ForwardTest }) {
           </ResponsiveContainer>
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
-            Đang chờ snapshot dữ liệu tiếp theo.
+            {t("forwardTesting.waitingSnapshot")}
           </div>
         )}
       </div>
       <div className="mt-3 text-sm">
-        <span className="text-muted-foreground">Tín hiệu gần nhất: </span>
+        <span className="text-muted-foreground">{t("forwardTesting.latestSignal")}: </span>
         {item.latestSignal ? (
           <span className={item.latestSignal.signalType === "buy" ? "text-bull" : "text-bear"}>
-            {item.latestSignal.signalType === "buy" ? "Mua" : "Bán"} · {item.latestSignal.reason}
+            {item.latestSignal.signalType === "buy" ? t("common.buy") : t("common.sell")} ·{" "}
+            {item.latestSignal.reason}
           </span>
         ) : (
-          "Chưa có tín hiệu mới"
+          t("forwardTesting.noSignal")
         )}
       </div>
     </article>

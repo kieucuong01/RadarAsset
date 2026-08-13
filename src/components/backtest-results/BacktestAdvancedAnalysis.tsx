@@ -119,18 +119,18 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
       [
         ...model.aggregate.cashFlow.map((event) => ({
           timestamp: event.timestamp,
-          type: "Contribution",
+          type: t("backtestResults.advanced.contributionEvent"),
           amount: event.amount,
           detail: `Cash ${money(event.cashAmount, currency)}`,
         })),
         ...model.aggregate.rebalance.map((event) => ({
           timestamp: event.timestamp,
-          type: "Rebalance",
+          type: t("backtestResults.advanced.rebalanceEvent"),
           amount: event.turnover,
           detail: `Cost ${money(event.cost, currency)}`,
         })),
       ].sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
-    [currency, model.aggregate.cashFlow, model.aggregate.rebalance],
+    [currency, model.aggregate.cashFlow, model.aggregate.rebalance, t],
   );
 
   async function applyStrategy(leg: BacktestResultModel["legs"][number]) {
@@ -180,9 +180,14 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
 
   return (
     <details className="min-w-0 max-w-full rounded-xl border bg-card text-card-foreground shadow">
-      <summary className="cursor-pointer px-6 py-5 font-semibold">Advanced Analysis</summary>
+      <summary className="cursor-pointer px-6 py-5 font-semibold">
+        {t("backtestResults.advanced.title")}
+      </summary>
       <div className="flex min-w-0 flex-col gap-5 px-6 pb-6">
-        <div className="flex flex-wrap gap-2" aria-label="Available advanced analysis">
+        <div
+          className="flex flex-wrap gap-2"
+          aria-label={t("backtestResults.advanced.availableAria")}
+        >
           {Object.entries(availability)
             .filter(([, available]) => available)
             .map(([section]) => (
@@ -195,18 +200,15 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         {availability.quantStats ? (
           <Card>
             <CardHeader>
-              <CardTitle>QuantStats IS / OOS report</CardTitle>
-              <CardDescription>
-                Chronological 70/30 split with market-aware annualization. The HTML tear sheet is
-                downloaded instead of rendered inside the app.
-              </CardDescription>
+              <CardTitle>{t("backtestResults.advanced.reportTitle")}</CardTitle>
+              <CardDescription>{t("backtestResults.advanced.reportDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm text-muted-foreground">
-                Source: QuantStats · immutable run artifact
+                {t("backtestResults.advanced.source")}
               </span>
               <Button onClick={downloadQuantStatsReport} disabled={!model.aggregate.reportHtml}>
-                Download HTML report
+                {t("backtestResults.advanced.download")}
               </Button>
             </CardContent>
           </Card>
@@ -215,34 +217,39 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         {model.aggregate.robustness ? (
           <Card>
             <CardHeader>
-              <CardTitle>Temporal holdout &amp; overfitting checks</CardTitle>
-              <CardDescription>
-                Expanding chronological windows. Each out-of-sample segment uses only information
-                available before that segment.
-              </CardDescription>
+              <CardTitle>{t("backtestResults.advanced.holdoutTitle")}</CardTitle>
+              <CardDescription>{t("backtestResults.advanced.holdoutDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs uppercase text-muted-foreground">OOS mean return</p>
+                  <p className="text-xs uppercase text-muted-foreground">
+                    {t("backtestResults.advanced.oosMean")}
+                  </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
                     {model.aggregate.robustness.outOfSampleMeanReturnPct.toFixed(2)}%
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs uppercase text-muted-foreground">Positive folds</p>
+                  <p className="text-xs uppercase text-muted-foreground">
+                    {t("backtestResults.advanced.positiveFolds")}
+                  </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
                     {model.aggregate.robustness.outOfSamplePositiveFoldPct.toFixed(0)}%
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs uppercase text-muted-foreground">OOS dispersion</p>
+                  <p className="text-xs uppercase text-muted-foreground">
+                    {t("backtestResults.advanced.oosDispersion")}
+                  </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
                     {model.aggregate.robustness.outOfSampleReturnStdPct.toFixed(2)}%
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs uppercase text-muted-foreground">Sample</p>
+                  <p className="text-xs uppercase text-muted-foreground">
+                    {t("backtestResults.advanced.sample")}
+                  </p>
                   <p className="mt-1 text-xl font-semibold capitalize">
                     {model.aggregate.robustness.sampleAdequacy}
                   </p>
@@ -252,11 +259,17 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Fold</TableHead>
-                    <TableHead>Out-of-sample period</TableHead>
-                    <TableHead className="text-right">Reference return</TableHead>
-                    <TableHead className="text-right">OOS return</TableHead>
-                    <TableHead className="text-right">Degradation</TableHead>
+                    <TableHead>{t("backtestResults.advanced.fold")}</TableHead>
+                    <TableHead>{t("backtestResults.advanced.oosPeriod")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("backtestResults.advanced.referenceReturn")}
+                    </TableHead>
+                    <TableHead className="text-right">
+                      {t("backtestResults.advanced.oosReturn")}
+                    </TableHead>
+                    <TableHead className="text-right">
+                      {t("backtestResults.advanced.degradation")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -281,7 +294,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
               </Table>
 
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                <p className="font-medium">Parameter robustness</p>
+                <p className="font-medium">{t("backtestResults.advanced.parameterRobustness")}</p>
                 <p className="mt-1 text-muted-foreground">
                   {model.aggregate.robustness.parameterStability.status === "not_evaluated"
                     ? "Not evaluated: this run did not execute neighboring parameter sets."
@@ -289,7 +302,8 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                 </p>
                 {model.aggregate.robustness.warnings.length > 0 ? (
                   <p className="mt-2 text-amber-600 dark:text-amber-400">
-                    Warnings: {model.aggregate.robustness.warnings.join(", ")}
+                    {t("backtestResults.advanced.warnings")}:{" "}
+                    {model.aggregate.robustness.warnings.join(", ")}
                   </p>
                 ) : null}
                 <p className="mt-2 text-xs text-muted-foreground">
@@ -303,7 +317,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         <Tabs defaultValue="aggregate" className="min-w-0">
           <div className="max-w-full overflow-x-auto pb-1">
             <TabsList className="w-max justify-start">
-              <TabsTrigger value="aggregate">Portfolio</TabsTrigger>
+              <TabsTrigger value="aggregate">{t("backtestResults.advanced.aggregate")}</TabsTrigger>
               {model.legs.map((leg) => (
                 <TabsTrigger key={leg.id} value={leg.id}>
                   {leg.symbol}
@@ -315,15 +329,18 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
           <TabsContent value="aggregate" className="flex min-w-0 flex-col gap-5">
             <Card>
               <CardHeader>
-                <CardTitle>Contribution by asset and cash</CardTitle>
+                <CardTitle>{t("backtestResults.advanced.contributionTitle")}</CardTitle>
                 <CardDescription>
-                  Absolute sleeve values stacked to total portfolio equity.
+                  {t("backtestResults.advanced.contributionDescription")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex min-w-0 flex-col gap-4">
                 {availability.contribution ? (
                   <>
-                    <div className="h-72 min-w-0" aria-label="Portfolio contribution chart">
+                    <div
+                      className="h-72 min-w-0"
+                      aria-label={t("backtestResults.advanced.contributionAria")}
+                    >
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                           data={contributionRows}
@@ -371,8 +388,10 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Component</TableHead>
-                          <TableHead className="text-right">Latest value</TableHead>
+                          <TableHead>{t("backtestResults.advanced.component")}</TableHead>
+                          <TableHead className="text-right">
+                            {t("backtestResults.advanced.latestValue")}
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -391,7 +410,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No contribution artifact is available for this run.
+                    {t("backtestResults.advanced.noContribution")}
                   </p>
                 )}
               </CardContent>
@@ -399,7 +418,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
 
             <Card>
               <CardHeader>
-                <CardTitle>Cash-flow and rebalance events</CardTitle>
+                <CardTitle>{t("backtestResults.advanced.cashFlowTitle")}</CardTitle>
                 <CardDescription>
                   {model.aggregate.assumptions.rebalanceFrequency} rebalance ·{" "}
                   {model.aggregate.assumptions.dividendMode} dividends · normalized FX
@@ -414,10 +433,12 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Event</TableHead>
-                        <TableHead className="text-right">Amount / turnover</TableHead>
-                        <TableHead>Detail</TableHead>
+                        <TableHead>{t("backtestResults.advanced.date")}</TableHead>
+                        <TableHead>{t("backtestResults.advanced.event")}</TableHead>
+                        <TableHead className="text-right">
+                          {t("backtestResults.advanced.amountTurnover")}
+                        </TableHead>
+                        <TableHead>{t("backtestResults.advanced.detail")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -458,7 +479,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                 <CardContent className="flex min-w-0 flex-col gap-4">
                   <EquityChart data={leg.equity} />
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Parameters:{" "}
+                    {t("backtestResults.advanced.parameters")}:{" "}
                     {Object.entries(leg.strategyParameters)
                       .map(([key, value]) => `${key}=${String(value)}`)
                       .join(", ")}
@@ -468,8 +489,10 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Completed trades</CardTitle>
-                  <CardDescription>Signal at close, fill at next bar open.</CardDescription>
+                  <CardTitle>{t("backtestResults.advanced.completedTrades")}</CardTitle>
+                  <CardDescription>
+                    {t("backtestResults.advanced.completedTradesDescription")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {leg.trades.length === 0 ? (
@@ -480,8 +503,8 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Entry</TableHead>
-                          <TableHead>Exit</TableHead>
+                          <TableHead>{t("backtestResults.advanced.entry")}</TableHead>
+                          <TableHead>{t("backtestResults.advanced.exit")}</TableHead>
                           <TableHead className="text-right">PnL</TableHead>
                           <TableHead className="text-right">Return</TableHead>
                         </TableRow>

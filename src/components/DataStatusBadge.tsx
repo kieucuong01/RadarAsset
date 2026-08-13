@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { DATA_STATUS_META, type DataStatus } from "@/lib/mvp-ui";
+import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<DataStatus, string> = {
@@ -18,7 +19,10 @@ export function DataStatusBadge({
   detail?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const meta = DATA_STATUS_META[status];
+  const label = t(`dataStatus.${status}.label`);
+  const description = t(`dataStatus.${status}.description`);
 
   return (
     <Badge
@@ -28,9 +32,9 @@ export function DataStatusBadge({
         STATUS_STYLES[status],
         className,
       )}
-      title={detail ?? meta.description}
+      title={detail ?? description ?? meta.description}
     >
-      {meta.label}
+      {label ?? meta.label}
     </Badge>
   );
 }

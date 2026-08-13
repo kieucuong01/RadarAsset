@@ -27,6 +27,21 @@ describe("i18n dictionary", () => {
     expect(translate("en", "quant.tabs.optimizer")).toBe("Portfolio Optimizer");
   });
 
+  it("covers visible content inside overview, mock portfolio and quant lab", () => {
+    expect(translate("vi", "overview.hero.badge")).toBe("Bản tin ngày");
+    expect(translate("en", "overview.hero.badge")).toBe("Daily briefing");
+    expect(translate("vi", "portfolio.balance.total")).toBe("Tổng tài sản");
+    expect(translate("en", "portfolio.balance.total")).toBe("Total Balance");
+    expect(translate("vi", "optimizer.title")).toBe("Bộ tối ưu Awesome-Quant");
+    expect(translate("en", "optimizer.title")).toBe("Awesome-Quant Optimizer");
+    expect(translate("vi", "strategyLab.title")).toBe("Thư viện chiến lược");
+    expect(translate("en", "strategyLab.title")).toBe("Strategy Lab");
+    expect(translate("vi", "factorLab.loading")).toBe("Đang tải universe factor Việt Nam…");
+    expect(translate("en", "factorLab.loading")).toBe("Loading VN factor universe…");
+    expect(translate("vi", "backtestResults.tradeList.title")).toBe("Danh sách lệnh");
+    expect(translate("en", "backtestResults.tradeList.title")).toBe("Trade List");
+  });
+
   it("keeps Vietnamese copy as valid UTF-8, not mojibake", () => {
     const text = translate("vi", "quant.hero.description");
 

@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
+import { useI18n } from "@/lib/i18n/context";
 
 type ActiveBacktestPortfolioProps = {
   run: BacktestRun;
@@ -21,6 +22,7 @@ function shortDate(value: string | undefined) {
 }
 
 export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioProps) {
+  const { t } = useI18n();
   const firstPoint = model.aggregate.equity[0];
   const lastPoint = model.aggregate.equity.at(-1);
   const currency = model.aggregate.assumptions.baseCurrency;
@@ -29,9 +31,9 @@ export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioP
     <Card className="min-w-0 max-w-full rounded-2xl shadow-sm">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <CardTitle>Active Portfolio</CardTitle>
+          <CardTitle>{t("backtestResults.activePortfolio")}</CardTitle>
           <CardDescription className="font-mono text-xs uppercase tracking-wider">
-            {model.legs.length} legs · {shortDate(firstPoint?.timestamp)} -{" "}
+            {model.legs.length} {t("backtestResults.legs")} · {shortDate(firstPoint?.timestamp)} -{" "}
             {shortDate(lastPoint?.timestamp)} · {run.timeframe}
           </CardDescription>
         </div>

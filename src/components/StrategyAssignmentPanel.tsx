@@ -13,6 +13,7 @@ import type {
 } from "@/lib/backend/types";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import { getStrategyCatalog, type StrategyCatalogItem } from "@/lib/backtest/client";
+import { useI18n } from "@/lib/i18n/context";
 
 function loadAssignments() {
   return fetch("/api/portfolio/strategy-assignments", { cache: "no-store" }).then(
@@ -34,6 +35,7 @@ export function StrategyAssignmentPanel({
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
+  const { t } = useI18n();
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
   const [assignments, setAssignments] = useState<StrategyAssignmentResponse[]>([]);
   const [symbol, setSymbol] = useState(holdings[0]?.ticker ?? "BTC");
@@ -55,7 +57,7 @@ export function StrategyAssignmentPanel({
       setAssignments(await loadAssignments());
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load assignments.");
+      setError(loadError instanceof Error ? loadError.message : t("strategyAlerts.loadError"));
     } finally {
       setLoading(false);
     }
@@ -72,10 +74,12 @@ export function StrategyAssignmentPanel({
         }
       })
       .catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : "Unable to load strategies.");
+        setError(
+          loadError instanceof Error ? loadError.message : t("strategyAlerts.strategiesError"),
+        );
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!heldAssets.some((holding) => holding.ticker === symbol) && heldAssets[0]) {
@@ -101,13 +105,13 @@ export function StrategyAssignmentPanel({
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Unable to apply strategy.");
+        throw new Error(payload?.error ?? t("strategyAlerts.applyError"));
       }
       await refreshAssignments();
-      toast.success(`${definition.name} applied to ${symbol}. Signals remain review-only.`);
+      toast.success(t("strategyAlerts.applied", { strategy: definition.name, symbol }));
     } catch (assignError) {
       const message =
-        assignError instanceof Error ? assignError.message : "Unable to apply strategy.";
+        assignError instanceof Error ? assignError.message : t("strategyAlerts.applyError");
       setError(message);
       toast.error(message);
     } finally {
@@ -122,19 +126,17 @@ export function StrategyAssignmentPanel({
     >
       <div className="p-5 border-b border-border">
         <h2 id="strategy-assignments-heading" className="font-semibold">
-          Strategy alerts
+          {t("strategyAlerts.title")}
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Apply a catalog strategy to a holding. BUY/SELL suggestions never execute automatically.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("strategyAlerts.description")}</p>
       </div>
       <div className="p-5 space-y-4">
         {heldAssets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Add a holding before applying a strategy.</p>
+          <p className="text-sm text-muted-foreground">{t("strategyAlerts.addHoldingFirst")}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-[1fr_1.5fr_auto] items-end">
             <label className="space-y-1 text-xs text-muted-foreground">
-              Holding
+              {t("strategyAlerts.holding")}
               <select
                 value={symbol}
                 onChange={(event) => setSymbol(event.target.value)}
@@ -148,7 +150,7 @@ export function StrategyAssignmentPanel({
               </select>
             </label>
             <label className="space-y-1 text-xs text-muted-foreground">
-              Strategy
+              {t("common.strategy")}
               <select
                 value={strategyCode}
                 onChange={(event) => {
@@ -169,7 +171,7 @@ export function StrategyAssignmentPanel({
               onClick={() => void assignStrategy()}
               disabled={disabled || saving || !selectedStrategy || loading}
             >
-              {saving ? "Applying…" : "Apply strategy"}
+              {saving ? t("common.applying") : t("strategyAlerts.apply")}
             </Button>
           </div>
         )}
@@ -216,13 +218,12 @@ export function StrategyAssignmentPanel({
                     </p>
                   </div>
                   <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Review required
+                    {t("strategyAlerts.reviewRequired")}
                   </span>
                 </div>
                 {assignment.signals.length === 0 ? (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    No new BUY/SELL signal yet. Active assignments are evaluated whenever a new
-                    immutable market dataset is published.
+                    {t("strategyAlerts.noSignal")}
                   </p>
                 ) : (
                   <div className="mt-3 space-y-2">

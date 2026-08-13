@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { WatchlistItemResponse } from "@/lib/backend/types";
+import { useI18n } from "@/lib/i18n/context";
 import { addFavoriteAsset } from "@/lib/watchlist-client";
 
 const instrumentSchema = z
@@ -43,6 +44,7 @@ export function FavoriteAssetDialog({
   onOpenChange: (open: boolean) => void;
   onSaved: (items: WatchlistItemResponse[]) => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
@@ -60,18 +62,18 @@ export function FavoriteAssetDialog({
         signal: controller.signal,
       })
         .then(async (response) => {
-          if (!response.ok) throw new Error("Không thể tìm catalog tài sản.");
+          if (!response.ok) throw new Error(t("favorites.searchError"));
           const parsed = z
             .object({ items: z.array(instrumentSchema) })
             .strict()
             .safeParse(await response.json());
-          if (!parsed.success) throw new Error("Catalog tài sản trả về dữ liệu không hợp lệ.");
+          if (!parsed.success) throw new Error(t("favorites.invalidCatalog"));
           setItems(parsed.data.items);
           setError(null);
         })
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          setError(caught instanceof Error ? caught.message : "Không thể tìm tài sản.");
+          setError(caught instanceof Error ? caught.message : t("favorites.searchError"));
         })
         .finally(() => setLoading(false));
     }, 250);
@@ -79,7 +81,7 @@ export function FavoriteAssetDialog({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, query]);
+  }, [open, query, t]);
 
   async function save() {
     if (!selected) return;
@@ -96,7 +98,7 @@ export function FavoriteAssetDialog({
       setSelected(null);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể thêm tài sản yêu thích.");
+      setError(caught instanceof Error ? caught.message : t("favorites.addError"));
     } finally {
       setSaving(false);
     }
@@ -106,11 +108,8 @@ export function FavoriteAssetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Thêm tài sản yêu thích</DialogTitle>
-          <DialogDescription>
-            Tìm trong catalog Binance, chứng khoán Việt Nam và XAU đã đồng bộ. Hệ thống không nhận
-            URL tự do.
-          </DialogDescription>
+          <DialogTitle>{t("favorites.dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("favorites.dialogDescription")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="relative">
@@ -123,19 +122,17 @@ export function FavoriteAssetDialog({
               }}
               className="pl-9"
               placeholder="VNM, ETH, XAU…"
-              aria-label="Tìm tài sản trong catalog"
+              aria-label={t("favorites.searchAria")}
             />
           </div>
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
             {loading ? (
               <p className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" /> Đang tìm…
+                <LoaderCircle className="size-4 animate-spin" /> {t("favorites.searching")}
               </p>
             ) : null}
             {!loading && items.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">
-                Không có mã phù hợp trong catalog cục bộ.
-              </p>
+              <p className="p-3 text-sm text-muted-foreground">{t("favorites.emptyCatalog")}</p>
             ) : null}
             {items.map((item) => (
               <button
@@ -162,10 +159,10 @@ export function FavoriteAssetDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Hủy
+            {t("favorites.cancel")}
           </Button>
           <Button onClick={() => void save()} disabled={!selected || saving}>
-            {saving ? "Đang thêm…" : "Thêm và chuẩn bị dữ liệu"}
+            {saving ? t("favorites.saving") : t("favorites.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

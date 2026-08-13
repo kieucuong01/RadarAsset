@@ -55,12 +55,16 @@ import {
   type CustomStrategyInput,
 } from "@/lib/strategy-lab/custom-strategy";
 import { listStrategyLibrary, type StrategyFamily } from "@/lib/strategy-lab/library";
+import { useI18n } from "@/lib/i18n/context";
 
 const STORAGE_KEY = "radarasset.strategy-lab.v1";
-const FAMILY_LABELS: Record<StrategyFamily, string> = {
-  technical: "Phân tích kỹ thuật",
-  fundamental: "Phân tích cơ bản",
-  systematic: "Hệ thống / phân bổ",
+const FAMILY_LABELS: Record<
+  StrategyFamily,
+  "strategyLab.technical" | "strategyLab.fundamental" | "strategyLab.systematic"
+> = {
+  technical: "strategyLab.technical",
+  fundamental: "strategyLab.fundamental",
+  systematic: "strategyLab.systematic",
 };
 const STYLE_LABELS = {
   trend: "Trend following",
@@ -119,6 +123,7 @@ export function StrategyLab({
 }: {
   onUsePreset: (selection: StrategyLabSelection) => void;
 }) {
+  const { t } = useI18n();
   const library = useMemo(() => listStrategyLibrary(), []);
   const [section, setSection] = useState("library");
   const [query, setQuery] = useState("");
@@ -209,9 +214,9 @@ export function StrategyLab({
       const strategy = normalizeCustomStrategy(buildDraft());
       persist([...saved, strategy]);
       setSection("mine");
-      toast.success("Đã lưu thiết kế chiến lược trên trình duyệt này.");
+      toast.success(t("strategyLab.saved"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Rule chưa hợp lệ.");
+      toast.error(error instanceof Error ? error.message : t("strategyLab.invalid"));
     }
   }
 
@@ -240,23 +245,22 @@ export function StrategyLab({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <BookOpen /> Strategy Lab
+                <BookOpen /> {t("strategyLab.title")}
               </CardTitle>
               <CardDescription className="mt-1 max-w-3xl">
-                Hiểu chiến lược trước khi dùng, thiết kế rule không cần viết code và chỉ đưa vào
-                Backtest những rule engine thực sự hỗ trợ.
+                {t("strategyLab.description")}
               </CardDescription>
             </div>
-            <Badge variant="secondary">No-code rules · v1</Badge>
+            <Badge variant="secondary">{t("strategyLab.badge")}</Badge>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 text-sm md:grid-cols-4">
             {[
-              "1. Tối ưu phân bổ",
-              "2. Chọn / thiết kế chiến lược",
-              "3. Backtest danh mục",
-              "4. Theo dõi ở Mock Portfolio",
+              t("strategyLab.flow1"),
+              t("strategyLab.flow2"),
+              t("strategyLab.flow3"),
+              t("strategyLab.flow4"),
             ].map((step, index) => (
               <div key={step} className="flex items-center gap-2 rounded-lg border p-3">
                 {index === 1 ? (
@@ -275,13 +279,13 @@ export function StrategyLab({
         <div className="overflow-x-auto pb-1">
           <TabsList className="min-w-max">
             <TabsTrigger value="library">
-              <BookOpen /> Thư viện
+              <BookOpen /> {t("strategyLab.library")}
             </TabsTrigger>
             <TabsTrigger value="builder">
-              <Wrench /> Thiết kế chiến lược
+              <Wrench /> {t("strategyLab.builder")}
             </TabsTrigger>
             <TabsTrigger value="mine">
-              <Save /> Chiến lược của tôi ({saved.length})
+              <Save /> {t("strategyLab.mine", { count: saved.length })}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -292,7 +296,7 @@ export function StrategyLab({
               <FieldGroup>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
                   <Field>
-                    <FieldLabel htmlFor="strategy-search">Tìm chiến lược</FieldLabel>
+                    <FieldLabel htmlFor="strategy-search">{t("strategyLab.search")}</FieldLabel>
                     <div className="relative">
                       <Search
                         aria-hidden="true"
@@ -308,17 +312,23 @@ export function StrategyLab({
                     </div>
                   </Field>
                   <Field>
-                    <FieldLabel>Nhóm phân tích</FieldLabel>
+                    <FieldLabel>{t("strategyLab.family")}</FieldLabel>
                     <ToggleGroup
                       type="single"
                       value={family}
                       onValueChange={(value) => value && setFamily(value as typeof family)}
                       variant="outline"
                     >
-                      <ToggleGroupItem value="all">Tất cả</ToggleGroupItem>
-                      <ToggleGroupItem value="technical">Kỹ thuật</ToggleGroupItem>
-                      <ToggleGroupItem value="fundamental">Cơ bản</ToggleGroupItem>
-                      <ToggleGroupItem value="systematic">Hệ thống</ToggleGroupItem>
+                      <ToggleGroupItem value="all">{t("strategyLab.all")}</ToggleGroupItem>
+                      <ToggleGroupItem value="technical">
+                        {t("strategyLab.technical")}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="fundamental">
+                        {t("strategyLab.fundamental")}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="systematic">
+                        {t("strategyLab.systematic")}
+                      </ToggleGroupItem>
                     </ToggleGroup>
                   </Field>
                 </div>
@@ -350,7 +360,7 @@ export function StrategyLab({
                         <CardDescription className="mt-1">{strategy.thesis}</CardDescription>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Badge>{FAMILY_LABELS[strategy.family]}</Badge>
+                        <Badge>{t(FAMILY_LABELS[strategy.family])}</Badge>
                         <Badge variant="outline">{STYLE_LABELS[strategy.style]}</Badge>
                       </div>
                     </div>
@@ -358,33 +368,38 @@ export function StrategyLab({
                   <CardContent>
                     <Accordion type="single" collapsible>
                       <AccordionItem value="logic">
-                        <AccordionTrigger>Logic mua / bán</AccordionTrigger>
+                        <AccordionTrigger>{t("strategyLab.entryExit")}</AccordionTrigger>
                         <AccordionContent className="flex flex-col gap-2 text-muted-foreground">
                           <p>
-                            <strong className="text-foreground">Mua:</strong> {strategy.entryRule}
+                            <strong className="text-foreground">{t("strategyLab.entry")}:</strong>{" "}
+                            {strategy.entryRule}
                           </p>
                           <p>
-                            <strong className="text-foreground">Bán:</strong> {strategy.exitRule}
+                            <strong className="text-foreground">{t("strategyLab.exit")}:</strong>{" "}
+                            {strategy.exitRule}
                           </p>
                         </AccordionContent>
                       </AccordionItem>
                       <AccordionItem value="fit">
-                        <AccordionTrigger>Khi nào phù hợp và rủi ro</AccordionTrigger>
+                        <AccordionTrigger>{t("strategyLab.fitRisk")}</AccordionTrigger>
                         <AccordionContent className="grid gap-4 md:grid-cols-2">
-                          <GuideList title="Phù hợp" items={strategy.idealConditions} />
-                          <GuideList title="Rủi ro" items={strategy.risks} />
+                          <GuideList
+                            title={t("strategyLab.ideal")}
+                            items={strategy.idealConditions}
+                          />
+                          <GuideList title={t("strategyLab.risk")} items={strategy.risks} />
                         </AccordionContent>
                       </AccordionItem>
                       <AccordionItem value="requirements">
-                        <AccordionTrigger>Dữ liệu, thị trường và tham số</AccordionTrigger>
+                        <AccordionTrigger>{t("strategyLab.requirements")}</AccordionTrigger>
                         <AccordionContent className="flex flex-col gap-3 text-muted-foreground">
                           <p>
-                            Dữ liệu: {strategy.dataRequirements.join(", ")} · Warm-up:{" "}
-                            {strategy.requiredWarmup}
+                            {t("strategyLab.data")}: {strategy.dataRequirements.join(", ")} ·{" "}
+                            {t("strategyLab.warmup")}: {strategy.requiredWarmup}
                           </p>
                           <p>
-                            Khung: {strategy.supportedTimeframes.join(", ")} · Version{" "}
-                            {strategy.version}
+                            {t("strategyLab.timeframes")}: {strategy.supportedTimeframes.join(", ")}{" "}
+                            · Version {strategy.version}
                           </p>
                           <p>{strategy.sourceAttribution}</p>
                         </AccordionContent>
@@ -399,7 +414,7 @@ export function StrategyLab({
                         setSection("builder");
                       }}
                     >
-                      <Wrench data-icon="inline-start" /> Tùy chỉnh tham số
+                      <Wrench data-icon="inline-start" /> {t("strategyLab.customize")}
                     </Button>
                     <Button
                       onClick={() =>
@@ -410,7 +425,7 @@ export function StrategyLab({
                         })
                       }
                     >
-                      <FlaskConical data-icon="inline-start" /> Dùng trong Backtest
+                      <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -423,16 +438,16 @@ export function StrategyLab({
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
             <Card>
               <CardHeader>
-                <CardTitle>Visual Rule Builder</CardTitle>
-                <CardDescription>
-                  Mỗi thiết kế có một tài sản, trigger/điều kiện và hành động rõ ràng.
-                </CardDescription>
+                <CardTitle>{t("strategyLab.visualBuilder")}</CardTitle>
+                <CardDescription>{t("strategyLab.visualBuilderDescription")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field>
-                      <FieldLabel htmlFor="custom-strategy-name">Tên chiến lược</FieldLabel>
+                      <FieldLabel htmlFor="custom-strategy-name">
+                        {t("strategyLab.strategyName")}
+                      </FieldLabel>
                       <Input
                         id="custom-strategy-name"
                         value={builder.name}
@@ -442,7 +457,9 @@ export function StrategyLab({
                       />
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="custom-strategy-symbol">Mã tài sản</FieldLabel>
+                      <FieldLabel htmlFor="custom-strategy-symbol">
+                        {t("strategyLab.assetSymbol")}
+                      </FieldLabel>
                       <Input
                         id="custom-strategy-symbol"
                         value={builder.symbol}
@@ -457,7 +474,7 @@ export function StrategyLab({
                     </Field>
                   </div>
                   <Field>
-                    <FieldLabel>Loại rule</FieldLabel>
+                    <FieldLabel>{t("strategyLab.ruleType")}</FieldLabel>
                     <ToggleGroup
                       type="single"
                       value={builder.kind}
@@ -468,10 +485,18 @@ export function StrategyLab({
                       variant="outline"
                       className="flex-wrap justify-start"
                     >
-                      <ToggleGroupItem value="catalog_preset">Indicator kỹ thuật</ToggleGroupItem>
-                      <ToggleGroupItem value="scheduled_dca">DCA định kỳ</ToggleGroupItem>
-                      <ToggleGroupItem value="price_threshold">Ngưỡng giá</ToggleGroupItem>
-                      <ToggleGroupItem value="fundamental_threshold">Chỉ số cơ bản</ToggleGroupItem>
+                      <ToggleGroupItem value="catalog_preset">
+                        {t("strategyLab.technicalIndicator")}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="scheduled_dca">
+                        {t("strategyLab.dca")}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="price_threshold">
+                        {t("strategyLab.priceThreshold")}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="fundamental_threshold">
+                        {t("strategyLab.fundamentalMetric")}
+                      </ToggleGroupItem>
                     </ToggleGroup>
                   </Field>
                   <RuleFields
@@ -484,7 +509,7 @@ export function StrategyLab({
               </CardContent>
               <CardFooter>
                 <Button onClick={saveDraft}>
-                  <Save data-icon="inline-start" /> Lưu chiến lược
+                  <Save data-icon="inline-start" /> {t("strategyLab.saveStrategy")}
                 </Button>
               </CardFooter>
             </Card>
@@ -497,12 +522,12 @@ export function StrategyLab({
           {saved.length === 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Chưa có chiến lược tự thiết kế</CardTitle>
-                <CardDescription>Tạo rule đầu tiên từ Visual Rule Builder.</CardDescription>
+                <CardTitle>{t("strategyLab.noCustomTitle")}</CardTitle>
+                <CardDescription>{t("strategyLab.noCustomDescription")}</CardDescription>
               </CardHeader>
               <CardFooter>
                 <Button onClick={() => setSection("builder")}>
-                  <Plus data-icon="inline-start" /> Tạo chiến lược
+                  <Plus data-icon="inline-start" /> {t("strategyLab.createStrategy")}
                 </Button>
               </CardFooter>
             </Card>
@@ -531,7 +556,7 @@ export function StrategyLab({
                         variant="outline"
                         onClick={() => persist(saved.filter((item) => item.id !== strategy.id))}
                       >
-                        <Trash2 data-icon="inline-start" /> Xóa
+                        <Trash2 data-icon="inline-start" /> {t("strategyLab.delete")}
                       </Button>
                       <Button
                         disabled={strategy.kind !== "catalog_preset"}
@@ -545,7 +570,7 @@ export function StrategyLab({
                           });
                         }}
                       >
-                        <FlaskConical data-icon="inline-start" /> Dùng trong Backtest
+                        <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
                       </Button>
                     </CardFooter>
                   </Card>
@@ -566,30 +591,37 @@ function CapabilityCard({
   family: "fundamental" | "systematic";
   onBuild: () => void;
 }) {
+  const { t } = useI18n();
   const fundamental = family === "fundamental";
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>{fundamental ? "Phân tích cơ bản" : "Chiến lược hệ thống"}</CardTitle>
+            <CardTitle>
+              {fundamental
+                ? t("strategyLab.capabilityFundamentalTitle")
+                : t("strategyLab.capabilitySystematicTitle")}
+            </CardTitle>
             <CardDescription className="mt-1">
               {fundamental
-                ? "P/B, P/E và ROE theo thời điểm công bố."
-                : "DCA và rule dòng tiền theo lịch."}
+                ? t("strategyLab.capabilityFundamentalDesc")
+                : t("strategyLab.capabilitySystematicDesc")}
             </CardDescription>
           </div>
-          <Badge variant="outline">{fundamental ? "Cần dữ liệu" : "Cần engine"}</Badge>
+          <Badge variant="outline">
+            {fundamental ? t("strategyLab.needsData") : t("strategyLab.needsEngine")}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
         {fundamental
-          ? "Có thể thiết kế và lưu rule ngay, nhưng hệ thống chưa backtest cho đến khi có dữ liệu báo cáo tài chính point-in-time để tránh look-ahead bias."
-          : "Có thể thiết kế DCA hàng tháng ngay. Engine portfolio đã có cash-flow assumptions, nhưng chưa thực thi DCA thành lệnh theo từng tài sản."}
+          ? t("strategyLab.capabilityFundamentalBody")
+          : t("strategyLab.capabilitySystematicBody")}
       </CardContent>
       <CardFooter>
         <Button variant="outline" onClick={onBuild}>
-          <Wrench data-icon="inline-start" /> Thiết kế rule
+          <Wrench data-icon="inline-start" /> {t("strategyLab.buildRule")}
         </Button>
       </CardFooter>
     </Card>
@@ -614,19 +646,23 @@ function ReadinessBadge({
 }: {
   status: ReturnType<typeof customStrategyReadiness>["status"];
 }) {
-  if (status === "executable") return <Badge>Có thể backtest</Badge>;
+  const { t } = useI18n();
+  if (status === "executable") return <Badge>{t("strategyLab.executable")}</Badge>;
   return (
-    <Badge variant="outline">{status === "data_required" ? "Cần dữ liệu" : "Cần engine"}</Badge>
+    <Badge variant="outline">
+      {status === "data_required" ? t("strategyLab.needsData") : t("strategyLab.needsEngine")}
+    </Badge>
   );
 }
 
 function BuilderPreview({ builder }: { builder: BuilderState }) {
+  const { t } = useI18n();
   let draft: CustomStrategyInput | null = null;
   try {
     const base = {
       schemaVersion: 1 as const,
       id: "preview",
-      name: builder.name || "Chưa đặt tên",
+      name: builder.name || t("strategyLab.unnamedShort"),
       symbol: builder.symbol || "?",
     };
     if (builder.kind === "catalog_preset") {
@@ -674,15 +710,15 @@ function BuilderPreview({ builder }: { builder: BuilderState }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Rule đã chuẩn hóa</CardTitle>
-        <CardDescription>Đây là điều hệ thống hiểu và sẽ lưu.</CardDescription>
+        <CardTitle>{t("strategyLab.normalizedRule")}</CardTitle>
+        <CardDescription>{t("strategyLab.normalizedRuleDesc")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {draft && readiness ? (
           <>
             <Alert>
               <CheckCircle2 />
-              <AlertTitle>{builder.name || "Chiến lược chưa đặt tên"}</AlertTitle>
+              <AlertTitle>{builder.name || t("strategyLab.unnamed")}</AlertTitle>
               <AlertDescription>{describeCustomStrategy(draft)}</AlertDescription>
             </Alert>
             <div className="flex items-center gap-2">
@@ -692,8 +728,8 @@ function BuilderPreview({ builder }: { builder: BuilderState }) {
           </>
         ) : (
           <Alert>
-            <AlertTitle>Rule chưa hợp lệ</AlertTitle>
-            <AlertDescription>Điền đầy đủ tên, mã và tham số hợp lệ.</AlertDescription>
+            <AlertTitle>{t("strategyLab.invalidRule")}</AlertTitle>
+            <AlertDescription>{t("strategyLab.invalidRuleDesc")}</AlertDescription>
           </Alert>
         )}
       </CardContent>
@@ -712,11 +748,12 @@ function RuleFields({
   selectedDefinition: (typeof STRATEGY_CATALOG)[number];
   onSelectCatalog: (code: string) => void;
 }) {
+  const { t } = useI18n();
   if (builder.kind === "catalog_preset") {
     return (
       <>
         <Field>
-          <FieldLabel htmlFor="catalog-rule">Chiến lược kỹ thuật</FieldLabel>
+          <FieldLabel htmlFor="catalog-rule">{t("strategyLab.technicalStrategy")}</FieldLabel>
           <Select value={builder.strategyCode} onValueChange={onSelectCatalog}>
             <SelectTrigger id="catalog-rule">
               <SelectValue />
@@ -764,7 +801,7 @@ function RuleFields({
       <div className="grid gap-4 md:grid-cols-3">
         <NumberField
           id="dca-amount"
-          label="Số tiền mỗi tháng"
+          label={t("strategyLab.dcaAmount")}
           value={builder.amount}
           min={0.01}
           onChange={(amount) => setBuilder((current) => ({ ...current, amount }))}
@@ -775,7 +812,7 @@ function RuleFields({
         />
         <NumberField
           id="dca-day"
-          label="Ngày trong tháng"
+          label={t("strategyLab.dayOfMonth")}
           value={builder.dayOfMonth}
           min={1}
           max={28}
@@ -790,11 +827,11 @@ function RuleFields({
         <div className="grid gap-4 md:grid-cols-3">
           <SelectField
             id="price-action"
-            label="Hành động"
+            label={t("strategyLab.action")}
             value={builder.action}
             options={[
-              { value: "buy", label: "Mua" },
-              { value: "sell", label: "Bán" },
+              { value: "buy", label: t("common.buy") },
+              { value: "sell", label: t("common.sell") },
             ]}
             onChange={(action) =>
               setBuilder((current) => ({ ...current, action: action as "buy" | "sell" }))
@@ -802,11 +839,11 @@ function RuleFields({
           />
           <SelectField
             id="price-operator"
-            label="Khi giá"
+            label={t("strategyLab.whenPrice")}
             value={builder.priceOperator}
             options={[
-              { value: "crosses_above", label: "Cắt lên" },
-              { value: "crosses_below", label: "Cắt xuống" },
+              { value: "crosses_above", label: t("strategyLab.crossesAbove") },
+              { value: "crosses_below", label: t("strategyLab.crossesBelow") },
             ]}
             onChange={(priceOperator) =>
               setBuilder((current) => ({
@@ -817,7 +854,7 @@ function RuleFields({
           />
           <NumberField
             id="price-value"
-            label="Mức giá"
+            label={t("strategyLab.priceLevel")}
             value={builder.priceValue}
             min={0.000001}
             onChange={(priceValue) => setBuilder((current) => ({ ...current, priceValue }))}
@@ -830,7 +867,7 @@ function RuleFields({
           />
           <NumberField
             id="price-size"
-            label="Tỷ lệ vị thế (%)"
+            label={t("strategyLab.positionPct")}
             value={builder.sizePct}
             min={0.01}
             max={100}
@@ -843,16 +880,13 @@ function RuleFields({
   return (
     <>
       <Alert>
-        <AlertTitle>Fundamental rule cần dữ liệu point-in-time</AlertTitle>
-        <AlertDescription>
-          Rule được lưu để hoàn thiện quy trình, nhưng nút Backtest sẽ bị khóa cho đến khi hệ thống
-          ingest lịch sử báo cáo tài chính theo ngày công bố.
-        </AlertDescription>
+        <AlertTitle>{t("strategyLab.fundamentalNeedsData")}</AlertTitle>
+        <AlertDescription>{t("strategyLab.fundamentalNeedsDataDesc")}</AlertDescription>
       </Alert>
       <div className="grid gap-4 md:grid-cols-3">
         <SelectField
           id="fundamental-metric"
-          label="Chỉ số"
+          label={t("strategyLab.metric")}
           value={builder.metric}
           options={[
             { value: "pb", label: "P/B" },
@@ -865,13 +899,13 @@ function RuleFields({
         />
         <SelectField
           id="fundamental-operator"
-          label="Điều kiện"
+          label={t("strategyLab.condition")}
           value={builder.fundamentalOperator}
           options={[
-            { value: "lt", label: "Nhỏ hơn" },
-            { value: "lte", label: "Nhỏ hơn hoặc bằng" },
-            { value: "gt", label: "Lớn hơn" },
-            { value: "gte", label: "Lớn hơn hoặc bằng" },
+            { value: "lt", label: t("strategyLab.lessThan") },
+            { value: "lte", label: t("strategyLab.lessThanOrEqual") },
+            { value: "gt", label: t("strategyLab.greaterThan") },
+            { value: "gte", label: t("strategyLab.greaterThanOrEqual") },
           ]}
           onChange={(fundamentalOperator) =>
             setBuilder((current) => ({
@@ -882,7 +916,7 @@ function RuleFields({
         />
         <NumberField
           id="fundamental-value"
-          label="Ngưỡng"
+          label={t("strategyLab.threshold")}
           value={builder.fundamentalValue}
           onChange={(fundamentalValue) =>
             setBuilder((current) => ({ ...current, fundamentalValue }))
@@ -931,10 +965,11 @@ function CurrencyField({
   value: "USD" | "VND";
   onChange: (value: "USD" | "VND") => void;
 }) {
+  const { t } = useI18n();
   return (
     <SelectField
       id="rule-currency"
-      label="Đồng tiền"
+      label={t("strategyLab.currency")}
       value={value}
       options={[
         { value: "USD", label: "USD" },

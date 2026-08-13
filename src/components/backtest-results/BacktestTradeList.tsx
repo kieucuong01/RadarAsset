@@ -25,6 +25,7 @@ import {
   buildPortfolioTradeRows,
   filterPortfolioTradeRows,
 } from "@/lib/backtest/result-presentation";
+import { useI18n } from "@/lib/i18n/context";
 
 type BacktestTradeListProps = {
   model: BacktestResultModel;
@@ -32,6 +33,7 @@ type BacktestTradeListProps = {
 };
 
 export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
+  const { t } = useI18n();
   const [symbol, setSymbol] = useState("all");
   const rows = useMemo(() => buildPortfolioTradeRows(model), [model]);
   const visibleRows = useMemo(() => filterPortfolioTradeRows(rows, symbol), [rows, symbol]);
@@ -46,18 +48,19 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
     <Card className="min-w-0 max-w-full">
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <CardTitle>Trade List</CardTitle>
-          <CardDescription>
-            Execution fills and completed round trips, newest first.
-          </CardDescription>
+          <CardTitle>{t("backtestResults.tradeList.title")}</CardTitle>
+          <CardDescription>{t("backtestResults.tradeList.description")}</CardDescription>
         </div>
         <Select value={symbol} onValueChange={setSymbol}>
-          <SelectTrigger className="w-full sm:w-44" aria-label="Filter trades by asset">
-            <SelectValue placeholder="All assets" />
+          <SelectTrigger
+            className="w-full sm:w-44"
+            aria-label={t("backtestResults.tradeList.filterAria")}
+          >
+            <SelectValue placeholder={t("backtestResults.tradeList.allAssets")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="all">All assets</SelectItem>
+              <SelectItem value="all">{t("backtestResults.tradeList.allAssets")}</SelectItem>
               {symbols.map((item) => (
                 <SelectItem key={item} value={item}>
                   {item}
@@ -69,22 +72,24 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
       </CardHeader>
       <CardContent className="min-w-0">
         {visibleRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No execution fills for this selection.</p>
+          <p className="text-sm text-muted-foreground">{t("backtestResults.tradeList.empty")}</p>
         ) : (
           <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Signal</TableHead>
-                <TableHead>Execution</TableHead>
-                <TableHead>Asset</TableHead>
-                <TableHead>Strategy</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Bars</TableHead>
-                <TableHead className="text-right">Fees</TableHead>
+                <TableHead>{t("backtestResults.tradeList.signal")}</TableHead>
+                <TableHead>{t("backtestResults.tradeList.execution")}</TableHead>
+                <TableHead>{t("common.asset")}</TableHead>
+                <TableHead>{t("common.strategy")}</TableHead>
+                <TableHead>{t("backtestResults.tradeList.action")}</TableHead>
+                <TableHead className="text-right">{t("common.price")}</TableHead>
+                <TableHead className="text-right">{t("common.quantity")}</TableHead>
+                <TableHead className="text-right">{t("backtestResults.tradeList.bars")}</TableHead>
+                <TableHead className="text-right">{t("backtestResults.tradeList.fees")}</TableHead>
                 <TableHead className="text-right">PnL</TableHead>
-                <TableHead className="text-right">Return</TableHead>
+                <TableHead className="text-right">
+                  {t("backtestResults.tradeList.return")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { Database, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ import {
   favoriteReducer,
   initialFavoriteState,
 } from "@/lib/favorite-assets/state";
+import { useI18n } from "@/lib/i18n/context";
 import { loadFavoriteAssets, removeFavoriteAsset } from "@/lib/watchlist-client";
 
 export function FavoriteAssetsPanel({
@@ -41,32 +42,33 @@ export function FavoriteAssetsPanel({
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
+  const { t } = useI18n();
   const [items, setItems] = useState<WatchlistItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ui, dispatch] = useReducer(favoriteReducer, initialFavoriteState);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       setItems(await loadFavoriteAssets());
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể tải tài sản yêu thích.");
+      setError(caught instanceof Error ? caught.message : t("favorites.loadError"));
     } finally {
       setLoading(false);
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (!items.some((item) => item.datasetState === "loading")) return;
     const timer = window.setTimeout(() => void refresh(), 5_000);
     return () => window.clearTimeout(timer);
-  }, [items]);
+  }, [items, refresh]);
 
   const removeCandidate = items.find((item) => item.id === ui.removeCandidateId) ?? null;
 
@@ -76,9 +78,9 @@ export function FavoriteAssetsPanel({
     try {
       await removeFavoriteAsset(removeCandidate.id);
       await refresh();
-      toast.success(`Đã xóa ${removeCandidate.sym} khỏi danh sách yêu thích.`);
+      toast.success(t("favorites.removed", { symbol: removeCandidate.sym }));
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "Không thể xóa tài sản.");
+      toast.error(caught instanceof Error ? caught.message : t("favorites.removeError"));
     } finally {
       dispatch({ type: "removeFinished" });
     }
@@ -92,28 +94,22 @@ export function FavoriteAssetsPanel({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
         <div>
           <h2 id="favorite-assets-heading" className="font-semibold">
-            Favorite Assets
+            {t("favorites.title")}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Theo dõi mã độc lập với holdings; dữ liệu sẵn sàng mới được chuyển sang Quant Lab.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("favorites.description")}</p>
         </div>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus /> Thêm mã
+          <Plus /> {t("common.addAsset")}
         </Button>
       </div>
       <div className="p-5">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Đang tải danh sách yêu thích…</p>
-        ) : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t("favorites.loading")}</p> : null}
         {error ? <p className="text-sm text-bear">{error}</p> : null}
         {!loading && !error && items.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center">
             <Database className="mx-auto size-6 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium">Chưa có mã yêu thích</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Thêm mã từ catalog để theo dõi hoặc chuẩn bị backtest.
-            </p>
+            <p className="mt-3 text-sm font-medium">{t("favorites.emptyTitle")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("favorites.emptyDescription")}</p>
           </div>
         ) : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -147,17 +143,17 @@ export function FavoriteAssetsPanel({
                   <p className="text-right text-xs text-muted-foreground">
                     {item.backtestableTimeframes.length
                       ? item.backtestableTimeframes.join(" · ")
-                      : "Waiting for data"}
+                      : t("favorites.waitingData")}
                   </p>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {action.backtestHref ? (
                     <Button asChild size="sm">
-                      <Link href={action.backtestHref}>Backtest</Link>
+                      <Link href={action.backtestHref}>{t("favorites.backtest")}</Link>
                     </Button>
                   ) : (
                     <Button size="sm" disabled>
-                      Backtest
+                      {t("favorites.backtest")}
                     </Button>
                   )}
                   <PortfolioTransactionDialog
@@ -166,7 +162,7 @@ export function FavoriteAssetsPanel({
                     timeframe={timeframe}
                     onRecorded={onRecorded}
                     preset={{ side: "buy", symbol: item.sym, price: item.price }}
-                    triggerLabel="Buy"
+                    triggerLabel={t("common.buy")}
                   />
                   <PortfolioTransactionDialog
                     holdings={holdings}
@@ -176,12 +172,12 @@ export function FavoriteAssetsPanel({
                     timeframe={timeframe}
                     onRecorded={onRecorded}
                     preset={{ side: "sell", symbol: item.sym, price: item.price }}
-                    triggerLabel="Sell"
+                    triggerLabel={t("common.sell")}
                   />
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Xóa ${item.sym} khỏi yêu thích`}
+                    aria-label={t("favorites.removeAria", { symbol: item.sym })}
                     onClick={() => dispatch({ type: "removeRequested", favoriteId: item.id })}
                   >
                     <Trash2 />
@@ -202,19 +198,20 @@ export function FavoriteAssetsPanel({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xóa {removeCandidate?.sym} khỏi yêu thích?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Chỉ xóa liên kết yêu thích. Holdings, giao dịch và dữ liệu thị trường dùng chung không
-              bị xóa.
-            </AlertDialogDescription>
+            <AlertDialogTitle>
+              {t("favorites.removeTitle", { symbol: removeCandidate?.sym ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{t("favorites.removeDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(ui.removingId)}>Hủy</AlertDialogCancel>
+            <AlertDialogCancel disabled={Boolean(ui.removingId)}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={Boolean(ui.removingId)}
               onClick={() => void confirmRemove()}
             >
-              {ui.removingId ? "Đang xóa…" : "Xóa yêu thích"}
+              {ui.removingId ? t("favorites.removing") : t("favorites.removeConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowUpRight, Gauge, Target, TrendingUp } from "lucide-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { buildBacktestKpis } from "@/lib/backtest/result-presentation";
+import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 function formatMetric(value: number | null, suffix = "", digits = 2) {
@@ -10,40 +11,41 @@ function formatMetric(value: number | null, suffix = "", digits = 2) {
 }
 
 export function BacktestKpiGrid({ model }: { model: BacktestResultModel }) {
+  const { t } = useI18n();
   const kpis = buildBacktestKpis(model);
   const items = [
     {
-      label: "Max Drawdown",
+      label: t("backtestResults.maxDrawdown"),
       value: formatMetric(kpis.maxDrawdownPct, "%"),
-      hint: "Peak-to-trough loss",
+      hint: t("backtestResults.peakLoss"),
       tone: "text-rose-600",
       icon: ArrowDownRight,
     },
     {
-      label: "Profit Factor",
+      label: t("backtestResults.profitFactor"),
       value: formatMetric(kpis.profitFactor),
-      hint: "Gross W / Gross L",
+      hint: t("backtestResults.grossWL"),
       tone: "text-emerald-600",
       icon: Target,
     },
     {
-      label: "Sharpe Ratio",
+      label: t("backtestResults.sharpeRatio"),
       value: formatMetric(kpis.sharpe),
-      hint: "Risk-adjusted return",
+      hint: t("backtestResults.riskAdjusted"),
       tone: "text-foreground",
       icon: Gauge,
     },
     {
-      label: "Win Rate",
+      label: t("backtestResults.winRate"),
       value: formatMetric(kpis.winRatePct, "%", 1),
-      hint: "Winning trades",
+      hint: t("backtestResults.winningTrades"),
       tone: "text-emerald-600",
       icon: ArrowUpRight,
     },
     {
-      label: "Total Return",
+      label: t("backtestResults.totalReturn"),
       value: formatMetric(kpis.totalReturnPct, "%", 1),
-      hint: "Portfolio return",
+      hint: t("backtestResults.portfolioReturn"),
       tone:
         kpis.totalReturnPct !== null && kpis.totalReturnPct < 0
           ? "text-rose-600"
@@ -55,7 +57,7 @@ export function BacktestKpiGrid({ model }: { model: BacktestResultModel }) {
   return (
     <section
       className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-5"
-      aria-label="Backtest KPIs"
+      aria-label={t("backtestResults.kpisAria")}
     >
       {items.map((item) => {
         const Icon = item.icon;

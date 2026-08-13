@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useI18n } from "@/lib/i18n/context";
 
 type FactorResponse =
   | {
@@ -42,21 +43,22 @@ type FactorResponse =
     };
 
 export function FactorLab() {
+  const { t } = useI18n();
   const [data, setData] = useState<FactorResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     void fetch("/api/quant/factors/vietnam", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Factor engine is unavailable.");
+        if (!response.ok) throw new Error(t("factorLab.unavailable"));
         setData((await response.json()) as FactorResponse);
       })
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setError(caught instanceof Error ? caught.message : "Unable to load Factor Lab.");
+        setError(caught instanceof Error ? caught.message : t("factorLab.error"));
       });
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   if (error) {
     return (
@@ -70,7 +72,7 @@ export function FactorLab() {
       <Card>
         <CardContent className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Loading VN factor universe…
+          {t("factorLab.loading")}
         </CardContent>
       </Card>
     );
@@ -82,17 +84,20 @@ export function FactorLab() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>VN Factor Lab — data gate</CardTitle>
+              <CardTitle>{t("factorLab.gateTitle")}</CardTitle>
               <CardDescription>{data.reason}</CardDescription>
             </div>
-            <DataStatusBadge status="UNAVAILABLE" detail="No synthetic factor scores are shown." />
+            <DataStatusBadge status="UNAVAILABLE" detail={t("factorLab.noSynthetic")} />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <Progress value={progress} />
           <p className="text-sm text-muted-foreground">
-            {data.eligibleAssetCount}/{data.requiredAssetCount} eligible symbols ·{" "}
-            {data.requiredObservationCount} aligned daily sessions required.
+            {t("factorLab.eligible", {
+              eligible: data.eligibleAssetCount,
+              required: data.requiredAssetCount,
+              observations: data.requiredObservationCount,
+            })}
           </p>
         </CardContent>
       </Card>
@@ -103,14 +108,15 @@ export function FactorLab() {
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>Vietnam Equity Factor Ranking</CardTitle>
-            <CardDescription>
-              Point-in-time price/volume factors as of {data.asOf}; higher score is better.
-            </CardDescription>
+            <CardTitle>{t("factorLab.title")}</CardTitle>
+            <CardDescription>{t("factorLab.description", { date: data.asOf })}</CardDescription>
           </div>
           <DataStatusBadge
             status="SYSTEM"
-            detail={`${data.universeSize} symbols · ${data.observationCount} aligned sessions`}
+            detail={t("factorLab.detail", {
+              symbols: data.universeSize,
+              sessions: data.observationCount,
+            })}
           />
         </div>
       </CardHeader>
@@ -118,14 +124,14 @@ export function FactorLab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead>Composite</TableHead>
-              <TableHead>Momentum</TableHead>
-              <TableHead>Low vol</TableHead>
-              <TableHead>Trend</TableHead>
-              <TableHead>Liquidity</TableHead>
-              <TableHead>126d return</TableHead>
-              <TableHead>63d vol</TableHead>
+              <TableHead>{t("factorLab.symbol")}</TableHead>
+              <TableHead>{t("factorLab.composite")}</TableHead>
+              <TableHead>{t("factorLab.momentum")}</TableHead>
+              <TableHead>{t("factorLab.lowVol")}</TableHead>
+              <TableHead>{t("factorLab.trend")}</TableHead>
+              <TableHead>{t("factorLab.liquidity")}</TableHead>
+              <TableHead>{t("factorLab.return126d")}</TableHead>
+              <TableHead>{t("factorLab.vol63d")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

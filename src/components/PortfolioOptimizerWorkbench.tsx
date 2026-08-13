@@ -68,12 +68,14 @@ import {
   OPTIMIZER_METHODS,
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
+import { useI18n } from "@/lib/i18n/context";
 
 export function PortfolioOptimizerWorkbench({
   initialSymbols = [],
 }: {
   initialSymbols?: string[];
 }) {
+  const { t } = useI18n();
   const range = useRef(createRollingBacktestRange()).current;
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [from, setFrom] = useState(range.from);
@@ -115,10 +117,10 @@ export function PortfolioOptimizerWorkbench({
       )
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.warning("Không thể nạp danh sách mã từ URL.");
+        toast.warning(t("optimizer.loadInitialError"));
       });
     return () => controller.abort();
-  }, [from, initialSymbolKey, timeframe, to]);
+  }, [from, initialSymbolKey, timeframe, t, to]);
 
   async function optimize() {
     if (assets.length === 0) return;
@@ -139,9 +141,9 @@ export function PortfolioOptimizerWorkbench({
         dividendMode: "exclude",
       });
       setProposal(result);
-      toast.success("Optimizer đã hoàn tất trên immutable dataset versions.");
+      toast.success(t("optimizer.success"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không thể chạy optimizer.");
+      toast.error(error instanceof Error ? error.message : t("optimizer.error"));
     } finally {
       setLoading(false);
     }
@@ -151,16 +153,14 @@ export function PortfolioOptimizerWorkbench({
     <div className="grid min-w-0 gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
       <Card className="h-fit lg:sticky lg:top-20">
         <CardHeader>
-          <CardTitle>Awesome-Quant Optimizer</CardTitle>
-          <CardDescription>
-            Powered by skfolio. Fit on the first 70% and validate on the final 30% OOS.
-          </CardDescription>
+          <CardTitle>{t("optimizer.title")}</CardTitle>
+          <CardDescription>{t("optimizer.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <Field>
-                <FieldLabel htmlFor="optimizer-timeframe">Khung thời gian</FieldLabel>
+                <FieldLabel htmlFor="optimizer-timeframe">{t("optimizer.timeframe")}</FieldLabel>
                 <Select
                   value={timeframe}
                   onValueChange={(value: "1d" | "1h") => {
@@ -173,15 +173,15 @@ export function PortfolioOptimizerWorkbench({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="1d">Ngày (1d)</SelectItem>
-                      <SelectItem value="1h">Giờ (1h)</SelectItem>
+                      <SelectItem value="1d">{t("optimizer.day")}</SelectItem>
+                      <SelectItem value="1h">{t("optimizer.hour")}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field>
-                  <FieldLabel htmlFor="optimizer-from">Từ ngày</FieldLabel>
+                  <FieldLabel htmlFor="optimizer-from">{t("optimizer.from")}</FieldLabel>
                   <Input
                     id="optimizer-from"
                     type="date"
@@ -193,7 +193,7 @@ export function PortfolioOptimizerWorkbench({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="optimizer-to">Đến ngày</FieldLabel>
+                  <FieldLabel htmlFor="optimizer-to">{t("optimizer.to")}</FieldLabel>
                   <Input
                     id="optimizer-to"
                     type="date"
@@ -206,7 +206,7 @@ export function PortfolioOptimizerWorkbench({
                 </Field>
               </div>
               <Field>
-                <FieldLabel htmlFor="optimizer-method">Optimization method</FieldLabel>
+                <FieldLabel htmlFor="optimizer-method">{t("optimizer.method")}</FieldLabel>
                 <Select
                   value={method}
                   onValueChange={(value: OptimizerMethod) => {
@@ -232,7 +232,7 @@ export function PortfolioOptimizerWorkbench({
               {method === "target_return" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-target-return">
-                    Target return/năm: {targetReturnPct}%
+                    {t("optimizer.targetReturn", { value: targetReturnPct })}
                   </FieldLabel>
                   <Input
                     id="optimizer-target-return"
@@ -247,15 +247,13 @@ export function PortfolioOptimizerWorkbench({
                       setProposal(null);
                     }}
                   />
-                  <FieldDescription>
-                    Markowitz sẽ tìm volatility thấp nhất tại mức return này.
-                  </FieldDescription>
+                  <FieldDescription>{t("optimizer.targetReturnDescription")}</FieldDescription>
                 </Field>
               ) : null}
               {method === "target_volatility" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-target-volatility">
-                    Target volatility/năm: {targetVolatilityPct}%
+                    {t("optimizer.targetVolatility", { value: targetVolatilityPct })}
                   </FieldLabel>
                   <Input
                     id="optimizer-target-volatility"
@@ -270,15 +268,13 @@ export function PortfolioOptimizerWorkbench({
                       setProposal(null);
                     }}
                   />
-                  <FieldDescription>
-                    Markowitz sẽ tìm expected return cao nhất tại volatility này.
-                  </FieldDescription>
+                  <FieldDescription>{t("optimizer.targetVolatilityDescription")}</FieldDescription>
                 </Field>
               ) : null}
               {method === "risk_tolerance" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-risk-tolerance">
-                    Risk tolerance: {markowitzRiskTolerance}
+                    {t("optimizer.riskTolerance", { value: markowitzRiskTolerance })}
                   </FieldLabel>
                   <Slider
                     value={[markowitzRiskTolerance]}
@@ -289,15 +285,15 @@ export function PortfolioOptimizerWorkbench({
                       setMarkowitzRiskTolerance(value);
                       setProposal(null);
                     }}
-                    aria-label="Markowitz risk tolerance"
+                    aria-label={t("optimizer.riskToleranceAria")}
                   />
                   <FieldDescription>
-                    Giá trị cao hơn nghiêng nhiều hơn về expected return.
+                    {method === "risk_tolerance" ? OPTIMIZER_METHOD_DESCRIPTIONS[method] : ""}
                   </FieldDescription>
                 </Field>
               ) : null}
               <Field>
-                <FieldLabel>Trọng số tối đa/mã: {maxWeightPct}%</FieldLabel>
+                <FieldLabel>{t("optimizer.maxWeight", { value: maxWeightPct })}</FieldLabel>
                 <Slider
                   value={[maxWeightPct]}
                   min={10}
@@ -307,14 +303,16 @@ export function PortfolioOptimizerWorkbench({
                     setMaxWeightPct(value);
                     setProposal(null);
                   }}
-                  aria-label="Maximum optimizer weight"
+                  aria-label={t("optimizer.maxWeightAria")}
                 />
               </Field>
             </div>
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium">Tài sản ({assets.length})</span>
+                <span className="text-sm font-medium">
+                  {t("optimizer.assets", { count: assets.length })}
+                </span>
                 <QuantAssetPickerDialog
                   timeframe={timeframe}
                   from={from}
@@ -339,14 +337,14 @@ export function PortfolioOptimizerWorkbench({
                   <span className="min-w-0">
                     <span className="block font-semibold">{asset.symbol}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {asset.market} · {asset.rowCount.toLocaleString()} bars
+                      {asset.market} · {asset.rowCount.toLocaleString()} {t("optimizer.bars")}
                     </span>
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label={`Xóa ${asset.symbol}`}
+                    aria-label={t("optimizer.removeAsset", { symbol: asset.symbol })}
                     onClick={() => {
                       setAssets((current) =>
                         current.filter((item) => item.symbol !== asset.symbol),
@@ -372,7 +370,7 @@ export function PortfolioOptimizerWorkbench({
             ) : (
               <Calculator data-icon="inline-start" />
             )}
-            Tính phân bổ tối ưu
+            {t("optimizer.run")}
           </Button>
         </CardFooter>
       </Card>
@@ -381,18 +379,12 @@ export function PortfolioOptimizerWorkbench({
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Optimal allocation</CardTitle>
-              <CardDescription className="mt-1">
-                Kết quả chỉ xuất hiện sau khi API xác nhận dataset versions.
-              </CardDescription>
+              <CardTitle>{t("optimizer.resultTitle")}</CardTitle>
+              <CardDescription className="mt-1">{t("optimizer.resultDescription")}</CardDescription>
             </div>
             <DataStatusBadge
               status={proposal ? "SYSTEM" : "UNAVAILABLE"}
-              detail={
-                proposal
-                  ? "Phân bổ được tính từ dữ liệu lịch sử có phiên bản."
-                  : "Chưa chạy optimizer."
-              }
+              detail={proposal ? t("optimizer.resultReady") : t("optimizer.resultUnavailable")}
             />
           </div>
         </CardHeader>
@@ -401,16 +393,25 @@ export function PortfolioOptimizerWorkbench({
             <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric
-                  label="Expected return"
+                  label={t("optimizer.expectedReturn")}
                   value={`${proposal.expectedReturnPct.toFixed(2)}%`}
                 />
-                <Metric label="Volatility" value={`${proposal.volatilityPct.toFixed(2)}%`} />
-                <Metric label="Sharpe" value={proposal.sharpe?.toFixed(2) ?? "N/A"} />
+                <Metric
+                  label={t("optimizer.volatility")}
+                  value={`${proposal.volatilityPct.toFixed(2)}%`}
+                />
+                <Metric
+                  label={t("optimizer.sharpe")}
+                  value={proposal.sharpe?.toFixed(2) ?? "N/A"}
+                />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <ValidationMetrics label="In sample (70%)" metrics={proposal.validation.inSample} />
                 <ValidationMetrics
-                  label="Out of sample (30%)"
+                  label={t("optimizer.inSample")}
+                  metrics={proposal.validation.inSample}
+                />
+                <ValidationMetrics
+                  label={t("optimizer.outSample")}
                   metrics={proposal.validation.outOfSample}
                 />
               </div>
@@ -424,14 +425,14 @@ export function PortfolioOptimizerWorkbench({
               />
               <AllocationBreakdown slices={dashboardModel.allocationSlices} />
               <p className="text-xs text-muted-foreground">
-                {proposal.observationCount} overlapping returns ·{" "}
+                {t("optimizer.observations", { count: proposal.observationCount })} ·{" "}
                 {OPTIMIZER_METHOD_LABELS[proposal.method]} · {proposal.source.library}{" "}
                 {proposal.source.version}
               </p>
             </>
           ) : (
             <div className="flex min-h-72 items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Chọn tài sản rồi chạy optimizer để xem phân bổ. Không có kết quả mô phỏng mặc định.
+              {t("optimizer.empty")}
             </div>
           )}
         </CardContent>
@@ -456,14 +457,23 @@ function ValidationMetrics({
   label: string;
   metrics: OptimizerProposal["validation"]["inSample"];
 }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-lg border p-4">
       <p className="text-sm font-semibold">{label}</p>
       <div className="mt-3 grid grid-cols-2 gap-3 text-sm tabular-nums">
-        <span>Return {metrics.expectedReturnPct.toFixed(2)}%</span>
-        <span>Vol {metrics.volatilityPct.toFixed(2)}%</span>
-        <span>Sharpe {metrics.sharpe?.toFixed(2) ?? "N/A"}</span>
-        <span>Max DD {metrics.maxDrawdownPct.toFixed(2)}%</span>
+        <span>
+          {t("optimizer.return")} {metrics.expectedReturnPct.toFixed(2)}%
+        </span>
+        <span>
+          {t("optimizer.volatility")} {metrics.volatilityPct.toFixed(2)}%
+        </span>
+        <span>
+          {t("optimizer.sharpe")} {metrics.sharpe?.toFixed(2) ?? "N/A"}
+        </span>
+        <span>
+          {t("optimizer.maxDd")} {metrics.maxDrawdownPct.toFixed(2)}%
+        </span>
       </div>
     </div>
   );
@@ -481,16 +491,19 @@ function pct(value: number) {
 }
 
 function AllocationPie({ slices }: { slices: OptimizerAllocationSlice[] }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Asset Allocation</h3>
+          <h3 className="font-semibold">{t("optimizer.allocationTitle")}</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Optimized weight by symbol from the selected method.
+            {t("optimizer.allocationDescription")}
           </p>
         </div>
-        <Badge variant="secondary">{slices.length} assets</Badge>
+        <Badge variant="secondary">
+          {slices.length} {t("common.assets")}
+        </Badge>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
         <div className="h-64 min-w-0">
@@ -512,7 +525,7 @@ function AllocationPie({ slices }: { slices: OptimizerAllocationSlice[] }) {
               </Pie>
               <Tooltip
                 contentStyle={chartTooltipStyle}
-                formatter={(value: number) => [pct(Number(value)), "Allocation"]}
+                formatter={(value: number) => [pct(Number(value)), t("common.allocation")]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -544,29 +557,35 @@ function RiskReturnTooltip({
   active?: boolean;
   payload?: Array<{ payload?: OptimizerRiskReturnPoint }>;
 }) {
+  const { t } = useI18n();
   const point = payload?.[0]?.payload;
   if (!active || !point) return null;
   return (
     <div className="rounded-lg border bg-card p-3 text-xs shadow-lg">
       <p className="font-semibold">{point.symbol}</p>
-      <p className="mt-1 text-muted-foreground">Expected return: {pct(point.expectedReturnPct)}</p>
-      <p className="text-muted-foreground">Volatility: {pct(point.volatilityPct)}</p>
-      <p className="text-muted-foreground">Weight: {pct(point.weightPct)}</p>
+      <p className="mt-1 text-muted-foreground">
+        {t("optimizer.expectedReturn")}: {pct(point.expectedReturnPct)}
+      </p>
+      <p className="text-muted-foreground">
+        {t("optimizer.volatility")}: {pct(point.volatilityPct)}
+      </p>
+      <p className="text-muted-foreground">
+        {t("common.allocation")}: {pct(point.weightPct)}
+      </p>
       <p className="mt-1 max-w-56 truncate text-muted-foreground">
-        Dataset {point.datasetVersionId}
+        {t("optimizer.dataset")} {point.datasetVersionId}
       </p>
     </div>
   );
 }
 
 function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-lg border p-4">
       <div>
-        <h3 className="font-semibold">Risk / Return — Expected Return vs Volatility</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Each bubble is a symbol; bubble size follows optimized weight.
-        </p>
+        <h3 className="font-semibold">{t("optimizer.riskReturnTitle")}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{t("optimizer.riskReturnDescription")}</p>
       </div>
       <div className="mt-4 h-64 min-w-0">
         <ResponsiveContainer width="100%" height="100%">
@@ -575,7 +594,7 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
             <XAxis
               type="number"
               dataKey="volatilityPct"
-              name="Volatility"
+              name={t("optimizer.volatility")}
               unit="%"
               tickLine={false}
               axisLine={false}
@@ -585,7 +604,7 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
             <YAxis
               type="number"
               dataKey="expectedReturnPct"
-              name="Expected return"
+              name={t("optimizer.expectedReturn")}
               unit="%"
               tickLine={false}
               axisLine={false}
@@ -598,7 +617,7 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
               content={<RiskReturnTooltip />}
               cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
             />
-            <Scatter name="Assets" data={points} fill="var(--primary)">
+            <Scatter name={t("common.assets")} data={points} fill="var(--primary)">
               <LabelList
                 dataKey="symbol"
                 position="top"
@@ -624,19 +643,20 @@ function CorrelationMatrix({
   symbols: string[];
   rows: OptimizerCorrelationRow[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-lg border p-4">
       <div>
-        <h3 className="font-semibold">Historical Correlation Matrix</h3>
+        <h3 className="font-semibold">{t("optimizer.correlationTitle")}</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Computed from overlapping historical returns used by the optimizer.
+          {t("optimizer.correlationDescription")}
         </p>
       </div>
       <div className="mt-4">
-        <Table className="min-w-[560px]" aria-label="Historical correlation matrix">
+        <Table className="min-w-[560px]" aria-label={t("optimizer.correlationTitle")}>
           <TableHeader>
             <TableRow>
-              <TableHead className="sticky left-0 bg-card">Symbol</TableHead>
+              <TableHead className="sticky left-0 bg-card">{t("optimizer.symbol")}</TableHead>
               {symbols.map((symbol) => (
                 <TableHead key={symbol} className="text-center">
                   {symbol}
@@ -668,12 +688,13 @@ function CorrelationMatrix({
 }
 
 function AllocationBreakdown({ slices }: { slices: OptimizerAllocationSlice[] }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-4 rounded-lg border p-4">
       <div>
-        <h3 className="font-semibold">Allocation details</h3>
+        <h3 className="font-semibold">{t("optimizer.allocationDetails")}</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Dataset IDs are shown so the result can be traced back to immutable data versions.
+          {t("optimizer.allocationDetailsDescription")}
         </p>
       </div>
       {slices.map((slice) => (
@@ -690,7 +711,9 @@ function AllocationBreakdown({ slices }: { slices: OptimizerAllocationSlice[] })
             <Badge variant="secondary">{pct(slice.weightPct)}</Badge>
           </div>
           <Progress value={slice.weightPct} />
-          <p className="truncate text-xs text-muted-foreground">Dataset {slice.datasetVersionId}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {t("optimizer.dataset")} {slice.datasetVersionId}
+          </p>
         </div>
       ))}
     </div>

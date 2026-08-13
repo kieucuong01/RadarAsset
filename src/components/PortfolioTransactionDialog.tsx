@@ -29,6 +29,7 @@ import {
   isSellSelectionDisabled,
   toLocalDateInputValue,
 } from "@/lib/portfolio-transaction-preview";
+import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 type AssetOption = {
@@ -72,6 +73,7 @@ export function PortfolioTransactionDialog({
   onSignalExecuted?: (signalId: string) => void;
   triggerLabel?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assets, setAssets] = useState<AssetOption[] | null>(null);
@@ -99,7 +101,7 @@ export function PortfolioTransactionDialog({
 
     void fetch("/api/assets", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load supported assets.");
+        if (!response.ok) throw new Error(t("transactionsDialog.loadAssetsError"));
         return (await response.json()) as AssetOption[];
       })
       .then((items) => {
@@ -114,11 +116,13 @@ export function PortfolioTransactionDialog({
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setAssets([]);
-        setAssetsError(error instanceof Error ? error.message : "Unable to load supported assets.");
+        setAssetsError(
+          error instanceof Error ? error.message : t("transactionsDialog.loadAssetsError"),
+        );
       });
 
     return () => controller.abort();
-  }, [assets, open]);
+  }, [assets, open, t]);
 
   const selectedHolding = holdings.find((holding) => holding.ticker === symbol) ?? null;
   const numericQuantity = Number(quantity);
@@ -185,11 +189,11 @@ export function PortfolioTransactionDialog({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit) {
-      setFormError(valueError ?? previewError ?? "Enter a valid quantity and execution price.");
+      setFormError(valueError ?? previewError ?? t("transactionsDialog.validInput"));
       return;
     }
     if (!symbol || !date) {
-      setFormError("Select an asset and execution date.");
+      setFormError(t("transactionsDialog.selectAssetDate"));
       return;
     }
 
@@ -212,7 +216,7 @@ export function PortfolioTransactionDialog({
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Unable to save transaction.");
+        throw new Error(payload?.error ?? t("transactionsDialog.saveError"));
       }
 
       const portfolio = (await response.json()) as PortfolioResponse;
@@ -229,7 +233,11 @@ export function PortfolioTransactionDialog({
         if (signalResponse.ok) onSignalExecuted?.(preset.signalId);
       }
       toast.success(
-        `${side === "buy" ? "Bought" : "Sold"} ${numericQuantity} ${symbol} successfully.`,
+        t("transactionsDialog.toastSuccess", {
+          side: side === "buy" ? t("common.buy") : t("common.sell"),
+          quantity: numericQuantity,
+          symbol,
+        }),
       );
       setQuantity("");
       setPrice("");
@@ -237,7 +245,7 @@ export function PortfolioTransactionDialog({
       setDate(toLocalDateInputValue(new Date()));
       setOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to save transaction.";
+      const message = error instanceof Error ? error.message : t("transactionsDialog.saveError");
       setFormError(message);
       toast.error(message);
     } finally {
@@ -249,15 +257,14 @@ export function PortfolioTransactionDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
         <Plus data-icon="inline-start" />
-        {triggerLabel ?? (preset ? "Review signal" : "Add Transaction")}
+        {triggerLabel ??
+          (preset ? t("transactionsDialog.reviewSignal") : t("transactionsDialog.add"))}
       </Button>
 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add Transaction</DialogTitle>
-          <DialogDescription>
-            Record a manual Buy or Sell. This tracker does not manage a cash balance.
-          </DialogDescription>
+          <DialogTitle>{t("transactionsDialog.title")}</DialogTitle>
+          <DialogDescription>{t("transactionsDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="flex flex-col gap-5">
@@ -267,13 +274,13 @@ export function PortfolioTransactionDialog({
             onValueChange={handleSideChange}
             variant="outline"
             className="grid grid-cols-2"
-            aria-label="Transaction side"
+            aria-label={t("transactionsDialog.sideAria")}
           >
             <ToggleGroupItem
               value="buy"
               className={cn("min-h-11", side === "buy" && "border-bull/40 text-bull")}
             >
-              Buy
+              {t("common.buy")}
             </ToggleGroupItem>
             <ToggleGroupItem
               value="sell"
@@ -283,13 +290,13 @@ export function PortfolioTransactionDialog({
               })}
               className={cn("min-h-11", side === "sell" && "border-bear/40 text-bear")}
             >
-              Sell
+              {t("common.sell")}
             </ToggleGroupItem>
           </ToggleGroup>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="tx-asset">Asset</Label>
+              <Label htmlFor="tx-asset">{t("transactionsDialog.asset")}</Label>
               <select
                 id="tx-asset"
                 value={symbol}
@@ -307,18 +314,20 @@ export function PortfolioTransactionDialog({
                 ))}
               </select>
               {assetsError && side === "buy" ? (
-                <p className="text-xs text-bear">{assetsError} Showing currently held assets.</p>
+                <p className="text-xs text-bear">
+                  {assetsError} {t("transactionsDialog.showingHeld")}
+                </p>
               ) : null}
               {side === "sell" && selectedHolding ? (
                 <p className="text-xs text-muted-foreground">
-                  Available: {selectedHolding.qty.toLocaleString()} at average cost{" "}
-                  {formatCurrency(selectedHolding.cost)}
+                  {t("transactionsDialog.available")}: {selectedHolding.qty.toLocaleString()} @{" "}
+                  {t("transactionsDialog.averageCost")} {formatCurrency(selectedHolding.cost)}
                 </p>
               ) : null}
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-date">Execution date</Label>
+              <Label htmlFor="tx-date">{t("transactionsDialog.executionDate")}</Label>
               <Input
                 id="tx-date"
                 type="date"
@@ -342,7 +351,7 @@ export function PortfolioTransactionDialog({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-quantity">Quantity</Label>
+              <Label htmlFor="tx-quantity">{t("common.quantity")}</Label>
               <Input
                 id="tx-quantity"
                 type="number"
@@ -358,7 +367,7 @@ export function PortfolioTransactionDialog({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-price">Execution price (USD)</Label>
+              <Label htmlFor="tx-price">{t("transactionsDialog.executionPrice")}</Label>
               <Input
                 id="tx-price"
                 type="number"
@@ -374,7 +383,7 @@ export function PortfolioTransactionDialog({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-fee">Fee (USD)</Label>
+              <Label htmlFor="tx-fee">{t("common.fee")} (USD)</Label>
               <Input
                 id="tx-fee"
                 type="number"
@@ -394,15 +403,16 @@ export function PortfolioTransactionDialog({
             <div className="flex flex-col gap-3">
               <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
                 <PreviewRow
-                  label={side === "buy" ? "Total cost" : "Net proceeds"}
+                  label={
+                    side === "buy"
+                      ? t("transactionsDialog.totalCost")
+                      : t("transactionsDialog.netProceeds")
+                  }
                   value={formatCurrency(backdatedTotal)}
                 />
               </div>
               <Alert>
-                <AlertDescription>
-                  Backdated trade: final quantity, average cost and realized PnL will be replayed
-                  from the full ledger after saving.
-                </AlertDescription>
+                <AlertDescription>{t("transactionsDialog.backdatedTrade")}</AlertDescription>
               </Alert>
             </div>
           ) : isBackdated && valueError ? (
@@ -412,33 +422,37 @@ export function PortfolioTransactionDialog({
           ) : preview?.valid ? (
             <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm sm:grid-cols-2">
               <PreviewRow
-                label={side === "buy" ? "Total cost" : "Net proceeds"}
+                label={
+                  side === "buy"
+                    ? t("transactionsDialog.totalCost")
+                    : t("transactionsDialog.netProceeds")
+                }
                 value={formatCurrency(preview.total)}
               />
               <PreviewRow
-                label="Projected quantity"
+                label={t("transactionsDialog.projectedQuantity")}
                 value={preview.projectedQuantity.toLocaleString("en-US", {
                   maximumFractionDigits: 8,
                 })}
               />
               {side === "buy" ? (
                 <PreviewRow
-                  label="Projected average cost"
+                  label={t("transactionsDialog.projectedAverageCost")}
                   value={formatCurrency(preview.projectedAverageCost)}
                 />
               ) : (
                 <PreviewRow
-                  label="Estimated realized PnL"
+                  label={t("transactionsDialog.estimatedRealizedPnl")}
                   value={formatCurrency(preview.realizedPnL)}
                   tone={preview.realizedPnL >= 0 ? "bull" : "bear"}
                 />
               )}
               {side === "sell" ? (
                 <PreviewRow
-                  label="Remaining average cost"
+                  label={t("transactionsDialog.remainingAverageCost")}
                   value={
                     preview.projectedQuantity === 0
-                      ? "Position closed"
+                      ? t("transactionsDialog.positionClosed")
                       : formatCurrency(preview.projectedAverageCost)
                   }
                 />
@@ -464,11 +478,15 @@ export function PortfolioTransactionDialog({
               disabled={saving}
               className="min-h-11"
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving || !canSubmit} className="min-h-11">
               {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-              {saving ? "Saving…" : `Save ${side === "buy" ? "Buy" : "Sell"}`}
+              {saving
+                ? t("common.saving")
+                : t("transactionsDialog.saveSide", {
+                    side: side === "buy" ? t("common.buy") : t("common.sell"),
+                  })}
             </Button>
           </DialogFooter>
         </form>

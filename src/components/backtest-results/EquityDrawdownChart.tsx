@@ -15,6 +15,7 @@ import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { alignEquityAndDrawdown, buildBacktestKpis } from "@/lib/backtest/result-presentation";
+import { useI18n } from "@/lib/i18n/context";
 
 type EquityDrawdownChartProps = {
   model: BacktestResultModel;
@@ -33,6 +34,7 @@ function metricValue(value: number | null, digits = 2) {
 }
 
 export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProps) {
+  const { t } = useI18n();
   const gradientId = useId().replaceAll(":", "");
   const kpis = buildBacktestKpis(model);
   const rows = alignEquityAndDrawdown(model.aggregate.equity, model.aggregate.drawdown).map(
@@ -50,15 +52,15 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
             <Activity className="text-primary" />
-            Equity Curve & Drawdown
+            {t("backtestResults.equityTitle")}
             <span className="font-mono text-xs font-normal uppercase tracking-wider text-muted-foreground">
-              Portfolio · {model.legs.length} legs
+              {t("common.portfolio")} · {model.legs.length} {t("backtestResults.legs")}
             </span>
           </CardTitle>
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <span className="flex items-center gap-2">
               <span className="h-0.5 w-4 bg-primary" />
-              Strategy{" "}
+              {t("backtestResults.strategy")}{" "}
               <span
                 className={
                   kpis.totalReturnPct !== null && kpis.totalReturnPct >= 0
@@ -69,12 +71,12 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                 {metricValue(kpis.totalReturnPct, 1)}%
               </span>
             </span>
-            <span className="text-muted-foreground">-- Benchmark pending</span>
+            <span className="text-muted-foreground">{t("backtestResults.benchmarkPending")}</span>
           </div>
         </div>
       </CardHeader>
       <CardContent className="grid min-w-0 gap-0 p-0 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="h-96 min-w-0 p-6" aria-label="Portfolio equity curve">
+        <div className="h-96 min-w-0 p-6" aria-label={t("backtestResults.portfolioCurveAria")}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
@@ -99,7 +101,7 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
               <Area
                 type="monotone"
                 dataKey="equity"
-                name="Equity"
+                name={t("backtestResults.equityTitle")}
                 stroke="var(--primary)"
                 strokeWidth={3}
                 fill={`url(#${gradientId})`}
@@ -111,7 +113,7 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
           <p className="mb-4 font-mono text-xs uppercase tracking-wider text-muted-foreground">
             Drawdown
           </p>
-          <div className="h-48 min-w-0" aria-label="Portfolio drawdown">
+          <div className="h-48 min-w-0" aria-label={t("backtestResults.drawdownAria")}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
@@ -125,12 +127,15 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(value) => [`${Number(value).toFixed(2)}%`, "Drawdown"]}
+                  formatter={(value) => [
+                    `${Number(value).toFixed(2)}%`,
+                    t("backtestResults.drawdown"),
+                  ]}
                 />
                 <Area
                   type="monotone"
                   dataKey="drawdownPct"
-                  name="Drawdown"
+                  name={t("backtestResults.drawdown")}
                   stroke="var(--destructive)"
                   fill="var(--destructive)"
                   fillOpacity={0.12}

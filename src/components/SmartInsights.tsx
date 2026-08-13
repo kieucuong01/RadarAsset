@@ -30,6 +30,7 @@ import {
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { WatchlistAddDialog } from "@/components/WatchlistAddDialog";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/context";
 import { isFeatureAvailable, type DataStatus } from "@/lib/mvp-ui";
 
 type TrendTicker = { sym: string; price: string; chg: number };
@@ -150,6 +151,59 @@ const NEWS: News[] = [
   },
 ];
 
+const NEWS_VI_BY_ID: Record<string, Pick<News, "title" | "summary" | "ago">> = {
+  n1: {
+    ago: "4 phút",
+    title: "Dòng tiền BTC Spot ETF đạt đỉnh 3 tuần khi whale gom lại vị thế",
+    summary:
+      "Địa chỉ tích lũy tăng thêm 18.400 BTC — lịch sử thường là tín hiệu trước nhịp tăng tiếp diễn.",
+  },
+  n2: {
+    ago: "22 phút",
+    title: "Ngành ngân hàng VN30 được kỳ vọng dẫn dắt phục hồi lợi nhuận Q3",
+    summary:
+      "Tín dụng phục hồi và NIM ổn định hỗ trợ tăng trưởng lợi nhuận hai chữ số ở nhóm ngân hàng lớn.",
+  },
+  n3: {
+    ago: "38 phút",
+    title: "Dầu giảm khi OPEC+ phát tín hiệu nới dần mức cắt giảm tự nguyện",
+    summary:
+      "WTI kiểm định hỗ trợ 77 USD; cổ phiếu năng lượng yếu hơn khi ước tính EPS Q4 bị điều chỉnh giảm.",
+  },
+  n4: {
+    ago: "1 giờ",
+    title: "Cổ phiếu đi ngang khi mùa kết quả kinh doanh cho tín hiệu trái chiều",
+    summary: "GS giữ mục tiêu S&P cuối năm ở 5.600 với quan điểm phân bổ ngành cân bằng.",
+  },
+  n5: {
+    ago: "1 giờ",
+    title: "Nguồn cung holder dài hạn BTC lập đỉnh — khả năng siết cung phía trước?",
+    summary: "76% nguồn cung BTC không dịch chuyển hơn một năm. Thanh khoản bán đang giảm dần.",
+  },
+  n6: {
+    ago: "2 giờ",
+    title: "Biên bản FOMC cứng rắn đẩy lợi suất 10Y vượt 4,30%",
+    summary: "Lạm phát dịch vụ lõi dai dẳng kéo dot plot cao hơn, làm tăng rủi ro lợi suất thực.",
+  },
+  n7: {
+    ago: "3 giờ",
+    title: "Ngân hàng trung ương mua thêm 38 tấn vàng trong tháng 5",
+    summary: "PBoC và RBI dẫn đầu dòng mua; vàng phá vùng tích lũy 6 tuần trên 2.400 USD.",
+  },
+  n8: {
+    ago: "4 giờ",
+    title: "Phí Ethereum L2 giảm 60% sau khi thị trường phí Dencun ổn định",
+    summary:
+      "Chi phí người dùng giảm mạnh, nhưng doanh thu validator và burn rate yếu đi trong ngắn hạn.",
+  },
+  n9: {
+    ago: "5 giờ",
+    title: "Xác suất soft landing tăng lại 70% nhờ dữ liệu lao động bền bỉ",
+    summary:
+      "Số đơn xin trợ cấp thất nghiệp thấp hơn kỳ vọng; tăng trưởng lương hạ nhiệt mà tiêu dùng chưa gãy.",
+  },
+};
+
 type CalendarEvent = {
   time: string;
   date: string;
@@ -235,6 +289,24 @@ const CALENDAR: CalendarEvent[] = [
   },
 ];
 
+const CALENDAR_DATE_VI: Record<string, string> = {
+  Today: "Hôm nay",
+  Tomorrow: "Ngày mai",
+  Fri: "Thứ Sáu",
+  Mon: "Thứ Hai",
+};
+
+const CALENDAR_EVENT_VI: Record<string, string> = {
+  "Core CPI m/m": "CPI lõi m/m",
+  "Crude Oil Inventories": "Tồn kho dầu thô",
+  "FOMC Meeting Minutes": "Biên bản họp FOMC",
+  "ECB Rate Decision": "Quyết định lãi suất ECB",
+  "Initial Jobless Claims": "Đơn xin trợ cấp thất nghiệp lần đầu",
+  "VN CPI y/y": "CPI Việt Nam y/y",
+  "Non-Farm Payrolls": "Bảng lương phi nông nghiệp",
+  "China Trade Balance": "Cán cân thương mại Trung Quốc",
+};
+
 const WATCHLIST: WatchlistItemResponse[] = [
   {
     id: "sample-btc",
@@ -311,11 +383,20 @@ const WATCHLIST: WatchlistItemResponse[] = [
 ];
 
 function SentimentBadge({ s }: { s: NewsSentiment }) {
+  const { t } = useI18n();
   const map = {
-    bull: { label: "Bullish", color: "text-bull bg-bull/10 border-bull/20", Icon: TrendingUp },
-    bear: { label: "Bearish", color: "text-bear bg-bear/10 border-bear/20", Icon: TrendingDown },
+    bull: {
+      label: t("overview.news.bullish"),
+      color: "text-bull bg-bull/10 border-bull/20",
+      Icon: TrendingUp,
+    },
+    bear: {
+      label: t("overview.news.bearish"),
+      color: "text-bear bg-bear/10 border-bear/20",
+      Icon: TrendingDown,
+    },
     neutral: {
-      label: "Neutral",
+      label: t("overview.news.neutral"),
       color: "text-muted-foreground bg-muted border-border",
       Icon: Minus,
     },
@@ -332,6 +413,7 @@ function SentimentBadge({ s }: { s: NewsSentiment }) {
 }
 
 function FearGreedGauge({ value }: { value: number }) {
+  const { t } = useI18n();
   const angle = (value / 100) * 180;
   const r = 70;
   const cx = 90;
@@ -369,13 +451,14 @@ function FearGreedGauge({ value }: { value: number }) {
       </svg>
       <div className="text-center -mt-2">
         <div className="text-3xl font-bold">{value}</div>
-        <div className="text-xs font-medium text-bull">Greed</div>
+        <div className="text-xs font-medium text-bull">{t("overview.market.greed")}</div>
       </div>
     </div>
   );
 }
 
 export function SmartInsights() {
+  const { locale, t } = useI18n();
   const [today, setToday] = useState("");
   const [marketTicks, setMarketTicks] = useState<TrendTicker[]>(tickers);
   const [marketStatus, setMarketStatus] = useState<DataStatus>("SAMPLE");
@@ -390,14 +473,14 @@ export function SmartInsights() {
   const [researchError, setResearchError] = useState<string | null>(null);
   useEffect(() => {
     setToday(
-      new Date().toLocaleDateString("en-US", {
+      new Date().toLocaleDateString(locale === "vi" ? "vi-VN" : "en-US", {
         weekday: "long",
         year: "numeric",
         month: "long",
         day: "numeric",
       }),
     );
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let alive = true;
@@ -418,12 +501,16 @@ export function SmartInsights() {
       .catch(() => {
         if (!alive) return;
         setMarketStatus("SAMPLE");
-        setMarketError("Ticker API không khả dụng; đang hiển thị dữ liệu mẫu.");
+        setMarketError(
+          locale === "vi"
+            ? "Ticker API không khả dụng; đang hiển thị dữ liệu mẫu."
+            : "Ticker API unavailable; showing sample data.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let alive = true;
@@ -441,12 +528,16 @@ export function SmartInsights() {
         if (!alive) return;
         setAssetIntelligence(null);
         setIntelligenceStatus("UNAVAILABLE");
-        setIntelligenceError("Không tải được Investor Intelligence cho tài sản đã chọn.");
+        setIntelligenceError(
+          locale === "vi"
+            ? "Không tải được Investor Intelligence cho tài sản đã chọn."
+            : "Could not load Investor Intelligence for the selected asset.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, [selectedIntelligenceSymbol]);
+  }, [locale, selectedIntelligenceSymbol]);
 
   useEffect(() => {
     let alive = true;
@@ -459,12 +550,16 @@ export function SmartInsights() {
       })
       .catch(() => {
         if (!alive) return;
-        setResearchError("Không tải được lịch sử research run.");
+        setResearchError(
+          locale === "vi"
+            ? "Không tải được lịch sử research run."
+            : "Could not load research run history.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locale]);
 
   return (
     <main className="mx-auto min-w-0 max-w-7xl space-y-10 px-4 py-8 sm:px-6">
@@ -481,26 +576,23 @@ export function SmartInsights() {
           <div className="min-w-0 space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1.5 text-xs font-bold tracking-widest px-3 py-1 rounded-full bg-white/15 backdrop-blur">
-                <Sparkles className="w-3.5 h-3.5" /> DAILY BRIEFING
+                <Sparkles className="w-3.5 h-3.5" /> {t("overview.hero.badge")}
               </span>
               <DataStatusBadge status="SAMPLE" className="border-white/30 bg-white/10 text-white" />
               <span className="text-sm text-white/80">{today}</span>
             </div>
             <h1 className="text-3xl md:text-5xl font-bold leading-tight tracking-tight max-w-2xl">
-              Risk-on returns as BTC reclaims $67K, but Fed minutes cap upside in equities.
+              {t("overview.hero.title")}
             </h1>
             <ul className="space-y-2 text-white/90 max-w-2xl">
               <li className="flex gap-3">
-                <span className="text-bull">▲</span> Crypto: ETF inflows accelerate; BTC dominance
-                climbs to 56.4%.
+                <span className="text-bull">▲</span> {t("overview.hero.crypto")}
               </li>
               <li className="flex gap-3">
-                <span className="text-bear">▼</span> Macro: Hawkish FOMC minutes lift 10Y yields to
-                4.32%.
+                <span className="text-bear">▼</span> {t("overview.hero.macro")}
               </li>
               <li className="flex gap-3">
-                <span className="text-bull">▲</span> Equities: VN30 +1.2% led by banking; SPY drifts
-                on rate concerns.
+                <span className="text-bull">▲</span> {t("overview.hero.equities")}
               </li>
             </ul>
           </div>
@@ -508,15 +600,15 @@ export function SmartInsights() {
             type="button"
             disabled={!isFeatureAvailable("listenBriefing")}
             aria-disabled={!isFeatureAvailable("listenBriefing")}
-            title="Chưa khả dụng trong MVP"
+            title={t("common.unavailableMvp")}
             className="group flex items-center gap-4 rounded-2xl border border-white/20 bg-white/10 px-5 py-4 backdrop-blur transition-all disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span className="w-14 h-14 rounded-full bg-white text-primary grid place-items-center shadow-glow group-hover:scale-105 transition-transform">
               <Play className="w-6 h-6 fill-current ml-0.5" />
             </span>
             <span className="text-left">
-              <span className="block text-sm font-semibold">Listen to AI Briefing</span>
-              <span className="block text-xs text-white/70">Chưa khả dụng trong MVP</span>
+              <span className="block text-sm font-semibold">{t("overview.hero.listen")}</span>
+              <span className="block text-xs text-white/70">{t("common.unavailableMvp")}</span>
             </span>
           </button>
         </div>
@@ -531,15 +623,13 @@ export function SmartInsights() {
             </span>
             <div>
               <h2 className="font-semibold flex items-center gap-2">
-                AI Digest
+                {t("overview.digest.title")}
                 <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
-                  Decision Summary
+                  {t("overview.digest.badge")}
                 </span>
                 <DataStatusBadge status="SAMPLE" />
               </h2>
-              <p className="text-xs text-muted-foreground">
-                Nội dung minh họa; không tổng hợp theo thời gian thực.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("overview.digest.sampleNote")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -557,37 +647,30 @@ export function SmartInsights() {
           <div className="min-w-0 space-y-5 p-6">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
-                Market Thesis
+                {t("overview.digest.thesisTitle")}
               </div>
-              <p className="text-base leading-relaxed">
-                Risk assets retain a{" "}
-                <span className="text-bull font-semibold">constructive bias</span> as ETF flows
-                accelerate and BTC reclaims $67K, but hawkish FOMC minutes and rising real yields
-                cap upside in long-duration equities. Rotate toward{" "}
-                <span className="font-semibold">quality cyclicals, gold and large-cap crypto</span>;
-                trim speculative growth and high-beta altcoins into strength.
-              </p>
+              <p className="text-base leading-relaxed">{t("overview.digest.thesis")}</p>
             </div>
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
-                Key Drivers
+                {t("overview.digest.keyDrivers")}
               </div>
               <ul className="space-y-2 text-sm">
                 <li className="flex gap-2.5">
                   <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
-                  Spot BTC ETF net inflows +$842M (3-week high); long-term holder supply at ATH.
+                  {t("overview.digest.driver1")}
                 </li>
                 <li className="flex gap-2.5">
                   <TrendingDown className="w-4 h-4 text-bear shrink-0 mt-0.5" />
-                  Fed minutes hawkish — 10Y yield 4.32%; reduces multiple-expansion runway.
+                  {t("overview.digest.driver2")}
                 </li>
                 <li className="flex gap-2.5">
                   <TrendingUp className="w-4 h-4 text-bull shrink-0 mt-0.5" />
-                  VN30 banking leadership; credit growth recovery supports Q3 EPS beats.
+                  {t("overview.digest.driver3")}
                 </li>
                 <li className="flex gap-2.5">
                   <Minus className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                  Oil drifting lower on OPEC+ supply unwind — neutral for headline CPI.
+                  {t("overview.digest.driver4")}
                 </li>
               </ul>
             </div>
@@ -596,25 +679,27 @@ export function SmartInsights() {
           <div className="min-w-0 space-y-5 bg-muted/20 p-6">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
-                Recommended Stance
+                {t("overview.digest.stanceTitle")}
               </div>
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full bg-bull/10 text-bull border border-bull/20">
-                  <TrendingUp className="w-3.5 h-3.5" /> Risk-On · Moderate
+                  <TrendingUp className="w-3.5 h-3.5" /> {t("overview.digest.stance")}
                 </span>
-                <span className="text-xs text-muted-foreground">7 / 10 conviction</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("overview.digest.conviction")}
+                </span>
               </div>
             </div>
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                <Target className="w-3 h-3" /> Action Items
+                <Target className="w-3 h-3" /> {t("overview.digest.actions")}
               </div>
               <ul className="space-y-2 text-sm">
                 {[
-                  { c: "bull" as const, t: "Increase BTC/ETH core allocation to 18-22%" },
-                  { c: "bull" as const, t: "Add VN30 banking basket on pullbacks below 1,310" },
-                  { c: "bear" as const, t: "Trim unprofitable small-cap tech; raise cash 5%" },
-                  { c: "bull" as const, t: "Hold gold 8-10% as macro hedge against sticky CPI" },
+                  { c: "bull" as const, t: t("overview.digest.action1") },
+                  { c: "bull" as const, t: t("overview.digest.action2") },
+                  { c: "bear" as const, t: t("overview.digest.action3") },
+                  { c: "bull" as const, t: t("overview.digest.action4") },
                 ].map((a, i) => (
                   <li key={i} className="flex gap-2.5 items-start">
                     <CheckCircle2
@@ -628,22 +713,21 @@ export function SmartInsights() {
             <div className="rounded-xl border border-bear/20 bg-bear/5 p-3 text-xs flex gap-2.5">
               <ShieldAlert className="w-4 h-4 text-bear shrink-0 mt-0.5" />
               <div>
-                <div className="font-semibold text-bear mb-0.5">Risk Watch</div>
-                <span className="text-muted-foreground">
-                  Surprise CPI print Thu 8:30 ET. Tighten stops on rate-sensitive longs; reduce
-                  leverage into the event.
-                </span>
+                <div className="font-semibold text-bear mb-0.5">
+                  {t("overview.digest.riskWatch")}
+                </div>
+                <span className="text-muted-foreground">{t("overview.digest.riskWatchBody")}</span>
               </div>
             </div>
             <button
               type="button"
               disabled={!isFeatureAvailable("applyPortfolio")}
               aria-disabled={!isFeatureAvailable("applyPortfolio")}
-              title="Chưa khả dụng trong MVP"
+              title={t("common.unavailableMvp")}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-elegant disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              Apply to My Portfolio · Chưa khả dụng trong MVP
+              {t("overview.digest.apply")} · {t("common.unavailableMvp")}
             </button>
           </div>
         </div>
@@ -663,18 +747,18 @@ export function SmartInsights() {
       <section className="grid min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="min-w-0 rounded-2xl border border-border bg-card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold">Fear &amp; Greed Index</h2>
+            <h2 className="font-semibold">{t("overview.market.fearGreed")}</h2>
             <DataStatusBadge status="SAMPLE" />
           </div>
           <FearGreedGauge value={75} />
           <p className="text-xs text-muted-foreground text-center mt-3">
-            Investors are showing strong risk appetite — historically a contrarian caution signal.
+            {t("overview.market.fearGreedNote")}
           </p>
 
           {/* On-chain mini metrics */}
           <div className="mt-6 pt-5 border-t border-border space-y-2.5">
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Activity className="w-3 h-3" /> On-Chain Pulse
+              <Activity className="w-3 h-3" /> {t("overview.market.onChainPulse")}
             </div>
             {[
               { l: "BTC Dominance", v: "56.4%", chg: 0.3 },
@@ -701,7 +785,7 @@ export function SmartInsights() {
 
         <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold">Trending Assets</h2>
+            <h2 className="font-semibold">{t("overview.market.trendingAssets")}</h2>
             <DataStatusBadge status={marketStatus} detail={marketError ?? undefined} />
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
@@ -760,6 +844,7 @@ function InvestorIntelligencePanel({
   selectedSymbol: string;
   status: DataStatus;
 }) {
+  const { t } = useI18n();
   const score = intelligence?.score ?? null;
   const stance = intelligence?.stance ?? "watch";
   const stanceTone =
@@ -777,10 +862,10 @@ function InvestorIntelligencePanel({
           <div>
             <h2 className="font-semibold flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              Investor Intelligence
+              {t("overview.intelligence.title")}
             </h2>
             <p className="text-xs text-muted-foreground">
-              DB-backed thesis, social evidence, and model forecast for the selected asset.
+              {t("overview.intelligence.description")}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -819,30 +904,29 @@ function InvestorIntelligencePanel({
           <div className="min-w-0 space-y-5">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
-                Active Thesis
+                {t("overview.intelligence.activeThesis")}
               </div>
               <p className="text-sm leading-relaxed">
-                {intelligence?.summary ??
-                  "Run the local research seed or worker to load investor intelligence."}
+                {intelligence?.summary ?? t("overview.intelligence.emptySummary")}
               </p>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <SignalList
-                title="Catalysts"
+                title={t("overview.intelligence.catalysts")}
                 tone="bull"
-                items={intelligence?.topCatalysts ?? ["No catalyst data"]}
+                items={intelligence?.topCatalysts ?? [t("overview.intelligence.noCatalyst")]}
               />
               <SignalList
-                title="Risks"
+                title={t("overview.intelligence.risks")}
                 tone="bear"
-                items={intelligence?.topRisks ?? ["No risk data"]}
+                items={intelligence?.topRisks ?? [t("overview.intelligence.noRisk")]}
               />
             </div>
 
             <div className="rounded-xl border border-border bg-muted/20 p-4">
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
-                Evidence Trail
+                {t("overview.intelligence.evidenceTrail")}
               </div>
               <div className="space-y-3">
                 {(intelligence?.evidence ?? []).slice(0, 3).map((item) => (
@@ -860,7 +944,7 @@ function InvestorIntelligencePanel({
                 ))}
                 {(!intelligence || intelligence.evidence.length === 0) && (
                   <p className="text-xs text-muted-foreground">
-                    Evidence will appear after last30days or provider imports write to PostgreSQL.
+                    {t("overview.intelligence.noEvidence")}
                   </p>
                 )}
               </div>
@@ -870,7 +954,7 @@ function InvestorIntelligencePanel({
           <div className="space-y-4">
             <div className="rounded-xl border border-border bg-background/60 p-4">
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                Sentiment Mix
+                {t("overview.intelligence.sentimentMix")}
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                 {(["bull", "bear", "neutral"] as const).map((key) => (
@@ -886,18 +970,22 @@ function InvestorIntelligencePanel({
 
             <div className="rounded-xl border border-border bg-background/60 p-4">
               <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                Kronos Forecast
+                {t("overview.intelligence.forecast")}
               </div>
               {forecast ? (
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{forecast.horizon} target</span>
+                    <span className="text-muted-foreground">
+                      {forecast.horizon} {t("overview.intelligence.target")}
+                    </span>
                     <span className="font-bold tabular-nums">
                       ${forecast.targetPrice.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Expected return</span>
+                    <span className="text-muted-foreground">
+                      {t("overview.intelligence.expectedReturn")}
+                    </span>
                     <span
                       className={`font-bold tabular-nums ${
                         forecast.expectedReturnPct >= 0 ? "text-bull" : "text-bear"
@@ -908,12 +996,14 @@ function InvestorIntelligencePanel({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Confidence</span>
+                    <span className="text-muted-foreground">{t("common.confidence")}</span>
                     <span className="font-bold tabular-nums">{forecast.confidence}%</span>
                   </div>
                 </div>
               ) : (
-                <p className="mt-3 text-xs text-muted-foreground">No forecast stored yet.</p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {t("overview.intelligence.noForecast")}
+                </p>
               )}
             </div>
           </div>
@@ -924,7 +1014,7 @@ function InvestorIntelligencePanel({
         <div className="px-5 py-4 border-b border-border">
           <h2 className="font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4 text-primary" />
-            Research Runs
+            {t("overview.intelligence.researchRuns")}
           </h2>
         </div>
         <div className="divide-y divide-border max-h-[430px] overflow-y-auto">
@@ -945,7 +1035,7 @@ function InvestorIntelligencePanel({
           ))}
           {runs.length === 0 && (
             <div className="p-5 text-xs text-muted-foreground">
-              No research runs loaded. Run `npm run db:seed` after migrations.
+              {t("overview.intelligence.noRuns")}
             </div>
           )}
         </div>
@@ -986,6 +1076,7 @@ function SignalList({
 /* ---------------- Watchlist ---------------- */
 
 function Watchlist() {
+  const { locale, t } = useI18n();
   const [items, setItems] = useState<WatchlistItemResponse[]>(WATCHLIST);
   const [status, setStatus] = useState<DataStatus>("SAMPLE");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1004,12 +1095,16 @@ function Watchlist() {
       .catch(() => {
         if (!alive) return;
         setStatus("SAMPLE");
-        setLoadError("Watchlist API không khả dụng; đang hiển thị dữ liệu mẫu.");
+        setLoadError(
+          locale === "vi"
+            ? "Watchlist API không khả dụng; đang hiển thị dữ liệu mẫu."
+            : "Watchlist API unavailable; showing sample data.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locale]);
 
   return (
     <>
@@ -1017,7 +1112,7 @@ function Watchlist() {
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
           <div className="flex flex-wrap items-center gap-2">
             <Star className="w-4 h-4 text-chart-4 fill-chart-4" />
-            <h2 className="font-semibold">My Watchlist</h2>
+            <h2 className="font-semibold">{t("overview.market.watchlist")}</h2>
             <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
               {items.length}
             </span>
@@ -1031,17 +1126,23 @@ function Watchlist() {
             onClick={() => setAddOpen(true)}
             className="h-11 sm:h-8"
           >
-            <Plus data-icon="inline-start" /> Add asset
+            <Plus data-icon="inline-start" /> {t("overview.market.addAsset")}
           </Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
               <tr className="border-b border-border">
-                <th className="text-left font-medium px-5 py-2.5">Asset</th>
-                <th className="text-right font-medium px-3 py-2.5">Price</th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {t("overview.market.tableAsset")}
+                </th>
+                <th className="text-right font-medium px-3 py-2.5">
+                  {t("overview.market.tablePrice")}
+                </th>
                 <th className="text-right font-medium px-3 py-2.5">24h</th>
-                <th className="text-right font-medium px-3 py-2.5">Alert</th>
+                <th className="text-right font-medium px-3 py-2.5">
+                  {t("overview.market.tableAlert")}
+                </th>
                 <th className="text-center font-medium px-3 py-2.5">AI</th>
                 <th className="text-right font-medium px-5 py-2.5"></th>
               </tr>
@@ -1090,9 +1191,9 @@ function Watchlist() {
                         type="button"
                         disabled={!isFeatureAvailable("alertEdit")}
                         aria-disabled={!isFeatureAvailable("alertEdit")}
-                        title="Chưa khả dụng trong MVP"
+                        title={t("common.unavailableMvp")}
                         className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 text-xs text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Edit alert for ${it.sym}`}
+                        aria-label={`${t("overview.market.tableAlert")} ${it.sym}`}
                       >
                         <Bell className="w-3.5 h-3.5" />
                       </button>
@@ -1104,12 +1205,12 @@ function Watchlist() {
           </table>
         </div>
         <div className="px-5 py-3 border-t border-border bg-muted/20 text-xs text-muted-foreground flex justify-between">
-          <span>Sentiment auto-synced from Smart Insights</span>
+          <span>{t("overview.market.synced")}</span>
           <button
             onClick={() => setItems([...items].sort((a, b) => b.chg - a.chg))}
             className="font-medium text-primary hover:underline"
           >
-            Sort by 24h ↕
+            {t("overview.market.sort24h")}
           </button>
         </div>
       </div>
@@ -1150,6 +1251,7 @@ function ImpactDots({ impact }: { impact: CalendarEvent["impact"] }) {
 }
 
 function EconomicCalendar() {
+  const { locale, t } = useI18n();
   const [impact, setImpact] = useState<"all" | "high" | "mid">("all");
   const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR);
   const [status, setStatus] = useState<DataStatus>("SAMPLE");
@@ -1168,23 +1270,30 @@ function EconomicCalendar() {
       .catch(() => {
         if (!alive) return;
         setStatus("SAMPLE");
-        setLoadError("Events API không khả dụng; đang hiển thị dữ liệu mẫu.");
+        setLoadError(
+          locale === "vi"
+            ? "Events API không khả dụng; đang hiển thị dữ liệu mẫu."
+            : "Events API unavailable; showing sample data.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locale]);
 
   const filtered = events.filter((e) =>
     impact === "all" ? true : impact === "high" ? e.impact === "high" : e.impact !== "low",
   );
+  const eventLabel = (event: CalendarEvent) =>
+    locale === "vi" ? (CALENDAR_EVENT_VI[event.event] ?? event.event) : event.event;
+  const dateLabel = (date: string) => (locale === "vi" ? (CALENDAR_DATE_VI[date] ?? date) : date);
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
         <div className="flex flex-wrap items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold">Economic Calendar</h2>
+          <h2 className="font-semibold">{t("overview.market.calendar")}</h2>
           <DataStatusBadge status={status} detail={loadError ?? undefined} />
         </div>
         <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
@@ -1198,7 +1307,11 @@ function EconomicCalendar() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {k === "all" ? "All" : k === "mid" ? "≥ Mid" : "High only"}
+              {k === "all"
+                ? t("overview.market.filterAll")
+                : k === "mid"
+                  ? t("overview.market.filterMid")
+                  : t("overview.market.filterHigh")}
             </button>
           ))}
         </div>
@@ -1207,31 +1320,37 @@ function EconomicCalendar() {
         {filtered.map((e, i) => (
           <li key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-muted/40">
             <div className="text-center shrink-0 w-14">
-              <div className="text-[10px] font-mono uppercase text-muted-foreground">{e.date}</div>
+              <div className="text-[10px] font-mono uppercase text-muted-foreground">
+                {dateLabel(e.date)}
+              </div>
               <div className="text-sm font-bold tabular-nums">{e.time}</div>
             </div>
             <div className="shrink-0 text-xl" aria-hidden>
               {FLAGS[e.country]}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium leading-tight truncate">{e.event}</div>
+              <div className="text-sm font-medium leading-tight truncate">{eventLabel(e)}</div>
               <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
                 <ImpactDots impact={e.impact} />
                 {e.forecast && (
                   <span>
-                    Forecast:{" "}
+                    {t("overview.market.forecast")}:{" "}
                     <span className="text-foreground font-medium tabular-nums">{e.forecast}</span>
                   </span>
                 )}
                 {e.previous && (
                   <span>
-                    Prev: <span className="tabular-nums">{e.previous}</span>
+                    {t("overview.market.previous")}:{" "}
+                    <span className="tabular-nums">{e.previous}</span>
                   </span>
                 )}
               </div>
             </div>
             {e.impact === "high" && (
-              <AlertCircle className="w-4 h-4 text-bear shrink-0" aria-label="High impact" />
+              <AlertCircle
+                className="w-4 h-4 text-bear shrink-0"
+                aria-label={t("overview.market.highImpact")}
+              />
             )}
           </li>
         ))}
@@ -1242,14 +1361,8 @@ function EconomicCalendar() {
 
 /* ---------------- News Feed with filters ---------------- */
 
-const SENTIMENTS: { k: NewsSentiment | "all"; label: string }[] = [
-  { k: "all", label: "All" },
-  { k: "bull", label: "Bullish" },
-  { k: "bear", label: "Bearish" },
-  { k: "neutral", label: "Neutral" },
-];
-
 function NewsFeed() {
+  const { locale, t } = useI18n();
   const [q, setQ] = useState("");
   const [asset, setAsset] = useState<NewsAsset | "all">("all");
   const [src, setSrc] = useState<NewsSource | "all">("all");
@@ -1281,18 +1394,42 @@ function NewsFeed() {
       .catch(() => {
         if (!alive) return;
         setStatus("SAMPLE");
-        setLoadError("Insights API không khả dụng; đang hiển thị dữ liệu mẫu.");
+        setLoadError(
+          locale === "vi"
+            ? "Insights API không khả dụng; đang hiển thị dữ liệu mẫu."
+            : "Insights API unavailable; showing sample data.",
+        );
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [locale]);
 
-  const sources = useMemo(() => Array.from(new Set(news.map((item) => item.src))).sort(), [news]);
-  const assets = useMemo(() => Array.from(new Set(news.map((item) => item.asset))).sort(), [news]);
+  const sentiments: { k: NewsSentiment | "all"; label: string }[] = [
+    { k: "all", label: t("overview.news.all") },
+    { k: "bull", label: t("overview.news.bullish") },
+    { k: "bear", label: t("overview.news.bearish") },
+    { k: "neutral", label: t("overview.news.neutral") },
+  ];
+
+  const localizedNews = useMemo(
+    () =>
+      news.map((item) =>
+        locale === "vi" && NEWS_VI_BY_ID[item.id] ? { ...item, ...NEWS_VI_BY_ID[item.id] } : item,
+      ),
+    [locale, news],
+  );
+  const sources = useMemo(
+    () => Array.from(new Set(localizedNews.map((item) => item.src))).sort(),
+    [localizedNews],
+  );
+  const assets = useMemo(
+    () => Array.from(new Set(localizedNews.map((item) => item.asset))).sort(),
+    [localizedNews],
+  );
 
   const filtered = useMemo(() => {
-    return news.filter((n) => {
+    return localizedNews.filter((n) => {
       if (asset !== "all" && n.asset !== asset) return false;
       if (src !== "all" && n.src !== src) return false;
       if (sent !== "all" && n.sentiment !== sent) return false;
@@ -1300,22 +1437,20 @@ function NewsFeed() {
         return false;
       return true;
     });
-  }, [q, asset, src, sent, news]);
+  }, [q, asset, src, sent, localizedNews]);
 
   return (
     <section>
       <div className="flex items-end justify-between mb-5 gap-3 flex-wrap">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight">Expert Signals</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{t("overview.news.title")}</h2>
             <DataStatusBadge status={status} detail={loadError ?? undefined} />
           </div>
-          <p className="text-sm text-muted-foreground">
-            AI-curated insights from top research desks worldwide.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("overview.news.description")}</p>
         </div>
         <span className="text-xs text-muted-foreground font-mono">
-          {filtered.length} / {news.length} stories
+          {t("overview.news.stories", { visible: filtered.length, total: localizedNews.length })}
         </span>
       </div>
 
@@ -1326,26 +1461,32 @@ function NewsFeed() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search headlines…"
+            placeholder={t("overview.news.search")}
             className="bg-transparent outline-none text-sm w-full py-2 placeholder:text-muted-foreground"
           />
         </div>
 
         <Select
           icon={<Filter className="w-3.5 h-3.5" />}
-          label="Asset"
+          label={t("overview.news.asset")}
           value={asset}
           onChange={(v) => setAsset(v as NewsAsset | "all")}
-          options={[{ v: "all", l: "All assets" }, ...assets.map((a) => ({ v: a, l: a }))]}
+          options={[
+            { v: "all", l: t("overview.news.allAssets") },
+            ...assets.map((a) => ({ v: a, l: a })),
+          ]}
         />
         <Select
-          label="Source"
+          label={t("overview.news.source")}
           value={src}
           onChange={(v) => setSrc(v as NewsSource | "all")}
-          options={[{ v: "all", l: "All sources" }, ...sources.map((s) => ({ v: s, l: s }))]}
+          options={[
+            { v: "all", l: t("overview.news.allSources") },
+            ...sources.map((s) => ({ v: s, l: s })),
+          ]}
         />
         <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
-          {SENTIMENTS.map((s) => (
+          {sentiments.map((s) => (
             <button
               key={s.k}
               onClick={() => setSent(s.k)}
@@ -1364,7 +1505,7 @@ function NewsFeed() {
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
           <Search className="w-8 h-8 mx-auto mb-3 opacity-50" />
-          No stories match your filters.
+          {t("overview.news.empty")}
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1388,9 +1529,11 @@ function NewsFeed() {
               <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{a.summary}</p>
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {a.ago} ago
+                  <Clock className="w-3 h-3" /> {a.ago} {t("overview.news.ago")}
                 </span>
-                <span className="text-xs font-medium text-muted-foreground">Tóm tắt trong MVP</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {t("overview.news.mvpSummary")}
+                </span>
               </div>
             </article>
           ))}
