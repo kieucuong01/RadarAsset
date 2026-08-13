@@ -8,7 +8,7 @@ describe("MVP UI contracts", () => {
       SYSTEM: expect.objectContaining({ label: "Dữ liệu hệ thống" }),
       SAMPLE: expect.objectContaining({ label: "Dữ liệu mẫu" }),
       SIMULATED: expect.objectContaining({ label: "Mô phỏng" }),
-      UNAVAILABLE: expect.objectContaining({ label: "Chưa khả dụng trong MVP" }),
+      UNAVAILABLE: expect.objectContaining({ label: "Dữ liệu chưa khả dụng" }),
     });
   });
 

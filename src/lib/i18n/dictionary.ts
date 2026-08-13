@@ -73,8 +73,8 @@ export const dictionaries = {
         description: "Kết quả minh họa, không phải giao dịch hoặc dự báo thực.",
       },
       UNAVAILABLE: {
-        label: "Chưa khả dụng trong MVP",
-        description: "Tính năng chưa có luồng vận hành thực.",
+        label: "Dữ liệu chưa khả dụng",
+        description: "Chưa có dữ liệu hệ thống đã xác thực để hiển thị.",
       },
     },
     common: {
@@ -757,8 +757,8 @@ export const dictionaries = {
         description: "Illustrative output, not real trades or predictions.",
       },
       UNAVAILABLE: {
-        label: "Unavailable in MVP",
-        description: "This feature does not have a real operating flow yet.",
+        label: "Data unavailable",
+        description: "No verified system data is currently available to display.",
       },
     },
     common: {

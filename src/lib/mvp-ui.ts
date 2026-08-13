@@ -12,8 +12,8 @@ export const DATA_STATUS_META = {
     description: "Kết quả minh họa, không phải giao dịch hoặc dự báo thực.",
   },
   UNAVAILABLE: {
-    label: "Chưa khả dụng trong MVP",
-    description: "Tính năng chưa có luồng vận hành thực.",
+    label: "Dữ liệu chưa khả dụng",
+    description: "Chưa có dữ liệu hệ thống đã xác thực để hiển thị.",
   },
 } as const;
 
