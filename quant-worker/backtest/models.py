@@ -43,6 +43,9 @@ class QualityIssue:
     code: str
     severity: str
     timestamp: datetime | None = None
+    classification: str | None = None
+    range_start: datetime | None = None
+    range_end: datetime | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 

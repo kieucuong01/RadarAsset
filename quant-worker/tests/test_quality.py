@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -125,3 +125,59 @@ def test_vietnam_daily_missing_bars_compare_market_dates_not_utc_anchors() -> No
 
     assert report.missing_bar_count == 1
     assert report.issues[0].details == {"marketDate": "2025-02-05"}
+
+
+def test_gap_ranges_classify_listing_suspension_provider_and_calendar_boundaries() -> None:
+    rows = [
+        bar("2026-12-30T00:00:00Z", asset="FPT", timeframe="1d"),
+        bar("2027-01-06T00:00:00Z", asset="FPT", timeframe="1d"),
+    ]
+
+    report = validate_bars(
+        rows,
+        market="vn_equity",
+        listing_start=datetime(2026, 12, 31, tzinfo=timezone.utc),
+        suspension_ranges=((
+            datetime(2027, 1, 4, tzinfo=timezone.utc),
+            datetime(2027, 1, 4, tzinfo=timezone.utc),
+        ),),
+    )
+
+    classifications = {issue.classification for issue in report.issues}
+    assert "LISTING_INACTIVE" in classifications
+    assert "PROVIDER_GAP" in classifications
+    assert "SUSPENSION_UNVERIFIED" in classifications
+    assert "CALENDAR_RANGE_UNVERIFIED" in classifications
+    assert report.status == "failed"
+    assert report.missing_bar_count == 1
+
+
+def test_adjacent_provider_gaps_collapse_into_one_bounded_range() -> None:
+    report = validate_bars(
+        [
+            bar("2024-01-01T00:00:00Z"),
+            bar("2024-01-01T04:00:00Z"),
+        ],
+        market="crypto_spot",
+    )
+
+    assert report.missing_bar_count == 3
+    assert len(report.issues) == 1
+    issue = report.issues[0]
+    assert issue.classification == "PROVIDER_GAP"
+    assert issue.range_start == datetime(2024, 1, 1, 1, tzinfo=timezone.utc)
+    assert issue.range_end == datetime(2024, 1, 1, 3, tzinfo=timezone.utc)
+    assert issue.details["missingCount"] == 3
+
+
+def test_expected_closures_are_not_provider_gaps() -> None:
+    report = validate_bars(
+        [
+            bar("2025-01-28T00:00:00Z", asset="FPT", timeframe="1d"),
+            bar("2025-02-03T00:00:00Z", asset="FPT", timeframe="1d"),
+        ],
+        market="vn_equity",
+    )
+
+    assert report.missing_bar_count == 0
+    assert all(issue.classification != "PROVIDER_GAP" for issue in report.issues)
