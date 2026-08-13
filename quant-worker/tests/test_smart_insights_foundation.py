@@ -223,6 +223,12 @@ def test_discovered_links_remain_inside_source_specific_paths() -> None:
         coinshares,
         "https://a.storyblok.com/f/176807/1600x2000/hash/ranked-flows-detail.png/m/",
     )
+    assert is_source_url_allowed(
+        coinshares, "https://coinshares.com/insights/research-data/?page=3"
+    )
+    assert not is_source_url_allowed(
+        coinshares, "https://coinshares.com/insights/research-data/?page=6"
+    )
     assert not is_source_url_allowed(
         coinshares,
         "https://a.storyblok.com/f/999999/1600x2000/hash/ranked-flows-detail.png/m/",
@@ -266,6 +272,32 @@ def test_coinshares_discovery_reads_scrapling_raw_html() -> None:
     assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
         "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
     )
+
+
+def test_coinshares_discovery_scans_bounded_pages_when_link_is_generic() -> None:
+    class Crawler:
+        urls: list[str] = []
+
+        @staticmethod
+        def scrape(_source: object, url: str) -> RawSnapshot:
+            Crawler.urls.append(url)
+            html = '<a href="insights/research-data/fund-flows">Read more</a>'
+            if url.endswith("?page=2"):
+                html = (
+                    '<a href="/insights/research-data/'
+                    'fund-flows-01-06-26/">latest</a>'
+                )
+            content = json.dumps({"rawHtml": html}).encode()
+            return replace(snapshot(content), source_url=url)
+
+    assert collect_smart_insights._discover_coinshares_report(Crawler()) == (
+        "https://coinshares.com/insights/research-data/fund-flows-01-06-26/"
+    )
+    assert Crawler.urls == [
+        "https://coinshares.com/insights/research-data/",
+        "https://coinshares.com/insights/research-data/?page=1",
+        "https://coinshares.com/insights/research-data/?page=2",
+    ]
 
 
 def test_dimension_key_is_canonical_and_contract_is_frozen() -> None:
@@ -564,11 +596,20 @@ def test_scrapling_runner_url_allowlist_is_exact() -> None:
         "https://coinshares.com/us/insights/research-data/fund-flows-01-06-26/"
     )
     assert runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/"
+    )
+    assert runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/?page=3"
+    )
+    assert runner.is_runner_url_allowed(
         "https://a.storyblok.com/f/176807/1600x2000/table.png/m/"
     )
     assert not runner.is_runner_url_allowed("http://farside.co.uk/btc/")
     assert not runner.is_runner_url_allowed("https://farside.co.uk/btc/extra")
     assert not runner.is_runner_url_allowed("https://evil.invalid/btc/")
+    assert not runner.is_runner_url_allowed(
+        "https://coinshares.com/insights/research-data/?page=6"
+    )
     assert not runner.is_runner_url_allowed(
         "https://a.storyblok.com/f/999999/1600x2000/table.png/m/"
     )

@@ -292,6 +292,11 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             "/calendar/"
         )
     if source.code == "coinshares-weekly":
+        index_page = (
+            parsed.hostname == "coinshares.com"
+            and parsed.path == "/insights/research-data/"
+            and parsed.query in {f"page={page}" for page in range(1, 6)}
+        )
         article = parsed.hostname == "coinshares.com" and (
             parsed.path.startswith("/insights/research-data/fund-flows-")
             or parsed.path.startswith("/us/insights/research-data/fund-flows-")
@@ -302,5 +307,5 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             and re.search(r"\.(?:png|jpe?g|webp)/m/?$", parsed.path, re.IGNORECASE)
             is not None
         )
-        return article or image
+        return index_page or article or image
     return False

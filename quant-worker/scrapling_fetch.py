@@ -12,6 +12,7 @@ _COINSHARES_PREFIXES = (
     "/insights/research-data/fund-flows-",
     "/us/insights/research-data/fund-flows-",
 )
+_COINSHARES_INDEX = "/insights/research-data/"
 _STORYBLOK_IMAGE = re.compile(
     r"^/f/176807/[^?#]+\.(?:png|jpe?g|webp)/m/$", re.IGNORECASE
 )
@@ -35,7 +36,14 @@ def is_runner_url_allowed(url: str) -> bool:
     if host == "farside.co.uk":
         return parsed.path in _FARSIDE_PATHS and not parsed.query
     if host == "coinshares.com":
-        return any(parsed.path.startswith(prefix) for prefix in _COINSHARES_PREFIXES)
+        index = parsed.path == _COINSHARES_INDEX and parsed.query in {
+            "",
+            *(f"page={page}" for page in range(1, 6)),
+        }
+        article = any(
+            parsed.path.startswith(prefix) for prefix in _COINSHARES_PREFIXES
+        ) and not parsed.query
+        return index or article
     if host == "a.storyblok.com":
         return _STORYBLOK_IMAGE.fullmatch(parsed.path) is not None
     return False

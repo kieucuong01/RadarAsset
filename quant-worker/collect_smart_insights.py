@@ -295,43 +295,45 @@ _COINSHARES_REPORT = re.compile(
     r"fund-flows-(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})/",
     re.IGNORECASE,
 )
-
-
 def _discover_coinshares_report(crawler: Any) -> str:
     source = source_for_code("coinshares-weekly")
-    snapshot = crawler.scrape(source, source.urls[0])
-    try:
-        payload = json.loads(snapshot.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise SourceFetchError("INVALID_RESPONSE") from error
-    markdown = payload.get("markdown") if isinstance(payload, dict) else None
-    raw_html = payload.get("rawHtml") if isinstance(payload, dict) else None
-    documents = tuple(
-        value
-        for value in (markdown, raw_html)
-        if isinstance(value, str) and value.strip()
+    index_urls = (source.urls[0],) + tuple(
+        f"{source.urls[0]}?page={page}" for page in range(1, 6)
     )
-    if not documents:
-        raise SourceFetchError("SCHEMA_DRIFT")
-    document = "\n".join(documents)
-    candidates: list[tuple[datetime, str]] = []
-    for match in _COINSHARES_REPORT.finditer(document):
+    for index_url in index_urls:
+        snapshot = crawler.scrape(source, index_url)
         try:
-            year = int(match.group(3))
-            if year < 100:
-                year += 2_000
-            report_date = datetime(
-                year, int(match.group(2)), int(match.group(1)),
-                tzinfo=timezone.utc,
-            )
-        except ValueError:
-            continue
-        url = urljoin("https://coinshares.com", match.group(0))
-        if is_source_url_allowed(source, url):
-            candidates.append((report_date, url))
-    if not candidates:
-        raise SourceFetchError("SCHEMA_DRIFT")
-    return max(candidates, key=lambda row: (row[0], row[1]))[1]
+            payload = json.loads(snapshot.content)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise SourceFetchError("INVALID_RESPONSE") from error
+        markdown = payload.get("markdown") if isinstance(payload, dict) else None
+        raw_html = payload.get("rawHtml") if isinstance(payload, dict) else None
+        documents = tuple(
+            value
+            for value in (markdown, raw_html)
+            if isinstance(value, str) and value.strip()
+        )
+        if not documents:
+            raise SourceFetchError("SCHEMA_DRIFT")
+        document = "\n".join(documents)
+        candidates: list[tuple[datetime, str]] = []
+        for match in _COINSHARES_REPORT.finditer(document):
+            try:
+                year = int(match.group(3))
+                if year < 100:
+                    year += 2_000
+                report_date = datetime(
+                    year, int(match.group(2)), int(match.group(1)),
+                    tzinfo=timezone.utc,
+                )
+            except ValueError:
+                continue
+            url = urljoin("https://coinshares.com", match.group(0))
+            if is_source_url_allowed(source, url):
+                candidates.append((report_date, url))
+        if candidates:
+            return max(candidates, key=lambda row: (row[0], row[1]))[1]
+    raise SourceFetchError("SCHEMA_DRIFT")
 
 
 def _previous_large_address_balances(
