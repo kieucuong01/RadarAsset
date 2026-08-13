@@ -26,12 +26,21 @@ export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioP
   const firstPoint = model.aggregate.equity[0];
   const lastPoint = model.aggregate.equity.at(-1);
   const currency = model.aggregate.assumptions.baseCurrency;
+  const adjustmentPolicy =
+    model.aggregate.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
 
   return (
     <Card className="min-w-0 max-w-full rounded-2xl shadow-sm">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <CardTitle>{t("backtestResults.activePortfolio")}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>{t("backtestResults.activePortfolio")}</CardTitle>
+            <Badge variant={adjustmentPolicy === "total_return" ? "secondary" : "outline"}>
+              {adjustmentPolicy === "total_return"
+                ? t("backtestResults.adjustedData")
+                : t("backtestResults.rawData")}
+            </Badge>
+          </div>
           <CardDescription className="font-mono text-xs uppercase tracking-wider">
             {model.legs.length} {t("backtestResults.legs")} · {shortDate(firstPoint?.timestamp)} -{" "}
             {shortDate(lastPoint?.timestamp)} · {run.timeframe}

@@ -520,6 +520,8 @@ export const dictionaries = {
       emptyMessage: "Chạy portfolio backtest để có hiệu suất thật và lệnh đã hoàn tất.",
       emptyContinue: "Chạy portfolio backtest để tiếp tục.",
       activePortfolio: "Danh mục đang chạy",
+      rawData: "Dữ liệu raw · chưa điều chỉnh",
+      adjustedData: "Dữ liệu adjusted · total return",
       legs: "legs",
       equityTitle: "Equity Curve & Drawdown",
       strategy: "Chiến lược",
@@ -602,6 +604,10 @@ export const dictionaries = {
       activeRunDescription: "{legs} legs · {timeframe} · normalized portfolio simulation",
       failedTitle: "Backtest failed",
       failedDescription: "Worker could not finish this run. Check the selected data and try again.",
+      cancelledTitle: "Backtest đã hủy",
+      cancelledDescription: "Run đã được hủy và sẽ không tiếp tục xử lý.",
+      timedOutTitle: "Backtest quá thời gian",
+      timedOutDescription: "Run vượt quá thời gian xử lý cho phép. Hãy thu hẹp phạm vi hoặc thử lại.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",
@@ -644,6 +650,12 @@ export const dictionaries = {
         dividend: "Cổ tức",
         excludeDividend: "Không tính riêng",
         adjustedPrices: "Giá total-return",
+        rawPolicyDescription: "Raw: giá gốc từ nhà cung cấp, chưa điều chỉnh cổ tức hoặc quyền.",
+        adjustedPolicyDescription:
+          "Adjusted: total return từ action đã xác minh; bars gốc vẫn được giữ bất biến.",
+        adjustmentUnavailableTitle: "Chưa có dữ liệu adjusted",
+        adjustmentUnavailableDescription:
+          "Các mã sau chưa có total-return dataset phủ đủ khoảng chọn: {symbols}.",
         fxPolicy: "FX policy",
         fxDescription: "Không mô phỏng settlement FX lịch sử ở MVP.",
         noFakeTitle: "Không tạo dữ liệu giả",
@@ -686,6 +698,7 @@ export const dictionaries = {
           emptyTitle: "Không tìm thấy mã phù hợp",
           emptyDescription: "Thử từ khóa khác hoặc điều chỉnh khoảng thời gian.",
           selected: "Đã thêm",
+          inactive: "Không còn trong catalog hiện tại",
         },
         leg: {
           remove: "Xóa {symbol}",
@@ -1213,6 +1226,8 @@ export const dictionaries = {
       emptyMessage: "Run a portfolio backtest to populate real performance and completed trades.",
       emptyContinue: "Run a portfolio backtest to continue.",
       activePortfolio: "Active Portfolio",
+      rawData: "Raw data · unadjusted",
+      adjustedData: "Adjusted data · total return",
       legs: "legs",
       equityTitle: "Equity Curve & Drawdown",
       strategy: "Strategy",
@@ -1294,6 +1309,10 @@ export const dictionaries = {
       activeRunDescription: "{legs} legs · {timeframe} · normalized portfolio simulation",
       failedTitle: "Backtest failed",
       failedDescription: "Worker could not finish this run. Check the selected data and try again.",
+      cancelledTitle: "Backtest cancelled",
+      cancelledDescription: "The run was cancelled and will not continue processing.",
+      timedOutTitle: "Backtest timed out",
+      timedOutDescription: "The run exceeded its processing deadline. Narrow the range or try again.",
       builder: {
         strategy: "Strategy",
         title: "Portfolio Backtest Builder",
@@ -1336,6 +1355,12 @@ export const dictionaries = {
         dividend: "Dividends",
         excludeDividend: "Do not model separately",
         adjustedPrices: "Total-return prices",
+        rawPolicyDescription: "Raw: provider prices before dividend or rights adjustments.",
+        adjustedPolicyDescription:
+          "Adjusted: total return from verified actions; source bars remain immutable.",
+        adjustmentUnavailableTitle: "Adjusted data unavailable",
+        adjustmentUnavailableDescription:
+          "These assets do not yet have a total-return dataset covering the selected range: {symbols}.",
         fxPolicy: "FX policy",
         fxDescription: "Historical settlement FX is not modeled in the MVP.",
         noFakeTitle: "No synthetic price data",
@@ -1378,6 +1403,7 @@ export const dictionaries = {
           emptyTitle: "No matching assets found",
           emptyDescription: "Try another keyword or adjust the date range.",
           selected: "Added",
+          inactive: "Not in the current catalog",
         },
         leg: {
           remove: "Remove {symbol}",
