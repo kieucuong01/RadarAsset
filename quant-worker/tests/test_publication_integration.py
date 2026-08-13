@@ -92,6 +92,18 @@ def test_publication_checksum_survives_a_non_utc_database_session() -> None:
         ]
 
         assert canonical_bar_checksum(round_tripped) == prepared.checksum
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT classification, range_start, range_end
+                FROM data_quality_issues
+                WHERE dataset_version_id = %s
+                ORDER BY range_start
+                """,
+                (result["datasetVersionId"],),
+            )
+            issue = cursor.fetchone()
+        assert issue is None
     finally:
         connection.rollback()
         with connection.cursor() as cursor:
@@ -174,6 +186,69 @@ def test_publish_if_changed_reuses_checksum_and_activates_only_a_correction() ->
             )
             counts = cursor.fetchone()
         assert counts == {"version_count": 2, "active_count": 1}
+    finally:
+        connection.rollback()
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM assets WHERE symbol = %s", (symbol,))
+            cursor.execute("DELETE FROM data_providers WHERE code = %s", (provider_code,))
+        connection.commit()
+        connection.close()
+
+
+def test_publication_persists_bounded_provider_gap_lineage() -> None:
+    suffix = uuid4().hex[:8]
+    symbol = f"QAGP{suffix}"
+    provider_code = f"qa-gap-{suffix}"
+    rows = [
+        Bar(
+            asset=symbol,
+            timestamp=datetime(2026, 8, 10, hour, tzinfo=timezone.utc),
+            timeframe="1h",
+            open=Decimal("100"),
+            high=Decimal("101"),
+            low=Decimal("99"),
+            close=Decimal("100"),
+            volume=Decimal("10"),
+            source="qa-live",
+        )
+        for hour in (0, 3)
+    ]
+    prepared = prepare_dataset_publication(
+        rows,
+        market="crypto_spot",
+        provider_code=provider_code,
+        provider_name="QA gap provider",
+        provider_symbol=symbol,
+        canonical_key=f"QA:GAP:{symbol}",
+        asset_name="QA gap asset",
+        currency="USD",
+        venue="QA",
+        timezone_name="UTC",
+        maximum_leverage=Decimal("1"),
+        terms_url=None,
+        source_metadata={"mode": "live"},
+    )
+    connection = psycopg.connect(_test_database_url(), row_factory=dict_row)
+    try:
+        result = PostgresDatasetPublisher(connection).publish(prepared)
+        connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT classification, range_start, range_end, details FROM data_quality_issues WHERE dataset_version_id = %s",
+                (result["datasetVersionId"],),
+            )
+            issue = cursor.fetchone()
+            cursor.execute(
+                "SELECT quality_summary, source_metadata FROM dataset_versions WHERE id = %s",
+                (result["datasetVersionId"],),
+            )
+            manifest = cursor.fetchone()
+        assert issue["classification"] == "PROVIDER_GAP"
+        assert issue["range_start"] == datetime(2026, 8, 10, 1, tzinfo=timezone.utc)
+        assert issue["range_end"] == datetime(2026, 8, 10, 2, tzinfo=timezone.utc)
+        assert issue["details"]["missingCount"] == 2
+        assert manifest["quality_summary"]["classificationCounts"] == {"PROVIDER_GAP": 1}
+        assert manifest["source_metadata"]["calendarVersion"] == "crypto-24x7-v1"
     finally:
         connection.rollback()
         with connection.cursor() as cursor:

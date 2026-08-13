@@ -10,6 +10,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from .models import Bar, QualityIssue
+from .market_calendar import MARKET_CALENDARS
 from .quality import canonical_bar_checksum, normalize_bars, validate_bars
 from .snapshots import ActiveSnapshot
 from .signal_jobs import enqueue_strategy_evaluations
@@ -120,7 +121,20 @@ def prepare_dataset_publication(
         timezone_name=timezone_name,
         maximum_leverage=maximum_leverage,
         terms_url=terms_url,
-        source_metadata=dict(source_metadata),
+        source_metadata={
+            **source_metadata,
+            "calendarVersion": MARKET_CALENDARS[market].version,
+            "calendarCertifiedFrom": (
+                MARKET_CALENDARS[market].certified_from.isoformat()
+                if MARKET_CALENDARS[market].certified_from
+                else None
+            ),
+            "calendarCertifiedTo": (
+                MARKET_CALENDARS[market].certified_to.isoformat()
+                if MARKET_CALENDARS[market].certified_to
+                else None
+            ),
+        },
         rows=tuple(normalized),
         issues=report.issues,
         checksum=canonical_bar_checksum(normalized),
@@ -336,10 +350,17 @@ class PostgresDatasetPublisher:
                 (dataset_id,),
             )
             version_number = int(cursor.fetchone()["next_version"])
+            classification_counts: dict[str, int] = {}
+            for issue in prepared.issues:
+                if issue.classification:
+                    classification_counts[issue.classification] = (
+                        classification_counts.get(issue.classification, 0) + 1
+                    )
             quality_summary = {
                 "status": prepared.quality_status,
                 "missingBarCount": prepared.missing_bar_count,
                 "issueCount": len(prepared.issues),
+                "classificationCounts": classification_counts,
             }
             cursor.execute(
                 """
@@ -395,8 +416,11 @@ class PostgresDatasetPublisher:
                 cursor.executemany(
                     """
                     INSERT INTO data_quality_issues (
-                        id, dataset_version_id, code, severity, ts, details, created_at
-                    ) VALUES (gen_random_uuid(), %s, %s, %s, %s, %s::jsonb, NOW())
+                        id, dataset_version_id, code, severity, ts, classification,
+                        range_start, range_end, details, created_at
+                    ) VALUES (
+                        gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW()
+                    )
                     """,
                     [
                         (
@@ -404,6 +428,9 @@ class PostgresDatasetPublisher:
                             issue.code,
                             issue.severity,
                             issue.timestamp,
+                            issue.classification,
+                            issue.range_start,
+                            issue.range_end,
                             json.dumps(issue.details, separators=(",", ":")),
                         )
                         for issue in prepared.issues

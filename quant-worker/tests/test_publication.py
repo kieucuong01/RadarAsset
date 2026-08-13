@@ -66,8 +66,16 @@ def test_prepare_and_publish_preserves_provenance_quality_and_checksum() -> None
     assert prepared.source_metadata == {
         "mode": "public-api",
         "licenseScope": "research_only",
+        "calendarVersion": "crypto-24x7-v1",
+        "calendarCertifiedFrom": None,
+        "calendarCertifiedTo": None,
     }
     assert prepared.adjustment_policy == "raw"
+    assert prepared.source_metadata["calendarVersion"] == "crypto-24x7-v1"
+    assert prepared.issues[0].classification == "PROVIDER_GAP"
+    assert prepared.issues[0].range_start == datetime.fromisoformat(
+        "2024-01-01T02:00:00+00:00"
+    )
 
     publisher = FakePublisher()
     result = publish_dataset(publisher, prepared)

@@ -1041,11 +1041,15 @@ model DataQualityIssue {
   code             String
   severity         String
   ts               DateTime?
+  classification   String?
+  rangeStart       DateTime?      @map("range_start") @db.Timestamptz(3)
+  rangeEnd         DateTime?      @map("range_end") @db.Timestamptz(3)
   details          Json           @default("{}")
   createdAt        DateTime       @default(now()) @map("created_at")
   datasetVersion   DatasetVersion @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
 
   @@index([datasetVersionId, severity])
+  @@index([datasetVersionId, classification, rangeStart, rangeEnd])
   @@map("data_quality_issues")
 }
 
