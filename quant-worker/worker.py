@@ -34,6 +34,8 @@ from backtest.portfolio import (
 from backtest.quality import canonical_bar_checksum
 from backtest.robustness import (
     build_walk_forward_diagnostics,
+    build_walk_forward_selection,
+    combined_robustness_status,
     out_of_sample_return,
     parameter_neighbors,
     parameter_stability,
@@ -73,6 +75,7 @@ class QueuedRun:
     dataset_version_ids: tuple[str, ...]
     worker_id: str = ""
     attempt_count: int = 0
+    deadline_at: datetime | None = None
     legs: tuple[QueuedRunLeg, ...] = ()
 
 
@@ -96,9 +99,23 @@ class WorkerRepository(Protocol):
         run: QueuedRun,
         summary: dict[str, Any],
         artifacts: list[dict[str, Any]],
-    ) -> None: ...
+    ) -> bool: ...
 
-    def fail_run(self, run: QueuedRun, code: str, message: str) -> None: ...
+    def fail_run(self, run: QueuedRun, code: str, message: str) -> bool: ...
+
+    def checkpoint_run(self, run: QueuedRun, progress: int) -> str: ...
+
+
+class RunControlStop(Exception):
+    def __init__(self, status: str) -> None:
+        super().__init__(status)
+        self.status = status
+
+
+def _checkpoint(repository: WorkerRepository, run: QueuedRun, progress: int) -> None:
+    status = repository.checkpoint_run(run, progress)
+    if status != "running":
+        raise RunControlStop(status)
 
 
 def load_local_env(path: str = ".env.local") -> None:
@@ -315,7 +332,9 @@ def _performance_artifacts(
 
 
 def _process_portfolio_run(
-    run: QueuedRun, datasets: list[DatasetInput]
+    run: QueuedRun,
+    datasets: list[DatasetInput],
+    checkpoint: Callable[[int], None] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     parameters = run.parameters
     if set(parameters) != {
@@ -345,9 +364,12 @@ def _process_portfolio_run(
         raise ValueError("Portfolio legs are invalid or duplicated.")
     dataset_by_id = {dataset.version_id: dataset for dataset in datasets}
     portfolio_legs: list[PortfolioLegInput] = []
-    neighbor_leg_results: list[tuple[str, Any]] = []
+    neighbor_leg_results: list[tuple[str, Any, str]] = []
     artifacts: list[dict[str, Any]] = []
-    for leg in sorted(run.legs, key=lambda item: item.asset):
+    sorted_legs = sorted(run.legs, key=lambda item: item.asset)
+    for leg_index, leg in enumerate(sorted_legs):
+        if checkpoint is not None:
+            checkpoint(20 + (leg_index * 50 // max(1, len(sorted_legs))))
         requested = request_by_symbol.get(leg.asset)
         dataset = dataset_by_id.get(leg.dataset_version_id)
         if requested is None or dataset is None or dataset.asset != leg.asset or dataset.market != leg.market:
@@ -453,6 +475,7 @@ def _process_portfolio_run(
                         (
                             leg.id,
                             execute_catalog(candidate_strategy, candidate_fast, candidate_slow),
+                            f"{leg.id}:{json.dumps(candidate_parameters, sort_keys=True, separators=(',', ':'))}",
                         )
                     )
         leg_manifest = {
@@ -495,6 +518,8 @@ def _process_portfolio_run(
                 result=result,
             )
         )
+        if checkpoint is not None:
+            checkpoint(20 + ((leg_index + 1) * 50 // max(1, len(sorted_legs))))
     portfolio = run_portfolio(
         portfolio_legs,
         total_capital=total_capital,
@@ -516,13 +541,12 @@ def _process_portfolio_run(
     ):
         artifacts.append(_artifact(kind, payload))
     if len(portfolio.equity) >= 8:
-        diagnostics = build_walk_forward_diagnostics(
-            portfolio.equity,
-            folds=min(3, len(portfolio.equity) // 4),
-        )
+        if checkpoint is not None:
+            checkpoint(80)
+        candidate_equity = {"base": portfolio.equity}
         base_oos_return = out_of_sample_return(portfolio.equity)
         neighbor_oos_returns = []
-        for changed_leg_id, changed_result in neighbor_leg_results:
+        for changed_leg_id, changed_result, candidate_name in neighbor_leg_results:
             candidate_portfolio = run_portfolio(
                 [
                     replace(item, result=changed_result)
@@ -534,12 +558,31 @@ def _process_portfolio_run(
                 assumptions=assumptions,
                 portfolio_hash=run.strategy_hash,
             )
+            candidate_equity[candidate_name] = candidate_portfolio.equity
             neighbor_oos_returns.append(out_of_sample_return(candidate_portfolio.equity))
-        diagnostics["parameterStability"] = parameter_stability(
+        diagnostics = build_walk_forward_selection(
+            candidate_equity,
+            folds=min(3, len(portfolio.equity) // 4),
+        )
+        stability = parameter_stability(
             base_oos_return=base_oos_return,
             neighbor_oos_returns=neighbor_oos_returns,
         )
+        diagnostics["parameterStability"] = stability
+        combined = combined_robustness_status(
+            sample_adequacy=diagnostics["sampleAdequacy"],
+            positive_fold_pct=diagnostics["outOfSamplePositiveFoldPct"],
+            parameter_status=stability["status"],
+        )
+        diagnostics["overallStatus"] = combined["status"]
+        diagnostics["warnings"] = sorted(set([
+            *diagnostics["warnings"],
+            *stability["warnings"],
+            *combined["warnings"],
+        ]))
         artifacts.append(_artifact("robustness", diagnostics))
+    if checkpoint is not None:
+        checkpoint(90)
     artifacts.extend(
         _performance_artifacts(
             portfolio.equity,
@@ -556,7 +599,9 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
     if run is None:
         return {"status": "idle", "message": "No queued backtest runs."}
     try:
+        _checkpoint(repository, run, 10)
         datasets = repository.load_datasets(run)
+        _checkpoint(repository, run, 15)
         if len(datasets) != len(run.dataset_version_ids):
             repository.fail_run(run, "DATASET_INCOMPLETE", "Selected dataset versions are unavailable.")
             return {"status": "failed", "id": run.id, "code": "DATASET_INCOMPLETE"}
@@ -584,8 +629,13 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
             for dataset in datasets
         ]
         if run.legs:
-            summary, artifacts = _process_portfolio_run(run, execution_datasets)
+            summary, artifacts = _process_portfolio_run(
+                run,
+                execution_datasets,
+                checkpoint=lambda progress: _checkpoint(repository, run, progress),
+            )
         else:
+            _checkpoint(repository, run, 30)
             config = _engine_config(run, execution_datasets)
             result = run_strategy(
                 {dataset.asset: dataset.bars for dataset in execution_datasets},
@@ -615,8 +665,13 @@ def process_next_run(repository: WorkerRepository) -> dict[str, Any]:
                 )
             )
             summary = result.summary
-        repository.complete_run(run, summary, artifacts)
+            _checkpoint(repository, run, 90)
+        _checkpoint(repository, run, 95)
+        if not repository.complete_run(run, summary, artifacts):
+            return {"status": "lease_lost", "id": run.id, "code": "WORKER_LOST"}
         return {"status": "succeeded", "id": run.id, "metrics": summary}
+    except RunControlStop as stopped:
+        return {"status": stopped.status, "id": run.id}
     except ValueError:
         repository.fail_run(run, "DSL_INVALID", "Backtest configuration is invalid.")
         return {"status": "failed", "id": run.id, "code": "DSL_INVALID"}
@@ -641,6 +696,55 @@ class PostgresWorkerRepository:
         )
         self.lease_seconds = lease_seconds
 
+    def recover_stale_runs(self) -> int:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE quant_runs
+                SET status = 'cancelled', progress = 100, finished_at = clock_timestamp(),
+                    lease_expires_at = NULL
+                WHERE status = 'cancel_requested'
+                  AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
+                """
+            )
+            recovered = cursor.rowcount
+            cursor.execute(
+                """
+                UPDATE quant_runs
+                SET status = 'timed_out', progress = 100, finished_at = clock_timestamp(),
+                    error_message = 'ENGINE_TIMEOUT: Backtest execution timed out.',
+                    lease_expires_at = NULL
+                WHERE (
+                    status = 'queued' AND deadline_at IS NOT NULL
+                    AND deadline_at <= clock_timestamp()
+                  ) OR (
+                    status = 'running' AND (
+                      (deadline_at IS NOT NULL AND deadline_at <= clock_timestamp())
+                      OR (
+                        lease_expires_at IS NOT NULL
+                        AND lease_expires_at <= clock_timestamp()
+                        AND attempt_count >= %s
+                      )
+                    )
+                  )
+                """,
+                (MAX_ATTEMPTS,),
+            )
+            recovered += cursor.rowcount
+            cursor.execute(
+                """
+                UPDATE quant_run_legs AS leg
+                SET status = run.status, progress = 100,
+                    error_code = CASE WHEN run.status = 'timed_out' THEN 'ENGINE_TIMEOUT' ELSE NULL END
+                FROM quant_runs AS run
+                WHERE leg.quant_run_id = run.id
+                  AND run.status IN ('cancelled', 'timed_out')
+                  AND leg.status IN ('queued', 'running')
+                """
+            )
+        self.connection.commit()
+        return recovered
+
     def claim_next_run(self) -> QueuedRun | None:
         with self.connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
@@ -649,12 +753,16 @@ class PostgresWorkerRepository:
                   SELECT id
                   FROM quant_runs
                   WHERE (
-                    status = 'queued'
+                    (
+                      status = 'queued'
+                      AND (deadline_at IS NULL OR deadline_at > clock_timestamp())
+                    )
                     OR (
                       status = 'running'
                       AND lease_expires_at IS NOT NULL
-                      AND lease_expires_at <= NOW()
+                      AND lease_expires_at <= clock_timestamp()
                       AND attempt_count < %s
+                      AND (deadline_at IS NULL OR deadline_at > clock_timestamp())
                     )
                   )
                   AND (
@@ -674,13 +782,14 @@ class PostgresWorkerRepository:
                     started_at = COALESCE(started_at, NOW()),
                     error_message = NULL,
                     worker_id = %s,
-                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    lease_expires_at = clock_timestamp() + (%s * INTERVAL '1 second'),
+                    last_heartbeat_at = clock_timestamp(),
                     attempt_count = attempt_count + 1
                 FROM next_run
                 WHERE run.id = next_run.id
                 RETURNING run.id, run.organization_id, run.strategy_hash,
                           run.parameters, run.dataset_version_ids,
-                          run.worker_id, run.attempt_count
+                          run.worker_id, run.attempt_count, run.deadline_at
                 """
                 ,
                 (MAX_ATTEMPTS, self.worker_id, self.lease_seconds),
@@ -704,7 +813,7 @@ class PostgresWorkerRepository:
                 (row["id"],),
             )
             leg_rows = cursor.fetchall()
-        return QueuedRun(
+        queued = QueuedRun(
             id=str(row["id"]),
             organization_id=str(row["organization_id"]),
             strategy_hash=str(row["strategy_hash"] or ""),
@@ -712,6 +821,7 @@ class PostgresWorkerRepository:
             dataset_version_ids=tuple(str(value) for value in (row["dataset_version_ids"] or [])),
             worker_id=str(row["worker_id"] or ""),
             attempt_count=int(row["attempt_count"] or 0),
+            deadline_at=row["deadline_at"],
             legs=tuple(
                 QueuedRunLeg(
                     id=str(leg["id"]),
@@ -729,6 +839,87 @@ class PostgresWorkerRepository:
                 for leg in leg_rows
             ),
         )
+        self.connection.commit()
+        return queued
+
+    def checkpoint_run(self, run: QueuedRun, progress: int) -> str:
+        bounded_progress = min(99, max(5, int(progress)))
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE quant_runs
+                SET status = 'cancelled', progress = 100,
+                    finished_at = clock_timestamp(), lease_expires_at = NULL
+                WHERE id = %s AND organization_id = %s
+                  AND status = 'cancel_requested' AND worker_id = %s
+                RETURNING id
+                """,
+                (run.id, run.organization_id, run.worker_id),
+            )
+            if cursor.fetchone() is not None:
+                cursor.execute(
+                    """
+                    UPDATE quant_run_legs SET status = 'cancelled', progress = 100
+                    WHERE quant_run_id = %s AND status IN ('queued', 'running')
+                    """,
+                    (run.id,),
+                )
+                self.connection.commit()
+                return "cancelled"
+            cursor.execute(
+                """
+                UPDATE quant_runs
+                SET status = 'timed_out', progress = 100,
+                    error_message = 'ENGINE_TIMEOUT: Backtest execution timed out.',
+                    finished_at = clock_timestamp(), lease_expires_at = NULL
+                WHERE id = %s AND organization_id = %s AND status = 'running'
+                  AND worker_id = %s AND deadline_at IS NOT NULL
+                  AND deadline_at <= clock_timestamp()
+                RETURNING id
+                """,
+                (run.id, run.organization_id, run.worker_id),
+            )
+            if cursor.fetchone() is not None:
+                cursor.execute(
+                    """
+                    UPDATE quant_run_legs
+                    SET status = 'timed_out', progress = 100, error_code = 'ENGINE_TIMEOUT'
+                    WHERE quant_run_id = %s AND status IN ('queued', 'running')
+                    """,
+                    (run.id,),
+                )
+                self.connection.commit()
+                return "timed_out"
+            cursor.execute(
+                """
+                UPDATE quant_runs
+                SET progress = GREATEST(progress, %s),
+                    last_heartbeat_at = clock_timestamp(),
+                    lease_expires_at = clock_timestamp() + (%s * INTERVAL '1 second')
+                WHERE id = %s AND organization_id = %s AND status = 'running'
+                  AND worker_id = %s
+                RETURNING id
+                """,
+                (
+                    bounded_progress,
+                    self.lease_seconds,
+                    run.id,
+                    run.organization_id,
+                    run.worker_id,
+                ),
+            )
+            active = cursor.fetchone() is not None
+            if active:
+                cursor.execute(
+                    """
+                    UPDATE quant_run_legs
+                    SET status = 'running', progress = GREATEST(progress, %s)
+                    WHERE quant_run_id = %s AND status IN ('queued', 'running')
+                    """,
+                    (bounded_progress, run.id),
+                )
+        self.connection.commit()
+        return "running" if active else "lease_lost"
 
     def load_datasets(self, run: QueuedRun) -> list[DatasetInput]:
         if not run.dataset_version_ids:
@@ -750,6 +941,7 @@ class PostgresWorkerRepository:
                 (list(run.dataset_version_ids),),
             )
             rows = cursor.fetchall()
+        self.connection.commit()
         grouped: dict[str, DatasetInput] = {}
         for row in rows:
             version_id = str(row["version_id"])
@@ -783,15 +975,15 @@ class PostgresWorkerRepository:
         run: QueuedRun,
         summary: dict[str, Any],
         artifacts: list[dict[str, Any]],
-    ) -> None:
+    ) -> bool:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE quant_runs
                 SET status = 'succeeded', progress = 100, metrics = %s::jsonb,
-                    error_message = NULL, finished_at = NOW(), lease_expires_at = NULL
+                    error_message = NULL, finished_at = clock_timestamp(), lease_expires_at = NULL
                 WHERE id = %s AND organization_id = %s AND status = 'running'
-                  AND worker_id = %s AND lease_expires_at > NOW()
+                  AND worker_id = %s
                 RETURNING id
                 """,
                 (
@@ -802,7 +994,8 @@ class PostgresWorkerRepository:
                 ),
             )
             if cursor.fetchone() is None:
-                return
+                self.connection.rollback()
+                return False
             cursor.execute(
                 "DELETE FROM quant_run_artifacts WHERE quant_run_id = %s AND organization_id = %s",
                 (run.id, run.organization_id),
@@ -844,18 +1037,25 @@ class PostgresWorkerRepository:
                         artifact["schemaVersion"],
                     ),
                 )
-    def fail_run(self, run: QueuedRun, code: str, message: str) -> None:
+        self.connection.commit()
+        return True
+
+    def fail_run(self, run: QueuedRun, code: str, message: str) -> bool:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE quant_runs
                 SET status = 'failed', progress = 100, error_message = %s,
-                    finished_at = NOW(), lease_expires_at = NULL
+                    finished_at = clock_timestamp(), lease_expires_at = NULL
                 WHERE id = %s AND organization_id = %s AND status = 'running'
-                  AND worker_id = %s AND lease_expires_at > NOW()
+                  AND worker_id = %s
+                RETURNING id
                 """,
                 (f"{code}: {message}", run.id, run.organization_id, run.worker_id),
             )
+            if cursor.fetchone() is None:
+                self.connection.rollback()
+                return False
             cursor.execute(
                 """
                 UPDATE quant_run_legs
@@ -864,11 +1064,14 @@ class PostgresWorkerRepository:
                 """,
                 (code, run.id),
             )
+        self.connection.commit()
+        return True
 
 
 def run_once() -> dict[str, Any]:
     with psycopg.connect(database_url(), autocommit=False) as connection:
         repository = PostgresWorkerRepository(connection)
+        repository.recover_stale_runs()
         run_result = process_next_run(repository)
         evaluation_result = process_next_evaluation(
             PostgresEvaluationRepository(connection, worker_id=repository.worker_id)

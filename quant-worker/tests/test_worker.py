@@ -70,12 +70,16 @@ class FakeRepository:
         self.dataset = dataset
         self.completed: tuple[str, dict[str, Any], list[dict[str, Any]]] | None = None
         self.failed: tuple[str, str, str] | None = None
+        self.checkpoints: list[int] = []
+        self.control_statuses: list[str] = []
+        self.load_calls = 0
 
     def claim_next_run(self) -> QueuedRun | None:
         claimed, self.run = self.run, None
         return claimed
 
     def load_datasets(self, _run: QueuedRun) -> list[DatasetInput]:
+        self.load_calls += 1
         assert self.dataset is not None
         return self.dataset if isinstance(self.dataset, list) else [self.dataset]
 
@@ -84,11 +88,19 @@ class FakeRepository:
         run: QueuedRun,
         summary: dict[str, Any],
         artifacts: list[dict[str, Any]],
-    ) -> None:
+    ) -> bool:
         self.completed = (run.id, summary, artifacts)
+        return True
 
-    def fail_run(self, run: QueuedRun, code: str, message: str) -> None:
+    def fail_run(self, run: QueuedRun, code: str, message: str) -> bool:
         self.failed = (run.id, code, message)
+        return True
+
+    def checkpoint_run(self, _run: QueuedRun, progress: int) -> str:
+        self.checkpoints.append(progress)
+        if self.control_statuses:
+            return self.control_statuses.pop(0)
+        return "running"
 
 
 def test_process_next_run_commits_real_checksummed_artifacts() -> None:
@@ -152,6 +164,61 @@ def test_process_next_run_is_idle_when_no_queued_backtest_exists() -> None:
     assert process_next_run(repository) == {"status": "idle", "message": "No queued backtest runs."}
 
 
+def test_process_next_run_honors_cooperative_cancellation_before_execution() -> None:
+    repository = FakeRepository(
+        queued_run(),
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(golden_bars()),
+            bars=golden_bars(),
+        ),
+    )
+    repository.control_statuses = ["cancelled"]
+
+    assert process_next_run(repository) == {"status": "cancelled", "id": "run-1"}
+    assert repository.completed is None
+    assert repository.failed is None
+    assert repository.load_calls == 0
+
+
+def test_process_next_run_honors_deadline_before_execution() -> None:
+    repository = FakeRepository(
+        queued_run(),
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(golden_bars()),
+            bars=golden_bars(),
+        ),
+    )
+    repository.control_statuses = ["timed_out"]
+
+    assert process_next_run(repository) == {"status": "timed_out", "id": "run-1"}
+    assert repository.completed is None
+    assert repository.failed is None
+
+
+def test_process_next_run_reports_monotonic_phase_progress() -> None:
+    repository = FakeRepository(
+        queued_run(),
+        DatasetInput(
+            version_id="dataset-version-1",
+            asset="BTC",
+            market="crypto_spot",
+            checksum=canonical_bar_checksum(golden_bars()),
+            bars=golden_bars(),
+        ),
+    )
+
+    assert process_next_run(repository)["status"] == "succeeded"
+    assert repository.checkpoints == sorted(repository.checkpoints)
+    assert repository.checkpoints[0] >= 10
+    assert repository.checkpoints[-1] >= 90
+
+
 def test_run_forever_waits_only_when_queue_is_idle() -> None:
     responses = iter(
         [
@@ -203,13 +270,21 @@ def test_run_once_processes_backtest_and_forward_job_fairly(monkeypatch: pytest.
         def commit(self): calls.append("commit")
 
     monkeypatch.setattr(worker.psycopg, "connect", lambda *_args, **_kwargs: Connection())
-    monkeypatch.setattr(worker, "PostgresWorkerRepository", lambda _connection: type("Repo", (), {"worker_id": "worker-a"})())
+    monkeypatch.setattr(
+        worker,
+        "PostgresWorkerRepository",
+        lambda _connection: type(
+            "Repo",
+            (),
+            {"worker_id": "worker-a", "recover_stale_runs": lambda self: calls.append("recover")},
+        )(),
+    )
     monkeypatch.setattr(worker, "PostgresEvaluationRepository", lambda _connection, worker_id: object())
     monkeypatch.setattr(worker, "process_next_run", lambda _repo: calls.append("backtest") or {"status": "idle"})
     monkeypatch.setattr(worker, "process_next_evaluation", lambda _repo: calls.append("evaluation") or {"status": "succeeded", "id": "job-a"})
 
     assert worker.run_once()["status"] == "processed"
-    assert calls == ["backtest", "evaluation", "commit"]
+    assert calls == ["recover", "backtest", "evaluation", "commit"]
 
 
 def test_process_next_run_accepts_versioned_catalog_ma_parameters() -> None:
@@ -512,7 +587,10 @@ def test_process_next_run_executes_portfolio_legs_and_emits_scoped_artifacts() -
         artifact for artifact in artifacts
         if artifact["scopeKey"] == "aggregate" and artifact["kind"] == "robustness"
     )
-    assert robustness["payload"]["method"] == "anchored_temporal_holdout"
+    assert robustness["payload"]["method"] == "anchored_walk_forward_selection"
+    assert robustness["payload"]["candidateCount"] > 1
+    assert robustness["payload"]["overallStatus"] in {"stable", "mixed", "fragile"}
+    assert all("selectedCandidate" in fold for fold in robustness["payload"]["folds"])
     assert robustness["payload"]["parameterStability"]["status"] in {
         "stable",
         "mixed",

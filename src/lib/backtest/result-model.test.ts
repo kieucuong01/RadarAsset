@@ -27,6 +27,8 @@ function successfulRun(): BacktestRun {
     startedAt: "2026-08-11T00:00:00.000Z",
     finishedAt: "2026-08-11T00:00:01.000Z",
     createdAt: "2026-08-11T00:00:00.000Z",
+    cacheHit: false,
+    sourceRunId: null,
     legs: [
       {
         id: "leg-btc",
@@ -174,7 +176,7 @@ describe("portfolio backtest result model", () => {
     expect(model.legs.map((leg) => leg.label)).toEqual(["BTC · MA Crossover"]);
   });
 
-  it("parses immutable walk-forward diagnostics without claiming parameter testing", () => {
+  it("parses immutable walk-forward selection and combined fragility", () => {
     const run = successfulRun();
     run.artifacts.push({
       id: "aggregate-robustness",
@@ -182,7 +184,8 @@ describe("portfolio backtest result model", () => {
       scopeKey: "aggregate",
       kind: "robustness",
       payload: {
-        method: "anchored_temporal_holdout",
+        method: "anchored_walk_forward_selection",
+        candidateCount: 3,
         foldCount: 2,
         folds: [1, 2].map((fold) => ({
           fold,
@@ -195,6 +198,7 @@ describe("portfolio backtest result model", () => {
           referenceReturnPct: 5,
           outOfSampleReturnPct: 2,
           degradationPctPoints: -3,
+          selectedCandidate: `candidate-${fold}`,
         })),
         outOfSampleMeanReturnPct: 2,
         outOfSampleReturnStdPct: 0,
@@ -202,7 +206,8 @@ describe("portfolio backtest result model", () => {
         sampleAdequacy: "adequate",
         warnings: [],
         disclaimer:
-          "Temporal holdout diagnostic; it does not fit or select parameters inside each fold.",
+          "Anchored walk-forward selection.",
+        overallStatus: "mixed",
         parameterStability: {
           status: "not_evaluated",
           score: null,
@@ -214,6 +219,8 @@ describe("portfolio backtest result model", () => {
 
     expect(buildBacktestResultModel(run).aggregate.robustness).toMatchObject({
       foldCount: 2,
+      candidateCount: 3,
+      overallStatus: "mixed",
       parameterStability: { status: "not_evaluated" },
     });
   });

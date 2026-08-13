@@ -41,6 +41,7 @@ const robustnessFoldSchema = z
     referenceReturnPct: z.number(),
     outOfSampleReturnPct: z.number(),
     degradationPctPoints: z.number(),
+    selectedCandidate: z.string().min(1).optional(),
   })
   .strict();
 
@@ -55,7 +56,8 @@ const parameterStabilitySchema = z
 
 const robustnessSchema = z
   .object({
-    method: z.literal("anchored_temporal_holdout"),
+    method: z.enum(["anchored_temporal_holdout", "anchored_walk_forward_selection"]),
+    candidateCount: z.number().int().positive().optional(),
     foldCount: z.number().int().min(2).max(10),
     folds: z.array(robustnessFoldSchema).min(2),
     outOfSampleMeanReturnPct: z.number(),
@@ -65,6 +67,7 @@ const robustnessSchema = z
     warnings: z.array(z.string()),
     disclaimer: z.string().min(1),
     parameterStability: parameterStabilitySchema,
+    overallStatus: z.enum(["stable", "mixed", "fragile", "not_evaluated"]).optional(),
   })
   .strict();
 

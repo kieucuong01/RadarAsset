@@ -5,6 +5,8 @@ from backtest.robustness import (
     out_of_sample_return,
     parameter_neighbors,
     parameter_stability,
+    build_walk_forward_selection,
+    combined_robustness_status,
 )
 
 
@@ -61,3 +63,28 @@ def test_out_of_sample_return_uses_only_the_chronological_tail() -> None:
     rows = equity([100, 200, 300, 400, 500, 550])
 
     assert out_of_sample_return(rows, fraction=0.3) == 10.0
+
+
+def test_walk_forward_reselects_the_best_training_candidate_for_each_future_fold() -> None:
+    base = equity([100, 105, 110, 115, 120, 121, 122, 123, 124, 125, 126, 127, 128])
+    neighbor = equity([100, 101, 102, 103, 104, 110, 120, 130, 140, 150, 160, 170, 180])
+
+    result = build_walk_forward_selection({"base": base, "neighbor-1": neighbor}, folds=2)
+
+    assert result["method"] == "anchored_walk_forward_selection"
+    assert result["candidateCount"] == 2
+    assert [fold["selectedCandidate"] for fold in result["folds"]] == ["base", "neighbor-1"]
+    assert all(fold["trainEnd"] < fold["testStart"] for fold in result["folds"])
+
+
+def test_combined_robustness_marks_unstable_oos_or_parameter_sensitivity_fragile() -> None:
+    assert combined_robustness_status(
+        sample_adequacy="adequate",
+        positive_fold_pct=33,
+        parameter_status="stable",
+    )["status"] == "fragile"
+    assert combined_robustness_status(
+        sample_adequacy="adequate",
+        positive_fold_pct=100,
+        parameter_status="fragile",
+    ) == {"status": "fragile", "warnings": ["PARAMETER_SENSITIVITY"]}
