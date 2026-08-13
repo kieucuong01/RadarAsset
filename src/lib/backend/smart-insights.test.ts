@@ -9,6 +9,8 @@ describe("Smart Insights read bounds", () => {
   });
 
   it("rejects windows beyond 31 days", () => {
-    expect(() => parseInsightWindow(new URL("http://local?from=2026-01-01&to=2026-03-01"))).toThrow(SmartInsightsInputError);
+    expect(() => parseInsightWindow(new URL("http://local?from=2026-01-01&to=2026-03-01"))).toThrow(
+      SmartInsightsInputError,
+    );
   });
 });

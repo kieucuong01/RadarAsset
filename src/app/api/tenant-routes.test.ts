@@ -243,12 +243,18 @@ describe("tenant API authorization", () => {
   });
 
   it("tenant-scopes cockpit briefing and evidence reads", async () => {
-    expect((await smartInsightsBriefingGet(new Request("http://localhost/api/smart-insights/briefing"))).status).toBe(404);
+    expect(
+      (await smartInsightsBriefingGet(new Request("http://localhost/api/smart-insights/briefing")))
+        .status,
+    ).toBe(404);
     expect(
       (
-        await smartInsightsEvidenceGet(new Request("http://localhost/api/smart-insights/evidence/e-a"), {
-          params: Promise.resolve({ id: "e-a" }),
-        })
+        await smartInsightsEvidenceGet(
+          new Request("http://localhost/api/smart-insights/evidence/e-a"),
+          {
+            params: Promise.resolve({ id: "e-a" }),
+          },
+        )
       ).status,
     ).toBe(404);
     expect(mocks.loadBriefing).toHaveBeenCalledWith(viewerContext, null);
@@ -257,7 +263,9 @@ describe("tenant API authorization", () => {
 
   it("rejects metric and calendar windows over 31 days", async () => {
     const metrics = await smartInsightsMetricsGet(
-      new Request("http://localhost/api/smart-insights/metrics?market=crypto&from=2026-01-01&to=2026-03-01"),
+      new Request(
+        "http://localhost/api/smart-insights/metrics?market=crypto&from=2026-01-01&to=2026-03-01",
+      ),
     );
     const calendar = await smartInsightsCalendarGet(
       new Request("http://localhost/api/smart-insights/calendar?from=2026-01-01&to=2026-03-01"),

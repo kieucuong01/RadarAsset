@@ -11,7 +11,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const context = await requireTenantContext();
     requireTenantCapability(context, "research", "read");
     const evidence = await loadEvidence(context, (await params).id);
-    return evidence ? NextResponse.json(evidence) : NextResponse.json({ error: "Evidence not found." }, { status: 404 });
+    return evidence
+      ? NextResponse.json(evidence)
+      : NextResponse.json({ error: "Evidence not found." }, { status: 404 });
   } catch (error) {
     return apiError(error);
   }

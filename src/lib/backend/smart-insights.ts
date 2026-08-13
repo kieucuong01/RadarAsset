@@ -42,7 +42,9 @@ function decimal(value: unknown): string {
 }
 
 function strings(value: Prisma.JsonValue | null | undefined): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function object(value: Prisma.JsonValue | null | undefined): Record<string, unknown> {
@@ -57,7 +59,9 @@ function dateOnly(value: Date): string {
 
 export function parseInsightWindow(url: URL): { from: Date; to: Date } {
   const now = new Date();
-  const from = new Date(url.searchParams.get("from") ?? new Date(now.getTime() - 7 * 86_400_000).toISOString());
+  const from = new Date(
+    url.searchParams.get("from") ?? new Date(now.getTime() - 7 * 86_400_000).toISOString(),
+  );
   const to = new Date(url.searchParams.get("to") ?? now.toISOString());
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
     throw new SmartInsightsInputError("Invalid date window.");
@@ -98,7 +102,13 @@ function briefingItem(row: {
   suggestedCheckTemplate: string;
   explanationStatus: string;
   confidence: unknown;
-  signalSnapshot: { market: string; signalType: string; score: unknown; label: string; asset: { symbol: string } | null };
+  signalSnapshot: {
+    market: string;
+    signalType: string;
+    score: unknown;
+    label: string;
+    asset: { symbol: string } | null;
+  };
   aiInsight: { title: string; summary: string; catalyst: string | null } | null;
 }): BriefingItemReadModel {
   return {
@@ -130,7 +140,8 @@ export async function loadBriefing(
   localDate?: string | null,
 ): Promise<BriefingReadModel | null> {
   const parsedDate = localDate ? new Date(`${localDate}T00:00:00.000Z`) : null;
-  if (parsedDate && Number.isNaN(parsedDate.getTime())) throw new SmartInsightsInputError("Invalid local date.");
+  if (parsedDate && Number.isNaN(parsedDate.getTime()))
+    throw new SmartInsightsInputError("Invalid local date.");
   const row = await getPrisma().dailyBriefing.findFirst({
     where: {
       organizationId: context.organizationId,
@@ -179,30 +190,35 @@ export async function loadRegimes(): Promise<MarketRegimeReadModel[]> {
     if (seen.has(key)) return [];
     seen.add(key);
     const inputs = Array.isArray(row.inputs) ? row.inputs : [];
-    const state: FreshnessState = row.status !== "active" ? "unavailable" : Number(row.coverage) < 1 ? "partial" : "fresh";
-    return [{
-      id: row.id,
-      market: row.market as InsightMarket,
-      asset: row.asset?.symbol ?? null,
-      score: row.score == null ? null : decimal(row.score),
-      label: row.label as MarketRegimeReadModel["label"],
-      dataConfidence: decimal(row.dataConfidence),
-      coverage: decimal(row.coverage),
-      effectiveAt: row.effectiveAt.toISOString(),
-      methodologyVersion: row.methodologyVersion,
-      freshness: state,
-      groups: inputs.flatMap((input) => {
-        if (!input || typeof input !== "object" || Array.isArray(input)) return [];
-        const item = input as Record<string, unknown>;
-        return [{
-          metricCode: String(item.metricCode ?? ""),
-          score: item.score == null ? null : String(item.score),
-          weight: String(item.configuredWeight ?? "0"),
-          observedAt: String(item.observedAt ?? row.effectiveAt.toISOString()),
-          freshness: item.isFresh === false ? "stale" : "fresh",
-        }];
-      }),
-    }];
+    const state: FreshnessState =
+      row.status !== "active" ? "unavailable" : Number(row.coverage) < 1 ? "partial" : "fresh";
+    return [
+      {
+        id: row.id,
+        market: row.market as InsightMarket,
+        asset: row.asset?.symbol ?? null,
+        score: row.score == null ? null : decimal(row.score),
+        label: row.label as MarketRegimeReadModel["label"],
+        dataConfidence: decimal(row.dataConfidence),
+        coverage: decimal(row.coverage),
+        effectiveAt: row.effectiveAt.toISOString(),
+        methodologyVersion: row.methodologyVersion,
+        freshness: state,
+        groups: inputs.flatMap((input) => {
+          if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+          const item = input as Record<string, unknown>;
+          return [
+            {
+              metricCode: String(item.metricCode ?? ""),
+              score: item.score == null ? null : String(item.score),
+              weight: String(item.configuredWeight ?? "0"),
+              observedAt: String(item.observedAt ?? row.effectiveAt.toISOString()),
+              freshness: item.isFresh === false ? "stale" : "fresh",
+            },
+          ];
+        }),
+      },
+    ];
   });
 }
 
@@ -213,8 +229,10 @@ export async function loadMetrics(input: {
   to: Date;
 }): Promise<MetricReadModel[]> {
   if (!MARKETS.has(input.market)) throw new SmartInsightsInputError("Market is not supported.");
-  if (input.asset && !ASSET.test(input.asset)) throw new SmartInsightsInputError("Asset is not supported.");
-  if (input.to.getTime() - input.from.getTime() > 31 * 86_400_000) throw new SmartInsightsInputError("Date window must not exceed 31 days.");
+  if (input.asset && !ASSET.test(input.asset))
+    throw new SmartInsightsInputError("Asset is not supported.");
+  if (input.to.getTime() - input.from.getTime() > 31 * 86_400_000)
+    throw new SmartInsightsInputError("Date window must not exceed 31 days.");
   const rows = await getPrisma().metricObservation.findMany({
     where: {
       effectiveAt: { gte: input.from, lte: input.to },
@@ -244,7 +262,11 @@ export async function loadMetrics(input: {
     observedAt: row.observedAt.toISOString(),
     sourceCode: row.provider.code,
     sourceUrl: row.rawSnapshot.sourceUrl,
-    freshness: freshness(row.observedAt, row.metricDefinition.freshnessSlaMinutes, row.qualityStatus),
+    freshness: freshness(
+      row.observedAt,
+      row.metricDefinition.freshnessSlaMinutes,
+      row.qualityStatus,
+    ),
     qualityWarnings: strings(row.qualityFlags),
     methodologyVersion: row.metricDefinition.methodologyVersion,
   }));
@@ -255,8 +277,10 @@ export async function loadCalendar(input: {
   to: Date;
   impact?: string | null;
 }): Promise<CalendarEventReadModel[]> {
-  if (input.impact && !IMPACTS.has(input.impact)) throw new SmartInsightsInputError("Impact is not supported.");
-  if (input.to.getTime() - input.from.getTime() > 31 * 86_400_000) throw new SmartInsightsInputError("Date window must not exceed 31 days.");
+  if (input.impact && !IMPACTS.has(input.impact))
+    throw new SmartInsightsInputError("Impact is not supported.");
+  if (input.to.getTime() - input.from.getTime() > 31 * 86_400_000)
+    throw new SmartInsightsInputError("Date window must not exceed 31 days.");
   const rows = await getPrisma().economicEvent.findMany({
     where: {
       eventDate: { gte: input.from, lte: input.to },
@@ -266,7 +290,9 @@ export async function loadCalendar(input: {
     take: 500,
   });
   const latest = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) if (!latest.has(`${row.sourceCode}:${row.sourceEventKey}`)) latest.set(`${row.sourceCode}:${row.sourceEventKey}`, row);
+  for (const row of rows)
+    if (!latest.has(`${row.sourceCode}:${row.sourceEventKey}`))
+      latest.set(`${row.sourceCode}:${row.sourceEventKey}`, row);
   return [...latest.values()].map((row) => ({
     id: row.id,
     event: row.event,
@@ -322,21 +348,25 @@ export async function loadEvidence(
 }
 
 function validatePreferences(value: unknown): InsightPreferences {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new SmartInsightsInputError("Preference body is invalid.");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new SmartInsightsInputError("Preference body is invalid.");
   const row = value as Record<string, unknown>;
   const markets = Array.isArray(row.markets) ? row.markets : [];
   const assets = Array.isArray(row.assets) ? row.assets : [];
   const alerts = row.alertPreferences;
   if (
-    markets.some((market) => typeof market !== "string" || !MARKETS.has(market as InsightMarket))
-    || assets.some((asset) => typeof asset !== "string" || !ASSET.test(asset))
-    || !["vi", "en"].includes(String(row.locale))
-    || !CURRENCY.test(String(row.baseCurrency))
-    || !HORIZONS.has(String(row.investmentHorizon))
-    || !RISKS.has(String(row.riskTolerance))
-    || !alerts || typeof alerts !== "object" || Array.isArray(alerts)
-    || typeof (alerts as Record<string, unknown>).highImpact !== "boolean"
-  ) throw new SmartInsightsInputError("Preference body is invalid.");
+    markets.some((market) => typeof market !== "string" || !MARKETS.has(market as InsightMarket)) ||
+    assets.some((asset) => typeof asset !== "string" || !ASSET.test(asset)) ||
+    !["vi", "en"].includes(String(row.locale)) ||
+    !CURRENCY.test(String(row.baseCurrency)) ||
+    !HORIZONS.has(String(row.investmentHorizon)) ||
+    !RISKS.has(String(row.riskTolerance)) ||
+    !alerts ||
+    typeof alerts !== "object" ||
+    Array.isArray(alerts) ||
+    typeof (alerts as Record<string, unknown>).highImpact !== "boolean"
+  )
+    throw new SmartInsightsInputError("Preference body is invalid.");
   return {
     markets: [...new Set(markets)] as InsightMarket[],
     assets: [...new Set(assets as string[])],
@@ -353,7 +383,9 @@ export async function loadPreferences(
   canWrite: boolean,
 ): Promise<InsightPreferencesResponse> {
   const row = await getPrisma().userInsightPreference.findUnique({
-    where: { organizationId_userId: { organizationId: context.organizationId, userId: context.userId } },
+    where: {
+      organizationId_userId: { organizationId: context.organizationId, userId: context.userId },
+    },
   });
   if (!row) return { preference: DEFAULT_INSIGHT_PREFERENCES, persisted: false, canWrite };
   return {
@@ -377,7 +409,9 @@ export async function savePreferences(
 ): Promise<InsightPreferencesResponse> {
   const preference = validatePreferences(input);
   await getPrisma().userInsightPreference.upsert({
-    where: { organizationId_userId: { organizationId: context.organizationId, userId: context.userId } },
+    where: {
+      organizationId_userId: { organizationId: context.organizationId, userId: context.userId },
+    },
     create: { organizationId: context.organizationId, userId: context.userId, ...preference },
     update: preference,
   });
