@@ -26,7 +26,16 @@ const validReadiness = {
   missingBarCount: 5,
   oldestBacklogAt: "2026-08-14T09:00:00.000Z",
   lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
-  recentProviderFailures: [{ providerCode: "vnstock-vci-free", count: 2 }],
+  latestSchedulerRun: {
+    command: "hourly",
+    status: "succeeded",
+    startedAt: "2026-08-14T10:00:00.000Z",
+    finishedAt: "2026-08-14T10:30:00.000Z",
+    errorCode: null,
+  },
+  recentProviderFailures: [
+    { providerCode: "vnstock-vci-free", errorCode: "provider_timeout", count: 2 },
+  ],
 } satisfies QuantDataReadiness;
 
 describe("Quant data readiness client", () => {
@@ -85,5 +94,19 @@ describe("Quant data readiness client", () => {
         recentProviderFailures: [],
       }),
     ).toEqual({ tone: "healthy", issueCount: 0, providerFailureCount: 0 });
+
+    expect(
+      quantDataOperationsHealth({
+        ...validReadiness,
+        missingDatasetCount: 0,
+        staleDatasetCount: 0,
+        recentProviderFailures: [],
+        latestSchedulerRun: {
+          ...validReadiness.latestSchedulerRun,
+          status: "failed",
+          errorCode: "provider_failure",
+        },
+      }),
+    ).toEqual({ tone: "failed", issueCount: 1, providerFailureCount: 0 });
   });
 });

@@ -222,7 +222,11 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <Badge
-                variant={robustnessStatus(model.aggregate.robustness) === "fragile" ? "destructive" : "secondary"}
+                variant={
+                  robustnessStatus(model.aggregate.robustness) === "fragile"
+                    ? "destructive"
+                    : "secondary"
+                }
                 className="w-fit uppercase"
               >
                 {robustnessStatus(model.aggregate.robustness)}
@@ -511,8 +515,10 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                         <TableRow>
                           <TableHead>{t("backtestResults.advanced.entry")}</TableHead>
                           <TableHead>{t("backtestResults.advanced.exit")}</TableHead>
-                          <TableHead className="text-right">PnL</TableHead>
-                          <TableHead className="text-right">Return</TableHead>
+                          <TableHead className="text-right">{t("backtestResults.pnl")}</TableHead>
+                          <TableHead className="text-right">
+                            {t("backtestResults.tradeList.return")}
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

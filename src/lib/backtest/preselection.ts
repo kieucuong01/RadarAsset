@@ -35,6 +35,13 @@ export function normalizeBacktestStrategyPreset(input: unknown): BacktestStrateg
     return null;
   }
   try {
+    if (candidate.strategyCode.startsWith("custom:")) {
+      return {
+        strategyCode: candidate.strategyCode,
+        strategyVersion: candidate.strategyVersion,
+        strategyParameters: {},
+      };
+    }
     strategyDefinition(candidate.strategyCode, candidate.strategyVersion);
     return {
       strategyCode: candidate.strategyCode,

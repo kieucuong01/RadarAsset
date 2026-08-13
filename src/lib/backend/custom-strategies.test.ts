@@ -5,6 +5,7 @@ const { prisma } = vi.hoisted(() => {
     customStrategy: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     customStrategyVersion: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     strategyVersion: { create: vi.fn() },
+    $executeRaw: vi.fn(),
   };
   return { prisma: { ...tx, $transaction: vi.fn() } };
 });
@@ -17,6 +18,7 @@ import {
   createCustomStrategyVersion,
   listCustomStrategies,
 } from "./custom-strategies";
+import { implementationHash } from "@/lib/custom-strategies/hash";
 
 const context = { organizationId: "organization-a", userId: "user-a", role: "editor" as const };
 const priceRule = {
@@ -64,6 +66,7 @@ describe("tenant custom strategy persistence", () => {
   });
 
   it("creates a strategy, immutable rule version, and tenant execution registry atomically", async () => {
+    prisma.customStrategy.findFirst.mockResolvedValueOnce(null);
     await createCustomStrategy(context, { name: "BTC entry", rule: priceRule });
 
     expect(prisma.customStrategy.create).toHaveBeenCalledWith({
@@ -91,6 +94,29 @@ describe("tenant custom strategy persistence", () => {
         defaultParameters: priceRule,
       }),
     });
+  });
+
+  it("reuses an identical tenant strategy submitted twice", async () => {
+    prisma.customStrategy.findFirst.mockResolvedValueOnce({ id: "strategy-a" });
+
+    await createCustomStrategy(context, { name: "BTC entry", rule: priceRule });
+
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    expect(prisma.customStrategy.create).not.toHaveBeenCalled();
+    expect(prisma.customStrategyVersion.create).not.toHaveBeenCalled();
+  });
+
+  it("reuses the latest immutable version when its rule hash is unchanged", async () => {
+    prisma.customStrategy.findFirst.mockResolvedValueOnce({
+      id: "strategy-a",
+      name: "BTC entry",
+      versions: [{ version: "1.0.0", implementationHash: implementationHash(priceRule) }],
+    });
+
+    await createCustomStrategyVersion(context, "strategy-a", { rule: priceRule });
+
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    expect(prisma.customStrategyVersion.create).not.toHaveBeenCalled();
   });
 
   it("does not expose another organization's strategy for versioning", async () => {

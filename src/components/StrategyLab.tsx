@@ -49,15 +49,20 @@ import {
   customStrategyReadiness,
   describeCustomStrategy,
   normalizeCustomStrategy,
-  parseStoredCustomStrategies,
-  serializeCustomStrategies,
-  type CustomStrategy,
   type CustomStrategyInput,
 } from "@/lib/strategy-lab/custom-strategy";
+import {
+  archiveCustomStrategy,
+  createCustomStrategy,
+  createCustomStrategyVersion,
+  listCustomStrategies,
+  type CustomStrategySummary,
+} from "@/lib/strategy-lab/client";
+import { migrateLegacyStrategies } from "@/lib/strategy-lab/legacy-migration";
 import { listStrategyLibrary, type StrategyFamily } from "@/lib/strategy-lab/library";
 import { useI18n } from "@/lib/i18n/context";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
 
-const STORAGE_KEY = "radarasset.strategy-lab.v1";
 const FAMILY_LABELS: Record<
   StrategyFamily,
   "strategyLab.technical" | "strategyLab.fundamental" | "strategyLab.systematic"
@@ -66,12 +71,19 @@ const FAMILY_LABELS: Record<
   fundamental: "strategyLab.fundamental",
   systematic: "strategyLab.systematic",
 };
-const STYLE_LABELS = {
-  trend: "Trend following",
-  momentum: "Momentum",
-  mean_reversion: "Mean reversion",
-  pattern: "Pattern",
+const STYLE_KEYS = {
+  trend: "strategyLab.styles.trend",
+  momentum: "strategyLab.styles.momentum",
+  mean_reversion: "strategyLab.styles.mean_reversion",
+  pattern: "strategyLab.styles.pattern",
 } as const;
+
+function guideKey(
+  code: string,
+  field: "thesis" | "entry" | "exit" | "ideal1" | "ideal2" | "risk1" | "risk2",
+) {
+  return `strategyLab.guides.${code}.${field}` as TranslationKey;
+}
 
 type BuilderKind = CustomStrategyInput["kind"];
 type BuilderState = {
@@ -97,10 +109,10 @@ export type StrategyLabSelection = {
   symbols: string[];
 };
 
-function initialBuilderState(): BuilderState {
+function initialBuilderState(name: string): BuilderState {
   const strategy = STRATEGY_CATALOG[0];
   return {
-    name: "Chiến lược của tôi",
+    name,
     symbol: "BTC",
     kind: "catalog_preset",
     strategyCode: strategy.code,
@@ -123,33 +135,42 @@ export function StrategyLab({
 }: {
   onUsePreset: (selection: StrategyLabSelection) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const library = useMemo(() => listStrategyLibrary(), []);
   const [section, setSection] = useState("library");
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<"all" | StrategyFamily>("all");
-  const [builder, setBuilder] = useState<BuilderState>(initialBuilderState);
-  const [saved, setSaved] = useState<CustomStrategy[]>([]);
+  const [builder, setBuilder] = useState<BuilderState>(() =>
+    initialBuilderState(t("strategyLab.defaultName")),
+  );
+  const [saved, setSaved] = useState<CustomStrategySummary[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    setSaved(parseStoredCustomStrategies(window.localStorage.getItem(STORAGE_KEY)));
-  }, []);
+    let active = true;
+    void migrateLegacyStrategies(window.localStorage, (input) => createCustomStrategy(input))
+      .then(() => listCustomStrategies())
+      .then((strategies) => active && setSaved(strategies))
+      .catch(() => toast.error(t("strategyLab.loadError")))
+      .finally(() => active && setLoadingSaved(false));
+    return () => {
+      active = false;
+    };
+  }, [t]);
 
   const filteredLibrary = library.filter((strategy) => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("vi");
+    const searchLocale = locale === "vi" ? "vi-VN" : "en-US";
+    const normalizedQuery = query.trim().toLocaleLowerCase(searchLocale);
     return (
       (family === "all" || family === strategy.family) &&
       (!normalizedQuery ||
-        `${strategy.name} ${strategy.thesis} ${STYLE_LABELS[strategy.style]}`
-          .toLocaleLowerCase("vi")
+        `${strategy.name} ${t(guideKey(strategy.code, "thesis"))} ${t(STYLE_KEYS[strategy.style])}`
+          .toLocaleLowerCase(searchLocale)
           .includes(normalizedQuery))
     );
   });
-
-  function persist(next: CustomStrategy[]) {
-    window.localStorage.setItem(STORAGE_KEY, serializeCustomStrategies(next));
-    setSaved(next);
-  }
 
   function selectCatalogStrategy(code: string) {
     const strategy = STRATEGY_CATALOG.find((item) => item.code === code);
@@ -209,15 +230,95 @@ export function StrategyLab({
     };
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     try {
       const strategy = normalizeCustomStrategy(buildDraft());
-      persist([...saved, strategy]);
+      if (strategy.kind === "catalog_preset") {
+        sendCatalogPresetToBacktest({
+          code: strategy.strategyCode,
+          version: strategy.strategyVersion,
+          parameters: strategy.strategyParameters,
+          symbol: strategy.symbol,
+        });
+        return;
+      }
+      if (strategy.kind === "fundamental_threshold") {
+        toast.error(t("strategyLab.fundamentalUnavailable"));
+        return;
+      }
+      setSaving(true);
+      const rule =
+        strategy.kind === "scheduled_dca"
+          ? {
+              schemaVersion: 1 as const,
+              kind: "scheduled_dca" as const,
+              contributionAmount: strategy.amount,
+              currency: strategy.currency,
+              frequency: "monthly" as const,
+              dayOfMonth: strategy.dayOfMonth,
+            }
+          : {
+              schemaVersion: 1 as const,
+              kind: "price_threshold" as const,
+              operator: strategy.operator,
+              threshold: strategy.value,
+              currency: strategy.currency,
+              action: strategy.action,
+              sizePct: strategy.sizePct,
+            };
+      const result = editingId
+        ? await createCustomStrategyVersion(editingId, { rule })
+        : await createCustomStrategy({ name: strategy.name, description: strategy.symbol, rule });
+      setSaved((current) => [result, ...current.filter((item) => item.id !== result.id)]);
+      setEditingId(null);
       setSection("mine");
       toast.success(t("strategyLab.saved"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("strategyLab.invalid"));
+      toast.error(t("strategyLab.saveError"));
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function archive(id: string) {
+    try {
+      const archived = await archiveCustomStrategy(id);
+      setSaved((current) => current.map((item) => (item.id === archived.id ? archived : item)));
+      toast.success(t("strategyLab.archived"));
+    } catch {
+      toast.error(t("strategyLab.archiveError"));
+    }
+  }
+
+  function edit(strategy: CustomStrategySummary) {
+    const latest = strategy.versions[0];
+    if (!latest) return;
+    setEditingId(strategy.id);
+    setBuilder((current) => {
+      if (latest.rule.kind === "scheduled_dca") {
+        return {
+          ...current,
+          name: strategy.name,
+          symbol: strategy.description ?? current.symbol,
+          kind: "scheduled_dca",
+          amount: latest.rule.contributionAmount,
+          currency: latest.rule.currency,
+          dayOfMonth: latest.rule.dayOfMonth,
+        };
+      }
+      return {
+        ...current,
+        name: strategy.name,
+        symbol: strategy.description ?? current.symbol,
+        kind: "price_threshold",
+        priceOperator: latest.rule.operator,
+        priceValue: latest.rule.threshold,
+        currency: latest.rule.currency,
+        action: latest.rule.action,
+        sizePct: latest.rule.sizePct,
+      };
+    });
+    setSection("builder");
   }
 
   function sendCatalogPresetToBacktest(input: {
@@ -357,11 +458,13 @@ export function StrategyLab({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle>{strategy.name}</CardTitle>
-                        <CardDescription className="mt-1">{strategy.thesis}</CardDescription>
+                        <CardDescription className="mt-1">
+                          {t(guideKey(strategy.code, "thesis"))}
+                        </CardDescription>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge>{t(FAMILY_LABELS[strategy.family])}</Badge>
-                        <Badge variant="outline">{STYLE_LABELS[strategy.style]}</Badge>
+                        <Badge variant="outline">{t(STYLE_KEYS[strategy.style])}</Badge>
                       </div>
                     </div>
                   </CardHeader>
@@ -372,11 +475,11 @@ export function StrategyLab({
                         <AccordionContent className="flex flex-col gap-2 text-muted-foreground">
                           <p>
                             <strong className="text-foreground">{t("strategyLab.entry")}:</strong>{" "}
-                            {strategy.entryRule}
+                            {t(guideKey(strategy.code, "entry"))}
                           </p>
                           <p>
                             <strong className="text-foreground">{t("strategyLab.exit")}:</strong>{" "}
-                            {strategy.exitRule}
+                            {t(guideKey(strategy.code, "exit"))}
                           </p>
                         </AccordionContent>
                       </AccordionItem>
@@ -385,9 +488,18 @@ export function StrategyLab({
                         <AccordionContent className="grid gap-4 md:grid-cols-2">
                           <GuideList
                             title={t("strategyLab.ideal")}
-                            items={strategy.idealConditions}
+                            items={[
+                              t(guideKey(strategy.code, "ideal1")),
+                              t(guideKey(strategy.code, "ideal2")),
+                            ]}
                           />
-                          <GuideList title={t("strategyLab.risk")} items={strategy.risks} />
+                          <GuideList
+                            title={t("strategyLab.risk")}
+                            items={[
+                              t(guideKey(strategy.code, "risk1")),
+                              t(guideKey(strategy.code, "risk2")),
+                            ]}
+                          />
                         </AccordionContent>
                       </AccordionItem>
                       <AccordionItem value="requirements">
@@ -399,7 +511,7 @@ export function StrategyLab({
                           </p>
                           <p>
                             {t("strategyLab.timeframes")}: {strategy.supportedTimeframes.join(", ")}{" "}
-                            · Version {strategy.version}
+                            · {t("strategyLab.version")} {strategy.version}
                           </p>
                           <p>{strategy.sourceAttribution}</p>
                         </AccordionContent>
@@ -508,8 +620,9 @@ export function StrategyLab({
                 </FieldGroup>
               </CardContent>
               <CardFooter>
-                <Button onClick={saveDraft}>
-                  <Save data-icon="inline-start" /> {t("strategyLab.saveStrategy")}
+                <Button disabled={saving} onClick={() => void saveDraft()}>
+                  <Save data-icon="inline-start" />
+                  {editingId ? t("strategyLab.saveNewVersion") : t("strategyLab.saveStrategy")}
                 </Button>
               </CardFooter>
             </Card>
@@ -519,7 +632,13 @@ export function StrategyLab({
         </TabsContent>
 
         <TabsContent value="mine">
-          {saved.length === 0 ? (
+          {loadingSaved ? (
+            <Card>
+              <CardContent className="py-8 text-sm text-muted-foreground">
+                {t("strategyLab.loading")}
+              </CardContent>
+            </Card>
+          ) : saved.filter((strategy) => strategy.status === "active").length === 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>{t("strategyLab.noCustomTitle")}</CardTitle>
@@ -533,49 +652,54 @@ export function StrategyLab({
             </Card>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2">
-              {saved.map((strategy) => {
-                const readiness = customStrategyReadiness(strategy);
-                return (
-                  <Card key={strategy.id}>
-                    <CardHeader>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <CardTitle>{strategy.name}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {describeCustomStrategy(strategy)}
-                          </CardDescription>
+              {saved
+                .filter((strategy) => strategy.status === "active")
+                .map((strategy) => {
+                  const latest = strategy.versions[0];
+                  return (
+                    <Card key={strategy.id}>
+                      <CardHeader>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <CardTitle>{strategy.name}</CardTitle>
+                            <CardDescription className="mt-1">
+                              {strategy.description ?? t("strategyLab.noDescription")} ·{" "}
+                              {t("strategyLab.version")} {latest?.version ?? "—"}
+                            </CardDescription>
+                          </div>
+                          <ReadinessBadge status="executable" />
                         </div>
-                        <ReadinessBadge status={readiness.status} />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      {readiness.detail}
-                    </CardContent>
-                    <CardFooter className="flex flex-wrap justify-between gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => persist(saved.filter((item) => item.id !== strategy.id))}
-                      >
-                        <Trash2 data-icon="inline-start" /> {t("strategyLab.delete")}
-                      </Button>
-                      <Button
-                        disabled={strategy.kind !== "catalog_preset"}
-                        onClick={() => {
-                          if (strategy.kind !== "catalog_preset") return;
-                          sendCatalogPresetToBacktest({
-                            code: strategy.strategyCode,
-                            version: strategy.strategyVersion,
-                            parameters: strategy.strategyParameters,
-                            symbol: strategy.symbol,
-                          });
-                        }}
-                      >
-                        <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                );
-              })}
+                      </CardHeader>
+                      <CardContent className="text-sm text-muted-foreground">
+                        {t("strategyLab.dbBacked")}
+                      </CardContent>
+                      <CardFooter className="flex flex-wrap justify-between gap-3">
+                        <Button variant="outline" onClick={() => void archive(strategy.id)}>
+                          <Trash2 data-icon="inline-start" /> {t("strategyLab.delete")}
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => edit(strategy)}>
+                            <Wrench data-icon="inline-start" /> {t("strategyLab.edit")}
+                          </Button>
+                          <Button
+                            disabled={!latest?.executionCode}
+                            onClick={() => {
+                              if (!latest?.executionCode) return;
+                              sendCatalogPresetToBacktest({
+                                code: latest.executionCode,
+                                version: latest.version,
+                                parameters: {},
+                                symbol: strategy.description ?? undefined,
+                              });
+                            }}
+                          >
+                            <FlaskConical data-icon="inline-start" /> {t("strategyLab.useBacktest")}
+                          </Button>
+                        </div>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
             </div>
           )}
         </TabsContent>
@@ -610,7 +734,7 @@ function CapabilityCard({
             </CardDescription>
           </div>
           <Badge variant="outline">
-            {fundamental ? t("strategyLab.needsData") : t("strategyLab.needsEngine")}
+            {fundamental ? t("strategyLab.needsData") : t("strategyLab.executable")}
           </Badge>
         </div>
       </CardHeader>

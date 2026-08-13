@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from verify_market_ingestion import recover_stale_scheduler_runs, verify_health
+from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, start_scheduler_run, verify_health
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +40,9 @@ def test_scheduler_wrapper_drains_retries_and_verifies_every_scheduled_batch() -
     assert "sync_corporate_actions.py" in source
     assert "publish_adjusted_datasets.py" in source
     assert '$Command -in @("daily", "all")' in source
+    assert "$taskCorporateActionExitCode" in source
+    assert '"--queued-count"' in source
+    assert '"--processed-count"' in source
 
 
 def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> None:
@@ -58,6 +61,10 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert "[switch]$Install" in installer
     assert "Register-ScheduledTask" in installer
     assert installer.count("New-ScheduledTaskTrigger") == 2
+    assert "[switch]$Verify" in installer
+    assert "RestartCount" in installer
+    assert "if ($Verify)" in installer
+    assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
 
 
 def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None:
@@ -76,6 +83,7 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
     assert "Exit 1" in wrapper
+    assert '.venv\\Scripts\\python.exe' in wrapper
 
 
 def test_scheduler_start_recovers_abandoned_running_rows() -> None:
@@ -108,6 +116,88 @@ def test_scheduler_start_recovers_abandoned_running_rows() -> None:
     assert "status = 'failed'" in connection.cursor_value.query
     assert connection.cursor_value.params == (180,)
     assert connection.committed is True
+
+
+def test_scheduler_start_rejects_duplicate_active_command() -> None:
+    class Cursor:
+        rowcount = 0
+
+        def __init__(self):
+            self.calls = []
+            self.rows = [{"id": "existing-run"}]
+
+        def execute(self, query, params):
+            self.calls.append((query, params))
+
+        def fetchone(self):
+            return self.rows.pop(0) if self.rows else None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Connection:
+        def __init__(self):
+            self.value = Cursor()
+
+        def cursor(self, **_kwargs):
+            return self.value
+
+        def commit(self):
+            pass
+
+    connection = Connection()
+
+    try:
+        start_scheduler_run(connection, "daily")
+    except SchedulerAlreadyRunning as error:
+        assert error.run_id == "existing-run"
+    else:
+        raise AssertionError("duplicate scheduler command must be rejected")
+
+    assert "WHERE command = %s AND status = 'running'" in connection.value.calls[2][0]
+
+
+def test_scheduler_finish_persists_operational_counts() -> None:
+    class Cursor:
+        rowcount = 1
+
+        def execute(self, query, params):
+            self.query = query
+            self.params = params
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Connection:
+        def __init__(self):
+            self.value = Cursor()
+
+        def cursor(self):
+            return self.value
+
+        def commit(self):
+            self.committed = True
+
+    connection = Connection()
+    finish_scheduler_run(
+        connection,
+        "11111111-1111-4111-8111-111111111111",
+        "failed",
+        queued_count=8,
+        retried_count=2,
+        processed_count=6,
+        failed_count=1,
+        error_code="provider_failure",
+    )
+
+    assert "queued_count = %s" in connection.value.query
+    assert connection.value.params[:6] == ("failed", 8, 2, 6, 1, "provider_failure")
 
 
 def test_quant_lab_mounts_bilingual_ingestion_health_dashboard() -> None:

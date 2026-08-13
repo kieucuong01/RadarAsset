@@ -59,9 +59,8 @@ import {
 } from "@/lib/backtest/client";
 import { requestOptimizedAllocation } from "@/lib/backtest/optimizer-client";
 import {
-  OPTIMIZER_METHOD_DESCRIPTIONS,
-  OPTIMIZER_METHOD_LABELS,
   OPTIMIZER_METHODS,
+  optimizerMethodTranslationKey,
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
@@ -443,8 +442,8 @@ export function PortfolioBacktestBuilder({
                 }}
                 variant="outline"
               >
-                <ToggleGroupItem value="equal">Equal</ToggleGroupItem>
-                <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
+                <ToggleGroupItem value="equal">{t("backtest.builder.equal")}</ToggleGroupItem>
+                <ToggleGroupItem value="custom">{t("backtest.builder.custom")}</ToggleGroupItem>
               </ToggleGroup>
             </Field>
             <div
@@ -468,14 +467,14 @@ export function PortfolioBacktestBuilder({
                     <SelectGroup>
                       {OPTIMIZER_METHODS.map((method) => (
                         <SelectItem key={method} value={method}>
-                          {OPTIMIZER_METHOD_LABELS[method]}
+                          {t(optimizerMethodTranslationKey(method, "label"))}
                         </SelectItem>
                       ))}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
                 <FieldDescription>
-                  {OPTIMIZER_METHOD_DESCRIPTIONS[optimizerMethod]}
+                  {t(optimizerMethodTranslationKey(optimizerMethod, "description"))}
                 </FieldDescription>
               </Field>
               {optimizerMethod === "target_return" ? (
@@ -661,7 +660,8 @@ export function PortfolioBacktestBuilder({
             <Progress value={Math.min(100, allocationTotalBps / 100)} />
             {state.optimizerProposal ? (
               <p className="text-xs text-muted-foreground">
-                Optimized by {OPTIMIZER_METHOD_LABELS[state.optimizerProposal.method]} ·{" "}
+                {t("backtest.builder.optimizedBy")}{" "}
+                {t(optimizerMethodTranslationKey(state.optimizerProposal.method, "label"))} ·{" "}
                 {state.optimizerProposal.source.library} {state.optimizerProposal.source.version}
               </p>
             ) : null}

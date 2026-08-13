@@ -14,17 +14,22 @@ import {
 } from "@/lib/backtest/data-readiness-client";
 import { useI18n } from "@/lib/i18n/context";
 
-function dateLabel(value: string | null) {
+function dateLabel(value: string | null, locale: "vi" | "en") {
   if (!value) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export function MarketDataHealthPanel() {
   const [readiness, setReadiness] = useState<QuantDataReadiness | null>(null);
   const [failed, setFailed] = useState(false);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const numberFormatter = useMemo(
+    () => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"),
+    [locale],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,23 +72,25 @@ export function MarketDataHealthPanel() {
     },
     {
       label: t("quant.dataHealth.stale"),
-      value: readiness.staleDatasetCount.toLocaleString(),
+      value: numberFormatter.format(readiness.staleDatasetCount),
       detail: t("quant.dataHealth.missingBars", { count: readiness.missingBarCount }),
       icon: History,
     },
     {
       label: t("quant.dataHealth.backlog"),
-      value: readiness.backlogCount.toLocaleString(),
+      value: numberFormatter.format(readiness.backlogCount),
       detail: readiness.oldestBacklogAt
-        ? t("quant.dataHealth.oldestBacklog", { date: dateLabel(readiness.oldestBacklogAt) })
+        ? t("quant.dataHealth.oldestBacklog", {
+            date: dateLabel(readiness.oldestBacklogAt, locale),
+          })
         : t("quant.dataHealth.noBacklog"),
       icon: RefreshCw,
     },
     {
       label: t("quant.dataHealth.providerFailures"),
-      value: health.providerFailureCount.toLocaleString(),
+      value: numberFormatter.format(health.providerFailureCount),
       detail: t("quant.dataHealth.lastScheduler", {
-        date: dateLabel(readiness.lastSchedulerSuccessAt),
+        date: dateLabel(readiness.lastSchedulerSuccessAt, locale),
       }),
       icon: health.tone === "healthy" ? CheckCircle2 : AlertTriangle,
     },
@@ -99,7 +106,9 @@ export function MarketDataHealthPanel() {
         <Badge variant={health.tone === "healthy" ? "default" : "destructive"}>
           {health.tone === "healthy"
             ? t("quant.dataHealth.healthy")
-            : t("quant.dataHealth.degraded", { count: health.issueCount })}
+            : health.tone === "failed"
+              ? t("quant.dataHealth.failed")
+              : t("quant.dataHealth.degraded", { count: health.issueCount })}
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

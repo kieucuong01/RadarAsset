@@ -42,6 +42,8 @@ def test_adjusted_publication_links_raw_manifest_actions_and_calendar() -> None:
         raw_dataset_version_id="raw-version-1",
         actions=[action],
         corporate_action_coverage_complete=True,
+        corporate_action_coverage_start="2025-01-02",
+        corporate_action_coverage_end="2025-01-03",
     )
 
     assert adjusted.adjustment_policy == "total_return"
@@ -49,6 +51,7 @@ def test_adjusted_publication_links_raw_manifest_actions_and_calendar() -> None:
     assert adjusted.source_metadata["rawDatasetVersionId"] == "raw-version-1"
     assert adjusted.source_metadata["corporateActionChecksums"] == [action.checksum]
     assert adjusted.source_metadata["calendarVersion"] == "hose-official-closures-2024-2026-v1"
+    assert adjusted.source_metadata["corporateActionCoverageStart"] == "2025-01-02"
 
 
 def test_adjusted_publication_blocks_unverified_action_inside_raw_coverage() -> None:
@@ -85,3 +88,40 @@ def test_adjusted_publication_blocks_unverified_action_inside_raw_coverage() -> 
             actions=[unverified],
             corporate_action_coverage_complete=True,
         )
+
+
+def test_adjusted_publication_ignores_unverified_future_announcement() -> None:
+    raw = prepare_dataset_publication(
+        [daily(2, "100"), daily(3, "90")],
+        market="vn_equity",
+        provider_code="vnstock-vci-free",
+        provider_name="Vnstock VCI Free",
+        provider_symbol="FPT",
+        canonical_key="vn_equity:HOSE:FPT",
+        asset_name="FPT Corporation",
+        currency="VND",
+        venue="HOSE",
+        timezone_name="Asia/Ho_Chi_Minh",
+        maximum_leverage=Decimal("2"),
+        terms_url="https://vnstocks.com/docs/vnstock",
+        source_metadata={"mode": "live"},
+    )
+    future = CorporateActionRecord(
+        asset="FPT",
+        provider_code="vnstock-vci-free",
+        provider_event_id="future",
+        action_type="cash_dividend",
+        status="unverified",
+        public_date=date(2025, 2, 1),
+        ex_right_date=None,
+        source_payload={},
+    )
+
+    adjusted = build_adjusted_publication(
+        raw,
+        raw_dataset_version_id="raw-version-1",
+        actions=[future],
+        corporate_action_coverage_complete=True,
+    )
+    assert [row.close for row in adjusted.rows] == [row.close for row in raw.rows]
+    assert adjusted.source_metadata["skippedUnverifiedEventCount"] == 1

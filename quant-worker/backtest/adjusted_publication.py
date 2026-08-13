@@ -16,6 +16,8 @@ def build_adjusted_publication(
     raw_dataset_version_id: str,
     actions: Iterable[CorporateActionRecord],
     corporate_action_coverage_complete: bool,
+    corporate_action_coverage_start: str | None = None,
+    corporate_action_coverage_end: str | None = None,
 ) -> PreparedDatasetPublication:
     action_rows = list(actions)
     coverage_start = raw.coverage_start.date()
@@ -52,6 +54,8 @@ def build_adjusted_publication(
             action.checksum for action in action_rows if action.status == "verified"
         ),
         "corporateActionCoverageComplete": corporate_action_coverage_complete,
+        "corporateActionCoverageStart": corporate_action_coverage_start,
+        "corporateActionCoverageEnd": corporate_action_coverage_end,
         "calendarVersion": HOSE_CALENDAR_VERSION,
         "timezone": "Asia/Ho_Chi_Minh",
         "priceUnit": "thousand_vnd" if raw.market == "vn_equity" else raw.currency,

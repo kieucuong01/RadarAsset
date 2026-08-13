@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { getNotifications, getStrategyForwardTests, updateStrategySignalStatusClient } from "./client";
+import {
+  getNotifications,
+  getStrategyForwardTests,
+  updateStrategySignalStatusClient,
+} from "./client";
 
 describe("strategy-forward client", () => {
   it("parses bounded strict forward responses", async () => {

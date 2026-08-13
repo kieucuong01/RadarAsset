@@ -48,4 +48,13 @@ describe("i18n dictionary", () => {
     expect(text).toContain("Tối ưu");
     expect(text).not.toMatch(/[ÃÂ�]/);
   });
+
+  it("translates Quant method, style, status, and fallback copy", () => {
+    expect(translate("vi", "optimizer.methods.maximum_sharpe.label")).toBe("Sharpe tối đa");
+    expect(translate("en", "optimizer.methods.maximum_sharpe.label")).toBe("Maximum Sharpe");
+    expect(translate("vi", "strategyLab.styles.trend")).toBe("Theo xu hướng");
+    expect(translate("en", "strategyLab.styles.trend")).toBe("Trend following");
+    expect(translate("vi", "quant.dataHealth.failed")).toBe("Lỗi vận hành");
+    expect(translate("en", "common.notAvailable")).toBe("N/A");
+  });
 });

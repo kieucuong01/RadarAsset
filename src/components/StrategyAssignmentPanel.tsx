@@ -36,7 +36,12 @@ export function StrategyAssignmentPanel({
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const dateFormatter = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const numberFormatter = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US");
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
   const [assignments, setAssignments] = useState<StrategyAssignmentResponse[]>([]);
   const [symbol, setSymbol] = useState(holdings[0]?.ticker ?? "BTC");
@@ -129,7 +134,9 @@ export function StrategyAssignmentPanel({
       await updateStrategySignalStatusClient(assignmentId, signalId, status);
       await refreshAssignments();
     } catch (decisionError) {
-      toast.error(decisionError instanceof Error ? decisionError.message : t("strategyAlerts.decisionError"));
+      toast.error(
+        decisionError instanceof Error ? decisionError.message : t("strategyAlerts.decisionError"),
+      );
     }
   }
 
@@ -257,16 +264,30 @@ export function StrategyAssignmentPanel({
                             {signal.signalType.toUpperCase()}
                           </span>
                           <span className="ml-2 text-muted-foreground">
-                            {new Date(signal.signalAt).toLocaleString()} ·{" "}
-                            {signal.signalPrice?.toLocaleString() ?? "—"}
+                            {dateFormatter.format(new Date(signal.signalAt))} ·{" "}
+                            {signal.signalPrice === null
+                              ? "—"
+                              : numberFormatter.format(signal.signalPrice)}
                           </span>
                         </div>
                         {signal.status === "suggested" ? (
                           <div className="flex flex-wrap gap-2">
-                            <Button size="sm" variant="outline" onClick={() => void decideSignal(assignment.id, signal.id, "reviewed")}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void decideSignal(assignment.id, signal.id, "reviewed")
+                              }
+                            >
                               {t("strategyAlerts.review")}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => void decideSignal(assignment.id, signal.id, "dismissed")}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                void decideSignal(assignment.id, signal.id, "dismissed")
+                              }
+                            >
                               {t("strategyAlerts.dismiss")}
                             </Button>
                             <PortfolioTransactionDialog

@@ -151,18 +151,24 @@ describe("organization-scoped database services", () => {
       }),
     ).not.toThrow();
     expect(() =>
-      validateSourceSignalExecution({ ...signal, signalType: "sell" }, {
-        portfolioId: "portfolio-a",
-        assetId: "asset-btc",
-        side: "buy",
-      }),
+      validateSourceSignalExecution(
+        { ...signal, signalType: "sell" },
+        {
+          portfolioId: "portfolio-a",
+          assetId: "asset-btc",
+          side: "buy",
+        },
+      ),
     ).toThrow("SIGNAL_SIDE_MISMATCH");
     expect(() =>
-      validateSourceSignalExecution({ ...signal, status: "executed" }, {
-        portfolioId: "portfolio-a",
-        assetId: "asset-btc",
-        side: "buy",
-      }),
+      validateSourceSignalExecution(
+        { ...signal, status: "executed" },
+        {
+          portfolioId: "portfolio-a",
+          assetId: "asset-btc",
+          side: "buy",
+        },
+      ),
     ).toThrow("SIGNAL_ALREADY_ACTED");
   });
 

@@ -146,13 +146,17 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border p-3">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Max DD</p>
+              <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                {t("backtestResults.maxDrawdown")}
+              </p>
               <p className="mt-1 font-semibold text-rose-600">
                 {metricValue(kpis.maxDrawdownPct, 2)}%
               </p>
             </div>
             <div className="rounded-xl border p-3">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Sharpe</p>
+              <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                {t("backtestResults.sharpeRatio")}
+              </p>
               <p className="mt-1 font-semibold">{metricValue(kpis.sharpe, 2)}</p>
             </div>
           </div>

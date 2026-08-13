@@ -418,7 +418,10 @@ export function validateSourceSignalExecution(
   if (signal.status === "executed" || signal.status === "dismissed") {
     throw new PortfolioDomainError("SIGNAL_ALREADY_ACTED", "SIGNAL_ALREADY_ACTED");
   }
-  if (signal.assignment.portfolioId !== expected.portfolioId || signal.assetId !== expected.assetId) {
+  if (
+    signal.assignment.portfolioId !== expected.portfolioId ||
+    signal.assetId !== expected.assetId
+  ) {
     throw new PortfolioDomainError("SIGNAL_SCOPE_MISMATCH", "SIGNAL_SCOPE_MISMATCH");
   }
   if (signal.signalType !== expected.side) {

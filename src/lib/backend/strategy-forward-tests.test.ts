@@ -93,7 +93,11 @@ describe("strategy forward activation", () => {
       portfolioId: "portfolio-a",
       parameters: input.strategyParameters,
       status: "active",
-      state: { backtestTotalReturnPct: 18.5, sourceQuantRunId: input.backtestRunId, sourceQuantRunLegId: input.backtestRunLegId },
+      state: {
+        backtestTotalReturnPct: 18.5,
+        sourceQuantRunId: input.backtestRunId,
+        sourceQuantRunLegId: input.backtestRunLegId,
+      },
       asset: { symbol: "BTC" },
       strategyVersion: { code: input.strategyCode, version: "1.0.0", name: "BTC entry" },
       signals: [],

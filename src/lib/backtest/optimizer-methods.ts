@@ -15,6 +15,13 @@ export const OPTIMIZER_METHODS = [
 
 export type OptimizerMethod = (typeof OPTIMIZER_METHODS)[number];
 
+export function optimizerMethodTranslationKey(
+  method: OptimizerMethod,
+  field: "label" | "description",
+) {
+  return `optimizer.methods.${method}.${field}` as const;
+}
+
 export const OPTIMIZER_METHOD_LABELS = {
   equal_weight: "Equal Weight",
   inverse_volatility: "Inverse Volatility",

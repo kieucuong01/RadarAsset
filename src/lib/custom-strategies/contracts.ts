@@ -25,7 +25,7 @@ const scheduledDcaRuleSchema = z
   })
   .strict();
 
-const executableRuleSchema = z.discriminatedUnion("kind", [
+export const executableRuleSchema = z.discriminatedUnion("kind", [
   priceThresholdRuleSchema,
   scheduledDcaRuleSchema,
 ]);

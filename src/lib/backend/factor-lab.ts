@@ -71,7 +71,7 @@ export async function loadVietnamFactorLab(_context: TenantContext) {
   if (eligible.length < 5) {
     return {
       ready: false as const,
-      reason: "Factor Lab needs at least 5 VN symbols with 252 daily price/volume sessions.",
+      reasonCode: "insufficient_symbols" as const,
       eligibleAssetCount: eligible.length,
       requiredAssetCount: 5,
       requiredObservationCount: 252,
@@ -91,7 +91,7 @@ export async function loadVietnamFactorLab(_context: TenantContext) {
   if (timestamps.length < 252) {
     return {
       ready: false as const,
-      reason: "VN datasets do not yet have 252 aligned daily sessions.",
+      reasonCode: "insufficient_aligned_sessions" as const,
       eligibleAssetCount: eligible.length,
       requiredAssetCount: 5,
       requiredObservationCount: 252,

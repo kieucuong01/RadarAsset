@@ -313,44 +313,42 @@ export async function loadStrategyForwardTests(
     const runId = typeof state.sourceQuantRunId === "string" ? state.sourceQuantRunId : null;
     const legId = typeof state.sourceQuantRunLegId === "string" ? state.sourceQuantRunLegId : null;
     const totalReturnPct = Number(state.backtestTotalReturnPct);
-    return ({
-    assignmentId: row.id,
-    portfolioId: row.portfolioId,
-    symbol: row.asset.symbol,
-    strategy: {
-      code: row.strategyVersion.code,
-      version: row.strategyVersion.version,
-      name: row.strategyVersion.name,
-      kind: row.strategyVersion.category,
-    },
-    status: row.status === "paused" || row.status === "evaluation_failed" ? row.status : "active",
-    activatedAt: (row.activatedAt ?? new Date(0)).toISOString(),
-    lastEvaluatedAt: row.lastEvaluatedAt?.toISOString() ?? null,
-    lastEvaluatedBarAt: row.lastEvaluatedBarAt?.toISOString() ?? null,
-    latestSignal: row.signals.length
-      ? (assignmentResponse({
-          id: row.id,
-          portfolioId: row.portfolioId,
-          parameters: {},
-          status: row.status,
-          asset: row.asset,
-          strategyVersion: row.strategyVersion,
-          signals: row.signals,
-        }).signals[0] ?? null)
-      : null,
-    backtestBaseline:
-      runId && legId && Number.isFinite(totalReturnPct)
-        ? { runId, legId, totalReturnPct }
+    return {
+      assignmentId: row.id,
+      portfolioId: row.portfolioId,
+      symbol: row.asset.symbol,
+      strategy: {
+        code: row.strategyVersion.code,
+        version: row.strategyVersion.version,
+        name: row.strategyVersion.name,
+        kind: row.strategyVersion.category,
+      },
+      status: row.status === "paused" || row.status === "evaluation_failed" ? row.status : "active",
+      activatedAt: (row.activatedAt ?? new Date(0)).toISOString(),
+      lastEvaluatedAt: row.lastEvaluatedAt?.toISOString() ?? null,
+      lastEvaluatedBarAt: row.lastEvaluatedBarAt?.toISOString() ?? null,
+      latestSignal: row.signals.length
+        ? (assignmentResponse({
+            id: row.id,
+            portfolioId: row.portfolioId,
+            parameters: {},
+            status: row.status,
+            asset: row.asset,
+            strategyVersion: row.strategyVersion,
+            signals: row.signals,
+          }).signals[0] ?? null)
         : null,
-    snapshots: [...row.forwardSnapshots].reverse().map((s) => ({
-      timestamp: s.barAt.toISOString(),
-      equity: numberFromDecimal(s.equity),
-      benchmarkEquity: numberFromDecimal(s.benchmarkEquity),
-      pnlExcludingContributions: numberFromDecimal(s.pnlExcludingContributions),
-      cumulativeContributions: numberFromDecimal(s.cumulativeContributions),
-      cumulativeFees: numberFromDecimal(s.cumulativeFees),
-    })),
-    });
+      backtestBaseline:
+        runId && legId && Number.isFinite(totalReturnPct) ? { runId, legId, totalReturnPct } : null,
+      snapshots: [...row.forwardSnapshots].reverse().map((s) => ({
+        timestamp: s.barAt.toISOString(),
+        equity: numberFromDecimal(s.equity),
+        benchmarkEquity: numberFromDecimal(s.benchmarkEquity),
+        pnlExcludingContributions: numberFromDecimal(s.pnlExcludingContributions),
+        cumulativeContributions: numberFromDecimal(s.cumulativeContributions),
+        cumulativeFees: numberFromDecimal(s.cumulativeFees),
+      })),
+    };
   });
 }
 

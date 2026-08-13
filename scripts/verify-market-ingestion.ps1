@@ -12,7 +12,13 @@ Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
 $taskVerifier = Join-Path $taskRepositoryRoot "quant-worker\verify_market_ingestion.py"
-$taskPython = (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
+$taskVenvPython = Join-Path $taskRepositoryRoot ".venv\Scripts\python.exe"
+$taskPython = if ($PythonExecutable -eq "python" -and (Test-Path -LiteralPath $taskVenvPython -PathType Leaf)) {
+    $taskVenvPython
+}
+else {
+    (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
+}
 
 & $taskPython $taskVerifier "--env-file" $EnvFile "--maximum-backlog-age-hours" $MaximumBacklogAgeHours "--maximum-recent-failures" $MaximumRecentFailures
 if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -ne 0) {

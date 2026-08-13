@@ -121,8 +121,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     url = psycopg_connection_url(load_database_url(Path(args.env_file)))
     published = 0
+    unchanged = 0
     skipped = 0
     blocked = 0
+    blocked_reasons = {"coverage": 0, "unverified": 0, "quality": 0}
     with psycopg.connect(url, autocommit=False) as connection:
         publisher = PostgresDatasetPublisher(connection)
         with connection.cursor(row_factory=dict_row) as cursor:
@@ -155,6 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 with connection.transaction():
                     _deactivate_adjusted_dataset(connection, symbol, timeframe)
                 blocked += 1
+                blocked_reasons["coverage"] += 1
                 continue
             metadata = raw.source_metadata
             prepared_raw = prepare_dataset_publication(
@@ -178,18 +181,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raw_dataset_version_id=raw.dataset_version_id,
                     actions=actions,
                     corporate_action_coverage_complete=complete,
+                    corporate_action_coverage_start=action_start.isoformat(),
+                    corporate_action_coverage_end=action_end.isoformat(),
                 )
-            except AdjustmentUnavailable:
+            except AdjustmentUnavailable as error:
                 with connection.transaction():
                     _deactivate_adjusted_dataset(connection, symbol, timeframe)
                 blocked += 1
+                reason = "unverified" if "unverified" in str(error).lower() else "quality"
+                blocked_reasons[reason] += 1
                 continue
             with connection.transaction():
-                publisher.publish_if_changed(adjusted)
-            published += 1
+                publication = publisher.publish_if_changed(adjusted)
+            if publication.status == "unchanged":
+                unchanged += 1
+            else:
+                published += 1
     print(
         json.dumps(
-            {"status": "succeeded", "published": published, "skipped": skipped, "blocked": blocked}
+            {
+                "status": "succeeded",
+                "published": published,
+                "unchanged": unchanged,
+                "skipped": skipped,
+                "blocked": blocked,
+                "blockedReasons": blocked_reasons,
+            }
         )
     )
     return 0

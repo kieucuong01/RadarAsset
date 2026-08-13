@@ -19,7 +19,7 @@ import { useI18n } from "@/lib/i18n/context";
 type FactorResponse =
   | {
       ready: false;
-      reason: string;
+      reasonCode: "insufficient_symbols" | "insufficient_aligned_sessions";
       eligibleAssetCount: number;
       requiredAssetCount: number;
       requiredObservationCount: number;
@@ -85,7 +85,7 @@ export function FactorLab() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{t("factorLab.gateTitle")}</CardTitle>
-              <CardDescription>{data.reason}</CardDescription>
+              <CardDescription>{t(`factorLab.reasons.${data.reasonCode}`)}</CardDescription>
             </div>
             <DataStatusBadge status="UNAVAILABLE" detail={t("factorLab.noSynthetic")} />
           </div>

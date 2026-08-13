@@ -63,9 +63,8 @@ import {
   type OptimizerProposal,
 } from "@/lib/backtest/optimizer-client";
 import {
-  OPTIMIZER_METHOD_DESCRIPTIONS,
-  OPTIMIZER_METHOD_LABELS,
   OPTIMIZER_METHODS,
+  optimizerMethodTranslationKey,
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
 import { useI18n } from "@/lib/i18n/context";
@@ -75,7 +74,11 @@ export function PortfolioOptimizerWorkbench({
 }: {
   initialSymbols?: string[];
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const numberFormatter = useMemo(
+    () => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"),
+    [locale],
+  );
   const range = useRef(createRollingBacktestRange()).current;
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [from, setFrom] = useState(range.from);
@@ -221,13 +224,15 @@ export function PortfolioOptimizerWorkbench({
                     <SelectGroup>
                       {OPTIMIZER_METHODS.map((item) => (
                         <SelectItem key={item} value={item}>
-                          {OPTIMIZER_METHOD_LABELS[item]}
+                          {t(optimizerMethodTranslationKey(item, "label"))}
                         </SelectItem>
                       ))}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <FieldDescription>{OPTIMIZER_METHOD_DESCRIPTIONS[method]}</FieldDescription>
+                <FieldDescription>
+                  {t(optimizerMethodTranslationKey(method, "description"))}
+                </FieldDescription>
               </Field>
               {method === "target_return" ? (
                 <Field>
@@ -288,7 +293,9 @@ export function PortfolioOptimizerWorkbench({
                     aria-label={t("optimizer.riskToleranceAria")}
                   />
                   <FieldDescription>
-                    {method === "risk_tolerance" ? OPTIMIZER_METHOD_DESCRIPTIONS[method] : ""}
+                    {method === "risk_tolerance"
+                      ? t(optimizerMethodTranslationKey(method, "description"))
+                      : ""}
                   </FieldDescription>
                 </Field>
               ) : null}
@@ -337,7 +344,8 @@ export function PortfolioOptimizerWorkbench({
                   <span className="min-w-0">
                     <span className="block font-semibold">{asset.symbol}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {asset.market} · {asset.rowCount.toLocaleString()} {t("optimizer.bars")}
+                      {asset.market} · {numberFormatter.format(asset.rowCount)}{" "}
+                      {t("optimizer.bars")}
                     </span>
                   </span>
                   <Button
@@ -402,7 +410,7 @@ export function PortfolioOptimizerWorkbench({
                 />
                 <Metric
                   label={t("optimizer.sharpe")}
-                  value={proposal.sharpe?.toFixed(2) ?? "N/A"}
+                  value={proposal.sharpe?.toFixed(2) ?? t("common.notAvailable")}
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -426,8 +434,8 @@ export function PortfolioOptimizerWorkbench({
               <AllocationBreakdown slices={dashboardModel.allocationSlices} />
               <p className="text-xs text-muted-foreground">
                 {t("optimizer.observations", { count: proposal.observationCount })} ·{" "}
-                {OPTIMIZER_METHOD_LABELS[proposal.method]} · {proposal.source.library}{" "}
-                {proposal.source.version}
+                {t(optimizerMethodTranslationKey(proposal.method, "label"))} ·{" "}
+                {proposal.source.library} {proposal.source.version}
               </p>
             </>
           ) : (
@@ -469,7 +477,7 @@ function ValidationMetrics({
           {t("optimizer.volatility")} {metrics.volatilityPct.toFixed(2)}%
         </span>
         <span>
-          {t("optimizer.sharpe")} {metrics.sharpe?.toFixed(2) ?? "N/A"}
+          {t("optimizer.sharpe")} {metrics.sharpe?.toFixed(2) ?? t("common.notAvailable")}
         </span>
         <span>
           {t("optimizer.maxDd")} {metrics.maxDrawdownPct.toFixed(2)}%

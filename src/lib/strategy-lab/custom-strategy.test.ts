@@ -41,7 +41,7 @@ describe("custom strategy rules", () => {
   });
 
   it("distinguishes missing engine support from missing point-in-time data", () => {
-    expect(customStrategyReadiness(dcaRule)).toMatchObject({ status: "engine_required" });
+    expect(customStrategyReadiness(dcaRule)).toMatchObject({ status: "executable" });
     expect(
       customStrategyReadiness({
         schemaVersion: 1,

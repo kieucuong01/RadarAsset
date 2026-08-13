@@ -121,10 +121,12 @@ export function strategyInputWithPreset(
   }
   return {
     ...strategy,
-    defaultParameters: normalizeStrategyParameters(
-      preset.strategyCode,
-      preset.strategyParameters,
-    ) as Record<string, number>,
+    defaultParameters: preset.strategyCode.startsWith("custom:")
+      ? {}
+      : (normalizeStrategyParameters(preset.strategyCode, preset.strategyParameters) as Record<
+          string,
+          number
+        >),
   };
 }
 
@@ -341,7 +343,9 @@ export function builderValidationReasons(state: BuilderState) {
       reasons.push(`${leg.strategyName} does not support ${leg.symbol} on ${state.timeframe}.`);
     }
     try {
-      normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters);
+      if (!leg.strategyCode.startsWith("custom:")) {
+        normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters);
+      }
     } catch (error) {
       reasons.push(
         `${leg.symbol}: ${error instanceof Error ? error.message : "Invalid strategy parameters."}`,

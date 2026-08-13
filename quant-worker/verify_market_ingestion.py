@@ -13,6 +13,12 @@ from psycopg.rows import dict_row
 from ingest_market_data import load_database_url, psycopg_connection_url
 
 
+class SchedulerAlreadyRunning(RuntimeError):
+    def __init__(self, run_id: str) -> None:
+        super().__init__("Scheduler command is already running.")
+        self.run_id = run_id
+
+
 HEALTH_SQL = """
 WITH expected AS (
   SELECT instrument.asset_id, timeframe.timeframe
@@ -91,6 +97,21 @@ def start_scheduler_run(connection: Any, command: str) -> str:
     recover_stale_scheduler_runs(connection)
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"market-ingestion:{command}",),
+        )
+        cursor.execute(
+            """
+            SELECT id FROM market_ingestion_scheduler_runs
+            WHERE command = %s AND status = 'running'
+            ORDER BY started_at DESC LIMIT 1
+            """,
+            (command,),
+        )
+        active = cursor.fetchone()
+        if active is not None:
+            raise SchedulerAlreadyRunning(str(active["id"]))
+        cursor.execute(
             """
             INSERT INTO market_ingestion_scheduler_runs (
               id, command, scheduled_at, started_at, status
@@ -106,16 +127,31 @@ def start_scheduler_run(connection: Any, command: str) -> str:
     return str(row["id"])
 
 
-def finish_scheduler_run(connection: Any, run_id: str, status: str) -> None:
+def finish_scheduler_run(
+    connection: Any,
+    run_id: str,
+    status: str,
+    *,
+    queued_count: int = 0,
+    retried_count: int = 0,
+    processed_count: int = 0,
+    failed_count: int = 0,
+    error_code: str | None = None,
+) -> None:
     UUID(run_id)
+    counts = (queued_count, retried_count, processed_count, failed_count)
+    if any(value < 0 for value in counts):
+        raise ValueError("Scheduler counts must be non-negative.")
     with connection.cursor() as cursor:
         cursor.execute(
             """
             UPDATE market_ingestion_scheduler_runs
-            SET status = %s, finished_at = NOW()
+            SET status = %s, finished_at = NOW(), queued_count = %s,
+                retried_count = %s, processed_count = %s, failed_count = %s,
+                error_code = %s
             WHERE id = %s AND status = 'running'
             """,
-            (status, run_id),
+            (status, queued_count, retried_count, processed_count, failed_count, error_code, run_id),
         )
         if cursor.rowcount != 1:
             raise RuntimeError("Scheduler run is not active.")
@@ -148,6 +184,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--start-command", choices=("all", "hourly", "daily"))
     parser.add_argument("--finish-run")
     parser.add_argument("--finish-status", choices=("succeeded", "failed"))
+    parser.add_argument("--queued-count", type=int, default=0)
+    parser.add_argument("--retried-count", type=int, default=0)
+    parser.add_argument("--processed-count", type=int, default=0)
+    parser.add_argument("--failed-count", type=int, default=0)
+    parser.add_argument("--error-code")
     args = parser.parse_args(argv)
     if not 1 <= args.maximum_backlog_age_hours <= 168 or not 0 <= args.maximum_recent_failures <= 10_000:
         print(json.dumps({"status": "failed", "errorCode": "configuration_error"}))
@@ -162,7 +203,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.finish_run:
                 if not args.finish_status:
                     raise ValueError("--finish-status is required with --finish-run.")
-                finish_scheduler_run(connection, args.finish_run, args.finish_status)
+                finish_scheduler_run(
+                    connection,
+                    args.finish_run,
+                    args.finish_status,
+                    queued_count=args.queued_count,
+                    retried_count=args.retried_count,
+                    processed_count=args.processed_count,
+                    failed_count=args.failed_count,
+                    error_code=args.error_code,
+                )
                 print(json.dumps({"status": args.finish_status, "runId": args.finish_run}))
                 return 0
             health = load_health(connection)
@@ -184,6 +234,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(output, separators=(",", ":")))
         return 0 if not errors else 1
+    except SchedulerAlreadyRunning as error:
+        print(json.dumps({"status": "already_running", "runId": error.run_id}))
+        return 3
     except (OSError, ValueError, psycopg.Error):
         print(json.dumps({"status": "failed", "errorCode": "verification_failed"}))
         return 2

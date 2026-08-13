@@ -38,9 +38,22 @@ const quantDataReadinessSchema = z
     missingBarCount: z.number().int().nonnegative(),
     oldestBacklogAt: z.string().datetime().nullable(),
     lastSchedulerSuccessAt: z.string().datetime().nullable(),
+    latestSchedulerRun: z
+      .object({
+        command: z.enum(["hourly", "daily", "all"]),
+        status: z.enum(["running", "succeeded", "failed"]),
+        startedAt: z.string().datetime(),
+        finishedAt: z.string().datetime().nullable(),
+        errorCode: z.string().max(80).nullable(),
+      })
+      .nullable(),
     recentProviderFailures: z.array(
       z
-        .object({ providerCode: z.string().min(1).max(80), count: z.number().int().positive() })
+        .object({
+          providerCode: z.string().min(1).max(80),
+          errorCode: z.string().min(1).max(80),
+          count: z.number().int().positive(),
+        })
         .strict(),
     ),
   })
@@ -95,9 +108,17 @@ export function quantDataOperationsHealth(readiness: QuantDataReadiness) {
     0,
   );
   const issueCount =
-    readiness.missingDatasetCount + readiness.staleDatasetCount + providerFailureCount;
+    readiness.missingDatasetCount +
+    readiness.staleDatasetCount +
+    providerFailureCount +
+    (readiness.latestSchedulerRun?.status === "failed" ? 1 : 0);
   return {
-    tone: issueCount > 0 ? ("degraded" as const) : ("healthy" as const),
+    tone:
+      readiness.latestSchedulerRun?.status === "failed"
+        ? ("failed" as const)
+        : issueCount > 0
+          ? ("degraded" as const)
+          : ("healthy" as const),
     issueCount,
     providerFailureCount,
   };
