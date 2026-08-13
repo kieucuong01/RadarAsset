@@ -94,7 +94,7 @@ export function PortfolioBacktestBuilder({
   const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const loadedInitialSymbols = useRef(false);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -201,7 +201,7 @@ export function PortfolioBacktestBuilder({
     };
   }, [selectedKey, state.from, state.timeframe, state.to, t]);
 
-  const reasons = useMemo(() => builderValidationReasons(state), [state]);
+  const reasons = useMemo(() => builderValidationReasons(state, locale), [locale, state]);
   const allocationTotalBps =
     state.assumptions.cashAllocationBps +
     state.legs.reduce((total, leg) => total + leg.allocationBps, 0);
@@ -266,7 +266,7 @@ export function PortfolioBacktestBuilder({
   async function submitPortfolio() {
     setSubmitting(true);
     try {
-      const run = await submitBacktest(toPortfolioBacktestSubmission(state));
+      const run = await submitBacktest(toPortfolioBacktestSubmission(state, locale));
       onRunCreated(run);
       toast.success(t("backtest.builder.queued"));
     } catch (error) {
@@ -522,7 +522,7 @@ export function PortfolioBacktestBuilder({
                     max={10}
                     step={0.1}
                     onValueChange={([value]) => setMarkowitzRiskTolerance(value)}
-                    aria-label="Markowitz risk tolerance"
+                    aria-label={t("backtest.builder.riskToleranceAria")}
                   />
                 </Field>
               ) : null}
@@ -534,7 +534,7 @@ export function PortfolioBacktestBuilder({
                   max={100}
                   step={5}
                   onValueChange={([value]) => setMaxWeightPct(value)}
-                  aria-label="Maximum asset weight"
+                  aria-label={t("backtest.builder.maxWeightAria")}
                 />
               </Field>
               <Button

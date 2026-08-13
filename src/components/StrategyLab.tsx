@@ -151,7 +151,12 @@ export function StrategyLab({
   useEffect(() => {
     let active = true;
     void migrateLegacyStrategies(window.localStorage, (input) => createCustomStrategy(input))
-      .then(() => listCustomStrategies())
+      .then((result) => {
+        if (result.skipped > 0) {
+          toast.warning(t("strategyLab.migrationSkipped", { count: result.skipped }));
+        }
+        return listCustomStrategies();
+      })
       .then((strategies) => active && setSaved(strategies))
       .catch(() => toast.error(t("strategyLab.loadError")))
       .finally(() => active && setLoadingSaved(false));

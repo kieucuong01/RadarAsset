@@ -10,6 +10,7 @@ import {
 import type { OptimizerProposal } from "./optimizer-client";
 import type { BacktestStrategyPreset } from "./preselection";
 import { normalizeStrategyParameters } from "./strategy-catalog";
+import { translate, type Locale } from "../i18n/dictionary";
 
 export type AllocationMode = "equal" | "custom" | "optimized";
 
@@ -313,47 +314,72 @@ export function reduceBuilder(state: BuilderState, action: BuilderAction): Build
   return applyOptimizerProposal(state, action.proposal);
 }
 
-export function builderValidationReasons(state: BuilderState) {
+export function builderValidationReasons(state: BuilderState, locale: Locale = "en") {
   const reasons: string[] = [];
-  if (state.legs.length === 0) reasons.push("Add at least one backtestable asset.");
+  if (state.legs.length === 0) reasons.push(translate(locale, "backtest.builder.validation.asset"));
   const allocationTotal =
     state.assumptions.cashAllocationBps +
     state.legs.reduce((total, leg) => total + leg.allocationBps, 0);
-  if (allocationTotal !== 10_000) reasons.push("Asset and cash weights must total exactly 100%.");
-  if (!Number.isFinite(state.totalCapital) || state.totalCapital <= 0) {
-    reasons.push("Total capital must be positive.");
+  if (allocationTotal !== 10_000) {
+    reasons.push(translate(locale, "backtest.builder.validation.allocation"));
   }
-  if (state.from > state.to) reasons.push("Start date must not be after end date.");
+  if (!Number.isFinite(state.totalCapital) || state.totalCapital <= 0) {
+    reasons.push(translate(locale, "backtest.builder.validation.capital"));
+  }
+  if (state.from > state.to) reasons.push(translate(locale, "backtest.builder.validation.dates"));
   const adjustmentPolicy =
     state.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
   for (const leg of state.legs) {
     if (!leg.backtestable || !leg.datasetVersionId || leg.timeframe !== state.timeframe) {
-      reasons.push(`${leg.symbol} needs an eligible ${state.timeframe} dataset for this range.`);
+      reasons.push(
+        translate(locale, "backtest.builder.validation.dataset", {
+          symbol: leg.symbol,
+          timeframe: state.timeframe,
+        }),
+      );
     }
     if (!leg.availableAdjustments.includes(adjustmentPolicy)) {
-      reasons.push(`${leg.symbol} does not have a ${adjustmentPolicy} dataset for this range.`);
+      reasons.push(
+        translate(locale, "backtest.builder.validation.adjustment", {
+          symbol: leg.symbol,
+          policy: adjustmentPolicy,
+        }),
+      );
     }
     if (leg.leverage < 1 || leg.leverage > leg.maxLeverage) {
-      reasons.push(`${leg.symbol} leverage must be between 1 and ${leg.maxLeverage}.`);
+      reasons.push(
+        translate(locale, "backtest.builder.validation.leverage", {
+          symbol: leg.symbol,
+          max: leg.maxLeverage,
+        }),
+      );
     }
     if (
       !leg.supportedMarkets.includes(leg.market) ||
       !leg.supportedTimeframes.includes(state.timeframe)
     ) {
-      reasons.push(`${leg.strategyName} does not support ${leg.symbol} on ${state.timeframe}.`);
+      reasons.push(
+        translate(locale, "backtest.builder.validation.strategy", {
+          strategy: leg.strategyName,
+          symbol: leg.symbol,
+          timeframe: state.timeframe,
+        }),
+      );
     }
     try {
       if (!leg.strategyCode.startsWith("custom:")) {
         normalizeStrategyParameters(leg.strategyCode, leg.strategyParameters);
       }
-    } catch (error) {
+    } catch {
       reasons.push(
-        `${leg.symbol}: ${error instanceof Error ? error.message : "Invalid strategy parameters."}`,
+        translate(locale, "backtest.builder.validation.parameters", { symbol: leg.symbol }),
       );
     }
   }
   if (!canonicalBacktestSubmissionSchema.safeParse(toUncheckedSubmission(state)).success) {
-    if (reasons.length === 0) reasons.push("Review the portfolio assumptions and cost bounds.");
+    if (reasons.length === 0) {
+      reasons.push(translate(locale, "backtest.builder.validation.assumptions"));
+    }
   }
   return [...new Set(reasons)];
 }
@@ -379,8 +405,11 @@ function toUncheckedSubmission(state: BuilderState): PortfolioBacktestSubmission
   };
 }
 
-export function toPortfolioBacktestSubmission(state: BuilderState): PortfolioBacktestSubmission {
-  const reasons = builderValidationReasons(state);
+export function toPortfolioBacktestSubmission(
+  state: BuilderState,
+  locale: Locale = "en",
+): PortfolioBacktestSubmission {
+  const reasons = builderValidationReasons(state, locale);
   if (reasons.length > 0) throw new Error(reasons.join(" "));
   return canonicalBacktestSubmissionSchema.parse(
     toUncheckedSubmission(state),

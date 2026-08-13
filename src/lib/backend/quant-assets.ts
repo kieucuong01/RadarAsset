@@ -272,10 +272,18 @@ export async function loadQuantDataReadiness(
         started_at: Date;
         finished_at: Date | null;
         error_code: string | null;
+        last_success_at: Date | null;
       }>
     >`
-      SELECT command, status, started_at, finished_at, error_code
+      SELECT
+        command,
+        status,
+        started_at,
+        finished_at,
+        error_code,
+        MAX(finished_at) FILTER (WHERE status = 'succeeded') OVER () AS last_success_at
       FROM market_ingestion_scheduler_runs
+      WHERE status IN ('succeeded', 'failed')
       ORDER BY started_at DESC
       LIMIT 1
     `,
@@ -365,13 +373,13 @@ export async function loadQuantDataReadiness(
       }
     : null;
   const lastSchedulerSuccessAt =
-    latestScheduler?.status === "succeeded"
-      ? (latestScheduler.finished_at?.toISOString() ?? null)
-      : null;
+    latestScheduler?.last_success_at?.toISOString() ?? null;
   const schedulerRecent = Boolean(
-    latestScheduler?.status === "succeeded" &&
-    latestScheduler.finished_at &&
-    now.getTime() - latestScheduler.finished_at.getTime() <= 25 * 60 * 60 * 1000,
+    latestScheduler?.last_success_at &&
+    now.getTime() - latestScheduler.last_success_at.getTime() <= 25 * 60 * 60 * 1000,
+  );
+  const backlogOverAge = Boolean(
+    oldestBacklog && now.getTime() - oldestBacklog.createdAt.getTime() > 6 * 60 * 60 * 1000,
   );
 
   return {
@@ -379,7 +387,7 @@ export async function loadQuantDataReadiness(
       activeDatasetsByMarketTimeframe.some((row) => row.count > 0) &&
       missingDatasetCount === 0 &&
       staleDatasetCount === 0 &&
-      backlogCount === 0 &&
+      !backlogOverAge &&
       schedulerRecent,
     instrumentsByMarket,
     activeDatasetsByMarketTimeframe,

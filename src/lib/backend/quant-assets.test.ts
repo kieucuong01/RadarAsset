@@ -225,6 +225,7 @@ describe("supported Quant asset catalog", () => {
         started_at: new Date("2026-08-14T10:00:00Z"),
         finished_at: new Date("2026-08-14T10:30:00Z"),
         error_code: null,
+        last_success_at: new Date("2026-08-14T10:30:00Z"),
       },
     ]);
 
@@ -274,6 +275,62 @@ describe("supported Quant asset catalog", () => {
         where: { organizationId: "org-a" },
       }),
     );
+  });
+
+  it("uses the latest terminal run, preserves the latest success, and tolerates a young backlog", async () => {
+    prisma.asset.groupBy.mockResolvedValue([
+      { market: "crypto_spot", _count: { _all: 1 } },
+    ]);
+    prisma.providerInstrument.count.mockResolvedValue(1);
+    prisma.dataset.findMany.mockResolvedValue([
+      {
+        timeframe: "1d",
+        asset: { market: "crypto_spot" },
+        versions: [
+          {
+            coverageEnd: new Date("2026-08-14T00:00:00Z"),
+            missingBarCount: 0,
+            sourceMetadata: { mode: "live" },
+          },
+        ],
+      },
+      {
+        timeframe: "1h",
+        asset: { market: "crypto_spot" },
+        versions: [
+          {
+            coverageEnd: new Date("2026-08-14T11:00:00Z"),
+            missingBarCount: 0,
+            sourceMetadata: { mode: "live" },
+          },
+        ],
+      },
+    ]);
+    prisma.marketIngestionRequest.groupBy.mockResolvedValue([
+      { status: "queued", timeframe: "1h", _count: { _all: 1 } },
+    ]);
+    prisma.marketIngestionRequest.findFirst.mockResolvedValue({
+      createdAt: new Date("2026-08-14T11:00:00Z"),
+    });
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        command: "hourly",
+        status: "failed",
+        started_at: new Date("2026-08-14T11:30:00Z"),
+        finished_at: new Date("2026-08-14T11:31:00Z"),
+        error_code: "provider_failure",
+        last_success_at: new Date("2026-08-14T10:30:00Z"),
+      },
+    ]);
+
+    const result = await loadQuantDataReadiness(
+      { userId: "user-a", organizationId: "org-a", role: "viewer" },
+      new Date("2026-08-14T12:00:00Z"),
+    );
+
+    expect(result.readyForBacktest).toBe(true);
+    expect(result.lastSchedulerSuccessAt).toBe("2026-08-14T10:30:00.000Z");
+    expect(result.latestSchedulerRun?.status).toBe("failed");
   });
 
   it("accepts active warning datasets and ranks eligible assets before unavailable catalog rows", async () => {

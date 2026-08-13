@@ -1,5 +1,8 @@
 import type { CreateCustomStrategyInput } from "@/lib/custom-strategies/contracts";
-import { parseStoredCustomStrategies } from "@/lib/strategy-lab/custom-strategy";
+import {
+  parseStoredCustomStrategies,
+  serializeCustomStrategies,
+} from "@/lib/strategy-lab/custom-strategy";
 
 const LEGACY_KEY = "radarasset.strategy-lab.v1";
 const MARKER_KEY = "radarasset.strategy-lab.db-migration.v1";
@@ -14,6 +17,9 @@ export async function migrateLegacyStrategies(
     return { imported: 0, skipped: 0, failed: 0 };
   }
   const strategies = parseStoredCustomStrategies(storage.getItem(LEGACY_KEY));
+  const unsupported = strategies
+    .filter((strategy) => strategy.kind === "fundamental_threshold")
+    .map(({ readiness: _readiness, ...strategy }) => strategy);
   const executable = strategies.flatMap((strategy): CreateCustomStrategyInput[] => {
     if (strategy.kind === "scheduled_dca") {
       return [
@@ -60,7 +66,11 @@ export async function migrateLegacyStrategies(
       return { imported, skipped, failed: 1 };
     }
   }
-  storage.removeItem(LEGACY_KEY);
+  if (unsupported.length > 0) {
+    storage.setItem(LEGACY_KEY, serializeCustomStrategies(unsupported));
+  } else {
+    storage.removeItem(LEGACY_KEY);
+  }
   storage.setItem(MARKER_KEY, "complete");
   return { imported, skipped, failed: 0 };
 }

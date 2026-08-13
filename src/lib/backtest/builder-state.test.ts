@@ -106,6 +106,17 @@ describe("portfolio backtest builder state", () => {
     expect(builderValidationReasons(state)).toContain("Add at least one backtestable asset.");
   });
 
+  it("localizes validation reasons for the active UI locale", () => {
+    const state = createInitialBuilderState(new Date("2026-08-11T00:00:00.000Z"));
+
+    expect(builderValidationReasons(state, "vi")).toContain(
+      "Thêm ít nhất một tài sản có thể backtest.",
+    );
+    expect(builderValidationReasons(state, "en")).toContain(
+      "Add at least one backtestable asset.",
+    );
+  });
+
   it("blocks total-return mode when any leg only has raw data", () => {
     const state = addTwoAssets();
     const adjusted = reduceBuilder(state, {

@@ -49,7 +49,8 @@ describe("legacy Strategy Lab migration", () => {
     const result = await migrateLegacyStrategies(storageAdapter(storage), create);
     expect(result).toEqual({ imported: 2, skipped: 1, failed: 0 });
     expect(create).toHaveBeenCalledTimes(2);
-    expect(storage.has("radarasset.strategy-lab.v1")).toBe(false);
+    expect(storage.get("radarasset.strategy-lab.v1")).toContain("fundamental_threshold");
+    expect(storage.get("radarasset.strategy-lab.v1")).not.toContain("scheduled_dca");
     expect(storage.get("radarasset.strategy-lab.db-migration.v1")).toBe("complete");
   });
 
