@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from collect_smart_insights import run_live_smoke
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
@@ -209,9 +210,8 @@ def test_farside_supports_btc_eth_sol_and_quarantines_bad_total() -> None:
 
 
 def test_coinmetrics_collects_only_closed_daily_metrics() -> None:
-    batch = CoinMetricsCollector(
-        transport=FakeTransport(fixture_text("coinmetrics.json"))
-    ).collect(NOW)
+    transport = FakeTransport(fixture_text("coinmetrics.json"))
+    batch = CoinMetricsCollector(transport=transport).collect(NOW)
 
     cutoff = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
     assert {row.effective_at.hour for row in batch.observations} == {0}
@@ -224,7 +224,10 @@ def test_coinmetrics_collects_only_closed_daily_metrics() -> None:
     assert all(row.asset_symbol == "BTC" for row in batch.observations)
     assert {
         row.dimensions["provider_metric"] for row in batch.observations
-    } == {"TxTfrValAdjUSD", "AdrActCnt", "CapMVRVCur", "NVTAdj", "SOPR", "NUPL"}
+    } == {"AdrActCnt", "CapMVRVCur"}
+    assert parse_qs(urlsplit(transport.calls[0][0]).query)["metrics"] == [
+        "AdrActCnt,CapMVRVCur"
+    ]
 
 
 def test_coinmetrics_paging_cannot_move_backward() -> None:

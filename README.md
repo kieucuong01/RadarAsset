@@ -131,12 +131,12 @@ Run enabled daily collectors after applying the Smart Insights migration:
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily
 ```
 
-The code-owned enabled set currently contains Alternative.me, mempool.space, DefiLlama stablecoin
-history, DefiLlama chain TVL, and Deribit public data; each passed its own bounded live smoke.
-Coin Metrics Community remains disabled after returning HTTP 403 for the requested on-chain metric
-set. Farside, CoinShares, and BitInfoCharts remain disabled until Firecrawl passes their production
-parser smoke. The official Firecrawl self-host baseline requires Docker Compose; alternatively set
-`FIRECRAWL_API_URL=https://api.firecrawl.dev` and provide `FIRECRAWL_API_KEY` for the hosted API.
+The code-owned enabled set currently contains Alternative.me, Coin Metrics Community active
+addresses and MVRV, mempool.space, DefiLlama stablecoin history, DefiLlama chain TVL, and Deribit
+public data; each passed its own bounded live smoke. Farside, CoinShares, and BitInfoCharts remain
+disabled until Firecrawl passes their production parser smoke. The official Firecrawl self-host
+baseline requires Docker Compose; alternatively set `FIRECRAWL_API_URL=https://api.firecrawl.dev`
+and provide `FIRECRAWL_API_KEY` for the hosted API.
 
 The Crypto Regime Score is deterministic and point-in-time. Its six groups are momentum 20%, flow
 25%, liquidity 15%, on-chain 20%, derivatives 10%, and sentiment 10%. A score is persisted as

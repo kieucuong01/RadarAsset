@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
+import collect_smart_insights
 from collect_smart_insights import run_collection, select_sources
 from smart_insights.contracts import (
     CollectionMode,
@@ -36,6 +37,23 @@ from smart_insights.validation import ObservationValidationError, validate_obser
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_database_connection_accepts_prisma_public_schema_url() -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    sentinel = object()
+
+    def connect(url: str, **kwargs: object) -> object:
+        calls.append((url, kwargs))
+        return sentinel
+
+    connection = collect_smart_insights.connect_database(
+        "postgresql://user:pass@localhost:5432/qa?schema=public&sslmode=disable",
+        connection_factory=connect,
+    )
+
+    assert connection is sentinel
+    assert calls[0][0] == "postgresql://user:pass@localhost:5432/qa?sslmode=disable"
 
 
 class FakeResponse:
@@ -151,6 +169,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
+        "coinmetrics-community",
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
@@ -167,6 +186,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     )
     assert tuple(source.code for source in sources_for_schedule("daily")) == (
         "alternative-fng",
+        "coinmetrics-community",
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",

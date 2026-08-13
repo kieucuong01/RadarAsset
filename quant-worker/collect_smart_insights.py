@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 from psycopg.rows import dict_row
 
+from ingest_market_data import psycopg_connection_url
 from smart_insights.artifacts import ArtifactStore
 from smart_insights.briefing_pipeline import (
     PostgresBriefingRepository,
@@ -617,6 +618,16 @@ def _emit_smoke(outcome: LiveSmokeOutcome) -> None:
     )
 
 
+def connect_database(
+    database_url: str, *, connection_factory: Callable[..., Any] = psycopg.connect
+) -> Any:
+    return connection_factory(
+        psycopg_connection_url(database_url),
+        autocommit=True,
+        row_factory=dict_row,
+    )
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -657,9 +668,7 @@ def main(
             database_url = os.getenv("DATABASE_URL")
             if not database_url:
                 raise ValueError("DATABASE_URL is required.")
-            connection = psycopg.connect(
-                database_url, autocommit=True, row_factory=dict_row
-            )
+            connection = connect_database(database_url)
             repository = PostgresInsightRepository(connection)
             repository.upsert_metric_definitions(
                 CRYPTO_METRIC_DEFINITIONS

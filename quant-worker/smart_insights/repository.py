@@ -698,7 +698,8 @@ class PostgresInsightRepository:
             cursor.execute(
                 """
                 SELECT bar.id, asset.symbol AS asset_symbol, bar.ts, bar.close,
-                       version.published_at AS observed_at
+                       version.published_at
+                         AT TIME ZONE current_setting('TIMEZONE') AS observed_at
                 FROM dataset_bars bar
                 JOIN dataset_versions version ON version.id = bar.dataset_version_id
                 JOIN datasets dataset ON dataset.id = version.dataset_id
@@ -707,9 +708,13 @@ class PostgresInsightRepository:
                   AND dataset.timeframe = '1d'
                   AND version.is_active = true
                   AND version.quality_status IN ('passed', 'warning')
-                  AND version.published_at <= %s
+                  AND version.published_at <= (
+                    %s AT TIME ZONE current_setting('TIMEZONE')
+                  )
                   AND bar.ts <= %s
-                  AND bar.ingested_at <= %s
+                  AND bar.ingested_at <= (
+                    %s AT TIME ZONE current_setting('TIMEZONE')
+                  )
                 ORDER BY bar.ts DESC
                 LIMIT %s
                 """,

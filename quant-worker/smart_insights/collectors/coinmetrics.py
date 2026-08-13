@@ -15,12 +15,8 @@ from . import CollectionBatch
 
 
 _METRICS = {
-    "TxTfrValAdjUSD": "crypto.onchain.adjusted_transfer_usd",
     "AdrActCnt": "crypto.onchain.active_addresses",
     "CapMVRVCur": "crypto.onchain.mvrv",
-    "NVTAdj": "crypto.onchain.nvt",
-    "SOPR": "crypto.onchain.sopr",
-    "NUPL": "crypto.onchain.nupl",
 }
 _ALLOWED_QUERY = {
     "assets",

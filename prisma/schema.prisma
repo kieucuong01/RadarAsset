@@ -758,7 +758,7 @@ model MetricObservation {
   publishedAt        DateTime?          @map("published_at") @db.Timestamptz(3)
   observedAt         DateTime           @map("observed_at") @db.Timestamptz(3)
   revision           Int                @default(1)
-  value              Decimal            @db.Decimal(30, 10)
+  value              Decimal            @db.Decimal(40, 10)
   naturalKey         String             @map("natural_key")
   dimensionKey       String             @map("dimension_key")
   dimensions         Json               @default("{}")

@@ -36,6 +36,7 @@ Current verified and enabled sources:
 | Source | Market | Frequency | Collection |
 | --- | --- | --- | --- |
 | `alternative-fng` | Crypto | Daily | API |
+| `coinmetrics-community` | Crypto/on-chain active addresses and MVRV | Daily | API |
 | `mempool-space` | Crypto/on-chain | Daily | API |
 | `defillama-stablecoins` | Crypto/liquidity | Daily | API |
 | `defillama-chains` | Crypto/on-chain | Daily | API |
@@ -52,7 +53,6 @@ Implemented but disabled pending a successful deployment-environment smoke:
 | `fred` | Daily | Requires deployment `FRED_API_KEY` and live smoke |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider/network smoke did not pass |
 | `wgc-gold-etf`, `wgc-central-bank` | Source period | Firecrawl unavailable during smoke |
-| `coinmetrics-community` | Daily | Community endpoint returned HTTP 403 |
 
 Smoke a single registered source without writing observations:
 
@@ -132,4 +132,3 @@ overwrite the original briefing.
 5. Verify authenticated `GET /api/smart-insights/data-health` and the Cockpit freshness labels.
 6. Investigate `stale`, `disabled`, `quarantined`, and `failed` sources independently. Do not
    substitute fixtures or promote a last-known value as current.
-

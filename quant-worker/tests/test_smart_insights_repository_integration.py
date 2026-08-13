@@ -162,6 +162,40 @@ def test_publication_revision_is_idempotent_and_correction_creates_revision_two(
         connection.close()
 
 
+def test_publication_preserves_network_scale_metric_values() -> None:
+    source = _source()
+    metric_code = f"crypto.qa.{uuid4().hex[:8]}"
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        _seed_metric(connection, metric_code)
+        snapshot = _snapshot(source.urls[0], "920000000000000000000")
+        PostgresInsightRepository(connection).publish(
+            source,
+            snapshot,
+            _artifact(snapshot, source.code),
+            [_row(metric_code, "920000000000000000000")],
+        )
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT observation.value
+                FROM metric_observations observation
+                JOIN metric_definitions metric ON metric.id = observation.metric_definition_id
+                WHERE metric.code = %s
+                """,
+                (metric_code,),
+            )
+            assert cursor.fetchone()["value"] == Decimal(
+                "920000000000000000000.0000000000"
+            )
+    finally:
+        _cleanup(connection, source_code=source.code, metric_codes=(metric_code,))
+        connection.close()
+
+
 def test_publication_rolls_back_everything_when_one_metric_is_unknown() -> None:
     source = _source()
     metric_code = f"crypto.qa.{uuid4().hex[:8]}"
@@ -278,3 +312,99 @@ def test_publication_advisory_lock_excludes_same_source_and_effective_day() -> N
             publish_connection, source_code=source.code, metric_codes=(metric_code,)
         )
         publish_connection.close()
+
+
+def test_price_closes_interprets_naive_publication_time_in_database_timezone() -> None:
+    suffix = uuid4().hex[:8]
+    symbol = f"QA{suffix.upper()}"
+    asset_id = str(uuid4())
+    provider_id = str(uuid4())
+    dataset_id = str(uuid4())
+    version_id = str(uuid4())
+    bar_id = str(uuid4())
+    as_of = datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc)
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET TIME ZONE 'Asia/Bangkok'")
+            cursor.execute(
+                """
+                INSERT INTO assets (
+                  id, symbol, name, asset_class, market, timezone,
+                  max_leverage, currency, created_at, updated_at
+                ) VALUES (%s, %s, 'QA asset', 'crypto', 'crypto', 'UTC', 1, 'USD', NOW(), NOW())
+                """,
+                (asset_id, symbol),
+            )
+            cursor.execute(
+                """
+                INSERT INTO data_providers (id, code, name, created_at, updated_at)
+                VALUES (%s, %s, 'QA provider', NOW(), NOW())
+                """,
+                (provider_id, f"qa-price-{suffix}"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO datasets (id, asset_id, timeframe, adjustment_policy, created_at)
+                VALUES (%s, %s, '1d', 'raw', NOW())
+                """,
+                (dataset_id, asset_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO dataset_versions (
+                  id, dataset_id, provider_id, version, checksum,
+                  coverage_start, coverage_end, row_count, missing_bar_count,
+                  quality_status, quality_summary, source_metadata, is_active, published_at
+                ) VALUES (
+                  %s, %s, %s, 1, %s,
+                  %s, %s, 1, 0,
+                  'passed', '{}'::jsonb, '{}'::jsonb, true, %s
+                )
+                """,
+                (
+                    version_id,
+                    dataset_id,
+                    provider_id,
+                    hashlib.sha256(symbol.encode()).hexdigest(),
+                    datetime(2026, 8, 12),
+                    datetime(2026, 8, 12),
+                    datetime(2026, 8, 13, 22, 5),
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO dataset_bars (
+                  id, dataset_version_id, ts, open, high, low, close,
+                  volume, source, quality_flags, ingested_at
+                ) VALUES (
+                  %s, %s, %s, 100, 100, 100, 100,
+                  NULL, 'qa', '[]'::jsonb, %s
+                )
+                """,
+                (
+                    bar_id,
+                    version_id,
+                    datetime(2026, 8, 12, tzinfo=timezone.utc),
+                    datetime(2026, 8, 13, 22, 10),
+                ),
+            )
+
+        closes = PostgresInsightRepository(connection).price_closes(
+            symbol, as_of=as_of
+        )
+
+        assert len(closes) == 1
+        assert closes[0].observed_at == datetime(
+            2026, 8, 13, 15, 5, tzinfo=timezone.utc
+        )
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM dataset_bars WHERE id = %s", (bar_id,))
+            cursor.execute("DELETE FROM dataset_versions WHERE id = %s", (version_id,))
+            cursor.execute("DELETE FROM datasets WHERE id = %s", (dataset_id,))
+            cursor.execute("DELETE FROM data_providers WHERE id = %s", (provider_id,))
+            cursor.execute("DELETE FROM assets WHERE id = %s", (asset_id,))
+        connection.close()

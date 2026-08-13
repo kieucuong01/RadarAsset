@@ -16,6 +16,9 @@ node_modules
 .worktrees/
 .npm-cache
 .venv/
+.local-data/
+.tmp/
+.pytest-tmp-*/
 dist
 dist-ssr
 .output
