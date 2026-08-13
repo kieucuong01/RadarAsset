@@ -2,7 +2,10 @@ param(
     [ValidateSet("all", "hourly", "daily")]
     [string]$Command = "all",
     [string]$PythonExecutable = "python",
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$DrainRequests,
+    [ValidateRange(1, 10000)]
+    [int]$MaxRequestTotal = 500
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +52,11 @@ if ($taskExitCode -eq 0 -and -not $DryRun) {
 if ($taskExitCode -eq 0 -and -not $DryRun) {
     Push-Location $taskRuntimeDirectory
     try {
-        & $taskPython $taskRequestCliPath "--limit" "20" "--env-file" $taskEnvPath
+        $taskRequestArguments = @($taskRequestCliPath, "--limit", "20", "--env-file", $taskEnvPath)
+        if ($DrainRequests) {
+            $taskRequestArguments += @("--drain", "--max-total", [string]$MaxRequestTotal)
+        }
+        & $taskPython @taskRequestArguments
         if ($null -ne $LASTEXITCODE) {
             $taskExitCode = $LASTEXITCODE
         }

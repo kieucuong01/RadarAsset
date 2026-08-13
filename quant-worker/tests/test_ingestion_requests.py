@@ -7,6 +7,7 @@ from backtest.providers import ProviderUnavailableError
 from backtest.publication import PublicationResult
 from process_ingestion_requests import (
     QueuedIngestionRequest,
+    process_ingestion_backlog,
     process_next_ingestion_request,
 )
 
@@ -64,18 +65,17 @@ class FakeProvider:
 
 
 class FakeRequestRepository:
-    def __init__(self, queued: QueuedIngestionRequest | None) -> None:
-        self.queued = queued
+    def __init__(self, queued: QueuedIngestionRequest | list[QueuedIngestionRequest] | None) -> None:
+        self.queue = queued if isinstance(queued, list) else ([] if queued is None else [queued])
         self.claim_count = 0
-        self.completed: tuple[str, str] | None = None
+        self.completed: list[tuple[str, str]] = []
         self.failed: tuple[str, str] | None = None
         self.retried: tuple[str, str] | None = None
         self.prepared = None
 
     def claim_next_request(self) -> QueuedIngestionRequest | None:
         self.claim_count += 1
-        queued, self.queued = self.queued, None
-        return queued
+        return self.queue.pop(0) if self.queue else None
 
     def load_active(self, _request: QueuedIngestionRequest):
         return None
@@ -93,7 +93,7 @@ class FakeRequestRepository:
         )
 
     def complete_request(self, queued: QueuedIngestionRequest, dataset_version_id: str) -> None:
-        self.completed = (queued.id, dataset_version_id)
+        self.completed.append((queued.id, dataset_version_id))
 
     def retry_or_fail(self, queued: QueuedIngestionRequest, code: str) -> None:
         self.retried = (queued.id, code)
@@ -115,7 +115,7 @@ def test_request_worker_claims_once_and_publishes_dataset() -> None:
         "id": "request-1",
         "datasetVersionId": "eth-1h-version",
     }
-    assert repository.completed == ("request-1", "eth-1h-version")
+    assert repository.completed == [("request-1", "eth-1h-version")]
     assert repository.claim_count == 1
     assert repository.prepared.asset == "ETH"
     assert provider.calls[0]["symbol"] == "ETHUSDT"
@@ -159,3 +159,49 @@ def test_request_worker_is_idle_without_queue_work() -> None:
     assert process_next_ingestion_request(repository, lambda _code: FakeProvider(bars()), now=NOW) == {
         "status": "idle"
     }
+
+
+def test_drain_processes_until_idle_without_sleeping() -> None:
+    first = request()
+    second = QueuedIngestionRequest(**{**request().__dict__, "id": "request-2"})
+    repository = FakeRequestRepository([first, second])
+
+    result = process_ingestion_backlog(
+        repository,
+        lambda _code: FakeProvider(bars()),
+        batch_limit=1,
+        drain=True,
+        max_total=10,
+        sleep=lambda _seconds: None,
+        poll_seconds=0.01,
+        now=NOW,
+    )
+
+    assert result == {"status": "succeeded", "processed": 2, "failed": 0}
+    assert repository.completed == [
+        ("request-1", "eth-1h-version"),
+        ("request-2", "eth-1h-version"),
+    ]
+    assert repository.claim_count == 3
+
+
+def test_drain_stops_at_max_total_guard() -> None:
+    requests = [
+        QueuedIngestionRequest(**{**request().__dict__, "id": f"request-{index}"})
+        for index in range(3)
+    ]
+    repository = FakeRequestRepository(requests)
+
+    result = process_ingestion_backlog(
+        repository,
+        lambda _code: FakeProvider(bars()),
+        batch_limit=2,
+        drain=True,
+        max_total=2,
+        sleep=lambda _seconds: None,
+        poll_seconds=0.01,
+        now=NOW,
+    )
+
+    assert result == {"status": "succeeded", "processed": 2, "failed": 0}
+    assert len(repository.completed) == 2

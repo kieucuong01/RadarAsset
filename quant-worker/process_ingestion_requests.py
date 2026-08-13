@@ -163,11 +163,59 @@ def process_next_ingestion_request(
         }
 
 
+def process_ingestion_backlog(
+    repository: RequestRepository,
+    provider_factory: Callable[[str], Any],
+    *,
+    batch_limit: int,
+    drain: bool,
+    max_total: int,
+    sleep: Callable[[float], None] = time.sleep,
+    poll_seconds: float = 5.0,
+    now: datetime | None = None,
+    emit: Callable[[dict[str, str]], None] | None = None,
+) -> dict[str, int | str]:
+    processed = 0
+    failed = 0
+    while processed < max_total:
+        batch_processed = 0
+        for _ in range(batch_limit):
+            if processed >= max_total:
+                break
+            outcome = process_next_ingestion_request(
+                repository,
+                provider_factory,
+                now=now,
+            )
+            if outcome["status"] == "idle":
+                return {
+                    "status": "succeeded" if failed == 0 else "partial_failure",
+                    "processed": processed,
+                    "failed": failed,
+                }
+            batch_processed += 1
+            processed += 1
+            failed += outcome["status"] != "succeeded"
+            if emit is not None:
+                emit(outcome)
+        if not drain:
+            break
+        if batch_processed == 0:
+            sleep(poll_seconds)
+    return {
+        "status": "succeeded" if failed == 0 else "partial_failure",
+        "processed": processed,
+        "failed": failed,
+    }
+
+
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Process queued market ingestion requests.")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--env-file", default=".env.local")
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--drain", action="store_true")
+    parser.add_argument("--max-total", type=int, default=500)
     parser.add_argument("--poll-seconds", type=float, default=5.0)
     return parser
 
@@ -178,7 +226,12 @@ def main(
     connection_factory: Callable[..., Any] = psycopg.connect,
 ) -> int:
     args = _argument_parser().parse_args(argv)
-    if not 1 <= args.limit <= 20 or args.poll_seconds <= 0 or args.poll_seconds > 60:
+    if (
+        not 1 <= args.limit <= 20
+        or not 1 <= args.max_total <= 10_000
+        or args.poll_seconds <= 0
+        or args.poll_seconds > 60
+    ):
         print(json.dumps({"status": "fatal", "errorCode": "configuration_error"}))
         return 2
     try:
@@ -190,35 +243,21 @@ def main(
         )
         database_url = psycopg_connection_url(load_database_url(Path(args.env_file)))
         factory = lambda code: provider_for_code(code, max_pages, max_rows)
-        processed = 0
-        failed = 0
         with connection_factory(database_url, autocommit=True) as connection:
             repository = PostgresRequestRepository(connection)
-            while True:
-                batch_processed = 0
-                for _ in range(args.limit):
-                    outcome = process_next_ingestion_request(repository, factory)
-                    if outcome["status"] == "idle":
-                        break
-                    batch_processed += 1
-                    processed += 1
-                    failed += outcome["status"] != "succeeded"
-                    print(json.dumps(outcome, separators=(",", ":"), sort_keys=True))
-                if not args.watch:
-                    break
-                if batch_processed == 0:
-                    time.sleep(args.poll_seconds)
-        print(
-            json.dumps(
-                {
-                    "status": "succeeded" if failed == 0 else "partial_failure",
-                    "processed": processed,
-                    "failed": failed,
-                },
-                separators=(",", ":"),
+            summary = process_ingestion_backlog(
+                repository,
+                factory,
+                batch_limit=args.limit,
+                drain=args.drain or args.watch,
+                max_total=args.max_total if (args.drain or args.watch) else args.limit,
+                poll_seconds=args.poll_seconds,
+                emit=lambda outcome: print(
+                    json.dumps(outcome, separators=(",", ":"), sort_keys=True)
+                ),
             )
-        )
-        return 0 if failed == 0 else 1
+        print(json.dumps(summary, separators=(",", ":")))
+        return 0 if summary["failed"] == 0 else 1
     except KeyboardInterrupt:
         return 0
     except (OSError, ValueError):

@@ -86,11 +86,19 @@ python quant-worker\sync_provider_instruments.py --queue-ingestion all
 python quant-worker\process_ingestion_requests.py --limit 20 --env-file .env.local
 ```
 
+For a controlled backlog drain after adding a large universe, keep batch size small and cap the
+total work:
+
+```powershell
+python quant-worker\process_ingestion_requests.py --limit 20 --drain --max-total 500 --env-file .env.local
+```
+
 Schedule the shared wrapper instead of running a second worker service:
 
 ```text
 Hourly at minute 10: powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command hourly
 Daily at 01:15 UTC:   powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
+Manual drain:          powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 Start in:             <repository root>
 ```
 

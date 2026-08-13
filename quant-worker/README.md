@@ -73,6 +73,12 @@ python quant-worker\sync_provider_instruments.py --queue-ingestion all
 python quant-worker\process_ingestion_requests.py --limit 20 --env-file .env.local
 ```
 
+To drain a large queued universe without running forever, use a bounded total:
+
+```powershell
+python quant-worker\process_ingestion_requests.py --limit 20 --drain --max-total 500 --env-file .env.local
+```
+
 Initial backfills target ten years for HOSE, the longest configured free-provider crypto history
 from `2017-01-01`, and XAU daily history from `2010-01-01`. Incremental runs merge only a recent
 overlap. XAU/USD hourly remains unsupported until a genuine hourly free source is added.
@@ -88,6 +94,7 @@ propagates the Python exit code, and does not print `.env.local`:
 ```powershell
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 ```
 
 For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
