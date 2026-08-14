@@ -21,7 +21,7 @@ from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot
-from smart_insights.http import HttpResponse
+from smart_insights.http import HttpResponse, SourceFetchError
 from smart_insights.metrics.crypto import ObservationPoint
 from smart_insights.parsers.markdown_table import parse_markdown_table
 from smart_insights.validation import validate_observations
@@ -243,12 +243,39 @@ def test_batch_collectors_use_injected_local_crawler() -> None:
 def test_bitinfocharts_uses_the_injected_scrapling_client() -> None:
     scrapling = FakeCrawler(fixture_text("bitinfocharts.md"))
 
-    batch = build_batch_collectors(scrapling_client=scrapling)[
+    batch = build_batch_collectors(bitinfocharts_crawler=scrapling)[
         "bitinfocharts-top-addresses"
     ](NOW)
 
     assert batch.error_code is None
     assert scrapling.calls == [
+        "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
+    ]
+
+
+def test_batch_builder_wires_bitinfocharts_403_fallback_without_affecting_other_sources() -> None:
+    class BlockedScrapling(FakeCrawlerHtml):
+        def scrape(self, source: object, url: str) -> RawSnapshot:
+            self.calls.append(url)
+            raise SourceFetchError("HTTP_ERROR", status_code=403)
+
+    primary = BlockedScrapling("")
+    fallback = FakeCrawlerHtml("<html>provider page</html>")
+    collectors = build_batch_collectors(
+        scrapling_client=primary,
+        bitinfocharts_fallback=fallback,
+        bitinfocharts_markdown_converter=lambda _html, _url: fixture_text(
+            "bitinfocharts.md"
+        ),
+    )
+
+    batch = collectors["bitinfocharts-top-addresses"](NOW)
+
+    assert batch.error_code is None
+    assert primary.calls == [
+        "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
+    ]
+    assert fallback.calls == [
         "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
     ]
 

@@ -12,8 +12,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 class SourceFetchError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, status_code: int | None = None) -> None:
         self.code = code
+        self.status_code = status_code
         super().__init__(code)
 
 
@@ -128,10 +129,16 @@ class UrllibTransport:
                     self._sleep(self._retry_delay(error, attempt))
                     continue
                 if error.code == 429:
-                    raise SourceFetchError("RATE_LIMITED") from error
+                    raise SourceFetchError(
+                        "RATE_LIMITED", status_code=error.code
+                    ) from error
                 if 500 <= error.code < 600:
-                    raise SourceFetchError("UPSTREAM_SERVER_ERROR") from error
-                raise SourceFetchError("HTTP_ERROR") from error
+                    raise SourceFetchError(
+                        "UPSTREAM_SERVER_ERROR", status_code=error.code
+                    ) from error
+                raise SourceFetchError(
+                    "HTTP_ERROR", status_code=error.code
+                ) from error
             except (TimeoutError, socket.timeout) as error:
                 raise SourceFetchError("TIMEOUT") from error
             except URLError as error:

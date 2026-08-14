@@ -22,6 +22,7 @@ QUALITY_TIERS = MappingProxyType(
 ENABLED_SOURCE_CODES = frozenset(
     {
         "alternative-fng",
+        "bitinfocharts-top-addresses",
         "coinmetrics-community",
         "cryptocraft",
         "defillama-chains",

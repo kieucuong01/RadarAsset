@@ -131,11 +131,11 @@ class ScraplingClient:
         if not isinstance(status, int):
             raise SourceFetchError("INVALID_RESPONSE")
         if status == 429:
-            raise SourceFetchError("RATE_LIMITED")
+            raise SourceFetchError("RATE_LIMITED", status_code=status)
         if status >= 500:
-            raise SourceFetchError("UPSTREAM_SERVER_ERROR")
+            raise SourceFetchError("UPSTREAM_SERVER_ERROR", status_code=status)
         if not 200 <= status < 300:
-            raise SourceFetchError("HTTP_ERROR")
+            raise SourceFetchError("HTTP_ERROR", status_code=status)
         if len(_body(response)) > max_bytes:
             raise SourceFetchError("RESPONSE_TOO_LARGE")
         return response

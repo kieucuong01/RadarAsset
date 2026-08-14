@@ -18,6 +18,10 @@ from psycopg.rows import dict_row
 
 from ingest_market_data import psycopg_connection_url
 from smart_insights.artifacts import ArtifactStore
+from smart_insights.bitinfocharts_acquisition import (
+    BitInfoChartsCrawler,
+    NodriverBitInfoChartsClient,
+)
 from smart_insights.briefing_pipeline import (
     PostgresBriefingRepository,
     generate_briefing,
@@ -491,8 +495,16 @@ def build_batch_collectors(
     *,
     scrapling_client: Any | None = None,
     large_address_transport: Any | None = None,
+    bitinfocharts_crawler: Any | None = None,
+    bitinfocharts_fallback: Any | None = None,
+    bitinfocharts_markdown_converter: Callable[[str, str], str] | None = None,
 ) -> Mapping[str, BatchCollector]:
     scrapling = scrapling_client or ScraplingClient()
+    bitinfocharts_acquisition = bitinfocharts_crawler or BitInfoChartsCrawler(
+        primary=scrapling,
+        fallback=bitinfocharts_fallback or NodriverBitInfoChartsClient(),
+        markdown_converter=bitinfocharts_markdown_converter,
+    )
 
     def coinshares(as_of: datetime) -> CollectionBatch:
         report_url = _discover_coinshares_report(scrapling)
@@ -502,7 +514,7 @@ def build_batch_collectors(
 
     def bitinfocharts(as_of: datetime) -> CollectionBatch:
         previous = _previous_large_address_balances(repository, as_of)
-        return BitInfoChartsCollector(crawler=scrapling).collect(
+        return BitInfoChartsCollector(crawler=bitinfocharts_acquisition).collect(
             as_of,
             previous_balances=previous or None,
         )

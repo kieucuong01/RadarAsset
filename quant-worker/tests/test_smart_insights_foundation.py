@@ -175,6 +175,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
+        "bitinfocharts-top-addresses",
         "coinmetrics-community",
         "cryptocraft",
         "defillama-chains",
@@ -205,6 +206,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert large_addresses.enabled is False
     assert tuple(source.code for source in sources_for_schedule("daily")) == (
         "alternative-fng",
+        "bitinfocharts-top-addresses",
         "coinmetrics-community",
         "defillama-chains",
         "defillama-stablecoins",
@@ -522,18 +524,23 @@ def test_scrapling_rejects_outside_url_before_fetch() -> None:
 
 
 @pytest.mark.parametrize(
-    ("response", "expected_code"),
+    ("response", "expected_code", "expected_status"),
     (
-        (_scrapling_response(url="https://evil.invalid/source"), "REDIRECT_REJECTED"),
-        (_scrapling_response(status=403), "HTTP_ERROR"),
+        (
+            _scrapling_response(url="https://evil.invalid/source"),
+            "REDIRECT_REJECTED",
+            None,
+        ),
+        (_scrapling_response(status=403), "HTTP_ERROR", 403),
         (
             _scrapling_response(headers={"content-type": "application/json"}),
             "INVALID_RESPONSE",
+            None,
         ),
     ),
 )
 def test_scrapling_rejects_invalid_html_responses(
-    response: SimpleNamespace, expected_code: str
+    response: SimpleNamespace, expected_code: str, expected_status: int | None
 ) -> None:
     module = _scrapling_client_module()
     client = module.ScraplingClient(fetcher=lambda _url: response)
@@ -544,6 +551,7 @@ def test_scrapling_rejects_invalid_html_responses(
         )
 
     assert error.value.code == expected_code
+    assert error.value.status_code == expected_status
 
 
 def test_scrapling_caps_html_and_download_bytes() -> None:

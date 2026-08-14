@@ -18,7 +18,7 @@ Copy `.env.example` to `.env.local` and configure:
 - `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
   With either missing, the briefing deliberately remains `quant_only`.
 
-Scrapling and RapidOCR run in the main Python environment. Both receive only source URLs
+Scrapling, MarkItDown, Nodriver, and RapidOCR run in the main Python environment. They receive only source URLs
 registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
 provider images, OCR tokens, and content-addressed artifacts remain private.
 
@@ -34,6 +34,24 @@ Chrome impersonation and stealth headers, without proxies or a challenge solver.
 local ONNX Runtime CPU backend; its packaged models must pass `rapidocr check` before CoinShares is
 eligible for live smoke.
 
+BitInfoCharts also tries Scrapling first. Only an exact `HTTP_ERROR` with status 403 may start the
+Nodriver fallback. The fallback launches one fresh Chrome profile in headful mode outside the visible
+desktop, polls the page HTML for at most 45 seconds under a 60-second outer acquisition deadline, and never clicks
+Turnstile/CAPTCHA, loads persistent cookies, or uses a proxy. Awaited socket/process cleanup is
+independently bounded after cancellation. Headless Chrome did not pass the
+2026-08-14 provider probe. Windows workers therefore require an interactive desktop session; a Linux
+worker requires a separately qualified Xvfb setup before this source can be enabled there.
+
+The provider splits ranks 1-19 and 20-100 across two HTML tables and abbreviates some visible address
+text. The acquisition layer merges exactly ranks 1-100, reads each full address from its allow-listed
+`/bitcoin/address/` link, converts only the normalized table with MarkItDown, and then delegates all
+balance, label, entity-exclusion, and cohort decisions to the existing BitInfoCharts collector.
+
+MarkItDown is MIT-licensed. Nodriver 0.50.1 is AGPL-3.0; non-commercial use does not waive the AGPL
+obligations, so distribution or network deployment requires license review. MarkItDown's Magika
+dependency requires `onnxruntime==1.20.1` on Windows; non-Windows workers retain the newer
+`onnxruntime>=1.22,<2` range. Run both `pip check` and the RapidOCR verification after installation.
+
 ## Source activation gate
 
 `quant-worker/smart_insights/sources.py` is the source of truth. A collector is production-enabled
@@ -45,6 +63,7 @@ Current verified and enabled sources:
 | Source | Market | Frequency | Collection |
 | --- | --- | --- | --- |
 | `alternative-fng` | Crypto | Daily | API |
+| `bitinfocharts-top-addresses` | Crypto/BTC large-address cohort | Daily | Scrapling with Nodriver 403 fallback and MarkItDown normalization |
 | `coinmetrics-community` | Crypto/on-chain active addresses and MVRV | Daily | API |
 | `mempool-space` | Crypto/on-chain | Daily | API |
 | `defillama-stablecoins` | Crypto/liquidity | Daily | API |
@@ -59,8 +78,7 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `bitinfocharts-top-addresses` | Daily | Scrapling live smoke on 2026-08-14 reached the provider but Cloudflare returned 403 (`HTTP_ERROR`). A separate Nodriver 0.50.1 probe launched Chrome but failed closed after 14.704 seconds on an invalid browser/CDP response (`INVALID_RESPONSE`) before a richest-address table was accepted. Nodriver was not added to production dependencies and no observations were published |
-| `mempool-btc-large-addresses` | Daily | Live smoke on 2026-08-14 failed closed with `MISSING_WATCHLIST` because no validated BitInfoCharts cohort exists yet; publication was not attempted |
+| `mempool-btc-large-addresses` | Daily | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
 | `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
@@ -90,6 +108,15 @@ observations or immutable artifacts as part of source rollback.
 Activation evidence on 2026-08-14: migration status reported all 22 migrations applied; bounded
 live smoke and PostgreSQL publication both succeeded for Farside BTC (169 observations), ETH
 (143), and SOL (91), each effective 2026-08-12. CoinShares remains disabled.
+
+BitInfoCharts activation evidence on 2026-08-14: migration status reported all 26 migrations
+applied; the bounded production live smoke and PostgreSQL publication each produced 92
+observations effective 2026-08-14. The validated cohort contained exactly ranks 1-100, with 16
+reviewed exclusions and 84 accepted non-exchange addresses; the minimum accepted balance was
+9,099 BTC and all accepted address observations shared one cohort version. The latest provider run
+was `succeeded`, its raw snapshot was `validated`, and the authenticated Smart Insights Data Health
+panel displayed `bitinfocharts-top-addresses` as `validated` and `FRESH`. The separate
+`mempool-btc-large-addresses` source remains disabled until its own live and publication gates pass.
 
 ## Scheduler matrix
 

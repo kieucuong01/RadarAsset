@@ -1,10 +1,14 @@
-# BitInfoCharts Nodriver Fallback Implementation Plan
+# BitInfoCharts Nodriver Fallback Historical Implementation Plan
+
+> **As-built correction (2026-08-14):** The initial selector-based probe below failed because Nodriver retained a stale CDP node. The approved implementation instead uses fresh headful off-screen Chrome, polls `page.get_content()`, merges the provider's split rank 1-19/20-100 tables, restores full addresses from allow-listed links, and converts the canonical table with MarkItDown 0.1.7. Live smoke and PostgreSQL publication each produced 92 observations, and authenticated Data Health showed the source as `validated` and `FRESH`; the source is now enabled. The design spec and operations runbook are the current operational truth.
+
+> **Archived plan — do not execute:** All unchecked steps and pre-qualification statements below preserve the original decision record only. They are superseded by the as-built correction above, the design spec, and the operations runbook.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Retrieve and publish the real BTC richest-address cohort when BitInfoCharts returns a Cloudflare 403 to Scrapling, using a bounded Nodriver fallback without weakening validation or changing any other source transport.
 
-**Architecture:** Keep `ScraplingClient` as the primary crawler. A BitInfoCharts-only coordinator inspects a structured Scrapling 403 and lazily launches a single Nodriver browser with a fresh profile. The browser returns bounded raw HTML; one generic HTML-table normalizer converts the provider table into the existing `MarkdownTable` contract, and the existing `BitInfoChartsCollector._parse_rows` remains the sole authority for addresses, labels, exclusions, balances, cohort identity, and observations. The source stays disabled until deterministic tests, live smoke, PostgreSQL publication, and Data Health verification all pass.
+**Architecture:** Keep `ScraplingClient` as the primary crawler. A BitInfoCharts-only coordinator inspects a structured Scrapling 403 and lazily launches a single Nodriver browser with a fresh profile. The browser returns bounded raw HTML; one provider-specific HTML-table normalizer converts the provider table into the existing `MarkdownTable` contract, and the existing `BitInfoChartsCollector._parse_rows` remains the sole authority for addresses, labels, exclusions, balances, cohort identity, and observations. The source was kept disabled until deterministic tests, live smoke, PostgreSQL publication, and Data Health verification passed; it is enabled in the as-built state.
 
 **Tech Stack:** Python 3.12-compatible standard library, Nodriver 0.50.1, locally installed Chrome or Chromium, existing Scrapling 0.4.14 transport, `html.parser`, existing psycopg repository, pytest, Prisma 7, Next.js 16, Vitest.
 
