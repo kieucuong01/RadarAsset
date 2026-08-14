@@ -20,6 +20,7 @@ from smart_insights.repository import (
     UnknownMetricError,
 )
 from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
+from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
 from smart_insights.sources import source_for_code
 
 
@@ -31,6 +32,8 @@ def _test_database_url() -> str:
     if not raw_url:
         pytest.skip("TEST_DATABASE_URL is required for PostgreSQL integration tests.")
     parts = urlsplit(raw_url)
+    if not parts.path.rsplit("/", 1)[-1].endswith("_test"):
+        raise RuntimeError("TEST_DATABASE_URL must name a database ending in _test.")
     query = urlencode(
         [(key, value) for key, value in parse_qsl(parts.query) if key != "schema"]
     )
@@ -160,6 +163,136 @@ def test_publication_revision_is_idempotent_and_correction_creates_revision_two(
             ]
     finally:
         _cleanup(connection, source_code=source.code, metric_codes=(metric_code,))
+        connection.close()
+
+
+def test_crawled_crypto_sources_publish_immutable_evidence_and_latest_revision() -> None:
+    suffix = uuid4().hex[:8]
+    base_codes = (
+        "coinglass-margin-borrow",
+        "coinglass-liquidation-maxpain",
+        "blockchaincenter-altcoin-season",
+        "cbbi-public",
+    )
+    sources = {
+        base: replace(
+            source_for_code(base),
+            code=f"qa-{base}-{suffix}",
+            enabled=True,
+        )
+        for base in base_codes
+    }
+    rows = {
+        "coinglass-margin-borrow": ObservationInput(
+            metric_code="crypto.derivatives.margin_borrow.annualized_rate",
+            value=Decimal("4.05"),
+            effective_at=NOW,
+            dimensions={"exchange": "Binance"},
+        ),
+        "coinglass-liquidation-maxpain": ObservationInput(
+            metric_code="crypto.derivatives.liquidation.current_price_usd",
+            value=Decimal("62609.4"),
+            effective_at=NOW,
+            dimensions={"asset": "BTC", "range": "24h"},
+        ),
+        "blockchaincenter-altcoin-season": ObservationInput(
+            metric_code="crypto.cycle.altcoin_season.index",
+            value=Decimal("61"),
+            effective_at=NOW,
+            dimensions={"horizon": "season_90d"},
+        ),
+        "cbbi-public": ObservationInput(
+            metric_code="crypto.cycle.cbbi.confidence",
+            value=Decimal("31.34"),
+            effective_at=NOW,
+            dimensions={"provider_scale": "0_to_1"},
+        ),
+    }
+    provider_codes = tuple(source.code for source in sources.values())
+    connection = psycopg.connect(
+        _test_database_url(), autocommit=True, row_factory=dict_row
+    )
+    try:
+        repository = PostgresInsightRepository(
+            connection, clock=lambda: NOW + timedelta(minutes=5)
+        )
+        repository.upsert_metric_definitions(CRYPTO_METRIC_DEFINITIONS)
+        for base in base_codes:
+            source = sources[base]
+            snapshot = _snapshot(source.urls[0], f"{base}-first")
+            publication = repository.publish(
+                source,
+                snapshot,
+                _artifact(snapshot, source.code),
+                [rows[base]],
+            )
+            assert publication.status == "succeeded"
+
+        cbbi_source = sources["cbbi-public"]
+        corrected_snapshot = _snapshot(cbbi_source.urls[0], "cbbi-corrected")
+        corrected = repository.publish(
+            cbbi_source,
+            corrected_snapshot,
+            _artifact(corrected_snapshot, cbbi_source.code),
+            [replace(rows["cbbi-public"], value=Decimal("32"))],
+        )
+        assert corrected.status == "succeeded"
+
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                "SELECT provider, count(*) AS runs FROM provider_runs WHERE provider = ANY(%s) GROUP BY provider",
+                (list(provider_codes),),
+            )
+            run_counts = {
+                str(row["provider"]): int(row["runs"]) for row in cursor.fetchall()
+            }
+            assert run_counts == {
+                source.code: (2 if base == "cbbi-public" else 1)
+                for base, source in sources.items()
+            }
+            cursor.execute(
+                """
+                SELECT count(*) AS snapshots
+                FROM insight_raw_snapshots snapshot
+                JOIN data_providers provider ON provider.id = snapshot.provider_id
+                WHERE provider.code = ANY(%s)
+                """,
+                (list(provider_codes),),
+            )
+            assert cursor.fetchone()["snapshots"] == 5
+            cursor.execute(
+                """
+                SELECT observation.revision, observation.value
+                FROM metric_observations observation
+                JOIN data_providers provider ON provider.id = observation.provider_id
+                JOIN metric_definitions metric ON metric.id = observation.metric_definition_id
+                WHERE provider.code = %s AND metric.code = %s
+                ORDER BY observation.revision
+                """,
+                (cbbi_source.code, "crypto.cycle.cbbi.confidence"),
+            )
+            assert cursor.fetchall() == [
+                {"revision": 1, "value": Decimal("31.3400000000")},
+                {"revision": 2, "value": Decimal("32.0000000000")},
+            ]
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM provider_runs WHERE provider = ANY(%s)",
+                (list(provider_codes),),
+            )
+            cursor.execute(
+                "DELETE FROM metric_observations WHERE provider_id IN (SELECT id FROM data_providers WHERE code = ANY(%s))",
+                (list(provider_codes),),
+            )
+            cursor.execute(
+                "DELETE FROM insight_raw_snapshots WHERE provider_id IN (SELECT id FROM data_providers WHERE code = ANY(%s))",
+                (list(provider_codes),),
+            )
+            cursor.execute(
+                "DELETE FROM data_providers WHERE code = ANY(%s)",
+                (list(provider_codes),),
+            )
         connection.close()
 
 

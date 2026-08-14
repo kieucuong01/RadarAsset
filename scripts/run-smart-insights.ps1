@@ -10,7 +10,8 @@ param(
     [switch]$AllMemberships,
     [string]$LocalDate,
     [string]$Timezone = "Asia/Bangkok",
-    [string]$BriefingId
+    [string]$BriefingId,
+    [switch]$CbbiBackfill
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +52,7 @@ if ($AllMemberships) { $arguments += "--all-memberships" }
 if ($LocalDate) { $arguments += @("--local-date", $LocalDate) }
 if ($Timezone) { $arguments += @("--timezone", $Timezone) }
 if ($BriefingId) { $arguments += @("--briefing-id", $BriefingId) }
+if ($CbbiBackfill) { $arguments += "--cbbi-backfill" }
 
 & $PythonExecutable @arguments
 exit $LASTEXITCODE

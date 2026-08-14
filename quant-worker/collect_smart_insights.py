@@ -32,6 +32,10 @@ from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollec
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
 from smart_insights.collectors.coinshares import CoinSharesCollector
+from smart_insights.collectors.coinglass import (
+    CoinGlassMarginCollector,
+    CoinGlassMaxPainCollector,
+)
 from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.cryptocraft import CryptoCraftCollector
 from smart_insights.collectors.defillama import (
@@ -46,9 +50,14 @@ from smart_insights.collectors.mempool_large_addresses import (
     AddressWatch,
     MempoolLargeAddressCollector,
 )
+from smart_insights.collectors.blockchaincenter import (
+    BlockchainCenterAltcoinSeasonCollector,
+)
+from smart_insights.collectors.cbbi import CbbiCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.scrapling_client import ScraplingClient
+from smart_insights.rendered_page_client import NodriverRenderedPageClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
@@ -496,15 +505,19 @@ def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
     *,
     scrapling_client: Any | None = None,
+    rendered_client: Any | None = None,
     large_address_transport: Any | None = None,
     bitinfocharts_crawler: Any | None = None,
     bitinfocharts_fallback: Any | None = None,
     bitinfocharts_markdown_converter: Callable[[str, str], str] | None = None,
+    cbbi_backfill: bool = False,
 ) -> Mapping[str, BatchCollector]:
     scrapling = scrapling_client or ScraplingClient()
+    rendered = rendered_client or NodriverRenderedPageClient()
     bitinfocharts_acquisition = bitinfocharts_crawler or BitInfoChartsCrawler(
         primary=scrapling,
-        fallback=bitinfocharts_fallback or NodriverBitInfoChartsClient(),
+        fallback=bitinfocharts_fallback
+        or NodriverBitInfoChartsClient(renderer=rendered),
         markdown_converter=bitinfocharts_markdown_converter,
     )
 
@@ -595,6 +608,18 @@ def build_batch_collectors(
         "deribit-public": lambda as_of: DeribitCollector().collect(as_of),
         "coinshares-weekly": coinshares,
         "bitinfocharts-top-addresses": bitinfocharts,
+        "coinglass-margin-borrow": lambda as_of: CoinGlassMarginCollector(
+            crawler=rendered
+        ).collect(as_of),
+        "coinglass-liquidation-maxpain": lambda as_of: CoinGlassMaxPainCollector(
+            crawler=rendered
+        ).collect(as_of),
+        "blockchaincenter-altcoin-season": lambda as_of: BlockchainCenterAltcoinSeasonCollector(
+            crawler=scrapling
+        ).collect(as_of),
+        "cbbi-public": lambda as_of: CbbiCollector(
+            crawler=scrapling, backfill=cbbi_backfill
+        ).collect(as_of),
         "fred": fred,
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
@@ -684,6 +709,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timezone", default="Asia/Bangkok")
     parser.add_argument("--briefing-id")
     parser.add_argument("--reason")
+    parser.add_argument("--cbbi-backfill", action="store_true")
     return parser
 
 
@@ -740,6 +766,8 @@ def main(
     smoke_collectors: Mapping[str, BatchCollector] | None = None,
 ) -> int:
     args = _argument_parser().parse_args(argv)
+    if args.cbbi_backfill and args.source != "cbbi-public":
+        return 2
     load_environment(Path(args.env_file))
     if args.live_smoke:
         if args.dry_run or not args.source:
@@ -755,7 +783,8 @@ def main(
                 outcome = run_live_smoke(
                     args.source,
                     as_of=smoke_time,
-                    batch_collectors=smoke_collectors or build_batch_collectors(),
+                    batch_collectors=smoke_collectors
+                    or build_batch_collectors(cbbi_backfill=args.cbbi_backfill),
                 )
         except ValueError:
             return 2
@@ -861,7 +890,9 @@ def main(
                 active_collectors = build_production_collectors(
                     repository,
                     artifact_store,
-                    build_batch_collectors(repository),
+                    build_batch_collectors(
+                        repository, cbbi_backfill=args.cbbi_backfill
+                    ),
                 )
         if not (repository is not None and args.schedule.startswith("calendar-")):
             outcomes, exit_code = run_collection(

@@ -51,6 +51,7 @@ def test_four_hourly_is_a_cli_and_wrapper_schedule() -> None:
     assert collect_smart_insights._SOURCE_SCHEDULE["four-hourly"] == "four-hourly"
     wrapper = Path("../scripts/run-smart-insights.ps1").read_text(encoding="utf-8")
     assert '"four-hourly"' in wrapper
+    assert '"--cbbi-backfill"' in wrapper
 
 
 def test_database_connection_accepts_prisma_public_schema_url() -> None:
