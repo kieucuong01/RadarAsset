@@ -312,6 +312,26 @@ def test_pipeline_publication_is_idempotent() -> None:
     assert first.snapshot_id == second.snapshot_id
 
 
+def test_pipeline_publishes_large_address_signal_without_changing_regime_result() -> None:
+    repository = complete_repository()
+
+    result = run_crypto_pipeline(repository, as_of=AS_OF)
+
+    signals = list(repository.snapshots.values())
+    assert result.snapshot.signal_type == "regime"
+    assert {getattr(signal, "signal_type") for signal in signals} == {
+        "regime",
+        "large_address_action",
+    }
+    large_address = next(
+        signal
+        for signal in signals
+        if getattr(signal, "signal_type") == "large_address_action"
+    )
+    assert getattr(large_address, "score") is None
+    assert getattr(large_address, "status") == "unavailable"
+
+
 def _test_database_url() -> str:
     raw_url = os.getenv("TEST_DATABASE_URL")
     if not raw_url:

@@ -17,6 +17,7 @@ from smart_insights.metrics.common import (
     simple_return,
     weighted_score,
 )
+from smart_insights.large_address_metrics import calculate_large_address_snapshot
 from smart_insights.metrics.crypto import (
     COMPONENT_WEIGHTS,
     CRYPTO_METRIC_DEFINITIONS,
@@ -507,6 +508,9 @@ def run_crypto_pipeline(
     previous = repository.latest_signal_snapshot(market="crypto", as_of=as_of)
     snapshot = calculate_crypto_snapshot(repository, as_of=as_of)
     snapshot_id, status = repository.publish_signal_snapshot(snapshot)
+    repository.publish_signal_snapshot(
+        calculate_large_address_snapshot(repository, as_of=as_of)
+    )
     candidates: tuple[SignalCandidate, ...] = ()
     if snapshot.score is not None:
         current = MetricSignalInput(
