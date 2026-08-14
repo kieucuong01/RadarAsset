@@ -122,7 +122,7 @@ def test_success_is_a_single_transaction_with_idempotent_forecast_upserts() -> N
     sql = " ".join(query for query, _ in connection.cursor_value.calls)
     assert "ON CONFLICT" in connection.cursor_value.many[0][0]
     assert "model_evaluations" in sql
-    assert "status = 'completed'" in sql
+    assert "status = 'succeeded'" in sql
 
 
 def test_failure_writes_provenance_but_no_forecasts() -> None:

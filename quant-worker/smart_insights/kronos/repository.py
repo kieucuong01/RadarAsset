@@ -228,7 +228,7 @@ class PostgresKronosRepository:
                 cursor.execute(
                     """
                     UPDATE provider_runs
-                    SET status = 'completed', records_fetched = %s, finished_at = now()
+                    SET status = 'succeeded', records_fetched = %s, finished_at = now()
                     WHERE id = %s
                     """,
                     (len(rows), provider_run_id),
