@@ -289,6 +289,30 @@ SOURCE_ROWS = (
         "official_api",
         "https://www.nasa.gov/nasa-brand-center/images-and-media/",
     ),
+    (
+        "eia-energy",
+        "U.S. EIA Energy",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://api.eia.gov/v2/",),
+        "daily",
+        "eia-energy-v1",
+        11_520,
+        "official_api",
+        "https://www.eia.gov/about/copyrights_reuse.php",
+    ),
+    (
+        "bis-statistics",
+        "BIS Statistics",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://stats.bis.org/api/v1/data",),
+        "weekly",
+        "bis-statistics-v1",
+        20_160,
+        "official_api",
+        "https://www.bis.org/terms_conditions.htm",
+    ),
 )
 
 
@@ -320,6 +344,8 @@ def _definition(row: tuple[object, ...]) -> SourceDefinition:
                 "gdacs-events",
                 "usgs-earthquakes",
                 "nasa-eonet",
+                "eia-energy",
+                "bis-statistics",
             }
             else LicenseScope.RESEARCH_ONLY
         ),

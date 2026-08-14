@@ -158,6 +158,7 @@ def test_registry_rejects_unknown_and_non_https_sources() -> None:
 def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert SOURCE_CODES == (
         "alternative-fng",
+        "bis-statistics",
         "bitinfocharts-top-addresses",
         "cftc-disaggregated",
         "cftc-legacy",
@@ -167,6 +168,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "defillama-chains",
         "defillama-stablecoins",
         "deribit-public",
+        "eia-energy",
         "farside-btc-etf",
         "farside-eth-etf",
         "farside-sol-etf",
@@ -748,7 +750,7 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
     )
 
     assert exit_code == 0
-    assert len(outcomes) == 16
+    assert len(outcomes) == 17
     assert any(
         outcome.source_code == "mempool-btc-large-addresses"
         and outcome.status == "dry_run"
