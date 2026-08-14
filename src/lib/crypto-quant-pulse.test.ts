@@ -207,6 +207,27 @@ describe("Crypto Quant Pulse chart model", () => {
     expect(observations.map((item) => item.kind)).toEqual(["onchain"]);
   });
 
+  it("excludes conflicting and unavailable on-chain facts from Overview", () => {
+    const conflicting = metric(
+      "conflicting-overview",
+      "crypto.onchain.active_addresses_change_30d",
+      "0.08",
+      "2026-08-14T00:00:00Z",
+      "return",
+    );
+    conflicting.freshness = "conflicting";
+    const unavailable = metric(
+      "unavailable-overview",
+      "crypto.stablecoin.supply_change_7d",
+      "0.03",
+      "2026-08-14T00:00:00Z",
+      "return",
+    );
+    unavailable.freshness = "unavailable";
+
+    expect(buildCryptoOverviewObservations(null, [conflicting, unavailable])).toEqual([]);
+  });
+
   it("derives stale Pulse freshness from effective time instead of assuming fresh", () => {
     const stalePulse = cryptoMarketPulseSchema.parse({
       ...pulse,
@@ -223,5 +244,22 @@ describe("Crypto Quant Pulse chart model", () => {
 
     const observations = buildCryptoOverviewObservations(stalePulse, []);
     expect(observations.map((item) => item.freshness)).toEqual(["stale", "stale"]);
+  });
+
+  it("prioritizes stale over partial when partial ETF data is older than the threshold", () => {
+    const stalePartialPulse = cryptoMarketPulseSchema.parse({
+      ...pulse,
+      generatedAt: "2026-08-14T12:00:00Z",
+      etfFlows: {
+        ...pulse.etfFlows,
+        status: "partial",
+        series: [{ ...pulse.etfFlows.series[0], effectiveAt: "2026-08-10T00:00:00Z" }],
+      },
+    });
+
+    expect(
+      buildCryptoOverviewObservations(stalePartialPulse, []).find((item) => item.kind === "etf")
+        ?.freshness,
+    ).toBe("stale");
   });
 });

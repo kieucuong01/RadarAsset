@@ -169,6 +169,7 @@ export function buildCryptoOverviewObservations(
       .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt))
       .at(-1);
     if (pulse.etfFlows.status !== "unavailable" && latestEtf) {
+      const etfFreshness = pulseFreshness(latestEtf.effectiveAt, pulse.generatedAt);
       observations.push({
         kind: "etf",
         label: "ETF flow phiên gần nhất",
@@ -178,16 +179,24 @@ export function buildCryptoOverviewObservations(
         sourceUrl: "https://farside.co.uk",
         effectiveAt: latestEtf.effectiveAt,
         freshness:
-          pulse.etfFlows.status === "partial"
-            ? "partial"
-            : pulseFreshness(latestEtf.effectiveAt, pulse.generatedAt),
+          etfFreshness !== "fresh"
+            ? etfFreshness
+            : pulse.etfFlows.status === "partial"
+              ? "partial"
+              : "fresh",
       });
     }
   }
 
   const onchain = ONCHAIN_OVERVIEW_PRIORITY.flatMap((metricCode) =>
     metrics
-      .filter((metric) => metric.market === "crypto" && metric.metricCode === metricCode)
+      .filter(
+        (metric) =>
+          metric.market === "crypto" &&
+          metric.metricCode === metricCode &&
+          metric.freshness !== "conflicting" &&
+          metric.freshness !== "unavailable",
+      )
       .sort((a, b) => b.effectiveStart.localeCompare(a.effectiveStart)),
   ).find((metric) => Number.isFinite(Number(metric.value)));
   if (onchain) {

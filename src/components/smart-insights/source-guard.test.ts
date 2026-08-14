@@ -215,7 +215,8 @@ describe("Smart Insights source guard", () => {
       "utf8",
     );
 
-    expect(trendPanel).toContain("hsl(var(--chart-1))");
+    expect(trendPanel).toContain('"var(--chart-1)"');
+    expect(trendPanel).not.toContain("hsl(var(--chart-1))");
     expect(trendPanel).not.toContain("#6366f1");
     expect(tabs).toContain("dateTime={regime.effectiveAt}");
   });
