@@ -212,17 +212,17 @@ def load_upstream_predictor(lock: RuntimeLock, device: str) -> KronosShadowAdapt
     try:
         from model import Kronos, KronosPredictor, KronosTokenizer
 
-        cache_dir = lock.runtime_root / "models"
+        model_root = lock.runtime_root / "models"
+        tokenizer_path = model_root / "tokenizer"
+        model_path = model_root / "model"
         tokenizer = KronosTokenizer.from_pretrained(
-            lock.tokenizer_id,
+            tokenizer_path,
             revision=lock.tokenizer_revision,
-            cache_dir=cache_dir,
             local_files_only=True,
         )
         model = Kronos.from_pretrained(
-            lock.model_id,
+            model_path,
             revision=lock.model_revision,
-            cache_dir=cache_dir,
             local_files_only=True,
         )
         predictor = KronosPredictor(model, tokenizer, device=device, max_context=MAX_CONTEXT)

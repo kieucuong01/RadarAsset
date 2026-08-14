@@ -4,26 +4,31 @@ import json
 import sys
 from pathlib import Path
 
-from huggingface_hub import snapshot_download
+from huggingface_hub import HfApi, snapshot_download
 
 
 def download(lock_path: Path, model_root: Path) -> None:
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     revisions = model_root / "resolved-revisions"
     revisions.mkdir(parents=True, exist_ok=True)
+    api = HfApi()
     for name in ("model", "tokenizer"):
         item = lock[name]
+        resolved_revision = api.model_info(item["id"], revision=item["revision"]).sha
+        if resolved_revision != item["revision"]:
+            raise RuntimeError(
+                f"Resolved revision mismatch for {name}: {resolved_revision}"
+            )
         resolved = Path(
             snapshot_download(
                 repo_id=item["id"],
                 revision=item["revision"],
-                cache_dir=model_root,
+                local_dir=model_root / name,
+                local_dir_use_symlinks=False,
             )
         )
-        if resolved.name != item["revision"]:
-            raise RuntimeError(
-                f"Resolved revision mismatch for {name}: {resolved.name}"
-            )
+        if not resolved.is_dir():
+            raise RuntimeError(f"Downloaded directory missing for {name}: {resolved}")
         revision_file = revisions / f"{name}.txt"
         revision_file.write_text(item["revision"], encoding="utf-8")
         if revision_file.read_text(encoding="utf-8").strip() != item["revision"]:

@@ -37,8 +37,8 @@ def test_setup_script_rejects_revision_drift() -> None:
 
     assert "rev-parse HEAD" in script
     assert "Source revision mismatch" in script
-    assert "cache_dir=model_root" in helper
-    assert "resolved.name != item[\"revision\"]" in helper
+    assert "local_dir=model_root / name" in helper
+    assert "model_info(item[\"id\"], revision=item[\"revision\"]).sha" in helper
     assert "download_kronos_runtime.py" in script
     assert "if ($LASTEXITCODE -ne 0)" in script
     assert "-c $downloadScript" not in script
