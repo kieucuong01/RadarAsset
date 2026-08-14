@@ -170,4 +170,55 @@ describe("Smart Insights source guard", () => {
       expect(source).toContain(token);
     }
   });
+
+  it("composes Crypto Market Pulse as six Vietnamese tabs without another request", () => {
+    const tabs = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoQuantPulseTabs.tsx"),
+      "utf8",
+    );
+    for (const value of ["overview", "flows", "sentiment", "cycle", "onchain", "whales"])
+      expect(tabs).toContain(`value="${value}"`);
+    for (const label of [
+      "Tổng quan",
+      "Dòng tiền",
+      "Tâm lý &amp; Phái sinh",
+      "Chu kỳ",
+      "On-chain",
+      "Cá voi BTC",
+    ])
+      expect(tabs).toContain(label);
+    expect(tabs).toContain('defaultValue="overview"');
+    expect(tabs).not.toContain("fetch(");
+
+    const legacy = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "LegacyMarketPulse.tsx"),
+      "utf8",
+    );
+    expect(legacy.match(/fetchCryptoMarketPulse\(/g)).toHaveLength(1);
+    expect(legacy).toContain("<CryptoQuantPulseTabs");
+    expect(legacy).not.toContain('<MetricGrid market="crypto"');
+    expect(legacy).not.toContain("onchain.map");
+  });
+
+  it("keeps CoinGlass pressure and cycle panels sourced and unit-separated", () => {
+    const source = readSmartInsightsSourceTree();
+    for (const token of [
+      "CryptoDerivativesPressurePanel",
+      "CryptoCyclePanel",
+      "coinglass.com/pro/i/MarginFeeChart",
+      "coinglass.com/liquidation-maxpain",
+      "blockchaincenter.net/altcoin-season-index",
+      "colintalkscrypto.com/cbbi",
+      "annualizedRate",
+      "dailyRate",
+      "hourlyRate",
+      "currentPriceUsd",
+      "season90d",
+      "CBBI Confidence",
+      "25",
+      "75",
+      "Không phải mức giá mục tiêu hoặc khuyến nghị giao dịch",
+    ])
+      expect(source).toContain(token);
+  });
 });

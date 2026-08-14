@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
-import { CryptoEtfFlowPanel } from "@/components/smart-insights/CryptoEtfFlowPanel";
-import { CryptoLargeAddressPanel } from "@/components/smart-insights/CryptoLargeAddressPanel";
-import {
-  CryptoFearGreedPanel,
-  type CryptoPanelMode,
-} from "@/components/smart-insights/CryptoFearGreedPanel";
-import { CryptoFundFlowPanel } from "@/components/smart-insights/CryptoFundFlowPanel";
+import type { CryptoPanelMode } from "@/components/smart-insights/CryptoFearGreedPanel";
+import { CryptoQuantPulseTabs } from "@/components/smart-insights/CryptoQuantPulseTabs";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
@@ -108,30 +103,9 @@ export function LegacyMarketPulse({
     () => metrics.filter((metric) => metric.market === "crypto"),
     [metrics],
   );
-  const onchain = cryptoMetrics
-    .filter((metric) => /onchain|stablecoin|etf/.test(metric.metricCode))
-    .slice(0, 4);
   const selectedRegime = regimes.find((regime) => regime.market === market);
   const requestMode: CryptoPanelMode =
     cryptoPulseState === "failed" ? "sample" : cryptoPulseState !== "loaded" ? "loading" : "system";
-  const fearMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.fearGreed.status === "unavailable"
-      ? "unavailable"
-      : requestMode;
-  const etfMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.etfFlows.status === "unavailable"
-      ? "unavailable"
-      : requestMode;
-  const fundMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.fundFlows.status === "unavailable"
-      ? "sample"
-      : requestMode;
-  const largeAddressMode: CryptoPanelMode =
-    requestMode === "system" &&
-    (!cryptoPulse?.largeAddressActivity ||
-      cryptoPulse.largeAddressActivity.status === "unavailable")
-      ? "sample"
-      : requestMode;
 
   return (
     <section className="space-y-6" aria-labelledby="market-pulse-heading">
@@ -160,56 +134,13 @@ export function LegacyMarketPulse({
           <TabsTrigger value="gold">Gold</TabsTrigger>
         </TabsList>
         <TabsContent value="crypto" className="mt-4">
-          <div className="min-w-0 space-y-6">
-            <CryptoFearGreedPanel
-              data={cryptoPulse?.fearGreed ?? null}
-              mode={fearMode}
-              locale={locale}
-            />
-            <CryptoEtfFlowPanel
-              data={cryptoPulse?.etfFlows ?? null}
-              mode={etfMode}
-              locale={locale}
-            />
-            <CryptoFundFlowPanel
-              data={cryptoPulse?.fundFlows ?? null}
-              mode={fundMode}
-              locale={locale}
-            />
-            <CryptoLargeAddressPanel
-              data={cryptoPulse?.largeAddressActivity ?? null}
-              mode={largeAddressMode}
-              locale={locale}
-            />
-            <div className="grid min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="min-w-0 space-y-2.5 rounded-2xl border border-border bg-card p-6">
-                <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <Activity className="size-3" /> {t("overview.market.onChainPulse")}
-                  {!onchain.length ? <DataStatusBadge status="SAMPLE" /> : null}
-                </div>
-                {(onchain.length ? onchain : null)?.map((metric) => (
-                  <div
-                    key={metric.observationId}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="truncate text-muted-foreground" title={metric.metricCode}>
-                      {metric.metricCode.replace("crypto.", "")}
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {metric.value} {metric.unit}
-                    </span>
-                  </div>
-                )) ??
-                  SAMPLE_MARKET_METRICS.crypto.slice(0, 3).map((label, index) => (
-                    <div key={label} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-semibold tabular-nums">{[50, 100, 0][index]}</span>
-                    </div>
-                  ))}
-              </div>
-              <MetricGrid market="crypto" metrics={marketMetrics} locale={locale} />
-            </div>
-          </div>
+          <CryptoQuantPulseTabs
+            pulse={cryptoPulse}
+            metrics={cryptoMetrics}
+            regime={regimes.find((item) => item.market === "crypto")}
+            mode={requestMode}
+            locale={locale}
+          />
         </TabsContent>
         <TabsContent value="macro" className="mt-4">
           <MetricGrid market="macro" metrics={marketMetrics} locale={locale} />
