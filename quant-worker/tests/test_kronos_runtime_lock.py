@@ -33,9 +33,13 @@ def test_runtime_lock_is_reproducible_and_optional() -> None:
 
 def test_setup_script_rejects_revision_drift() -> None:
     script = (ROOT / "quant-worker/scripts/setup_kronos.ps1").read_text()
+    helper = (ROOT / "quant-worker/scripts/download_kronos_runtime.py").read_text()
 
     assert "rev-parse HEAD" in script
     assert "Source revision mismatch" in script
-    assert "local_dir" in script
-    assert "resolved.name != item[\"revision\"]" in script
+    assert "cache_dir=model_root" in helper
+    assert "resolved.name != item[\"revision\"]" in helper
+    assert "download_kronos_runtime.py" in script
+    assert "if ($LASTEXITCODE -ne 0)" in script
+    assert "-c $downloadScript" not in script
     assert "sha256-manifest.json" in script
