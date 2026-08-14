@@ -37,4 +37,5 @@ def test_setup_script_rejects_revision_drift() -> None:
     assert "rev-parse HEAD" in script
     assert "Source revision mismatch" in script
     assert "local_dir" in script
+    assert "resolved.name != item[\"revision\"]" in script
     assert "sha256-manifest.json" in script

@@ -39,13 +39,16 @@ lock_path, model_root = Path(sys.argv[1]), Path(sys.argv[2])
 lock = json.loads(lock_path.read_text(encoding="utf-8"))
 for name in ("model", "tokenizer"):
     item = lock[name]
-    local_dir = model_root / name
-    resolved = snapshot_download(
+    local_dir = model_root / "resolved-revisions"
+    local_dir.mkdir(parents=True, exist_ok=True)
+    resolved = Path(snapshot_download(
         repo_id=item["id"],
         revision=item["revision"],
-        local_dir=local_dir,
-    )
-    revision_file = local_dir / ".locked-revision"
+        cache_dir=model_root,
+    ))
+    if resolved.name != item["revision"]:
+        raise RuntimeError(f"Resolved revision mismatch for {name}: {resolved.name}")
+    revision_file = local_dir / f"{name}.txt"
     revision_file.write_text(item["revision"], encoding="utf-8")
     if revision_file.read_text(encoding="utf-8").strip() != item["revision"]:
         raise RuntimeError(f"Resolved revision mismatch for {name}: {resolved}")
