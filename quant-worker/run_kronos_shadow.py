@@ -79,6 +79,8 @@ def run_shadow(
             evaluation_points=evaluation_points,
             minimum_oos=180,
         )
+        if not dry_run and hasattr(repository, "accumulate_evaluation"):
+            evaluation = repository.accumulate_evaluation(organization_id, evaluation)
         run_id = None
         if not dry_run:
             run_id = repository.persist_success(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from smart_insights.kronos.contracts import Bar, ForecastDistribution, ForecastPoint
-from smart_insights.kronos.evaluation import evaluate
+from smart_insights.kronos.evaluation import accumulate_evaluation, evaluate
 
 
 def history(count: int = 240) -> list[Bar]:
@@ -61,3 +61,28 @@ def test_metrics_and_ready_shadow_gate_after_180_completed_dates() -> None:
     assert 0 <= kronos.interval_coverage <= 1
     assert abs(kronos.calibration_error - abs(kronos.interval_coverage - 0.8)) < 1e-9
     assert {run.volatility_regime for run in result.runs} <= {"LOW", "NORMAL", "HIGH"}
+
+
+def test_daily_shadow_runs_accumulate_unique_cutoffs_across_runs() -> None:
+    first = evaluate(history(220), FakeKronos(), evaluation_points=1, minimum_oos=2)
+    second = evaluate(history(221), FakeKronos(), evaluation_points=1, minimum_oos=2)
+
+    accumulated = accumulate_evaluation(second, first.runs)
+
+    assert accumulated.status == "READY_SHADOW"
+    assert accumulated.completed_forecasts == 2
+    assert len(accumulated.runs) == 30
+    assert {run.forecast_generated_at for run in accumulated.runs} == {
+        first.runs[0].forecast_generated_at,
+        second.runs[0].forecast_generated_at,
+    }
+
+
+def test_accumulation_deduplicates_a_retried_cutoff() -> None:
+    current = evaluate(history(220), FakeKronos(), evaluation_points=1, minimum_oos=2)
+
+    accumulated = accumulate_evaluation(current, current.runs)
+
+    assert accumulated.status == "ACCUMULATING"
+    assert accumulated.completed_forecasts == 1
+    assert len(accumulated.runs) == 15

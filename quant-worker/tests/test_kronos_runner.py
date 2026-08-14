@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -83,3 +84,26 @@ def test_success_persists_revisions_seed_parameters_and_input_fingerprint() -> N
     assert persisted["config"]["modelRevision"] == "model-rev"
     assert len(persisted["input_fingerprint"]) == 64
     assert repo.failure == []
+
+
+def test_runner_reports_tenant_accumulated_progress() -> None:
+    class AccumulatingRepo(Repo):
+        def accumulate_evaluation(self, organization_id, evaluation):
+            assert organization_id == "org-id"
+            return replace(evaluation, status="READY_SHADOW", completed_forecasts=180)
+
+    repo = AccumulatingRepo()
+    outcome = run_shadow(
+        repo,
+        FakePredictor(),
+        organization_id="org-id",
+        as_of=bars()[-1].ts,
+        evaluation_points=1,
+        minimum_input_bars=30,
+        dry_run=False,
+        runtime_metadata={"device": "cpu"},
+    )
+
+    assert outcome.status == "READY_SHADOW"
+    assert outcome.completed_oos == 180
+    assert repo.success[0]["evaluation"].completed_forecasts == 180

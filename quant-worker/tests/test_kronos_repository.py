@@ -8,10 +8,12 @@ from smart_insights.kronos.repository import PostgresKronosRepository, config_fi
 
 
 class Cursor:
-    def __init__(self):
+    def __init__(self, prior_rows=None):
         self.calls = []
         self.many = []
         self._row = None
+        self._rows = []
+        self.prior_rows = prior_rows or []
 
     def __enter__(self):
         return self
@@ -30,6 +32,9 @@ class Cursor:
             self._row = {"id": "run-id"}
         elif "INSERT INTO provider_runs" in normalized and "RETURNING id" in normalized:
             self._row = {"id": "provider-run-id"}
+        elif "FROM model_evaluations" in normalized:
+            self._rows = self.prior_rows
+            self._row = None
         else:
             self._row = None
 
@@ -40,7 +45,8 @@ class Cursor:
         return self._row
 
     def fetchall(self):
-        return []
+        rows, self._rows = self._rows, []
+        return rows
 
 
 class Transaction:
@@ -54,8 +60,8 @@ class Transaction:
 class Connection:
     autocommit = True
 
-    def __init__(self):
-        self.cursor_value = Cursor()
+    def __init__(self, prior_rows=None):
+        self.cursor_value = Cursor(prior_rows)
 
     def transaction(self):
         return Transaction()
@@ -140,3 +146,55 @@ def test_failure_writes_provenance_but_no_forecasts() -> None:
     sql = " ".join(query for query, _ in connection.cursor_value.calls)
     assert "provider_runs" in sql
     assert "'failed'" in sql
+
+
+def test_success_merges_prior_daily_shadow_records_into_latest_evaluation() -> None:
+    generated_at = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    prior = {
+        "metrics": {
+            "rollingErrors": [
+                {
+                    "model": "kronos-small",
+                    "horizon": 1,
+                    "forecastGeneratedAt": generated_at.isoformat(),
+                    "maxInputTs": generated_at.isoformat(),
+                    "forecastFor": (generated_at + timedelta(days=1)).isoformat(),
+                    "predicted": 101,
+                    "lower": 99,
+                    "upper": 103,
+                    "actual": 102,
+                    "cutoffPrice": 100,
+                    "absoluteError": 1,
+                    "scaledAbsoluteError": 0.5,
+                    "directionCorrect": True,
+                    "volatilityRegime": "NORMAL",
+                }
+            ]
+        }
+    }
+    connection = Connection([prior])
+    repo = PostgresKronosRepository(connection)
+    now, distribution, evaluation = output()
+
+    repo.persist_success(
+        organization_id="org-id",
+        as_of=now,
+        config={"configFingerprint": "fingerprint", "modelRevision": "revision"},
+        runtime_metadata={"device": "cpu", "seed": 20260814},
+        input_fingerprint="input",
+        current=distribution,
+        evaluation=evaluation,
+    )
+
+    evaluation_insert = next(
+        params
+        for query, params in connection.cursor_value.calls
+        if "INSERT INTO model_evaluations" in query
+    )
+    payload = __import__("json").loads(evaluation_insert[-1])
+    assert payload["completedOos"] == 1
+    assert payload["rollingErrors"][0]["forecastGeneratedAt"] == generated_at.isoformat()
+    prior_query = next(
+        query for query, _ in connection.cursor_value.calls if "FROM model_evaluations" in query
+    )
+    assert "ORDER BY evaluation.created_at DESC LIMIT 1" in prior_query

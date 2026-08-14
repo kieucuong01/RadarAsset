@@ -31,6 +31,7 @@ class EvaluationRun:
     actual: float
     cutoff_price: float
     absolute_error: float
+    scaled_absolute_error: float
     direction_correct: bool
     volatility_regime: str
 
@@ -120,7 +121,7 @@ def _regime(current: float, prior: list[float]) -> str:
     return "NORMAL"
 
 
-def _metrics(model: str, records: list[EvaluationRun], naive_scale: float) -> EvaluationMetric:
+def _metrics(model: str, records: list[EvaluationRun]) -> EvaluationMetric:
     errors = [record.absolute_error for record in records]
     forecast_returns = [record.predicted / record.cutoff_price - 1 for record in records]
     actual_returns = [record.actual / record.cutoff_price - 1 for record in records]
@@ -134,11 +135,57 @@ def _metrics(model: str, records: list[EvaluationRun], naive_scale: float) -> Ev
     return EvaluationMetric(
         model=model,
         mae=_mean(errors),
-        mase=_mean(errors) / naive_scale if naive_scale > 0 else 0.0,
+        mase=_mean([record.scaled_absolute_error for record in records]),
         directional_accuracy=_mean([float(record.direction_correct) for record in records]),
         spearman_ic=_correlation(_rank(forecast_returns), _rank(actual_returns)),
         interval_coverage=coverage,
         calibration_error=calibration,
+    )
+
+
+def accumulate_evaluation(
+    current: EvaluationResult,
+    prior_runs: tuple[EvaluationRun, ...] | list[EvaluationRun],
+) -> EvaluationResult:
+    """Merge daily shadow samples while keeping one record per model/horizon/cutoff."""
+    keyed = {
+        (record.model, record.horizon, record.forecast_generated_at): record
+        for record in (*prior_runs, *current.runs)
+    }
+    records = sorted(
+        keyed.values(),
+        key=lambda record: (record.forecast_generated_at, record.model, record.horizon),
+    )
+    cutoffs = sorted(
+        {
+            record.forecast_generated_at
+            for record in records
+            if record.model == "kronos-small"
+        }
+    )
+    if not cutoffs:
+        return current
+    metric_models = (
+        "kronos-small",
+        "random-walk",
+        "historical-drift",
+        "momentum-20d",
+        "ema-trend-20d",
+    )
+    metrics = tuple(
+        _metrics(model, [record for record in records if record.model == model])
+        for model in metric_models
+    )
+    completed = len(cutoffs)
+    return EvaluationResult(
+        methodology=current.methodology,
+        status="READY_SHADOW" if completed >= current.minimum_oos else "ACCUMULATING",
+        completed_forecasts=completed,
+        minimum_oos=current.minimum_oos,
+        runs=tuple(records),
+        metrics=metrics,
+        window_start=cutoffs[0],
+        window_end=cutoffs[-1],
     )
 
 
@@ -199,24 +246,20 @@ def evaluate(
                         actual=actual_bar.close,
                         cutoff_price=cutoff.close,
                         absolute_error=abs(predicted - actual_bar.close),
+                        scaled_absolute_error=abs(predicted - actual_bar.close) / naive_scale,
                         direction_correct=_sign(predicted - cutoff.close) == _sign(actual_bar.close - cutoff.close),
                         volatility_regime=regime,
                     )
                 )
 
-    metric_models = ("kronos-small", "random-walk", "historical-drift", "momentum-20d", "ema-trend-20d")
-    metrics = tuple(
-        _metrics(model, [record for record in records if record.model == model], naive_scale)
-        for model in metric_models
-    )
-    completed = len(cutoffs)
-    return EvaluationResult(
+    current = EvaluationResult(
         methodology=METHODOLOGY,
-        status="READY_SHADOW" if completed >= minimum_oos else "ACCUMULATING",
-        completed_forecasts=completed,
+        status="ACCUMULATING",
+        completed_forecasts=len(cutoffs),
         minimum_oos=minimum_oos,
         runs=tuple(records),
-        metrics=metrics,
+        metrics=(),
         window_start=ordered[cutoffs[0]].ts,
         window_end=ordered[cutoffs[-1]].ts,
     )
+    return accumulate_evaluation(current, ())

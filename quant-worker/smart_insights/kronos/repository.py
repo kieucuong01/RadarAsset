@@ -8,7 +8,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from .contracts import Bar, ForecastDistribution
-from .evaluation import EvaluationResult
+from .evaluation import EvaluationResult, EvaluationRun, accumulate_evaluation
 
 
 def config_fingerprint(config: dict[str, Any]) -> str:
@@ -59,6 +59,15 @@ class PostgresKronosRepository:
                 for row in cursor.fetchall()
             ]
 
+    def accumulate_evaluation(
+        self, organization_id: str, evaluation: EvaluationResult
+    ) -> EvaluationResult:
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            prior = self._prior_evaluation_runs(
+                cursor, organization_id, evaluation.methodology
+            )
+        return accumulate_evaluation(evaluation, prior)
+
     @staticmethod
     def _asset_id(cursor) -> str:
         cursor.execute("SELECT id FROM assets WHERE symbol = 'BTC' LIMIT 1")
@@ -84,6 +93,60 @@ class PostgresKronosRepository:
         row = cursor.fetchone()
         return str(row["id"]) if row else None
 
+    @staticmethod
+    def _prior_evaluation_runs(
+        cursor, organization_id: str, methodology: str
+    ) -> tuple[EvaluationRun, ...]:
+        cursor.execute(
+            """
+            SELECT evaluation.metrics
+            FROM model_evaluations AS evaluation
+            JOIN research_runs AS run ON run.id = evaluation.research_run_id
+            WHERE run.organization_id = %s
+              AND run.source = 'kronos-small'
+              AND run.kind = 'btc_shadow_forecast'
+              AND run.status = 'completed'
+              AND evaluation.methodology_version = %s
+            ORDER BY evaluation.created_at DESC
+            LIMIT 1
+            """,
+            (organization_id, methodology),
+        )
+        keyed: dict[tuple[str, int, datetime], EvaluationRun] = {}
+        for row in cursor.fetchall():
+            payload = row.get("metrics") or {}
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            for value in payload.get("rollingErrors", []):
+                try:
+                    generated_at = datetime.fromisoformat(
+                        str(value["forecastGeneratedAt"]).replace("Z", "+00:00")
+                    ).astimezone(timezone.utc)
+                    record = EvaluationRun(
+                        model=str(value["model"]),
+                        horizon=int(value["horizon"]),
+                        forecast_generated_at=generated_at,
+                        max_input_ts=datetime.fromisoformat(
+                            str(value["maxInputTs"]).replace("Z", "+00:00")
+                        ).astimezone(timezone.utc),
+                        forecast_for=datetime.fromisoformat(
+                            str(value["forecastFor"]).replace("Z", "+00:00")
+                        ).astimezone(timezone.utc),
+                        predicted=float(value["predicted"]),
+                        lower=float(value["lower"]) if value.get("lower") is not None else None,
+                        upper=float(value["upper"]) if value.get("upper") is not None else None,
+                        actual=float(value["actual"]),
+                        cutoff_price=float(value["cutoffPrice"]),
+                        absolute_error=float(value["absoluteError"]),
+                        scaled_absolute_error=float(value["scaledAbsoluteError"]),
+                        direction_correct=value.get("directionCorrect") is True,
+                        volatility_regime=str(value["volatilityRegime"]),
+                    )
+                except (KeyError, TypeError, ValueError):
+                    continue
+                keyed[(record.model, record.horizon, generated_at)] = record
+        return tuple(keyed.values())
+
     def persist_success(
         self,
         *,
@@ -101,6 +164,10 @@ class PostgresKronosRepository:
                 existing = self._existing_run(cursor, organization_id, fingerprint)
                 if existing:
                     return existing
+                evaluation = accumulate_evaluation(
+                    evaluation,
+                    self._prior_evaluation_runs(cursor, organization_id, evaluation.methodology),
+                )
                 asset_id = self._asset_id(cursor)
                 parameters = {**config, "runtime": runtime_metadata, "inputFingerprint": input_fingerprint}
                 cursor.execute(
@@ -193,7 +260,16 @@ class PostgresKronosRepository:
                         "ts": record.forecast_for.isoformat(),
                         "horizon": record.horizon,
                         "model": record.model,
+                        "forecastGeneratedAt": record.forecast_generated_at.isoformat(),
+                        "maxInputTs": record.max_input_ts.isoformat(),
+                        "forecastFor": record.forecast_for.isoformat(),
+                        "predicted": record.predicted,
+                        "lower": record.lower,
+                        "upper": record.upper,
+                        "actual": record.actual,
+                        "cutoffPrice": record.cutoff_price,
                         "absoluteError": record.absolute_error,
+                        "scaledAbsoluteError": record.scaled_absolute_error,
                         "directionCorrect": record.direction_correct,
                         "volatilityRegime": record.volatility_regime,
                     }
