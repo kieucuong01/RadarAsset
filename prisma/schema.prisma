@@ -395,6 +395,7 @@ model ForecastPoint {
   asset              Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
   researchRun        ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
 
+  @@unique([researchRunId, model, horizon, generatedAt])
   @@index([assetId, generatedAt(sort: Desc)])
   @@index([researchRunId])
   @@map("forecast_points")

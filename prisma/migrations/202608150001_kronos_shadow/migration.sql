@@ -20,3 +20,6 @@ ALTER TABLE "model_evaluations"
   ADD CONSTRAINT "model_evaluations_research_run_id_fkey"
   FOREIGN KEY ("research_run_id") REFERENCES "research_runs"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
+
+CREATE UNIQUE INDEX "forecast_points_research_run_id_model_horizon_generated_at_key"
+  ON "forecast_points"("research_run_id", "model", "horizon", "generated_at");
