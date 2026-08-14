@@ -9,6 +9,7 @@ export type ResolvedPortfolioHashLeg = {
   datasetChecksum: string;
   strategyVersionId: string;
   implementationHash: string;
+  listingFirstObservedAt: string | null;
   allocationBps: number;
   leverage: number;
   strategyParameters: Record<string, unknown>;
@@ -34,6 +35,7 @@ export function hashResolvedPortfolioRun(
       datasetChecksum: leg.datasetChecksum,
       strategyVersionId: leg.strategyVersionId,
       implementationHash: leg.implementationHash,
+      listingFirstObservedAt: leg.listingFirstObservedAt,
       allocationBps: leg.allocationBps,
       leverage: leg.leverage,
       strategyParameters: Object.fromEntries(

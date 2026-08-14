@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -12,6 +13,7 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -184,6 +186,17 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         {t("backtestResults.advanced.title")}
       </summary>
       <div className="flex min-w-0 flex-col gap-5 px-6 pb-6">
+        {model.aggregate.historicalCoverage?.warningCode === "SURVIVORSHIP_COVERAGE_PARTIAL" ? (
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
+            <AlertTitle>{t("backtestResults.advanced.survivorshipTitle")}</AlertTitle>
+            <AlertDescription>
+              {t("backtestResults.advanced.survivorshipDescription", {
+                date: model.aggregate.historicalCoverage.firstObservedAt?.slice(0, 10) ?? "—",
+              })}
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <div
           className="flex flex-wrap gap-2"
           aria-label={t("backtestResults.advanced.availableAria")}

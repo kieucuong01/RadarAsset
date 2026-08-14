@@ -59,7 +59,20 @@ export type QuantAssetCatalogItem = {
   rowCount: number;
   freshness: MarketDataFreshness;
   backtestable: boolean;
-  reasonCode: "DATASET_UNAVAILABLE" | "DATASET_RANGE_INSUFFICIENT" | null;
+  reasonCode:
+    | "DATASET_UNAVAILABLE"
+    | "DATASET_RANGE_INSUFFICIENT"
+    | "DATASET_PROVIDER_GAP"
+    | "DATASET_CALENDAR_UNVERIFIED"
+    | null;
+  calendarVersion: string | null;
+  qualityIssueCount: number;
+  blockingQualityIssueCount: number;
+  catalogCoverage: {
+    firstObservedAt: string | null;
+    completeForRequestedRange: boolean;
+    warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL" | null;
+  };
   listingStatus: "active" | "inactive" | "delisted" | "unknown";
   availableAdjustments: Array<"raw" | "total_return">;
 };
@@ -82,11 +95,15 @@ export type QuantDataReadinessResponse = {
     count: number;
   }>;
   backlogCount: number;
+  dueBacklogCount: number;
   expectedDatasetCount: number;
   missingDatasetCount: number;
   staleDatasetCount: number;
   missingBarCount: number;
   oldestBacklogAt: string | null;
+  oldestDueBacklogAt: string | null;
+  workerHeartbeatAt: string | null;
+  workerStatus: "active" | "stale" | "unavailable";
   lastSchedulerSuccessAt: string | null;
   latestSchedulerRun: {
     command: "hourly" | "daily" | "all";

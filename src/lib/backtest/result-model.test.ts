@@ -126,6 +126,11 @@ function successfulRun(): BacktestRun {
             fxPolicy: "normalized_returns",
             baseCurrency: "USD",
           },
+          historicalCoverage: {
+            firstObservedAt: "2025-06-01T00:00:00.000Z",
+            completeForRequestedRange: false,
+            warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+          },
         },
         ...baseArtifact,
       },

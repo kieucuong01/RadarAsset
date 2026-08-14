@@ -20,11 +20,15 @@ const validReadiness = {
     { status: "running", timeframe: "1h", count: 2 },
   ],
   backlogCount: 400,
+  dueBacklogCount: 398,
   expectedDatasetCount: 836,
   missingDatasetCount: 803,
   staleDatasetCount: 2,
   missingBarCount: 5,
   oldestBacklogAt: "2026-08-14T09:00:00.000Z",
+  oldestDueBacklogAt: "2026-08-14T09:00:00.000Z",
+  workerHeartbeatAt: "2026-08-14T11:59:30.000Z",
+  workerStatus: "active",
   lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
   latestSchedulerRun: {
     command: "hourly",
@@ -106,6 +110,17 @@ describe("Quant data readiness client", () => {
           status: "failed",
           errorCode: "provider_failure",
         },
+      }),
+    ).toEqual({ tone: "failed", issueCount: 1, providerFailureCount: 0 });
+
+    expect(
+      quantDataOperationsHealth({
+        ...validReadiness,
+        missingDatasetCount: 0,
+        staleDatasetCount: 0,
+        recentProviderFailures: [],
+        workerStatus: "stale",
+        dueBacklogCount: 2,
       }),
     ).toEqual({ tone: "failed", issueCount: 1, providerFailureCount: 0 });
   });

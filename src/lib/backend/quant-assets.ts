@@ -27,6 +27,17 @@ const EMPTY_MARKET_COUNTS: Record<MarketDataMarket, number> = {
   metal_spot: 0,
 };
 const BACKLOG_STATUSES = new Set(["queued", "running"]);
+const PUBLIC_INGESTION_ERROR_CODES = new Set([
+  "ingestion_failed",
+  "invalid_response",
+  "network_error",
+  "provider_rejected",
+  "provider_unavailable",
+  "rate_limited",
+  "response_limit",
+  "stale_run",
+  "unsupported_timeframe",
+]);
 
 function isRealIsoDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -97,6 +108,11 @@ export async function loadQuantAssetCatalog(
       currency: true,
       maxLeverage: true,
       listingStatus: true,
+      listingPeriods: {
+        orderBy: { validFrom: "asc" },
+        take: 1,
+        select: { validFrom: true },
+      },
       datasets: {
         where: { timeframe: query.timeframe, adjustmentPolicy: { in: ["raw", "total_return"] } },
         select: {
@@ -110,6 +126,15 @@ export async function loadQuantAssetCatalog(
               coverageStart: true,
               coverageEnd: true,
               rowCount: true,
+              sourceMetadata: true,
+              issues: {
+                select: {
+                  classification: true,
+                  severity: true,
+                  rangeStart: true,
+                  rangeEnd: true,
+                },
+              },
               bars: {
                 orderBy: { ts: "desc" },
                 take: 1,
@@ -149,11 +174,36 @@ export async function loadQuantAssetCatalog(
         const rangeCovered = Boolean(
           version && version.coverageStart <= requestedStart && version.coverageEnd >= requestedEnd,
         );
+        const intersectingIssues = (version?.issues ?? []).filter(
+          (issue) =>
+            issue.rangeStart &&
+            issue.rangeEnd &&
+            issue.rangeStart <= requestedEnd &&
+            issue.rangeEnd >= requestedStart,
+        );
+        const hasCalendarBlock = intersectingIssues.some(
+          (issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED",
+        );
+        const hasProviderGap = intersectingIssues.some(
+          (issue) => issue.classification === "PROVIDER_GAP",
+        );
         const reasonCode: QuantAssetReasonCode = !version
           ? "DATASET_UNAVAILABLE"
           : !rangeCovered
             ? "DATASET_RANGE_INSUFFICIENT"
-            : null;
+            : hasCalendarBlock
+              ? "DATASET_CALENDAR_UNVERIFIED"
+              : hasProviderGap
+                ? "DATASET_PROVIDER_GAP"
+                : null;
+        const sourceMetadata =
+          version?.sourceMetadata && typeof version.sourceMetadata === "object"
+            ? (version.sourceMetadata as Record<string, unknown>)
+            : {};
+        const firstObservedAt = asset.listingPeriods[0]?.validFrom ?? null;
+        const completeForRequestedRange = Boolean(
+          firstObservedAt && requestedStart >= firstObservedAt,
+        );
 
         return {
           symbol: asset.symbol,
@@ -177,6 +227,23 @@ export async function loadQuantAssetCatalog(
           }),
           backtestable: reasonCode === null,
           reasonCode,
+          calendarVersion:
+            typeof sourceMetadata.calendarVersion === "string"
+              ? sourceMetadata.calendarVersion
+              : null,
+          qualityIssueCount: version?.issues.length ?? 0,
+          blockingQualityIssueCount: intersectingIssues.filter(
+            (issue) =>
+              issue.classification === "PROVIDER_GAP" ||
+              issue.classification === "CALENDAR_RANGE_UNVERIFIED",
+          ).length,
+          catalogCoverage: {
+            firstObservedAt: firstObservedAt?.toISOString() ?? null,
+            completeForRequestedRange,
+            warningCode: completeForRequestedRange
+              ? null
+              : ("SURVIVORSHIP_COVERAGE_PARTIAL" as const),
+          },
           listingStatus: ["active", "inactive", "delisted", "unknown"].includes(asset.listingStatus)
             ? (asset.listingStatus as "active" | "inactive" | "delisted" | "unknown")
             : "unknown",
@@ -197,7 +264,7 @@ export async function loadQuantAssetCatalog(
 }
 
 export async function loadQuantDataReadiness(
-  context: TenantContext,
+  _context: TenantContext,
   now = new Date(),
 ): Promise<QuantDataReadinessResponse> {
   const prisma = getPrisma();
@@ -205,11 +272,11 @@ export async function loadQuantDataReadiness(
   const [
     assetCounts,
     activeDatasets,
-    activeInstrumentCount,
     ingestionCounts,
     oldestBacklog,
     recentFailures,
     schedulerRows,
+    workerHeartbeat,
   ] = await Promise.all([
     prisma.asset.groupBy({
       by: ["market"],
@@ -236,26 +303,17 @@ export async function loadQuantDataReadiness(
         },
       },
     }),
-    prisma.providerInstrument.count({
-      where: {
-        isActive: true,
-        provider: { status: "active" },
-        asset: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
-      },
-    }),
     prisma.marketIngestionRequest.groupBy({
       by: ["status", "timeframe"],
-      where: { organizationId: context.organizationId },
       _count: { _all: true },
     }),
     prisma.marketIngestionRequest.findFirst({
-      where: { organizationId: context.organizationId, status: { in: [...BACKLOG_STATUSES] } },
+      where: { status: { in: [...BACKLOG_STATUSES] } },
       orderBy: { createdAt: "asc" },
       select: { createdAt: true },
     }),
     prisma.marketIngestionRequest.findMany({
       where: {
-        organizationId: context.organizationId,
         status: "failed",
         updatedAt: { gte: failureCutoff },
       },
@@ -287,6 +345,10 @@ export async function loadQuantDataReadiness(
       ORDER BY started_at DESC
       LIMIT 1
     `,
+    prisma.ingestionWorkerHeartbeat.findFirst({
+      orderBy: { heartbeatAt: "desc" },
+      select: { heartbeatAt: true },
+    }),
   ]);
 
   const instrumentsByMarket = { ...EMPTY_MARKET_COUNTS };
@@ -339,12 +401,19 @@ export async function loadQuantDataReadiness(
   const backlogCount = ingestionRequestsByStatusTimeframe
     .filter((row) => BACKLOG_STATUSES.has(row.status))
     .reduce((total, row) => total + row.count, 0);
-  const expectedDatasetCount = activeInstrumentCount * 2;
+  const dueBacklogCount = backlogCount;
+  const expectedDatasetCount =
+    instrumentsByMarket.vn_equity * 2 +
+    instrumentsByMarket.crypto_spot * 2 +
+    instrumentsByMarket.metal_spot;
   const missingDatasetCount = Math.max(0, expectedDatasetCount - activeDatasets.length);
   const providerFailureCounts = new Map<string, number>();
   for (const failure of recentFailures) {
     const code = failure.providerInstrument.provider.code;
-    const errorCode = failure.errorCode ?? "unknown";
+    const errorCode =
+      failure.errorCode && PUBLIC_INGESTION_ERROR_CODES.has(failure.errorCode)
+        ? failure.errorCode
+        : "unknown";
     const key = `${code}:${errorCode}`;
     providerFailureCounts.set(key, (providerFailureCounts.get(key) ?? 0) + 1);
   }
@@ -372,8 +441,7 @@ export async function loadQuantDataReadiness(
         errorCode: latestScheduler.error_code,
       }
     : null;
-  const lastSchedulerSuccessAt =
-    latestScheduler?.last_success_at?.toISOString() ?? null;
+  const lastSchedulerSuccessAt = latestScheduler?.last_success_at?.toISOString() ?? null;
   const schedulerRecent = Boolean(
     latestScheduler?.last_success_at &&
     now.getTime() - latestScheduler.last_success_at.getTime() <= 25 * 60 * 60 * 1000,
@@ -381,6 +449,13 @@ export async function loadQuantDataReadiness(
   const backlogOverAge = Boolean(
     oldestBacklog && now.getTime() - oldestBacklog.createdAt.getTime() > 6 * 60 * 60 * 1000,
   );
+  const workerHeartbeatAt = workerHeartbeat?.heartbeatAt ?? null;
+  const workerStatus = !workerHeartbeatAt
+    ? "unavailable"
+    : now.getTime() - workerHeartbeatAt.getTime() <= 90_000
+      ? "active"
+      : "stale";
+  const workerCanDrainDueBacklog = dueBacklogCount === 0 || workerStatus === "active";
 
   return {
     readyForBacktest:
@@ -388,16 +463,21 @@ export async function loadQuantDataReadiness(
       missingDatasetCount === 0 &&
       staleDatasetCount === 0 &&
       !backlogOverAge &&
+      workerCanDrainDueBacklog &&
       schedulerRecent,
     instrumentsByMarket,
     activeDatasetsByMarketTimeframe,
     ingestionRequestsByStatusTimeframe,
     backlogCount,
+    dueBacklogCount,
     expectedDatasetCount,
     missingDatasetCount,
     staleDatasetCount,
     missingBarCount,
     oldestBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
+    oldestDueBacklogAt: oldestBacklog?.createdAt.toISOString() ?? null,
+    workerHeartbeatAt: workerHeartbeatAt?.toISOString() ?? null,
+    workerStatus,
     lastSchedulerSuccessAt,
     latestSchedulerRun,
     recentProviderFailures,

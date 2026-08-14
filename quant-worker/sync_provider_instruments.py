@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -15,6 +15,7 @@ from backtest.providers import (
     ProviderInstrumentDescriptor,
     VnstockAdapter,
 )
+from backtest.market_calendar import HOSE_TIMEZONE, is_session_day
 from backtest.catalog import FEEDS
 from ingest_market_data import load_database_url, psycopg_connection_url
 
@@ -34,6 +35,67 @@ PROVIDERS = {
         "https://www.dukascopy.com/swiss/english/marketwatch/historical/",
     ),
 }
+
+
+FRESHNESS_TOLERANCE = {
+    "1h": timedelta(minutes=90),
+    "1d": timedelta(hours=36),
+}
+
+
+def _latest_closed_bar_open(market: str, timeframe: str, now: datetime) -> datetime:
+    if now.tzinfo is None:
+        raise ValueError("Queue timestamp must be timezone-aware.")
+    now = now.astimezone(timezone.utc)
+    if market == "crypto_spot":
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        return current_hour - (timedelta(hours=1) if timeframe == "1h" else timedelta(days=1))
+
+    if market == "vn_equity":
+        local_day = now.astimezone(HOSE_TIMEZONE).date()
+        for day_offset in range(14):
+            session_day = local_day - timedelta(days=day_offset)
+            if not is_session_day(session_day, market):
+                continue
+            if timeframe == "1d":
+                session_close = datetime.combine(
+                    session_day, time(15), tzinfo=HOSE_TIMEZONE
+                ).astimezone(timezone.utc)
+                if session_close <= now:
+                    return datetime.combine(
+                        session_day, time(0), tzinfo=HOSE_TIMEZONE
+                    ).astimezone(timezone.utc)
+            else:
+                for hour in (7, 6, 4, 3, 2):
+                    candidate = datetime.combine(
+                        session_day, time(hour), tzinfo=timezone.utc
+                    )
+                    if candidate + timedelta(hours=1) <= now:
+                        return candidate
+        raise ValueError("Unable to resolve the latest closed HOSE bar.")
+
+    candidate = (
+        now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+        if timeframe == "1h"
+        else now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    )
+    step = timedelta(hours=1) if timeframe == "1h" else timedelta(days=1)
+    while not is_session_day(candidate.date(), market):
+        candidate -= step
+    return candidate
+
+
+def market_timeframe_stale_cutoffs(now: datetime) -> dict[tuple[str, str], datetime]:
+    return {
+        (market, timeframe): _latest_closed_bar_open(market, timeframe, now)
+        - FRESHNESS_TOLERANCE[timeframe]
+        for market, timeframes in {
+            "crypto_spot": ("1d", "1h"),
+            "vn_equity": ("1d", "1h"),
+            "metal_spot": ("1d",),
+        }.items()
+        for timeframe in timeframes
+    }
 
 
 def load_service_tenant(env_file: Path = Path(".env.local")) -> tuple[str, str]:
@@ -87,15 +149,51 @@ def select_provider_instruments(
     return sorted(selected, key=lambda item: (item.canonical_symbol, item.market))
 
 
+def collect_provider_descriptors(
+    adapters: Iterable[tuple[str, Any]],
+) -> tuple[list[ProviderInstrumentDescriptor], list[str]]:
+    descriptors: list[ProviderInstrumentDescriptor] = []
+    failures: list[str] = []
+    for code, adapter in adapters:
+        try:
+            descriptors.extend(adapter.list_instruments())
+        except Exception:
+            failures.append(code)
+    return descriptors, failures
+
+
+def complete_catalog_provider_codes(
+    descriptors: Iterable[ProviderInstrumentDescriptor],
+) -> set[str]:
+    counts: dict[str, int] = {}
+    for descriptor in descriptors:
+        code = provider_code(descriptor)
+        counts[code] = counts.get(code, 0) + 1
+    return {
+        code
+        for code, minimum in {
+            "binance-public": 10,
+            "vnstock-vci-free": 100,
+            "dukascopy-public": 1,
+        }.items()
+        if counts.get(code, 0) >= minimum
+    }
+
+
 def sync_provider_instruments(
     connection: psycopg.Connection[Any],
     descriptors: Iterable[ProviderInstrumentDescriptor],
+    *,
+    observed_provider_codes: Iterable[str] | None = None,
 ) -> int:
     rows = sorted(
         select_provider_instruments(descriptors),
         key=lambda item: (provider_code(item), item.canonical_symbol),
     )
     observed_at = datetime.now(timezone.utc)
+    provider_codes = sorted(
+        set(observed_provider_codes or (provider_code(item) for item in rows))
+    )
     synchronized = 0
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -110,15 +208,23 @@ def sync_provider_instruments(
             cursor.execute(
                 """
                 UPDATE provider_instruments AS instrument
-                SET is_active = false
+                SET metadata = jsonb_set(
+                      instrument.metadata,
+                      '{absenceObservationCount}',
+                      to_jsonb(COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) + 1),
+                      true
+                    ),
+                    is_active = CASE
+                      WHEN COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) + 1 < 2
+                        THEN instrument.is_active
+                      ELSE false
+                    END
                 FROM data_providers AS provider
                 WHERE instrument.provider_id = provider.id
-                  AND provider.code IN (
-                    'binance-public', 'dukascopy-public',
-                    'vnstock-vci-free', 'msn-via-vnstock'
-                  )
+                  AND provider.code = ANY(%s)
+                  AND instrument.last_seen_at < %s
                 """,
-                (),
+                (provider_codes, observed_at),
             )
             for descriptor in rows:
                 code = provider_code(descriptor)
@@ -187,6 +293,7 @@ def sync_provider_instruments(
                 metadata = {
                     "catalogSynchronizedAt": observed_at.isoformat(),
                     "source": "approved-provider-catalog",
+                    "absenceObservationCount": 0,
                 }
                 cursor.execute(
                     """
@@ -212,6 +319,47 @@ def sync_provider_instruments(
                     ),
                 )
                 synchronized += 1
+            cursor.execute(
+                """
+                INSERT INTO asset_listing_periods (
+                  id, asset_id, provider_instrument_id, provider_code,
+                  provider_symbol, venue, status, valid_from,
+                  confirmation_count, metadata, created_at
+                )
+                SELECT
+                  gen_random_uuid(), asset.id, instrument.id, provider.code,
+                  instrument.provider_symbol, asset.venue, 'confirmed_active',
+                  instrument.last_seen_at, 1, instrument.metadata, NOW()
+                FROM provider_instruments instrument
+                JOIN data_providers provider ON provider.id = instrument.provider_id
+                JOIN assets asset ON asset.id = instrument.asset_id
+                WHERE provider.code = ANY(%s)
+                  AND instrument.is_active = true
+                  AND NOT EXISTS (
+                    SELECT 1 FROM asset_listing_periods open_period
+                    WHERE open_period.provider_instrument_id = instrument.id
+                      AND open_period.valid_to IS NULL
+                  )
+                """,
+                (provider_codes,),
+            )
+            cursor.execute(
+                """
+                UPDATE asset_listing_periods period
+                SET valid_to = %s,
+                    status = 'confirmed_inactive',
+                    confirmation_count = GREATEST(
+                      period.confirmation_count,
+                      COALESCE((instrument.metadata->>'absenceObservationCount')::int, 2)
+                    )
+                FROM provider_instruments instrument
+                WHERE period.provider_instrument_id = instrument.id
+                  AND period.valid_to IS NULL
+                  AND instrument.is_active = false
+                  AND COALESCE((instrument.metadata->>'absenceObservationCount')::int, 0) >= 2
+                """,
+                (observed_at,),
+            )
             cursor.execute(
                 """
                 UPDATE assets AS asset
@@ -289,15 +437,20 @@ def queue_market_ingestion_requests(
     command: str,
     organization_slug: str = "demo-workspace",
     user_email: str = "demo@radarasset.local",
+    now: datetime | None = None,
 ) -> int:
     if command not in {"all", "daily", "hourly"}:
         raise ValueError("Unsupported bulk ingestion command.")
     timeframe_filter = {"all": "all", "daily": "1d", "hourly": "1h"}[command]
+    cutoffs = market_timeframe_stale_cutoffs(now or datetime.now(timezone.utc))
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                WITH requester AS (
+                WITH queue_lock AS MATERIALIZED (
+                  SELECT pg_advisory_xact_lock(hashtext('market-ingestion-due-queue'))
+                ),
+                requester AS (
                   SELECT org.id AS organization_id, app_user.id AS user_id
                   FROM organizations AS org
                   JOIN app_users AS app_user ON app_user.email = %s
@@ -312,10 +465,32 @@ def queue_market_ingestion_requests(
                   CROSS JOIN LATERAL (
                     VALUES ('1d'), ('1h')
                   ) AS timeframe(timeframe)
+                  LEFT JOIN LATERAL (
+                    SELECT version.coverage_end
+                    FROM datasets AS dataset
+                    JOIN dataset_versions AS version ON version.dataset_id = dataset.id
+                    WHERE dataset.asset_id = asset.id
+                      AND dataset.timeframe = timeframe.timeframe
+                      AND dataset.adjustment_policy = 'raw'
+                      AND version.is_active = true
+                    ORDER BY version.published_at DESC
+                    LIMIT 1
+                  ) AS active_raw ON true
                   WHERE provider.status = 'active'
                     AND pi.is_active = true
                     AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
+                    AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
+                    AND (
+                      active_raw.coverage_end IS NULL
+                      OR active_raw.coverage_end < CASE
+                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1h' THEN %s
+                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1d' THEN %s
+                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1h' THEN %s
+                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1d' THEN %s
+                        WHEN asset.market = 'metal_spot' AND timeframe.timeframe = '1d' THEN %s
+                      END
+                    )
                     AND (%s = 'all' OR %s = timeframe.timeframe)
                 )
                 INSERT INTO market_ingestion_requests (
@@ -328,6 +503,7 @@ def queue_market_ingestion_requests(
                   'queued', 0, NOW(), NOW(), NOW()
                 FROM requester
                 CROSS JOIN candidates
+                CROSS JOIN queue_lock
                 WHERE NOT EXISTS (
                   SELECT 1
                   FROM market_ingestion_requests AS existing
@@ -337,8 +513,19 @@ def queue_market_ingestion_requests(
                     AND existing.timeframe = candidates.timeframe
                     AND existing.status IN ('queued', 'running')
                 )
+                ON CONFLICT DO NOTHING
                 """,
-                (user_email, organization_slug, timeframe_filter, timeframe_filter),
+                (
+                    user_email,
+                    organization_slug,
+                    cutoffs[("crypto_spot", "1h")],
+                    cutoffs[("crypto_spot", "1d")],
+                    cutoffs[("vn_equity", "1h")],
+                    cutoffs[("vn_equity", "1d")],
+                    cutoffs[("metal_spot", "1d")],
+                    timeframe_filter,
+                    timeframe_filter,
+                ),
             )
             return cursor.rowcount
 
@@ -353,9 +540,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         env_file = Path(args.env_file)
         organization_slug, user_email = load_service_tenant(env_file)
-        descriptors = [
-            *BinanceSpotAdapter().list_instruments(),
-            *VnstockAdapter().list_instruments(),
+        descriptors, provider_failures = collect_provider_descriptors(
+            (
+                ("binance-public", BinanceSpotAdapter()),
+                ("vnstock-vci-free", VnstockAdapter()),
+            )
+        )
+        descriptors.append(
             ProviderInstrumentDescriptor(
                 provider_symbol="XAUUSD",
                 canonical_symbol="XAU",
@@ -363,11 +554,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 market="metal_spot",
                 venue="OTC",
                 currency="USD",
-            ),
-        ]
+            )
+        )
+        observed_codes = complete_catalog_provider_codes(descriptors)
         url = psycopg_connection_url(load_database_url(env_file))
         with psycopg.connect(url, autocommit=False) as connection:
-            count = sync_provider_instruments(connection, descriptors)
+            count = sync_provider_instruments(
+                connection, descriptors, observed_provider_codes=observed_codes
+            )
             queued = (
                 queue_market_ingestion_requests(
                     connection,
@@ -380,7 +574,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         print(
             json.dumps(
-                {"status": "succeeded", "synchronized": count, "queued": queued},
+                {
+                    "status": "succeeded" if not provider_failures else "degraded",
+                    "synchronized": count,
+                    "queued": queued,
+                    "providerFailures": provider_failures,
+                },
                 separators=(",", ":"),
             )
         )

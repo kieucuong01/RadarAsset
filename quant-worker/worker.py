@@ -337,7 +337,7 @@ def _process_portfolio_run(
     checkpoint: Callable[[int], None] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     parameters = run.parameters
-    if set(parameters) != {
+    required_parameter_keys = {
         "timeframe",
         "from",
         "to",
@@ -347,6 +347,10 @@ def _process_portfolio_run(
         "slippageBps",
         "assumptions",
         "legs",
+    }
+    if set(parameters) not in {
+        frozenset(required_parameter_keys),
+        frozenset(required_parameter_keys | {"historicalCoverage"}),
     }:
         raise ValueError("Portfolio parameters do not match the allow-listed contract.")
     total_capital = _strict_decimal(parameters["totalCapital"], "totalCapital", "0.00000001", "100000000000")
@@ -530,6 +534,7 @@ def _process_portfolio_run(
         **portfolio.manifest,
         "runId": run.id,
         "datasetVersionIds": list(run.dataset_version_ids),
+        "historicalCoverage": parameters.get("historicalCoverage"),
     }
     for kind, payload in (
         ("equity", portfolio.equity),

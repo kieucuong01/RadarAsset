@@ -32,11 +32,15 @@ const quantDataReadinessSchema = z
         .strict(),
     ),
     backlogCount: z.number().int().nonnegative(),
+    dueBacklogCount: z.number().int().nonnegative(),
     expectedDatasetCount: z.number().int().nonnegative(),
     missingDatasetCount: z.number().int().nonnegative(),
     staleDatasetCount: z.number().int().nonnegative(),
     missingBarCount: z.number().int().nonnegative(),
     oldestBacklogAt: z.string().datetime().nullable(),
+    oldestDueBacklogAt: z.string().datetime().nullable(),
+    workerHeartbeatAt: z.string().datetime().nullable(),
+    workerStatus: z.enum(["active", "stale", "unavailable"]),
     lastSchedulerSuccessAt: z.string().datetime().nullable(),
     latestSchedulerRun: z
       .object({
@@ -111,10 +115,12 @@ export function quantDataOperationsHealth(readiness: QuantDataReadiness) {
     readiness.missingDatasetCount +
     readiness.staleDatasetCount +
     providerFailureCount +
-    (readiness.latestSchedulerRun?.status === "failed" ? 1 : 0);
+    (readiness.latestSchedulerRun?.status === "failed" ? 1 : 0) +
+    (readiness.dueBacklogCount > 0 && readiness.workerStatus !== "active" ? 1 : 0);
+  const workerFailed = readiness.dueBacklogCount > 0 && readiness.workerStatus !== "active";
   return {
     tone:
-      readiness.latestSchedulerRun?.status === "failed"
+      readiness.latestSchedulerRun?.status === "failed" || workerFailed
         ? ("failed" as const)
         : issueCount > 0
           ? ("degraded" as const)

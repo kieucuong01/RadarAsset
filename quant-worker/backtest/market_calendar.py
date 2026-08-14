@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from .models import MarketCalendarContract
+
 
 HOSE_CALENDAR_VERSION = "hose-official-closures-2024-2026-v1"
 HOSE_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -51,6 +53,39 @@ _ANNUALIZATION = {
     ("metal_spot", "1h"): 6_240,
 }
 
+MARKET_CALENDARS = {
+    "vn_equity": MarketCalendarContract(
+        market="vn_equity",
+        venue="HOSE",
+        timezone_name="Asia/Ho_Chi_Minh",
+        version=HOSE_CALENDAR_VERSION,
+        certified_from=HOSE_VERIFIED_FROM,
+        certified_to=HOSE_VERIFIED_TO,
+        weekdays=frozenset(range(5)),
+        hourly_opens_utc=(2, 3, 4, 6, 7),
+        closure_dates=frozenset(_VN_HOLIDAYS),
+    ),
+    "crypto_spot": MarketCalendarContract(
+        market="crypto_spot",
+        venue="BINANCE",
+        timezone_name="UTC",
+        version="crypto-24x7-v1",
+        certified_from=None,
+        certified_to=None,
+        weekdays=frozenset(range(7)),
+    ),
+    "metal_spot": MarketCalendarContract(
+        market="metal_spot",
+        venue="OTC",
+        timezone_name="UTC",
+        version="xau-24x5-rollover-v1",
+        certified_from=None,
+        certified_to=None,
+        weekdays=frozenset(range(5)),
+        rollover_utc_hour=22,
+    ),
+}
+
 
 def annualization_factor(market: str, timeframe: str) -> int:
     try:
@@ -67,15 +102,14 @@ def timestamp_to_market_date(timestamp: datetime, market: str) -> date:
 
 
 def is_session_day(day: date, market: str, *, strict: bool = False) -> bool:
-    if market == "crypto_spot":
-        return True
+    try:
+        contract = MARKET_CALENDARS[market]
+    except KeyError as error:
+        raise ValueError(f"Unsupported market: {market}.") from error
     if market == "vn_equity":
-        if strict and not HOSE_VERIFIED_FROM <= day <= HOSE_VERIFIED_TO:
+        if strict and not contract.certifies(day):
             raise ValueError("HOSE date is outside verified coverage.")
-        return day.weekday() < 5 and day not in _VN_HOLIDAYS
-    if market == "metal_spot":
-        return day.weekday() < 5
-    raise ValueError(f"Unsupported market: {market}.")
+    return day.weekday() in contract.weekdays and day not in contract.closure_dates
 
 
 def expected_bar_timestamps(
@@ -95,11 +129,12 @@ def expected_bar_timestamps(
         raise ValueError(f"Unsupported timeframe: {timeframe}.")
 
     if timeframe == "1h" and market == "vn_equity":
+        contract = MARKET_CALENDARS[market]
         result: set[datetime] = set()
         current = start.date()
         while current <= end.date():
             if is_session_day(current, market):
-                for hour in (2, 3, 4, 6, 7):
+                for hour in contract.hourly_opens_utc:
                     candidate = datetime.combine(current, time(hour), tzinfo=timezone.utc)
                     if start <= candidate <= end:
                         result.add(candidate)
@@ -126,7 +161,12 @@ def expected_bar_timestamps(
     candidate = start
     result = set()
     while candidate <= end:
-        if is_session_day(candidate.date(), market):
+        is_rollover = (
+            market == "metal_spot"
+            and timeframe == "1h"
+            and candidate.hour == MARKET_CALENDARS[market].rollover_utc_hour
+        )
+        if is_session_day(candidate.date(), market) and not is_rollover:
             result.add(candidate)
         candidate += step
     return result

@@ -1,5 +1,10 @@
+from datetime import datetime, timezone
+
 from backtest.providers import ProviderInstrumentDescriptor
 from sync_provider_instruments import (
+    collect_provider_descriptors,
+    complete_catalog_provider_codes,
+    market_timeframe_stale_cutoffs,
     load_service_tenant,
     queue_market_ingestion_requests,
     select_provider_instruments,
@@ -90,9 +95,13 @@ def test_bulk_queue_selects_supported_timeframes_for_all_synced_instruments() ->
     query, params = connection.cursor_instance.queries[0]
     assert "provider_instruments" in query
     assert "market_ingestion_requests" in query
-    assert params == ("demo@radarasset.local", "demo-workspace", "all", "all")
+    assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
+    assert params[-2:] == ("all", "all")
     assert "dukascopy-public" in query
     assert "NOT (provider.code = 'msn-via-vnstock'" not in query
+    assert "active_raw.coverage_end IS NULL" in query
+    assert "pg_advisory_xact_lock" in query
+    assert "ON CONFLICT DO NOTHING" in query
 
 
 def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() -> None:
@@ -110,11 +119,9 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
 
     queries = [query for query, _params in connection.cursor_instance.queries]
     assert not any("DELETE FROM provider_instruments" in query for query in queries)
-    assert any(
-        "UPDATE provider_instruments" in query and "is_active = false" in query
-        for query in queries
-    )
+    assert any("absenceObservationCount" in query for query in queries)
     assert any("instrument_catalog_snapshots" in query for query in queries)
+    assert any("INSERT INTO asset_listing_periods" in query for query in queries)
     assert any(
         "UPDATE market_ingestion_requests" in query
         and "instrument_inactive" in query
@@ -124,6 +131,82 @@ def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() 
         "UPDATE data_providers" in query and "msn-via-vnstock" in query
         for query in queries
     )
+    deactivation = next(
+        (query, params)
+        for query, params in connection.cursor_instance.queries
+        if "absenceObservationCount" in query
+    )
+    assert "provider.code = ANY(%s)" in deactivation[0]
+    assert deactivation[1][0] == ["binance-public"]
+    assert "< 2" in deactivation[0]
+    assert "THEN instrument.is_active" in deactivation[0]
+    assert "instrument.last_seen_at < %s" in deactivation[0]
+
+
+def test_listing_history_keeps_symbol_and_venue_lineage_without_deleting_assets() -> None:
+    connection = FakeConnection()
+    descriptor = ProviderInstrumentDescriptor(
+        provider_symbol="FPT",
+        canonical_symbol="FPT",
+        name="FPT Corporation",
+        market="vn_equity",
+        venue="HOSE",
+        currency="VND",
+    )
+
+    sync_provider_instruments(
+        connection,
+        [descriptor],
+        observed_provider_codes={"vnstock-vci-free"},
+    )
+
+    queries = [query for query, _params in connection.cursor_instance.queries]
+    listing_insert = next(query for query in queries if "INSERT INTO asset_listing_periods" in query)
+    assert "instrument.provider_symbol" in listing_insert
+    assert "asset.venue" in listing_insert
+    assert "confirmed_active" in listing_insert
+    assert not any("DELETE FROM assets" in query for query in queries)
+
+
+def test_catalog_collection_isolates_one_provider_failure() -> None:
+    crypto = ProviderInstrumentDescriptor(
+        provider_symbol="BTCUSDT",
+        canonical_symbol="BTC",
+        name="Bitcoin / Tether",
+        market="crypto_spot",
+        venue="BINANCE",
+        currency="USDT",
+    )
+
+    class FailedAdapter:
+        def list_instruments(self):
+            raise RuntimeError("upstream secret must not escape")
+
+    class HealthyAdapter:
+        def list_instruments(self):
+            return [crypto]
+
+    descriptors, failures = collect_provider_descriptors(
+        (("vnstock-vci-free", FailedAdapter()), ("binance-public", HealthyAdapter()))
+    )
+
+    assert descriptors == [crypto]
+    assert failures == ["vnstock-vci-free"]
+
+
+def test_incomplete_catalog_cannot_deactivate_existing_provider_universe() -> None:
+    descriptors = [
+        ProviderInstrumentDescriptor(
+            provider_symbol="FPT",
+            canonical_symbol="FPT",
+            name="FPT",
+            market="vn_equity",
+            venue="HOSE",
+            currency="VND",
+        )
+    ]
+
+    assert complete_catalog_provider_codes(descriptors) == set()
 
 
 def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
@@ -133,7 +216,47 @@ def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
 
     query, params = connection.cursor_instance.queries[0]
     assert "pi.is_active = true" in query
-    assert params == ("demo@radarasset.local", "demo-workspace", "1d", "1d")
+    assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
+    assert params[-2:] == ("1d", "1d")
+
+
+def test_due_cutoffs_follow_closed_crypto_and_hose_sessions() -> None:
+    now = datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc)
+
+    cutoffs = market_timeframe_stale_cutoffs(now)
+
+    assert cutoffs[("crypto_spot", "1h")] == datetime(
+        2026, 8, 14, 6, 30, tzinfo=timezone.utc
+    )
+    assert cutoffs[("vn_equity", "1h")] == datetime(
+        2026, 8, 14, 5, 30, tzinfo=timezone.utc
+    )
+    assert cutoffs[("vn_equity", "1d")] == datetime(
+        2026, 8, 12, 5, 0, tzinfo=timezone.utc
+    )
+
+
+def test_due_cutoffs_use_previous_hose_session_on_market_holiday() -> None:
+    now = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
+
+    cutoffs = market_timeframe_stale_cutoffs(now)
+
+    assert cutoffs[("vn_equity", "1h")] == datetime(
+        2026, 8, 31, 5, 30, tzinfo=timezone.utc
+    )
+
+
+def test_bulk_queue_excludes_unsupported_xau_hourly_identity() -> None:
+    connection = FakeConnection()
+
+    queue_market_ingestion_requests(
+        connection,
+        command="hourly",
+        now=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+    )
+
+    query, _params = connection.cursor_instance.queries[0]
+    assert "NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')" in query
 
 
 def test_catalog_cli_uses_configured_service_tenant_for_scheduled_queue(monkeypatch) -> None:

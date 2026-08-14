@@ -92,15 +92,16 @@ means a partial provider failure/unavailable capability; successful feeds are st
 Exit `1` means invalid configuration or a fatal database/bootstrap failure. Errors are sanitized;
 provider response bodies and environment values are never logged.
 
-Use `scripts\run-market-ingestion.ps1` as the scheduler boundary. It resolves the repository root,
-performs a bounded retry/drain, verifies the post-run health contract, records scheduler outcomes,
-and does not print `.env.local`. Daily/all runs additionally refresh corporate actions and publish
+Use `scripts\run-market-ingestion.ps1` as the scheduler boundary and keep
+`process_ingestion_requests.py --watch` running as the data worker. The wrapper resolves the
+repository root, enqueues due requests, records scheduler outcomes, and does not wait for the full
+universe or print `.env.local`. Daily/all runs additionally refresh corporate actions and publish
 adjusted datasets:
 
 ```powershell
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
-powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -MaxRequestTotal 500
+powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 ```
 
 For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
@@ -141,6 +142,11 @@ python quant-worker\research_import.py --payload .\local-research\BTC-last30days
 The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `evidence`, `thesis`, `forecasts`, and `providerRuns`. It is designed for adapters around last30days, ai-berkshire, Kronos, and future market-data providers.
 
 ## Smart Insights Crypto Worker
+
+Capacity verification is local and test-only. Set `TEST_DATABASE_URL` to a local database ending
+in `_test`, then run `python run_backtest_capacity.py --runs 20 --workers 10` and the corresponding
+50-run gate with `--workers 20`. The harness uses the production PostgreSQL claim and execution
+path, deletes its temporary organizations, and is not provider-data evidence.
 
 `collect_smart_insights.py` owns the allow-listed Crypto collectors, immutable raw-artifact
 publication, metric definition seeding, point-in-time observation queries, and Crypto Regime Score

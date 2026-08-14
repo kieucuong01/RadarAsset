@@ -57,6 +57,7 @@ function modelWithTrades(): BacktestResultModel {
       analytics: null,
       reportHtml: null,
       robustness: null,
+      historicalCoverage: null,
     },
     legs: [
       {

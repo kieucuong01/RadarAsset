@@ -6,6 +6,7 @@ const { prisma } = vi.hoisted(() => ({
     dataset: { findMany: vi.fn() },
     providerInstrument: { count: vi.fn() },
     marketIngestionRequest: { groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    ingestionWorkerHeartbeat: { findFirst: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }));
@@ -22,6 +23,7 @@ const vnmAsset = {
   currency: "VND",
   maxLeverage: 2,
   listingStatus: "active",
+  listingPeriods: [{ validFrom: new Date("2024-01-01T00:00:00.000Z") }],
   datasets: [
     {
       adjustmentPolicy: "raw",
@@ -32,6 +34,8 @@ const vnmAsset = {
           coverageEnd: new Date("2026-01-01T00:00:00.000Z"),
           rowCount: 500,
           publishedAt: new Date("2026-01-01T09:00:00.000Z"),
+          sourceMetadata: { calendarVersion: "hose-official-closures-2024-2026-v1" },
+          issues: [],
           bars: [{ source: "vnstock" }],
         },
       ],
@@ -47,6 +51,7 @@ const vn30Asset = {
   currency: "VND",
   maxLeverage: 1,
   listingStatus: "inactive",
+  listingPeriods: [{ validFrom: new Date("2024-01-01T00:00:00.000Z") }],
   datasets: [],
 };
 
@@ -60,6 +65,7 @@ describe("supported Quant asset catalog", () => {
     prisma.marketIngestionRequest.groupBy.mockResolvedValue([]);
     prisma.marketIngestionRequest.findFirst.mockResolvedValue(null);
     prisma.marketIngestionRequest.findMany.mockResolvedValue([]);
+    prisma.ingestionWorkerHeartbeat.findFirst.mockResolvedValue(null);
     prisma.$queryRaw.mockResolvedValue([]);
   });
 
@@ -79,6 +85,14 @@ describe("supported Quant asset catalog", () => {
         reasonCode: null,
         listingStatus: "active",
         availableAdjustments: ["raw"],
+        calendarVersion: "hose-official-closures-2024-2026-v1",
+        qualityIssueCount: 0,
+        blockingQualityIssueCount: 0,
+        catalogCoverage: {
+          firstObservedAt: "2024-01-01T00:00:00.000Z",
+          completeForRequestedRange: true,
+          warningCode: null,
+        },
       }),
       expect.objectContaining({
         symbol: "VN30",
@@ -163,7 +177,77 @@ describe("supported Quant asset catalog", () => {
     });
   });
 
-  it("summarizes global dataset coverage and tenant-scoped ingestion backlog", async () => {
+  it("blocks only quality ranges intersecting the requested interval", async () => {
+    const baseVersion = vnmAsset.datasets[0].versions[0];
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        ...vnmAsset,
+        datasets: [
+          {
+            adjustmentPolicy: "raw",
+            versions: [
+              {
+                ...baseVersion,
+                issues: [
+                  {
+                    classification: "PROVIDER_GAP",
+                    severity: "warning",
+                    rangeStart: new Date("2024-01-01T00:00:00Z"),
+                    rangeEnd: new Date("2024-01-03T00:00:00Z"),
+                  },
+                  {
+                    classification: "CALENDAR_RANGE_UNVERIFIED",
+                    severity: "error",
+                    rangeStart: new Date("2025-06-01T00:00:00Z"),
+                    rangeEnd: new Date("2025-06-05T00:00:00Z"),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "VNM", timeframe: "1d", from: "2025-01-01", to: "2025-12-31" },
+      new Date("2026-01-02T12:00:00Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      backtestable: false,
+      reasonCode: "DATASET_CALENDAR_UNVERIFIED",
+      qualityIssueCount: 2,
+      blockingQualityIssueCount: 1,
+    });
+  });
+
+  it("keeps historical assets selectable but discloses partial survivorship coverage", async () => {
+    prisma.asset.findMany.mockResolvedValue([
+      {
+        ...vnmAsset,
+        listingStatus: "inactive",
+        listingPeriods: [{ validFrom: new Date("2025-06-01T00:00:00Z") }],
+      },
+    ]);
+
+    const result = await loadQuantAssetCatalog(
+      { q: "VNM", timeframe: "1d", from: "2025-01-01", to: "2025-12-31" },
+      new Date("2026-01-02T12:00:00Z"),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      backtestable: true,
+      listingStatus: "inactive",
+      catalogCoverage: {
+        firstObservedAt: "2025-06-01T00:00:00.000Z",
+        completeForRequestedRange: false,
+        warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+      },
+    });
+  });
+
+  it("summarizes global dataset coverage and operational ingestion backlog", async () => {
     prisma.asset.groupBy.mockResolvedValue([
       { market: "vn_equity", _count: { _all: 404 } },
       { market: "crypto_spot", _count: { _all: 13 } },
@@ -213,6 +297,9 @@ describe("supported Quant asset catalog", () => {
     prisma.marketIngestionRequest.findFirst.mockResolvedValue({
       createdAt: new Date("2026-08-14T09:00:00Z"),
     });
+    prisma.ingestionWorkerHeartbeat.findFirst.mockResolvedValue({
+      heartbeatAt: new Date("2026-08-14T11:59:30Z"),
+    });
     prisma.marketIngestionRequest.findMany.mockResolvedValue([
       { errorCode: null, providerInstrument: { provider: { code: "vnstock-vci-free" } } },
       { errorCode: null, providerInstrument: { provider: { code: "vnstock-vci-free" } } },
@@ -252,11 +339,15 @@ describe("supported Quant asset catalog", () => {
     });
     expect(result.backlogCount).toBe(400);
     expect(result).toMatchObject({
-      expectedDatasetCount: 836,
-      missingDatasetCount: 833,
+      dueBacklogCount: 400,
+      expectedDatasetCount: 835,
+      missingDatasetCount: 832,
       staleDatasetCount: 0,
       missingBarCount: 3,
       oldestBacklogAt: "2026-08-14T09:00:00.000Z",
+      oldestDueBacklogAt: "2026-08-14T09:00:00.000Z",
+      workerHeartbeatAt: "2026-08-14T11:59:30.000Z",
+      workerStatus: "active",
       lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
       latestSchedulerRun: {
         command: "hourly",
@@ -271,16 +362,12 @@ describe("supported Quant asset catalog", () => {
       ],
     });
     expect(prisma.marketIngestionRequest.groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { organizationId: "org-a" },
-      }),
+      expect.not.objectContaining({ where: expect.anything() }),
     );
   });
 
   it("uses the latest terminal run, preserves the latest success, and tolerates a young backlog", async () => {
-    prisma.asset.groupBy.mockResolvedValue([
-      { market: "crypto_spot", _count: { _all: 1 } },
-    ]);
+    prisma.asset.groupBy.mockResolvedValue([{ market: "crypto_spot", _count: { _all: 1 } }]);
     prisma.providerInstrument.count.mockResolvedValue(1);
     prisma.dataset.findMany.mockResolvedValue([
       {
@@ -311,6 +398,9 @@ describe("supported Quant asset catalog", () => {
     ]);
     prisma.marketIngestionRequest.findFirst.mockResolvedValue({
       createdAt: new Date("2026-08-14T11:00:00Z"),
+    });
+    prisma.ingestionWorkerHeartbeat.findFirst.mockResolvedValue({
+      heartbeatAt: new Date("2026-08-14T11:59:30Z"),
     });
     prisma.$queryRaw.mockResolvedValue([
       {

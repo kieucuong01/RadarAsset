@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 
 from backtest.market_calendar import (
+    MARKET_CALENDARS,
     HOSE_CALENDAR_VERSION,
     annualization_factor,
     expected_bar_timestamps,
@@ -51,3 +52,30 @@ def test_calendar_version_is_explicit_and_future_dates_are_not_silently_certifie
         assert "outside verified coverage" in str(error)
     else:
         raise AssertionError("Unknown future HOSE calendar must not be treated as verified.")
+
+
+def test_market_calendar_contracts_declare_certified_ranges_and_sessions() -> None:
+    hose = MARKET_CALENDARS["vn_equity"]
+    crypto = MARKET_CALENDARS["crypto_spot"]
+    gold = MARKET_CALENDARS["metal_spot"]
+
+    assert hose.version == HOSE_CALENDAR_VERSION
+    assert hose.certified_from == date(2024, 1, 1)
+    assert hose.certified_to == date(2026, 12, 31)
+    assert hose.hourly_opens_utc == (2, 3, 4, 6, 7)
+    assert crypto.weekdays == frozenset(range(7))
+    assert gold.rollover_utc_hour == 22
+
+
+def test_gold_hourly_calendar_excludes_weekend_and_daily_rollover() -> None:
+    timestamps = expected_bar_timestamps(
+        datetime(2025, 1, 3, 21, tzinfo=timezone.utc),
+        datetime(2025, 1, 6, 23, tzinfo=timezone.utc),
+        timeframe="1h",
+        market="metal_spot",
+    )
+
+    assert datetime(2025, 1, 3, 21, tzinfo=timezone.utc) in timestamps
+    assert datetime(2025, 1, 3, 22, tzinfo=timezone.utc) not in timestamps
+    assert datetime(2025, 1, 4, 12, tzinfo=timezone.utc) not in timestamps
+    assert datetime(2025, 1, 6, 23, tzinfo=timezone.utc) in timestamps

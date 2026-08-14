@@ -27,6 +27,8 @@ type EligibilityCode =
   | "ASSET_UNAVAILABLE"
   | "DATASET_UNAVAILABLE"
   | "DATASET_RANGE_INSUFFICIENT"
+  | "DATASET_PROVIDER_GAP"
+  | "DATASET_CALENDAR_UNVERIFIED"
   | "LEVERAGE_LIMIT_EXCEEDED"
   | "STRATEGY_UNAVAILABLE"
   | "STRATEGY_UNSUPPORTED";
@@ -47,6 +49,7 @@ type ResolvedLeg = ResolvedPortfolioHashLeg & {
   initialNotional: number;
   strategyCode: string;
   strategyVersion: string;
+  listingFirstObservedAt: string | null;
 };
 
 function stringArray(value: unknown): string[] {
@@ -146,6 +149,11 @@ async function resolvePortfolioLegs(
       market: true,
       currency: true,
       maxLeverage: true,
+      listingPeriods: {
+        orderBy: { validFrom: "asc" },
+        take: 1,
+        select: { validFrom: true },
+      },
       datasets: {
         where: { timeframe: input.timeframe, adjustmentPolicy },
         take: 1,
@@ -160,6 +168,14 @@ async function resolvePortfolioLegs(
               coverageStart: true,
               coverageEnd: true,
               rowCount: true,
+              issues: {
+                where: {
+                  rangeStart: { lte: dateBoundary(input.to) },
+                  rangeEnd: { gte: dateBoundary(input.from) },
+                  classification: { in: ["PROVIDER_GAP", "CALENDAR_RANGE_UNVERIFIED"] },
+                },
+                select: { classification: true },
+              },
             },
           },
         },
@@ -193,6 +209,18 @@ async function resolvePortfolioLegs(
       throw new PortfolioRunEligibilityError(
         "DATASET_RANGE_INSUFFICIENT",
         `${leg.symbol} does not cover the requested range.`,
+      );
+    }
+    if (dataset.issues.some((issue) => issue.classification === "CALENDAR_RANGE_UNVERIFIED")) {
+      throw new PortfolioRunEligibilityError(
+        "DATASET_CALENDAR_UNVERIFIED",
+        `${leg.symbol} intersects an uncertified calendar range.`,
+      );
+    }
+    if (dataset.issues.some((issue) => issue.classification === "PROVIDER_GAP")) {
+      throw new PortfolioRunEligibilityError(
+        "DATASET_PROVIDER_GAP",
+        `${leg.symbol} intersects a provider data gap.`,
       );
     }
     const strategy = strategyByKey.get(`${leg.strategyCode}@${leg.strategyVersion}`);
@@ -252,6 +280,7 @@ async function resolvePortfolioLegs(
       currency: asset.currency,
       strategyCode: leg.strategyCode,
       strategyVersion: leg.strategyVersion,
+      listingFirstObservedAt: asset.listingPeriods[0]?.validFrom.toISOString() ?? null,
     };
   });
 }
@@ -290,6 +319,22 @@ export async function createPortfolioQuantRun(
 ) {
   const normalizedInput = normalizeBacktestSubmission(input);
   const resolvedLegs = await resolvePortfolioLegs(context, normalizedInput);
+  const listingStarts = resolvedLegs
+    .map((leg) => leg.listingFirstObservedAt)
+    .filter((value): value is string => value !== null)
+    .sort();
+  const firstObservedAt =
+    listingStarts.length === resolvedLegs.length ? (listingStarts.at(-1) ?? null) : null;
+  const historicalCoverage = {
+    firstObservedAt,
+    completeForRequestedRange: Boolean(
+      firstObservedAt && dateBoundary(normalizedInput.from) >= new Date(firstObservedAt),
+    ),
+    warningCode: null as "SURVIVORSHIP_COVERAGE_PARTIAL" | null,
+  };
+  if (!historicalCoverage.completeForRequestedRange) {
+    historicalCoverage.warningCode = "SURVIVORSHIP_COVERAGE_PARTIAL";
+  }
   const portfolioHash = hashResolvedPortfolioRun(
     normalizedInput,
     resolvedLegs,
@@ -328,7 +373,7 @@ export async function createPortfolioQuantRun(
         datasetVersionIds: datasetVersionIds as Prisma.InputJsonValue,
         engineVersion: PORTFOLIO_ENGINE_VERSION,
         deadlineAt: new Date(Date.now() + RUN_TIMEOUT_MS),
-        parameters: normalizedInput as Prisma.InputJsonValue,
+        parameters: { ...normalizedInput, historicalCoverage } as Prisma.InputJsonValue,
       },
       select: { id: true },
     });

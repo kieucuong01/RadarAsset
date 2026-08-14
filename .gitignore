@@ -20,6 +20,8 @@ node_modules
 .tmp/
 .pytest-tmp-*/
 .pytest-*/
+test-results/
+playwright-report/
 dist
 dist-ssr
 .output

@@ -95,6 +95,7 @@ function dataset(id: string, checksum: string) {
     coverageStart: new Date("2024-01-01T00:00:00.000Z"),
     coverageEnd: new Date("2026-01-31T00:00:00.000Z"),
     rowCount: 500,
+    issues: [],
   };
 }
 
@@ -105,6 +106,7 @@ const assets = [
     market: "crypto_spot",
     currency: "USDT",
     maxLeverage: 1,
+    listingPeriods: [{ validFrom: new Date("2024-01-01T00:00:00.000Z") }],
     datasets: [{ versions: [dataset("dataset-btc", "c".repeat(64))] }],
   },
   {
@@ -113,6 +115,7 @@ const assets = [
     market: "vn_equity",
     currency: "VND",
     maxLeverage: 2,
+    listingPeriods: [{ validFrom: new Date("2025-06-01T00:00:00.000Z") }],
     datasets: [{ versions: [dataset("dataset-vnm", "d".repeat(64))] }],
   },
 ];
@@ -212,7 +215,14 @@ describe("portfolio quant run persistence", () => {
           strategyVersionId: null,
           strategyName: "Portfolio Backtest",
           datasetVersionIds: ["dataset-btc", "dataset-vnm"],
-          parameters: submission,
+          parameters: {
+            ...submission,
+            historicalCoverage: {
+              firstObservedAt: "2025-06-01T00:00:00.000Z",
+              completeForRequestedRange: false,
+              warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+            },
+          },
         }),
       }),
     );
@@ -358,6 +368,51 @@ describe("portfolio quant run persistence", () => {
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.quantRun.create).not.toHaveBeenCalled();
+  });
+
+  it("freezes partial survivorship coverage into run parameters", async () => {
+    await createPortfolioQuantRun(context, submission);
+
+    expect(prisma.quantRun.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          parameters: expect.objectContaining({
+            historicalCoverage: {
+              firstObservedAt: "2025-06-01T00:00:00.000Z",
+              completeForRequestedRange: false,
+              warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("rejects an intersecting provider gap before opening a transaction", async () => {
+    prisma.asset.findMany.mockResolvedValue(
+      assets.map((asset) =>
+        asset.symbol === "BTC"
+          ? {
+              ...asset,
+              datasets: [
+                {
+                  versions: [
+                    {
+                      ...dataset("dataset-btc", "c".repeat(64)),
+                      issues: [{ classification: "PROVIDER_GAP" }],
+                    },
+                  ],
+                },
+              ],
+            }
+          : asset,
+      ),
+    );
+
+    await expect(createPortfolioQuantRun(context, submission)).rejects.toMatchObject({
+      code: "DATASET_PROVIDER_GAP",
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("enforces the resolved market leverage cap before writes", async () => {

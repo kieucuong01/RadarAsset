@@ -1,34 +1,72 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, start_scheduler_run, verify_health
+from verify_market_ingestion import health_json_output
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_health_verifier_rejects_recent_terminal_provider_failures() -> None:
+def test_health_verifier_keeps_recent_provider_failures_as_diagnostics() -> None:
     errors = verify_health(
         {
             "missing_dataset_count": 0,
             "stale_dataset_count": 0,
             "oldest_backlog_at": None,
             "recent_provider_failure_count": 2,
+            "worker_heartbeat_at": None,
+            "due_backlog_count": 0,
         },
         maximum_backlog_age_hours=6,
         maximum_recent_failures=0,
     )
 
-    assert errors == ["provider_failures"]
+    assert errors == []
 
 
-def test_scheduler_wrapper_drains_retries_and_verifies_every_scheduled_batch() -> None:
+def test_health_verifier_requires_live_worker_when_due_work_exists() -> None:
+    errors = verify_health(
+        {
+            "missing_dataset_count": 0,
+            "stale_dataset_count": 0,
+            "oldest_backlog_at": None,
+            "recent_provider_failure_count": 0,
+            "worker_heartbeat_at": datetime(2026, 8, 14, 9, 0, tzinfo=timezone.utc),
+            "due_backlog_count": 4,
+        },
+        maximum_backlog_age_hours=6,
+        maximum_recent_failures=0,
+        now=datetime(2026, 8, 14, 9, 5, tzinfo=timezone.utc),
+    )
+
+    assert errors == ["worker_stale"]
+
+
+def test_health_json_serializes_all_operational_timestamps() -> None:
+    now = datetime(2026, 8, 14, 9, 5, tzinfo=timezone.utc)
+
+    output = health_json_output(
+        {
+            "oldest_backlog_at": now,
+            "oldest_due_backlog_at": now,
+            "last_scheduler_success_at": now,
+            "worker_heartbeat_at": now,
+        },
+        [],
+    )
+
+    assert output["oldest_due_backlog_at"] == now.isoformat()
+
+
+def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:
     source = (ROOT / "scripts" / "run-market-ingestion.ps1").read_text(encoding="utf-8")
 
     assert '"--retry-failed"' in source
     assert '"--retry-limit"' in source
     assert '"--drain"' in source
     assert '"--max-total"' in source
-    assert "verify-market-ingestion.ps1" in source
+    assert '[switch]$DrainRequests' in source
     assert "$OrganizationSlug" in source
     assert "$UserEmail" in source
     assert '"--start-command"' in source
@@ -69,6 +107,22 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
 
 
+def test_scheduled_wrapper_enqueues_without_draining_the_full_universe() -> None:
+    wrapper = (ROOT / "scripts" / "run-market-ingestion.ps1").read_text(encoding="utf-8")
+
+    assert '[switch]$DrainRequests' in wrapper
+    assert 'if ($DrainRequests) {' in wrapper
+    assert "@($taskCatalogOutput)[-1]" in wrapper
+    drain_block = wrapper.split('if ($DrainRequests) {', 1)[1]
+    assert '"--retry-failed"' in drain_block
+    assert '"--drain"' in drain_block
+    enqueue_path = wrapper.split('if ($DrainRequests) {', 1)[0]
+    assert '"--retry-failed"' not in enqueue_path
+    assert '"--drain"' not in enqueue_path
+    assert "& $taskPython @taskArguments" not in enqueue_path
+    assert "$taskVerificationPath" not in wrapper
+
+
 def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None:
     wrapper = (ROOT / "scripts" / "verify-market-ingestion.ps1").read_text(
         encoding="utf-8"
@@ -84,6 +138,8 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "market_ingestion_requests" in source
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
+    assert "DISTINCT ON (instrument.asset_id, timeframe.timeframe)" in source
+    assert "DISTINCT ON (dataset.asset_id, dataset.timeframe)" in source
     assert "Exit 1" in wrapper
     assert '.venv\\Scripts\\python.exe' in wrapper
 

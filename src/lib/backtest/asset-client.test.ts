@@ -20,6 +20,14 @@ const validItem = {
   reasonCode: null,
   listingStatus: "active",
   availableAdjustments: ["raw", "total_return"],
+  calendarVersion: "hose-official-closures-2024-2026-v1",
+  qualityIssueCount: 0,
+  blockingQualityIssueCount: 0,
+  catalogCoverage: {
+    firstObservedAt: "2024-01-01T00:00:00.000Z",
+    completeForRequestedRange: true,
+    warningCode: null,
+  },
 } satisfies QuantAssetCatalogItem;
 
 describe("Quant asset catalog client", () => {
@@ -80,5 +88,37 @@ describe("Quant asset catalog client", () => {
         rowCount: 0,
       }).badge,
     ).toBe("Chưa có dataset");
+
+    expect(
+      assetReadinessLabel(
+        {
+          ...validItem,
+          backtestable: false,
+          reasonCode: "DATASET_PROVIDER_GAP",
+          qualityIssueCount: 2,
+          blockingQualityIssueCount: 1,
+        },
+        "en",
+      ),
+    ).toEqual({ badge: "Provider data gap", detail: "1 blocking ranges" });
+  });
+
+  it("discloses partial catalog history even when price data is backtestable", () => {
+    expect(
+      assetReadinessLabel(
+        {
+          ...validItem,
+          catalogCoverage: {
+            firstObservedAt: "2025-06-01T00:00:00.000Z",
+            completeForRequestedRange: false,
+            warningCode: "SURVIVORSHIP_COVERAGE_PARTIAL",
+          },
+        },
+        "en",
+      ),
+    ).toEqual({
+      badge: "Partial history coverage",
+      detail: "250 bars · catalog since 2025-06-01",
+    });
   });
 });
