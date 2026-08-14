@@ -10,6 +10,12 @@ import re
 from typing import Any, Protocol
 
 from smart_insights.collectors.cryptocraft import CalendarEventInput
+from smart_insights.event_contracts import EventCollectionBatch
+from smart_insights.event_repository import (
+    EventCluster,
+    EventPublicationResult,
+    EventRepository,
+)
 from smart_insights.macro_registry import classify_surprise_event
 from smart_insights.metrics.common import (
     ConfidenceInput,
@@ -35,6 +41,12 @@ from smart_insights.metrics.macro import (
     parse_release_number,
     release_surprise,
     surprise_z_score,
+)
+from smart_insights.metrics.event_risk import (
+    EventRiskComponent,
+    EventRiskInputs,
+    EventRiskResult,
+    calculate_event_risk,
 )
 from smart_insights.signals import MetricSignalInput, SignalCandidate, detect_signals
 from smart_insights.sources import source_for_code
@@ -71,6 +83,133 @@ class MacroPipelineResult:
     regime_snapshot: SignalSnapshotInput
     event_risk_snapshot: SignalSnapshotInput
     candidates: tuple[SignalCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EventSourceHealth:
+    source_code: str
+    status: str
+    records_fetched: int
+    newest_event_at: datetime | None
+    parser_version: str
+    error_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class MacroAssetImpact:
+    asset: str
+    direction: str
+    score: Decimal
+    methodology: str = "macro-event-asset-impact-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalEventPipelineResult:
+    publication: EventPublicationResult
+    clusters: tuple[EventCluster, ...]
+    risk: EventRiskResult
+    asset_impacts: tuple[MacroAssetImpact, ...]
+    source_health: EventSourceHealth
+
+
+def _asset_impacts(
+    risk: EventRiskResult, clusters: Sequence[EventCluster]
+) -> tuple[MacroAssetImpact, ...]:
+    if risk.value is None:
+        return ()
+    categories = {cluster.category for cluster in clusters}
+    if "energy" in categories:
+        btc_factor, xau_factor = Decimal("-0.55"), Decimal("0.45")
+    elif categories & {"geopolitical", "sanctions", "trade"}:
+        btc_factor, xau_factor = Decimal("-0.40"), Decimal("0.60")
+    else:
+        btc_factor, xau_factor = Decimal("-0.30"), Decimal("0.50")
+    raw_score = Decimal(str(risk.value))
+    return (
+        MacroAssetImpact(
+            "BTC",
+            "headwind" if btc_factor < 0 else "tailwind",
+            (raw_score * btc_factor).quantize(Decimal("0.01")),
+        ),
+        MacroAssetImpact(
+            "XAU",
+            "tailwind" if xau_factor > 0 else "headwind",
+            (raw_score * xau_factor).quantize(Decimal("0.01")),
+        ),
+    )
+
+
+def process_global_event_batch(
+    repository: EventRepository,
+    batch: EventCollectionBatch,
+    *,
+    frequency_anomaly: float | None = None,
+    market_stress: float | None = None,
+) -> GlobalEventPipelineResult:
+    publication = repository.publish(batch.events)
+    clusters = repository.clusters()
+    evidence = tuple(event.content_hash for event in batch.events)
+    components: dict[str, EventRiskComponent] = {}
+    severities = [
+        event.normalized_severity
+        for event in batch.events
+        if event.normalized_severity is not None
+    ]
+    if severities:
+        components["severity"] = EventRiskComponent(
+            "severity", max(severities), batch.snapshot.observed_at, True, evidence
+        )
+    if frequency_anomaly is not None:
+        components["frequency_anomaly"] = EventRiskComponent(
+            "frequency_anomaly", frequency_anomaly, batch.snapshot.observed_at, True, evidence
+        )
+    if clusters:
+        corroboration = min(
+            100.0,
+            sum(min(cluster.corroboration_count, 3) / 3 * 100 for cluster in clusters)
+            / len(clusters),
+        )
+        components["corroboration"] = EventRiskComponent(
+            "corroboration", corroboration, batch.snapshot.observed_at, True, evidence
+        )
+        relevance_by_category = {
+            "energy": 100.0,
+            "geopolitical": 85.0,
+            "sanctions": 80.0,
+            "trade": 75.0,
+            "natural_hazard": 60.0,
+            "other": 30.0,
+        }
+        components["strategic_relevance"] = EventRiskComponent(
+            "strategic_relevance",
+            max(relevance_by_category.get(cluster.category, 30.0) for cluster in clusters),
+            batch.snapshot.observed_at,
+            True,
+            evidence,
+        )
+    if market_stress is not None:
+        components["market_stress"] = EventRiskComponent(
+            "market_stress", market_stress, batch.snapshot.observed_at, True, evidence
+        )
+    risk = calculate_event_risk(
+        EventRiskInputs(as_of=batch.snapshot.observed_at, components=components)
+    )
+    newest = max((event.occurred_at for event in batch.events), default=None)
+    health = EventSourceHealth(
+        source_code=batch.source_code,
+        status="healthy" if batch.error_code is None and batch.events else "failed",
+        records_fetched=len(batch.events),
+        newest_event_at=newest,
+        parser_version=batch.source.parser_version,
+        error_code=batch.error_code,
+    )
+    return GlobalEventPipelineResult(
+        publication=publication,
+        clusters=clusters,
+        risk=risk,
+        asset_impacts=_asset_impacts(risk, clusters),
+        source_health=health,
+    )
 
 
 @dataclass(frozen=True, slots=True)

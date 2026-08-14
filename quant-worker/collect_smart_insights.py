@@ -39,6 +39,9 @@ from smart_insights.collectors.defillama import (
     DefiLlamaStablecoinsCollector,
 )
 from smart_insights.collectors.deribit import DeribitCollector
+from smart_insights.collectors.eonet import EonetCollector
+from smart_insights.collectors.gdacs import GdacsCollector
+from smart_insights.collectors.gdelt import GdeltCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
@@ -46,7 +49,9 @@ from smart_insights.collectors.mempool_large_addresses import (
     AddressWatch,
     MempoolLargeAddressCollector,
 )
+from smart_insights.collectors.usgs import UsgsCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
+from smart_insights.event_contracts import EventCollectionBatch
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.scrapling_client import ScraplingClient
 from smart_insights.gold_pipeline import run_gold_pipeline
@@ -77,6 +82,10 @@ SCHEDULES = (
     "briefing-refresh",
     "replay",
 )
+EVENT_SOURCE_CODES = frozenset(
+    {"gdelt-events", "gdacs-events", "usgs-earthquakes", "nasa-eonet"}
+)
+ENERGY_SOURCE_CODES = frozenset({"eia-energy", "bis-statistics"})
 _SOURCE_SCHEDULE = {
     "daily": "daily",
     "weekly": "weekly",
@@ -96,6 +105,7 @@ class CollectionOutcome:
 
 Collector = Callable[[SourceDefinition], SourceRunResult]
 BatchCollector = Callable[[datetime], CollectionBatch]
+EventCollector = Callable[[datetime], EventCollectionBatch]
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +281,51 @@ def run_live_smoke(
         records_fetched=len(validated),
         effective_at=max(row.effective_at for row in validated),
         error_code=None,
+    )
+
+
+def build_event_collectors(*, transport: Any | None = None) -> Mapping[str, EventCollector]:
+    return {
+        "gdelt-events": lambda as_of: GdeltCollector(transport=transport).collect(observed_at=as_of),
+        "gdacs-events": lambda as_of: GdacsCollector(transport=transport).collect(observed_at=as_of),
+        "usgs-earthquakes": lambda as_of: UsgsCollector(transport=transport).collect(observed_at=as_of),
+        "nasa-eonet": lambda as_of: EonetCollector(transport=transport).collect(observed_at=as_of),
+    }
+
+
+def run_event_live_smoke(
+    source_code: str,
+    *,
+    as_of: datetime,
+    event_collectors: Mapping[str, EventCollector],
+) -> LiveSmokeOutcome:
+    if source_code not in EVENT_SOURCE_CODES:
+        raise ValueError("Source is not a registered global-event source.")
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("Live smoke time must be timezone-aware.")
+    collector = event_collectors.get(source_code)
+    if collector is None:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, "SOURCE_NOT_IMPLEMENTED")
+    try:
+        batch = collector(as_of)
+    except SourceFetchError as error:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, error.code)
+    except ValueError:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, "INVALID_RESPONSE")
+    if batch.source_code != source_code or batch.error_code is not None or not batch.events:
+        return LiveSmokeOutcome(
+            source_code,
+            "failed",
+            0,
+            None,
+            batch.error_code or "MISSING_REQUIRED_FIELD",
+        )
+    return LiveSmokeOutcome(
+        source_code,
+        "succeeded",
+        len(batch.events),
+        max(event.occurred_at for event in batch.events),
+        None,
     )
 
 
@@ -748,6 +803,12 @@ def main(
                 crawler = ScraplingClient()
                 outcome = run_calendar_live_smoke(
                     CryptoCraftCollector(crawler=crawler), as_of=smoke_time
+                )
+            elif args.source in EVENT_SOURCE_CODES:
+                outcome = run_event_live_smoke(
+                    args.source,
+                    as_of=smoke_time,
+                    event_collectors=build_event_collectors(),
                 )
             else:
                 outcome = run_live_smoke(
