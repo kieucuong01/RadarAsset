@@ -318,6 +318,7 @@ model ResearchRun {
   evidence       EvidenceItem[]
   theses         InvestmentThesis[]
   forecasts      ForecastPoint[]
+  evaluations    ModelEvaluation[]
   providerRuns   ProviderRun[]
   dailyBriefings DailyBriefing[]
 
@@ -373,19 +374,26 @@ model InvestmentThesis {
 }
 
 model ForecastPoint {
-  id            String       @id @default(uuid()) @db.Uuid
-  assetId       String       @map("asset_id") @db.Uuid
-  researchRunId String?      @map("research_run_id") @db.Uuid
-  horizon       String
-  targetPrice   Decimal      @map("target_price") @db.Decimal(20, 8)
-  lowerBound    Decimal      @map("lower_bound") @db.Decimal(20, 8)
-  upperBound    Decimal      @map("upper_bound") @db.Decimal(20, 8)
-  confidence    Int
-  model         String
-  generatedAt   DateTime     @map("generated_at")
-  createdAt     DateTime     @default(now()) @map("created_at")
-  asset         Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  researchRun   ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  id                 String       @id @default(uuid()) @db.Uuid
+  assetId            String       @map("asset_id") @db.Uuid
+  researchRunId      String?      @map("research_run_id") @db.Uuid
+  horizon            String
+  targetPrice        Decimal      @map("target_price") @db.Decimal(20, 8)
+  lowerBound         Decimal      @map("lower_bound") @db.Decimal(20, 8)
+  upperBound         Decimal      @map("upper_bound") @db.Decimal(20, 8)
+  confidence         Int
+  model              String
+  generatedAt        DateTime     @map("generated_at")
+  forecastFor        DateTime?    @map("forecast_for") @db.Timestamptz(6)
+  status             String       @default("published")
+  methodologyVersion String?      @map("methodology_version")
+  modelRevision      String?      @map("model_revision")
+  inputFingerprint   String?      @map("input_fingerprint")
+  realizedPrice      Decimal?     @map("realized_price") @db.Decimal(20, 8)
+  evaluatedAt        DateTime?    @map("evaluated_at") @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @map("created_at")
+  asset              Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  researchRun        ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
 
   @@index([assetId, generatedAt(sort: Desc)])
   @@index([researchRunId])
@@ -393,17 +401,23 @@ model ForecastPoint {
 }
 
 model ModelEvaluation {
-  id          String   @id @default(uuid()) @db.Uuid
-  assetId     String?  @map("asset_id") @db.Uuid
-  model       String
-  task        String
-  windowStart DateTime @map("window_start")
-  windowEnd   DateTime @map("window_end")
-  metrics     Json     @default("{}")
-  createdAt   DateTime @default(now()) @map("created_at")
-  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  id                 String       @id @default(uuid()) @db.Uuid
+  assetId            String?      @map("asset_id") @db.Uuid
+  researchRunId      String?      @map("research_run_id") @db.Uuid
+  model              String
+  task               String
+  status             String       @default("shadow")
+  methodologyVersion String?      @map("methodology_version")
+  dataFingerprint    String?      @map("data_fingerprint")
+  windowStart        DateTime     @map("window_start")
+  windowEnd          DateTime     @map("window_end")
+  metrics            Json         @default("{}")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  asset              Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  researchRun        ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
 
   @@index([assetId, model, createdAt(sort: Desc)])
+  @@index([researchRunId])
   @@map("model_evaluations")
 }
 
