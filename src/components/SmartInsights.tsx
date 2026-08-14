@@ -23,6 +23,8 @@ import {
   evidenceSchema,
   fetchParsed,
   healthSchema,
+  energyPulseSchema,
+  macroEventRiskSchema,
   metricsSchema,
   preferencesSchema,
   putPreferences,
@@ -31,6 +33,8 @@ import {
   type CalendarModel,
   type EvidenceModel,
   type HealthModel,
+  type EnergyPulseModel,
+  type MacroEventRiskModel,
   type MetricModel,
   type PreferencesModel,
   type RegimeModel,
@@ -56,6 +60,11 @@ export function SmartInsights() {
   const [events, setEvents] = useState<CalendarModel[]>([]);
   const [preferences, setPreferences] = useState<PreferencesModel | null>(null);
   const [health, setHealth] = useState<HealthModel | null>(null);
+  const [macroEventRisk, setMacroEventRisk] = useState<MacroEventRiskModel | null>(null);
+  const [energyPulse, setEnergyPulse] = useState<EnergyPulseModel | null>(null);
+  const [macroPulseState, setMacroPulseState] = useState<"idle" | "loading" | "loaded" | "failed">(
+    "idle",
+  );
   const [state, setState] = useState<QueryState>("loading");
   const [refresh, setRefresh] = useState(0);
 
@@ -94,6 +103,34 @@ export function SmartInsights() {
       .then((result) => setMetrics(result.metrics))
       .catch(() => {
         if (!controller.signal.aborted) setMetrics([]);
+      });
+    return () => controller.abort();
+  }, [market, refresh]);
+
+  useEffect(() => {
+    if (market !== "macro") return;
+    const controller = new AbortController();
+    setMacroPulseState("loading");
+    Promise.all([
+      fetchParsed(
+        `/api/smart-insights/macro/events?${windowQuery(31)}`,
+        macroEventRiskSchema,
+        controller.signal,
+      ),
+      fetchParsed(
+        `/api/smart-insights/macro/energy?${windowQuery(31)}`,
+        energyPulseSchema,
+        controller.signal,
+      ),
+    ])
+      .then(([eventsResult, energyResult]) => {
+        if (controller.signal.aborted) return;
+        setMacroEventRisk(eventsResult);
+        setEnergyPulse(energyResult);
+        setMacroPulseState("loaded");
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setMacroPulseState("failed");
       });
     return () => controller.abort();
   }, [market, refresh]);
@@ -182,6 +219,9 @@ export function SmartInsights() {
         market={market}
         metrics={marketMetrics}
         regimes={regimes}
+        macroEventRisk={macroEventRisk}
+        energyPulse={energyPulse}
+        macroPulseState={macroPulseState}
         onMarketChange={setMarket}
       />
       <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">

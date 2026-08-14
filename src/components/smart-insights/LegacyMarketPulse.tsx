@@ -6,6 +6,10 @@ import { ExternalLink } from "lucide-react";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { CryptoQuantPulseTabs } from "@/components/smart-insights/CryptoQuantPulseTabs";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
+import {
+  MacroQuantPulseTabs,
+  type MacroPulseState,
+} from "@/components/smart-insights/MacroQuantPulseTabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import type { MarketTickerResponse } from "@/lib/backend/types";
@@ -14,7 +18,12 @@ import {
   type CryptoMarketPulseModel,
 } from "@/lib/crypto-market-pulse-client";
 import { useI18n } from "@/lib/i18n/context";
-import type { MetricModel, RegimeModel } from "@/lib/smart-insights-client";
+import type {
+  EnergyPulseModel,
+  MacroEventRiskModel,
+  MetricModel,
+  RegimeModel,
+} from "@/lib/smart-insights-client";
 import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 const SAMPLE_MARKET_METRICS = {
@@ -27,11 +36,17 @@ export function LegacyMarketPulse({
   market,
   metrics,
   regimes,
+  macroEventRisk,
+  energyPulse,
+  macroPulseState,
   onMarketChange,
 }: {
   market: InsightMarket;
   metrics: MetricModel[];
   regimes: RegimeModel[];
+  macroEventRisk: MacroEventRiskModel | null;
+  energyPulse: EnergyPulseModel | null;
+  macroPulseState: MacroPulseState;
   onMarketChange: (market: InsightMarket) => void;
 }) {
   const { locale, t } = useI18n();
@@ -124,7 +139,13 @@ export function LegacyMarketPulse({
           />
         </TabsContent>
         <TabsContent value="macro" className="mt-4">
-          <MetricGrid market="macro" metrics={marketMetrics} locale={locale} />
+          <MacroQuantPulseTabs
+            regimeContent={<MetricGrid market="macro" metrics={marketMetrics} locale={locale} />}
+            eventRisk={macroEventRisk}
+            energy={energyPulse}
+            state={macroPulseState}
+            locale={locale}
+          />
         </TabsContent>
         <TabsContent value="gold" className="mt-4">
           <MetricGrid market="gold" metrics={marketMetrics} locale={locale} />
