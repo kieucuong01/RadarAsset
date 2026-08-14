@@ -144,7 +144,7 @@ def _verify_runtime(lock: RuntimeLock) -> None:
             [
                 "git",
                 "-c",
-                "safe.directory=" + str(source),
+                "safe.directory=" + source.resolve().as_posix(),
                 "-C",
                 str(source),
                 "rev-parse",

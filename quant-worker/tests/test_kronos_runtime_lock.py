@@ -47,4 +47,4 @@ def test_setup_script_rejects_revision_drift() -> None:
 
 def test_runtime_verifier_scopes_git_safe_directory_to_checkout() -> None:
     adapter = (ROOT / "quant-worker/smart_insights/kronos/adapter.py").read_text()
-    assert '"safe.directory=" + str(source)' in adapter
+    assert '"safe.directory=" + source.resolve().as_posix()' in adapter
