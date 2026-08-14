@@ -91,6 +91,7 @@ async function seedAsset(input: {
     select: { id: true },
   });
   if (existing) {
+    await prisma.strategyAssignment.deleteMany({ where: { assetId: existing.id } });
     await prisma.quantRun.deleteMany({ where: { legs: { some: { assetId: existing.id } } } });
     await prisma.asset.delete({ where: { id: existing.id } });
   }
