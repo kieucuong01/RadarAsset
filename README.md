@@ -225,7 +225,7 @@ coverage. `Event Risk` is published separately as the maximum upcoming event sev
 
 The local v1 backend stores research in PostgreSQL:
 
-- `research_runs`: each last30days, ai-berkshire, Kronos, or provider-health refresh
+- `research_runs`: each normalized research, Kronos shadow, or provider-health refresh
 - `evidence_items`: source snippets and engagement metadata
 - `investment_theses`: investor-ready stance, conviction, bull case, bear case, and action items
 - `forecast_points`: model forecasts by horizon

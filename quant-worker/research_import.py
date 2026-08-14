@@ -32,8 +32,8 @@ def default_payload(symbol: str) -> dict[str, Any]:
         "status": "succeeded",
         "summary": f"Local investor intelligence refresh completed for {symbol.upper()}.",
         "parameters": {
-            "adapters": ["last30days", "ai-berkshire", "kronos"],
             "mode": "local-deterministic-sample",
+            "dataStatus": "sample",
         },
         "startedAt": now,
         "finishedAt": now,
@@ -49,7 +49,7 @@ def default_payload(symbol: str) -> dict[str, Any]:
         "insights": [
             {
                 "title": f"{symbol.upper()} local research refresh",
-                "summary": "Replace this sample with normalized output from last30days or another adapter.",
+                "summary": "Sample data only; replace it with normalized output from a configured provider.",
                 "sentiment": "neutral",
                 "confidence": 50,
                 "catalyst": "Fresh research pending",

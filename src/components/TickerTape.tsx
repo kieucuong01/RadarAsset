@@ -2,39 +2,25 @@ import { useEffect, useState } from "react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { MarketTickerResponse } from "@/lib/backend/types";
-import { resolveTickerSnapshot, type TickerSnapshot } from "@/lib/ticker-presentation";
-
-type Tick = { sym: string; price: number; chg: number };
-
-const INITIAL_SNAPSHOT: TickerSnapshot<Tick> = {
-  rows: [],
-  status: "UNAVAILABLE",
-  detail: "Đang chờ dữ liệu thị trường đã xác thực.",
-};
+import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 export function TickerTape() {
-  const [snapshot, setSnapshot] = useState<TickerSnapshot<Tick>>(INITIAL_SNAPSHOT);
+  const [snapshot, setSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/market/ticker")
+    fetch(curatedTickerUrl())
       .then((response) =>
         response.ok ? response.json() : Promise.reject(new Error("Ticker API không khả dụng.")),
       )
       .then((rows: MarketTickerResponse[]) => {
         if (!alive) return;
-        const ticks = rows.map((row) => ({
-          sym: row.symbol,
-          price: row.price,
-          chg: row.changePercent,
-        }));
-        setSnapshot(resolveTickerSnapshot(ticks));
+        setSnapshot(resolveCuratedTickerSnapshot(rows));
       })
       .catch(() => {
         if (!alive) return;
         setSnapshot({
-          rows: [],
-          status: "UNAVAILABLE",
+          ...resolveCuratedTickerSnapshot([]),
           detail: "Ticker API không khả dụng; không có dữ liệu mẫu được thay thế.",
         });
       });
@@ -58,15 +44,15 @@ export function TickerTape() {
             </span>
           ) : null}
           {strip.map((tick, index) => {
-            const up = tick.chg >= 0;
+            const up = tick.changePercent >= 0;
             return (
-              <div key={`${tick.sym}-${index}`} className="flex items-center gap-2 text-xs">
-                <span className="font-bold tracking-wide">{tick.sym}</span>
+              <div key={`${tick.symbol}-${index}`} className="flex items-center gap-2 text-xs">
+                <span className="font-bold tracking-wide">{tick.symbol}</span>
                 <span className="tabular-nums text-muted-foreground">
                   {tick.price.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                 </span>
                 <span className={`tabular-nums font-semibold ${up ? "text-bull" : "text-bear"}`}>
-                  {up ? "▲" : "▼"} {Math.abs(tick.chg).toFixed(2)}%
+                  {up ? "▲" : "▼"} {Math.abs(tick.changePercent).toFixed(2)}%
                 </span>
                 <span className="text-border">|</span>
               </div>
@@ -80,7 +66,7 @@ export function TickerTape() {
           100% { transform: translateX(-50%); }
         }
         .ticker-track {
-          animation: ticker-scroll 60s linear infinite;
+          animation: ticker-scroll 160s linear infinite;
         }
         .ticker-track:hover {
           animation-play-state: paused;

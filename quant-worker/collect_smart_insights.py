@@ -30,6 +30,7 @@ from smart_insights.briefing_pipeline import (
 from smart_insights.collectors import CollectionBatch
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
+from smart_insights.collectors.bis import BisCollector
 from smart_insights.collectors.coinmetrics import CoinMetricsCollector
 from smart_insights.collectors.coinshares import CoinSharesCollector
 from smart_insights.collectors.cftc import CftcCollector
@@ -39,6 +40,9 @@ from smart_insights.collectors.defillama import (
     DefiLlamaStablecoinsCollector,
 )
 from smart_insights.collectors.deribit import DeribitCollector
+from smart_insights.collectors.eonet import EonetCollector
+from smart_insights.collectors.gdacs import GdacsCollector
+from smart_insights.collectors.gdelt import GdeltCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
@@ -46,14 +50,17 @@ from smart_insights.collectors.mempool_large_addresses import (
     AddressWatch,
     MempoolLargeAddressCollector,
 )
+from smart_insights.collectors.usgs import UsgsCollector
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
+from smart_insights.event_contracts import EventCollectionBatch
+from smart_insights.event_repository import PostgresEventRepository
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.scrapling_client import ScraplingClient
 from smart_insights.gold_pipeline import run_gold_pipeline
 from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
 from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
-from smart_insights.macro_pipeline import run_macro_pipeline
+from smart_insights.macro_pipeline import run_global_event_risk_pipeline, run_macro_pipeline
 from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
 from smart_insights.metrics.macro import MACRO_METRIC_DEFINITIONS
 from smart_insights.repository import PostgresInsightRepository
@@ -77,6 +84,10 @@ SCHEDULES = (
     "briefing-refresh",
     "replay",
 )
+EVENT_SOURCE_CODES = frozenset(
+    {"gdelt-events", "gdacs-events", "usgs-earthquakes", "nasa-eonet"}
+)
+ENERGY_SOURCE_CODES = frozenset({"eia-energy", "bis-statistics"})
 _SOURCE_SCHEDULE = {
     "daily": "daily",
     "weekly": "weekly",
@@ -96,6 +107,7 @@ class CollectionOutcome:
 
 Collector = Callable[[SourceDefinition], SourceRunResult]
 BatchCollector = Callable[[datetime], CollectionBatch]
+EventCollector = Callable[[datetime], EventCollectionBatch]
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +283,51 @@ def run_live_smoke(
         records_fetched=len(validated),
         effective_at=max(row.effective_at for row in validated),
         error_code=None,
+    )
+
+
+def build_event_collectors(*, transport: Any | None = None) -> Mapping[str, EventCollector]:
+    return {
+        "gdelt-events": lambda as_of: GdeltCollector(transport=transport).collect(observed_at=as_of),
+        "gdacs-events": lambda as_of: GdacsCollector(transport=transport).collect(observed_at=as_of),
+        "usgs-earthquakes": lambda as_of: UsgsCollector(transport=transport).collect(observed_at=as_of),
+        "nasa-eonet": lambda as_of: EonetCollector(transport=transport).collect(observed_at=as_of),
+    }
+
+
+def run_event_live_smoke(
+    source_code: str,
+    *,
+    as_of: datetime,
+    event_collectors: Mapping[str, EventCollector],
+) -> LiveSmokeOutcome:
+    if source_code not in EVENT_SOURCE_CODES:
+        raise ValueError("Source is not a registered global-event source.")
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("Live smoke time must be timezone-aware.")
+    collector = event_collectors.get(source_code)
+    if collector is None:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, "SOURCE_NOT_IMPLEMENTED")
+    try:
+        batch = collector(as_of)
+    except SourceFetchError as error:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, error.code)
+    except ValueError:
+        return LiveSmokeOutcome(source_code, "failed", 0, None, "INVALID_RESPONSE")
+    if batch.source_code != source_code or batch.error_code is not None or not batch.events:
+        return LiveSmokeOutcome(
+            source_code,
+            "failed",
+            0,
+            None,
+            batch.error_code or "MISSING_REQUIRED_FIELD",
+        )
+    return LiveSmokeOutcome(
+        source_code,
+        "succeeded",
+        len(batch.events),
+        max(event.occurred_at for event in batch.events),
+        None,
     )
 
 
@@ -574,6 +631,17 @@ def build_batch_collectors(
         )
         return _merge_api_batches("cftc-disaggregated", (batch,), observed_at=as_of)
 
+    def bis_statistics(as_of: datetime) -> CollectionBatch:
+        context = BisCollector().collect_context(observed_at=as_of)
+        if context.snapshot is None:
+            raise ValueError("BIS collector returned no evidence snapshot.")
+        return CollectionBatch(
+            source_for_code("bis-statistics"),
+            context.snapshot,
+            context.observations,
+            context.error_code,
+        )
+
     return {
         "alternative-fng": lambda as_of: AlternativeFearGreedCollector().collect(as_of),
         "farside-btc-etf": lambda as_of: FarsideEtfCollector(
@@ -596,6 +664,7 @@ def build_batch_collectors(
         "fred": fred,
         "cftc-legacy": cftc_legacy,
         "cftc-disaggregated": cftc_disaggregated,
+        "bis-statistics": bis_statistics,
     }
 
 
@@ -642,6 +711,59 @@ def build_production_collectors(
                 publication.status,
                 len(batch.observations),
                 batch.error_code,
+                0,
+                started_at,
+                now(),
+            )
+
+        collectors[source_code] = collect
+    return collectors
+
+
+def build_production_event_collectors(
+    repository: PostgresEventRepository,
+    quarantine_repository: PostgresInsightRepository,
+    artifact_store: ArtifactStore,
+    event_collectors: Mapping[str, EventCollector],
+    *,
+    clock: Callable[[], datetime] | None = None,
+) -> Mapping[str, Collector]:
+    now = clock or (lambda: datetime.now(timezone.utc))
+    collectors: dict[str, Collector] = {}
+    for source_code, event_collector in event_collectors.items():
+        def collect(
+            source: SourceDefinition,
+            *,
+            collector: EventCollector = event_collector,
+            expected_code: str = source_code,
+        ) -> SourceRunResult:
+            started_at = now()
+            if source.code != expected_code:
+                raise ValueError("Event collector source does not match its registry code.")
+            batch = collector(started_at)
+            artifact = artifact_store.write(batch.snapshot, source.code)
+            if batch.error_code is not None or not batch.events:
+                error_code = batch.error_code or "MISSING_REQUIRED_FIELD"
+                quarantine_repository.quarantine(
+                    source, batch.snapshot, artifact, error_code=error_code
+                )
+                return SourceRunResult(
+                    source.code,
+                    "quarantined",
+                    0,
+                    error_code,
+                    0,
+                    started_at,
+                    now(),
+                )
+            publication = repository.publish(
+                source, batch.snapshot, artifact, batch.events
+            )
+            return SourceRunResult(
+                source.code,
+                "succeeded" if publication.inserted else "unchanged",
+                len(batch.events),
+                None,
                 0,
                 started_at,
                 now(),
@@ -749,6 +871,12 @@ def main(
                 outcome = run_calendar_live_smoke(
                     CryptoCraftCollector(crawler=crawler), as_of=smoke_time
                 )
+            elif args.source in EVENT_SOURCE_CODES:
+                outcome = run_event_live_smoke(
+                    args.source,
+                    as_of=smoke_time,
+                    event_collectors=build_event_collectors(),
+                )
             else:
                 outcome = run_live_smoke(
                     args.source,
@@ -764,6 +892,7 @@ def main(
     try:
         active_collectors = collectors
         repository: PostgresInsightRepository | None = None
+        event_repository: PostgresEventRepository | None = None
         if active_collectors is None and not args.dry_run:
             database_url = os.getenv("DATABASE_URL")
             if not database_url:
@@ -856,10 +985,19 @@ def main(
                         collector=CryptoCraftCollector(crawler=crawler),
                     )
             else:
-                active_collectors = build_production_collectors(
+                active_collectors = dict(build_production_collectors(
                     repository,
                     artifact_store,
                     build_batch_collectors(repository),
+                ))
+                event_repository = PostgresEventRepository(connection)
+                active_collectors.update(
+                    build_production_event_collectors(
+                        event_repository,
+                        repository,
+                        artifact_store,
+                        build_event_collectors(),
+                    )
                 )
         if not (repository is not None and args.schedule.startswith("calendar-")):
             outcomes, exit_code = run_collection(
@@ -876,6 +1014,10 @@ def main(
                 "daily", "weekly", "calendar-current", "calendar-next", "calendar-event"
             }:
                 run_macro_pipeline(repository, as_of=pipeline_time)
+            if args.schedule == "daily" and event_repository is not None:
+                run_global_event_risk_pipeline(
+                    event_repository, repository, as_of=pipeline_time
+                )
             if args.schedule in {"daily", "weekly"}:
                 run_gold_pipeline(repository, as_of=pipeline_time)
     except ValueError:

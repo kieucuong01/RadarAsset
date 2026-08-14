@@ -5,6 +5,17 @@ import re
 from types import MappingProxyType
 
 
+EVENT_RISK_COMPONENTS = MappingProxyType(
+    {
+        "severity": "macro.event.severity",
+        "frequency_anomaly": "macro.event.frequency_anomaly",
+        "corroboration": "macro.event.corroboration",
+        "strategic_relevance": "macro.event.strategic_relevance",
+        "market_stress": "macro.event.market_stress",
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class FredSeriesDefinition:
     series_id: str

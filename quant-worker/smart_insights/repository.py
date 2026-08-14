@@ -537,8 +537,14 @@ class PostgresInsightRepository:
                 f"""
                 SELECT provider.code AS source_code,
                        provider.name AS source_name,
-                       MAX(observation.effective_at) AS last_effective_at,
-                       MAX(observation.observed_at) AS last_observed_at,
+                       GREATEST(
+                         MAX(observation.effective_at),
+                         MAX(global_event.occurred_at)
+                       ) AS last_effective_at,
+                       GREATEST(
+                         MAX(observation.observed_at),
+                         MAX(global_event.last_observed_at)
+                       ) AS last_observed_at,
                        latest_run.status AS last_run_status,
                        latest_run.error_code AS last_error_code,
                        latest_quarantine.observed_at AS last_quarantined_at
@@ -546,6 +552,9 @@ class PostgresInsightRepository:
                 LEFT JOIN metric_observations observation
                   ON observation.provider_id = provider.id
                  AND observation.quality_status IN ('passed', 'warning')
+                LEFT JOIN global_event_observations global_event
+                  ON global_event.provider_id = provider.id
+                 AND global_event.quality_status IN ('passed', 'warning')
                 LEFT JOIN LATERAL (
                   SELECT status, error_code
                   FROM provider_runs

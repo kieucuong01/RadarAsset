@@ -172,6 +172,94 @@ export const healthSchema = z.object({
   ),
 });
 
+const availability = z.enum(["AVAILABLE", "STALE", "LIMITED_DATA", "UNAVAILABLE"]);
+
+export const macroEventRiskSchema = z.object({
+  generatedAt: z.string(),
+  methodology: z.literal("macro-event-risk-v1"),
+  status: availability,
+  score: z.number().nullable(),
+  freshWeight: z.number().min(0).max(1),
+  asOf: z.string(),
+  components: z.array(
+    z.object({
+      code: z.string(),
+      value: z.number().nullable(),
+      weight: z.number().min(0).max(1),
+      fresh: z.boolean(),
+      evidenceIds: z.array(z.string()),
+    }),
+  ),
+  timeline: z.array(z.object({ ts: z.string(), score: z.number(), category: z.string() })),
+  events: z.array(
+    z.object({
+      id: z.string(),
+      category: z.string(),
+      subcategory: z.string().nullable(),
+      title: z.string(),
+      country: z.string().nullable(),
+      region: z.string().nullable(),
+      occurredAt: z.string(),
+      severity: z.number().nullable(),
+      corroborationCount: z.number().int().positive(),
+      status: z.string(),
+      qualityFlags: z.array(z.string()),
+      sources: z.array(
+        z.object({
+          sourceCode: z.string(),
+          sourceUrl: z.string().nullable(),
+          observedAt: z.string(),
+        }),
+      ),
+    }),
+  ),
+  assetImpacts: z.array(
+    z.object({
+      asset: z.enum(["BTC", "XAU"]),
+      direction: z.enum(["headwind", "tailwind"]),
+      score: z.number(),
+      methodology: z.literal("macro-event-asset-impact-v1"),
+    }),
+  ),
+});
+
+export const energyPulseSchema = z.object({
+  generatedAt: z.string(),
+  methodology: z.literal("energy-oil-shock-v1"),
+  status: availability,
+  oilShockScore: z.number().nullable(),
+  freshWeight: z.number().min(0).max(1),
+  asOf: z.string(),
+  cards: z.array(
+    z.object({
+      code: z.enum(["brent", "wti", "spread", "oil_shock"]),
+      label: z.string(),
+      value: z.number().nullable(),
+      unit: z.string(),
+      asOf: z.string().nullable(),
+    }),
+  ),
+  priceSeries: z.array(
+    z.object({ ts: z.string(), brent: z.number().nullable(), wti: z.number().nullable() }),
+  ),
+  inventoryProduction: z.array(
+    z.object({
+      ts: z.string(),
+      inventory: z.number().nullable(),
+      production: z.number().nullable(),
+    }),
+  ),
+  evidence: z.array(
+    z.object({
+      observationId: z.string(),
+      metricCode: z.string(),
+      sourceCode: z.string(),
+      sourceUrl: z.string().nullable(),
+      observedAt: z.string(),
+    }),
+  ),
+});
+
 export type BriefingModel = z.infer<typeof briefingSchema>;
 export type BriefingItemModel = z.infer<typeof briefingItemSchema>;
 export type RegimeModel = z.infer<typeof regimesSchema>["regimes"][number];
@@ -180,6 +268,8 @@ export type CalendarModel = z.infer<typeof calendarSchema>["events"][number];
 export type EvidenceModel = z.infer<typeof evidenceSchema>;
 export type PreferencesModel = z.infer<typeof preferencesSchema>;
 export type HealthModel = z.infer<typeof healthSchema>;
+export type MacroEventRiskModel = z.infer<typeof macroEventRiskSchema>;
+export type EnergyPulseModel = z.infer<typeof energyPulseSchema>;
 
 export async function fetchParsed<T>(
   url: string,

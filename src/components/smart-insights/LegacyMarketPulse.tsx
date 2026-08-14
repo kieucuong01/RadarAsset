@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
-import { CryptoEtfFlowPanel } from "@/components/smart-insights/CryptoEtfFlowPanel";
-import { CryptoLargeAddressPanel } from "@/components/smart-insights/CryptoLargeAddressPanel";
-import {
-  CryptoFearGreedPanel,
-  type CryptoPanelMode,
-} from "@/components/smart-insights/CryptoFearGreedPanel";
-import { CryptoFundFlowPanel } from "@/components/smart-insights/CryptoFundFlowPanel";
+import { CryptoQuantPulseTabs } from "@/components/smart-insights/CryptoQuantPulseTabs";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
+import {
+  MacroQuantPulseTabs,
+  type MacroPulseState,
+} from "@/components/smart-insights/MacroQuantPulseTabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import type { MarketTickerResponse } from "@/lib/backend/types";
@@ -20,14 +18,13 @@ import {
   type CryptoMarketPulseModel,
 } from "@/lib/crypto-market-pulse-client";
 import { useI18n } from "@/lib/i18n/context";
-import type { MetricModel, RegimeModel } from "@/lib/smart-insights-client";
-
-const SAMPLE_TICKERS = [
-  { symbol: "BTC", price: 100, changePercent: 1.2 },
-  { symbol: "ETH", price: 100, changePercent: -0.4 },
-  { symbol: "GOLD", price: 100, changePercent: 0.3 },
-  { symbol: "DXY", price: 100, changePercent: -0.2 },
-];
+import type {
+  EnergyPulseModel,
+  MacroEventRiskModel,
+  MetricModel,
+  RegimeModel,
+} from "@/lib/smart-insights-client";
+import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 const SAMPLE_MARKET_METRICS = {
   crypto: ["ETF Flow", "On-chain Activity", "Stablecoin Liquidity"],
@@ -39,19 +36,21 @@ export function LegacyMarketPulse({
   market,
   metrics,
   regimes,
+  macroEventRisk,
+  energyPulse,
+  macroPulseState,
   onMarketChange,
 }: {
   market: InsightMarket;
   metrics: MetricModel[];
   regimes: RegimeModel[];
+  macroEventRisk: MacroEventRiskModel | null;
+  energyPulse: EnergyPulseModel | null;
+  macroPulseState: MacroPulseState;
   onMarketChange: (market: InsightMarket) => void;
 }) {
   const { locale, t } = useI18n();
-  const [tickers, setTickers] =
-    useState<Array<Pick<MarketTickerResponse, "symbol" | "price" | "changePercent">>>(
-      SAMPLE_TICKERS,
-    );
-  const [tickerStatus, setTickerStatus] = useState<"SYSTEM" | "SAMPLE">("SAMPLE");
+  const [tickerSnapshot, setTickerSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));
   const [cryptoPulse, setCryptoPulse] = useState<CryptoMarketPulseModel | null>(null);
   const [cryptoPulseState, setCryptoPulseState] = useState<
     "idle" | "loading" | "loaded" | "failed"
@@ -59,7 +58,7 @@ export function LegacyMarketPulse({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/market/ticker", {
+    fetch(curatedTickerUrl(), {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     })
@@ -68,16 +67,10 @@ export function LegacyMarketPulse({
         return response.json() as Promise<MarketTickerResponse[]>;
       })
       .then((rows) => {
-        if (!controller.signal.aborted && rows.length) {
-          setTickers(rows.slice(0, 8));
-          setTickerStatus("SYSTEM");
-        }
+        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot(rows));
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setTickers(SAMPLE_TICKERS);
-          setTickerStatus("SAMPLE");
-        }
+        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot([]));
       });
     return () => controller.abort();
   }, []);
@@ -108,30 +101,7 @@ export function LegacyMarketPulse({
     () => metrics.filter((metric) => metric.market === "crypto"),
     [metrics],
   );
-  const onchain = cryptoMetrics
-    .filter((metric) => /onchain|stablecoin|etf/.test(metric.metricCode))
-    .slice(0, 4);
   const selectedRegime = regimes.find((regime) => regime.market === market);
-  const requestMode: CryptoPanelMode =
-    cryptoPulseState === "failed" ? "sample" : cryptoPulseState !== "loaded" ? "loading" : "system";
-  const fearMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.fearGreed.status === "unavailable"
-      ? "unavailable"
-      : requestMode;
-  const etfMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.etfFlows.status === "unavailable"
-      ? "unavailable"
-      : requestMode;
-  const fundMode: CryptoPanelMode =
-    requestMode === "system" && cryptoPulse?.fundFlows.status === "unavailable"
-      ? "sample"
-      : requestMode;
-  const largeAddressMode: CryptoPanelMode =
-    requestMode === "system" &&
-    (!cryptoPulse?.largeAddressActivity ||
-      cryptoPulse.largeAddressActivity.status === "unavailable")
-      ? "sample"
-      : requestMode;
 
   return (
     <section className="space-y-6" aria-labelledby="market-pulse-heading">
@@ -160,59 +130,22 @@ export function LegacyMarketPulse({
           <TabsTrigger value="gold">Gold</TabsTrigger>
         </TabsList>
         <TabsContent value="crypto" className="mt-4">
-          <div className="min-w-0 space-y-6">
-            <CryptoFearGreedPanel
-              data={cryptoPulse?.fearGreed ?? null}
-              mode={fearMode}
-              locale={locale}
-            />
-            <CryptoEtfFlowPanel
-              data={cryptoPulse?.etfFlows ?? null}
-              mode={etfMode}
-              locale={locale}
-            />
-            <CryptoFundFlowPanel
-              data={cryptoPulse?.fundFlows ?? null}
-              mode={fundMode}
-              locale={locale}
-            />
-            <CryptoLargeAddressPanel
-              data={cryptoPulse?.largeAddressActivity ?? null}
-              mode={largeAddressMode}
-              locale={locale}
-            />
-            <div className="grid min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="min-w-0 space-y-2.5 rounded-2xl border border-border bg-card p-6">
-                <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <Activity className="size-3" /> {t("overview.market.onChainPulse")}
-                  {!onchain.length ? <DataStatusBadge status="SAMPLE" /> : null}
-                </div>
-                {(onchain.length ? onchain : null)?.map((metric) => (
-                  <div
-                    key={metric.observationId}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="truncate text-muted-foreground" title={metric.metricCode}>
-                      {metric.metricCode.replace("crypto.", "")}
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {metric.value} {metric.unit}
-                    </span>
-                  </div>
-                )) ??
-                  SAMPLE_MARKET_METRICS.crypto.slice(0, 3).map((label, index) => (
-                    <div key={label} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-semibold tabular-nums">{[50, 100, 0][index]}</span>
-                    </div>
-                  ))}
-              </div>
-              <MetricGrid market="crypto" metrics={marketMetrics} locale={locale} />
-            </div>
-          </div>
+          <CryptoQuantPulseTabs
+            cryptoPulse={cryptoPulse}
+            cryptoPulseState={cryptoPulseState}
+            metrics={cryptoMetrics}
+            regime={regimes.find((regime) => regime.market === "crypto")}
+            locale={locale}
+          />
         </TabsContent>
         <TabsContent value="macro" className="mt-4">
-          <MetricGrid market="macro" metrics={marketMetrics} locale={locale} />
+          <MacroQuantPulseTabs
+            regimeContent={<MetricGrid market="macro" metrics={marketMetrics} locale={locale} />}
+            eventRisk={macroEventRisk}
+            energy={energyPulse}
+            state={macroPulseState}
+            locale={locale}
+          />
         </TabsContent>
         <TabsContent value="gold" className="mt-4">
           <MetricGrid market="gold" metrics={marketMetrics} locale={locale} />
@@ -222,10 +155,17 @@ export function LegacyMarketPulse({
       <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h3 className="font-semibold">{t("overview.market.trendingAssets")}</h3>
-          <DataStatusBadge status={tickerStatus} />
+          <DataStatusBadge status={tickerSnapshot.status} detail={tickerSnapshot.detail} />
         </div>
         <div className="flex gap-3 overflow-x-auto px-1 pb-2">
-          {tickers.map((ticker) => (
+          {tickerSnapshot.rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {locale === "vi"
+                ? "Chưa có dữ liệu cho danh sách blue-chip đã chọn."
+                : "No verified data for the selected blue-chip universe."}
+            </p>
+          ) : null}
+          {tickerSnapshot.rows.map((ticker) => (
             <div
               key={ticker.symbol}
               className="min-w-[140px] shrink-0 rounded-xl border border-border bg-background/50 p-3"

@@ -151,4 +151,73 @@ describe("Smart Insights source guard", () => {
     );
     expect(backend).not.toContain("LARGE_ADDRESS_SAMPLE");
   });
+
+  it("uses the curated ticker universe without sample prices", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "LegacyMarketPulse.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("curatedTickerUrl()");
+    expect(source).toContain("resolveCuratedTickerSnapshot");
+    expect(source).not.toContain("SAMPLE_TICKERS");
+    expect(source).not.toContain("rows.slice(0, 8)");
+  });
+
+  it("renders sourced Crypto metric trends without inventing unavailable history", () => {
+    const source = readSmartInsightsSourceTree();
+
+    for (const token of [
+      "function CryptoMetricTrendPanel",
+      "ResponsiveContainer",
+      "LineChart",
+      "trendPoints",
+      "FreshnessBadge",
+      "sourceUrl",
+      "effectiveAt",
+      'status="UNAVAILABLE"',
+    ]) {
+      expect(source).toContain(token);
+    }
+  });
+
+  it("organizes Crypto Quant Pulse into the five approved chart-first tabs", () => {
+    const source = readSmartInsightsSourceTree();
+
+    expect(source).toContain("function CryptoQuantPulseTabs");
+    expect(source).toContain('defaultValue="overview"');
+    for (const value of ["overview", "flows", "sentiment", "onchain", "whales"])
+      expect(source).toContain(`value="${value}"`);
+    for (const label of [
+      "Tổng quan",
+      "Dòng tiền",
+      "Tâm lý &amp; Phái sinh",
+      "On-chain",
+      "Cá voi BTC",
+    ])
+      expect(source).toContain(label);
+
+    const tabs = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoQuantPulseTabs.tsx"),
+      "utf8",
+    );
+    expect(tabs).not.toContain("fetch(");
+    expect(tabs).not.toContain("fetchCryptoMarketPulse");
+  });
+
+  it("uses theme chart colors and exposes the regime effective time", () => {
+    const trendPanel = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoMetricTrendPanel.tsx"),
+      "utf8",
+    );
+    const tabs = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoQuantPulseTabs.tsx"),
+      "utf8",
+    );
+
+    expect(trendPanel).toContain('"var(--chart-1)"');
+    expect(trendPanel).not.toContain("hsl(var(--chart-1))");
+    expect(trendPanel).not.toContain("#6366f1");
+    expect(tabs).toContain("dateTime={regime.effectiveAt}");
+  });
 });

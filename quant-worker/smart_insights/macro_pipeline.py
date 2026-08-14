@@ -10,7 +10,14 @@ import re
 from typing import Any, Protocol
 
 from smart_insights.collectors.cryptocraft import CalendarEventInput
-from smart_insights.macro_registry import classify_surprise_event
+from smart_insights.event_contracts import EventCollectionBatch
+from smart_insights.event_repository import (
+    EventCluster,
+    EventPublicationResult,
+    EventRepository,
+    EventRiskEvidence,
+)
+from smart_insights.macro_registry import EVENT_RISK_COMPONENTS, classify_surprise_event
 from smart_insights.metrics.common import (
     ConfidenceInput,
     InsufficientCoverageError,
@@ -35,6 +42,14 @@ from smart_insights.metrics.macro import (
     parse_release_number,
     release_surprise,
     surprise_z_score,
+)
+from smart_insights.metrics.event_risk import (
+    EVENT_RISK_V1,
+    METHODOLOGY_VERSION as EVENT_RISK_METHODOLOGY_VERSION,
+    EventRiskComponent,
+    EventRiskInputs,
+    EventRiskResult,
+    calculate_event_risk,
 )
 from smart_insights.signals import MetricSignalInput, SignalCandidate, detect_signals
 from smart_insights.sources import source_for_code
@@ -62,6 +77,12 @@ class MacroRepository(Protocol):
     ) -> tuple[str, str]: ...
 
 
+class GlobalEventRiskEvidenceRepository(Protocol):
+    def risk_evidence(
+        self, *, as_of: datetime, freshness_minutes: int = 360
+    ) -> tuple[EventRiskEvidence, ...]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class MacroPipelineResult:
     regime_snapshot_id: str
@@ -71,6 +92,261 @@ class MacroPipelineResult:
     regime_snapshot: SignalSnapshotInput
     event_risk_snapshot: SignalSnapshotInput
     candidates: tuple[SignalCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EventSourceHealth:
+    source_code: str
+    status: str
+    records_fetched: int
+    newest_event_at: datetime | None
+    parser_version: str
+    error_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class MacroAssetImpact:
+    asset: str
+    direction: str
+    score: Decimal
+    methodology: str = "macro-event-asset-impact-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalEventPipelineResult:
+    publication: EventPublicationResult
+    clusters: tuple[EventCluster, ...]
+    risk: EventRiskResult
+    asset_impacts: tuple[MacroAssetImpact, ...]
+    source_health: EventSourceHealth
+
+
+def _asset_impacts(
+    risk: EventRiskResult, clusters: Sequence[EventCluster]
+) -> tuple[MacroAssetImpact, ...]:
+    if risk.value is None:
+        return ()
+    categories = {cluster.category for cluster in clusters}
+    if "energy" in categories:
+        btc_factor, xau_factor = Decimal("-0.55"), Decimal("0.45")
+    elif categories & {"geopolitical", "sanctions", "trade"}:
+        btc_factor, xau_factor = Decimal("-0.40"), Decimal("0.60")
+    else:
+        btc_factor, xau_factor = Decimal("-0.30"), Decimal("0.50")
+    raw_score = Decimal(str(risk.value))
+    return (
+        MacroAssetImpact(
+            "BTC",
+            "headwind" if btc_factor < 0 else "tailwind",
+            (raw_score * btc_factor).quantize(Decimal("0.01")),
+        ),
+        MacroAssetImpact(
+            "XAU",
+            "tailwind" if xau_factor > 0 else "headwind",
+            (raw_score * xau_factor).quantize(Decimal("0.01")),
+        ),
+    )
+
+
+def process_global_event_batch(
+    repository: EventRepository,
+    batch: EventCollectionBatch,
+    *,
+    frequency_anomaly: float | None = None,
+    market_stress: float | None = None,
+) -> GlobalEventPipelineResult:
+    publication = repository.publish(batch.events)
+    clusters = repository.clusters()
+    evidence = tuple(event.content_hash for event in batch.events)
+    components: dict[str, EventRiskComponent] = {}
+    severities = [
+        event.normalized_severity
+        for event in batch.events
+        if event.normalized_severity is not None
+    ]
+    if severities:
+        components["severity"] = EventRiskComponent(
+            "severity", max(severities), batch.snapshot.observed_at, True, evidence
+        )
+    if frequency_anomaly is not None:
+        components["frequency_anomaly"] = EventRiskComponent(
+            "frequency_anomaly", frequency_anomaly, batch.snapshot.observed_at, True, evidence
+        )
+    if clusters:
+        corroboration = min(
+            100.0,
+            sum(min(cluster.corroboration_count, 3) / 3 * 100 for cluster in clusters)
+            / len(clusters),
+        )
+        components["corroboration"] = EventRiskComponent(
+            "corroboration", corroboration, batch.snapshot.observed_at, True, evidence
+        )
+        relevance_by_category = {
+            "energy": 100.0,
+            "geopolitical": 85.0,
+            "sanctions": 80.0,
+            "trade": 75.0,
+            "natural_hazard": 60.0,
+            "other": 30.0,
+        }
+        components["strategic_relevance"] = EventRiskComponent(
+            "strategic_relevance",
+            max(relevance_by_category.get(cluster.category, 30.0) for cluster in clusters),
+            batch.snapshot.observed_at,
+            True,
+            evidence,
+        )
+    if market_stress is not None:
+        components["market_stress"] = EventRiskComponent(
+            "market_stress", market_stress, batch.snapshot.observed_at, True, evidence
+        )
+    risk = calculate_event_risk(
+        EventRiskInputs(as_of=batch.snapshot.observed_at, components=components)
+    )
+    newest = max((event.occurred_at for event in batch.events), default=None)
+    health = EventSourceHealth(
+        source_code=batch.source_code,
+        status="healthy" if batch.error_code is None and batch.events else "failed",
+        records_fetched=len(batch.events),
+        newest_event_at=newest,
+        parser_version=batch.source.parser_version,
+        error_code=batch.error_code,
+    )
+    return GlobalEventPipelineResult(
+        publication=publication,
+        clusters=clusters,
+        risk=risk,
+        asset_impacts=_asset_impacts(risk, clusters),
+        source_health=health,
+    )
+
+
+def calculate_global_event_risk_snapshot(
+    repository: GlobalEventRiskEvidenceRepository, *, as_of: datetime
+) -> SignalSnapshotInput:
+    _aware(as_of, "as_of")
+    rows = repository.risk_evidence(as_of=as_of, freshness_minutes=360)
+    observation_ids = tuple(
+        sorted({observation_id for row in rows for observation_id in row.observation_ids})
+    )
+    provider_codes = tuple(
+        sorted({provider_code for row in rows for provider_code in row.provider_codes})
+    )
+    effective_at = max((row.occurred_at for row in rows), default=as_of)
+    observed_at = max((row.observed_at for row in rows), default=as_of)
+    components: dict[str, EventRiskComponent] = {}
+    severities = [
+        row.normalized_severity
+        for row in rows
+        if row.normalized_severity is not None
+    ]
+    if severities:
+        components["severity"] = EventRiskComponent(
+            "severity", max(severities), observed_at, True, observation_ids
+        )
+    if rows:
+        corroboration = min(
+            100.0,
+            sum(min(row.corroboration_count, 3) / 3 * 100 for row in rows)
+            / len(rows),
+        )
+        components["corroboration"] = EventRiskComponent(
+            "corroboration", corroboration, observed_at, True, observation_ids
+        )
+        relevance = {
+            "energy": 100.0,
+            "geopolitical": 85.0,
+            "sanctions": 80.0,
+            "trade": 75.0,
+            "natural_hazard": 60.0,
+            "other": 30.0,
+        }
+        components["strategic_relevance"] = EventRiskComponent(
+            "strategic_relevance",
+            max(relevance.get(row.category, 30.0) for row in rows),
+            observed_at,
+            True,
+            observation_ids,
+        )
+    result = calculate_event_risk(EventRiskInputs(as_of=as_of, components=components))
+    quality_tier = min(
+        (source_for_code(code).quality_tier for code in provider_codes),
+        default=Decimal("0"),
+    )
+    inputs = tuple(
+        SnapshotMetricInput(
+            metric_code=EVENT_RISK_COMPONENTS[name],
+            value=Decimal(str(component.value)),
+            score=Decimal(str(component.value)),
+            percentile=None,
+            configured_weight=Decimal(str(EVENT_RISK_V1[name])),
+            effective_at=effective_at,
+            observed_at=component.as_of,
+            source_observation_ids=component.source_evidence,
+            quality_tier=quality_tier,
+            validation_status="passed",
+            is_fresh=component.fresh,
+        )
+        for name in EVENT_RISK_V1
+        if (component := components.get(name)) is not None
+        and component.value is not None
+    )
+    score = (
+        None
+        if result.value is None
+        else Decimal(str(result.value)).quantize(Decimal("0.0001"))
+    )
+    status = "active" if score is not None else "unavailable"
+    label = (
+        "high"
+        if score is not None and score >= 75
+        else "elevated"
+        if score is not None and score >= 40
+        else "watch"
+        if score is not None and score > 0
+        else "low"
+        if score is not None
+        else "unavailable"
+    )
+    coverage = Decimal(str(result.coverage)).quantize(Decimal("0.0001"))
+    confidence = (quality_tier * coverage * Decimal("100")).quantize(
+        Decimal("0.01")
+    )
+    payload = {
+        "effectiveAt": as_of.isoformat(timespec="microseconds"),
+        "methodologyVersion": EVENT_RISK_METHODOLOGY_VERSION,
+        "observationIds": observation_ids,
+        "score": None if score is None else format(score, "f"),
+        "status": status,
+    }
+    idempotency_key = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return SignalSnapshotInput(
+        market="macro",
+        asset_symbol=None,
+        effective_at=as_of,
+        methodology_version=EVENT_RISK_METHODOLOGY_VERSION,
+        signal_type="global_event_risk",
+        score=score,
+        label=label,
+        data_confidence=confidence,
+        coverage=coverage,
+        inputs=inputs,
+        status=status,
+        idempotency_key=idempotency_key,
+    )
+
+
+def run_global_event_risk_pipeline(
+    event_repository: GlobalEventRiskEvidenceRepository,
+    insight_repository: MacroRepository,
+    *,
+    as_of: datetime,
+) -> tuple[SignalSnapshotInput, str, str]:
+    snapshot = calculate_global_event_risk_snapshot(event_repository, as_of=as_of)
+    snapshot_id, publication_status = insight_repository.publish_signal_snapshot(snapshot)
+    return snapshot, snapshot_id, publication_status
 
 
 @dataclass(frozen=True, slots=True)
