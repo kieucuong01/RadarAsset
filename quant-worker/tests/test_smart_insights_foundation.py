@@ -13,6 +13,7 @@ import socket
 import sys
 from types import ModuleType, SimpleNamespace
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -170,8 +171,12 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-eth-etf",
         "farside-sol-etf",
         "fred",
+        "gdacs-events",
+        "gdelt-events",
         "mempool-btc-large-addresses",
         "mempool-space",
+        "nasa-eonet",
+        "usgs-earthquakes",
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
@@ -190,6 +195,11 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         code for code in SOURCE_CODES if source_for_code(code).enabled
     } == ENABLED_SOURCE_CODES
     assert source_for_code("fred").license_scope is LicenseScope.PUBLIC_OFFICIAL
+    assert source_for_code("gdelt-events").license_scope is LicenseScope.RESEARCH_ONLY
+    for public_code in ("gdacs-events", "usgs-earthquakes", "nasa-eonet"):
+        source = source_for_code(public_code)
+        assert source.license_scope is LicenseScope.PUBLIC_OFFICIAL
+        assert source.enabled is False
     assert source_for_code("fred").quality_tier == Decimal("1.00")
     assert source_for_code("farside-btc-etf").quality_tier == Decimal("0.70")
     assert (
@@ -216,6 +226,20 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-sol-etf",
         "mempool-space",
     )
+
+
+def test_event_api_urls_are_strictly_allow_listed() -> None:
+    allowed = {
+        "gdelt-events": "https://api.gdeltproject.org/api/v2/doc/doc?query=shipping&mode=artlist&format=json&maxrecords=75&sort=datedesc&startdatetime=20260813000000&enddatetime=20260814000000",
+        "gdacs-events": "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ%3BFL&fromdate=2026-08-13&todate=2026-08-14&alertlevel=green%3Borange%3Bred&limit=100",
+        "usgs-earthquakes": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2026-08-13T00%3A00%3A00%2B00%3A00&endtime=2026-08-14T00%3A00%3A00%2B00%3A00&minmagnitude=4.5&limit=500&orderby=time-asc",
+        "nasa-eonet": "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=7&limit=200",
+    }
+    for code, url in allowed.items():
+        source = source_for_code(code)
+        assert is_source_url_allowed(source, url)
+        assert not is_source_url_allowed(source, url.replace(urlsplit(url).hostname or "", "evil.invalid"))
+        assert not is_source_url_allowed(source, f"{source.urls[0]}?token=secret")
 
 
 def test_discovered_links_remain_inside_source_specific_paths() -> None:
@@ -724,7 +748,7 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
     )
 
     assert exit_code == 0
-    assert len(outcomes) == 12
+    assert len(outcomes) == 16
     assert any(
         outcome.source_code == "mempool-btc-large-addresses"
         and outcome.status == "dry_run"

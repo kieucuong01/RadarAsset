@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from .contracts import RawSnapshot, SourceDefinition
+
 
 JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -51,3 +53,15 @@ class EventObservation:
     quality_flags: tuple[str, ...]
     dimensions: Mapping[str, JsonValue]
     content_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventCollectionBatch:
+    source: SourceDefinition
+    snapshot: RawSnapshot
+    events: tuple[EventObservation, ...]
+    error_code: str | None = None
+
+    @property
+    def source_code(self) -> str:
+        return self.source.code

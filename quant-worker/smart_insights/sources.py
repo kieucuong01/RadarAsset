@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 import re
 from types import MappingProxyType
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from .contracts import CollectionMode, LicenseScope, Market, SourceDefinition
 
@@ -241,6 +241,54 @@ SOURCE_ROWS = (
         "official_api",
         "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
     ),
+    (
+        "gdelt-events",
+        "GDELT Events",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://api.gdeltproject.org/api/v2/doc/doc",),
+        "daily",
+        "gdelt-events-v1",
+        360,
+        "direct_api",
+        "https://www.gdeltproject.org/about.html",
+    ),
+    (
+        "gdacs-events",
+        "GDACS Events",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH",),
+        "daily",
+        "gdacs-events-v1",
+        360,
+        "official_api",
+        "https://www.gdacs.org/About/legal.aspx",
+    ),
+    (
+        "usgs-earthquakes",
+        "USGS Earthquakes",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://earthquake.usgs.gov/fdsnws/event/1/query",),
+        "daily",
+        "usgs-earthquakes-v1",
+        360,
+        "official_api",
+        "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+    ),
+    (
+        "nasa-eonet",
+        "NASA EONET",
+        Market.MACRO,
+        CollectionMode.API,
+        ("https://eonet.gsfc.nasa.gov/api/v3/events",),
+        "daily",
+        "nasa-eonet-v1",
+        360,
+        "official_api",
+        "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+    ),
 )
 
 
@@ -264,7 +312,15 @@ def _definition(row: tuple[object, ...]) -> SourceDefinition:
         collection_mode=CollectionMode(collection_mode),
         license_scope=(
             LicenseScope.PUBLIC_OFFICIAL
-            if str(code) in {"fred", "cftc-legacy", "cftc-disaggregated"}
+            if str(code)
+            in {
+                "fred",
+                "cftc-legacy",
+                "cftc-disaggregated",
+                "gdacs-events",
+                "usgs-earthquakes",
+                "nasa-eonet",
+            }
             else LicenseScope.RESEARCH_ONLY
         ),
         urls=tuple(str(url) for url in urls),  # type: ignore[arg-type]
@@ -326,4 +382,49 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             is not None
         )
         return index_page or article or image
+    if source.code in {
+        "gdelt-events",
+        "gdacs-events",
+        "usgs-earthquakes",
+        "nasa-eonet",
+    }:
+        base = urlsplit(source.urls[0])
+        if parsed.hostname != base.hostname or parsed.path.casefold() != base.path.casefold():
+            return False
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if any(len(values) != 1 for values in query.values()):
+            return False
+        keys = set(query)
+        if source.code == "gdelt-events":
+            if keys != {"query", "mode", "format", "maxrecords", "sort", "startdatetime", "enddatetime"}:
+                return False
+            return (
+                query["mode"] == ["artlist"]
+                and query["format"] == ["json"]
+                and query["sort"] == ["datedesc"]
+                and query["maxrecords"] == ["75"]
+                and all(re.fullmatch(r"\d{14}", query[key][0]) for key in ("startdatetime", "enddatetime"))
+                and 0 < len(query["query"][0]) <= 500
+            )
+        if source.code == "gdacs-events":
+            if keys != {"eventlist", "fromdate", "todate", "alertlevel", "limit"}:
+                return False
+            return query["limit"] == ["100"] and all(
+                re.fullmatch(r"\d{4}-\d{2}-\d{2}", query[key][0])
+                for key in ("fromdate", "todate")
+            )
+        if source.code == "usgs-earthquakes":
+            if keys != {"format", "starttime", "endtime", "minmagnitude", "limit", "orderby"}:
+                return False
+            return (
+                query["format"] == ["geojson"]
+                and query["minmagnitude"] == ["4.5"]
+                and query["limit"] == ["500"]
+                and query["orderby"] == ["time-asc"]
+            )
+        return keys == {"status", "days", "limit"} and query == {
+            "status": ["open"],
+            "days": ["7"],
+            "limit": ["200"],
+        }
     return False

@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"eventtype":"EQ","eventid":1456789,"episodeid":1,"name":"Earthquake in Japan","alertlevel":"Orange","fromdate":"2026-08-13T03:15:00Z","country":"Japan","url":{"report":"https://www.gdacs.org/report.aspx?eventid=1456789&eventtype=EQ"}},"geometry":{"type":"Point","coordinates":[141.25,38.40]}}]}
