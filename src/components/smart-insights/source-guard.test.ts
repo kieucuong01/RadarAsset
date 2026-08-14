@@ -181,17 +181,18 @@ describe("Smart Insights source guard", () => {
     }
   });
 
-  it("organizes Crypto Quant Pulse into the five approved chart-first tabs", () => {
+  it("organizes Crypto Quant Pulse into the six approved chart-first tabs", () => {
     const source = readSmartInsightsSourceTree();
 
     expect(source).toContain("function CryptoQuantPulseTabs");
     expect(source).toContain('defaultValue="overview"');
-    for (const value of ["overview", "flows", "sentiment", "onchain", "whales"])
+    for (const value of ["overview", "flows", "sentiment", "cycle", "onchain", "whales"])
       expect(source).toContain(`value="${value}"`);
     for (const label of [
       "Tổng quan",
       "Dòng tiền",
       "Tâm lý &amp; Phái sinh",
+      "Chu kỳ",
       "On-chain",
       "Cá voi BTC",
     ])
@@ -203,6 +204,26 @@ describe("Smart Insights source guard", () => {
     );
     expect(tabs).not.toContain("fetch(");
     expect(tabs).not.toContain("fetchCryptoMarketPulse");
+  });
+
+  it("keeps CoinGlass pressure and cycle panels sourced and unit-separated", () => {
+    const source = readSmartInsightsSourceTree();
+    for (const token of [
+      "CryptoDerivativesPressurePanel",
+      "CryptoCyclePanel",
+      "coinglass.com/pro/i/MarginFeeChart",
+      "coinglass.com/liquidation-maxpain",
+      "blockchaincenter.net/altcoin-season-index",
+      "colintalkscrypto.com/cbbi",
+      "annualizedRate",
+      "dailyRate",
+      "hourlyRate",
+      "currentPriceUsd",
+      "season90d",
+      "CBBI Confidence",
+      "Không phải mức giá mục tiêu hoặc khuyến nghị giao dịch",
+    ])
+      expect(source).toContain(token);
   });
 
   it("uses theme chart colors and exposes the regime effective time", () => {

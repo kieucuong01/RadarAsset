@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
+import collect_smart_insights
 from collect_smart_insights import build_batch_collectors, run_live_smoke
 from smart_insights.collectors.alternative_fng import AlternativeFearGreedCollector
 from smart_insights.collectors.bitinfocharts import BitInfoChartsCollector
@@ -23,6 +24,7 @@ from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot
 from smart_insights.http import HttpResponse, SourceFetchError
 from smart_insights.metrics.crypto import ObservationPoint
+from smart_insights.scrapling_client import DownloadedAsset
 from smart_insights.parsers.markdown_table import parse_markdown_table
 from smart_insights.validation import validate_observations
 
@@ -238,6 +240,94 @@ def test_batch_collectors_use_injected_local_crawler() -> None:
     assert batch.error_code is None
     assert len(batch.observations) > 0
     assert crawler.calls == ["https://farside.co.uk/btc/"]
+
+
+def test_batch_builder_wires_all_crawled_crypto_pulse_sources() -> None:
+    cycle_now = datetime(2026, 8, 14, 23, tzinfo=timezone.utc)
+
+    class StaticCrawler:
+        def scrape(self, _source: object, url: str) -> RawSnapshot:
+            html = (
+                fixture_text("cbbi-page.html")
+                if url.endswith("/cbbi/")
+                else fixture_text("blockchaincenter-altseason.html")
+            )
+            return RawSnapshot(
+                content=json.dumps({"rawHtml": html}).encode("utf-8"),
+                content_type="application/json",
+                source_url=url,
+                effective_at=None,
+                published_at=None,
+                observed_at=cycle_now,
+                metadata={"collector": "scrapling"},
+            )
+
+        def download_json(self, _source: object, url: str) -> DownloadedAsset:
+            return DownloadedAsset(
+                content=(FIXTURES / "cbbi-latest.json").read_bytes(),
+                content_type="application/json",
+                source_url=url,
+                observed_at=cycle_now,
+                metadata={"collector": "scrapling"},
+            )
+
+    class RenderedCrawler:
+        def scrape(
+            self, _source: object, url: str, *, ready: object
+        ) -> RawSnapshot:
+            html = (
+                fixture_text("coinglass-margin.html")
+                if url.endswith("MarginFeeChart")
+                else fixture_text("coinglass-maxpain.html")
+            )
+            assert callable(ready) and ready(html)
+            return RawSnapshot(
+                content=json.dumps({"rawHtml": html}).encode("utf-8"),
+                content_type="application/json",
+                source_url=url,
+                effective_at=None,
+                published_at=None,
+                observed_at=cycle_now,
+                metadata={"collector": "nodriver"},
+            )
+
+    collectors = build_batch_collectors(
+        scrapling_client=StaticCrawler(), rendered_client=RenderedCrawler()
+    )
+    expected_counts = {
+        "coinglass-margin-borrow": 6,
+        "coinglass-liquidation-maxpain": 21,
+        "blockchaincenter-altcoin-season": 3,
+        "cbbi-public": 19,
+    }
+
+    for source_code, count in expected_counts.items():
+        batch = collectors[source_code](cycle_now)
+        assert batch.source.code == source_code
+        assert batch.error_code is None
+        assert len(batch.observations) == count
+
+
+def test_cbbi_backfill_cli_requires_the_cbbi_source() -> None:
+    assert (
+        collect_smart_insights.main(
+            ["daily", "--dry-run", "--cbbi-backfill"], collectors={}
+        )
+        == 2
+    )
+    assert (
+        collect_smart_insights.main(
+            [
+                "daily",
+                "--dry-run",
+                "--source",
+                "cbbi-public",
+                "--cbbi-backfill",
+            ],
+            collectors={},
+        )
+        == 0
+    )
 
 
 def test_bitinfocharts_uses_the_injected_scrapling_client() -> None:

@@ -42,6 +42,12 @@ independently bounded after cancellation. Headless Chrome did not pass the
 2026-08-14 provider probe. Windows workers therefore require an interactive desktop session; a Linux
 worker requires a separately qualified Xvfb setup before this source can be enabled there.
 
+CoinGlass uses the same bounded Nodriver lifecycle directly because its public quantitative tables
+render only after JavaScript. The client sets the browser timezone to UTC before navigation, uses a
+fresh temporary profile for every page, accepts only the exact registered final URL, and stores no
+cookies. BlockchainCenter and CBBI use Scrapling; CBBI may download only the exact public companion
+asset `/cbbi/data/latest.json`, with strict JSON content type, UTF-8, and byte limits.
+
 The provider splits ranks 1-19 and 20-100 across two HTML tables and abbreviates some visible address
 text. The acquisition layer merges exactly ranks 1-100, reads each full address from its allow-listed
 `/bitcoin/address/` link, converts only the normalized table with MarkItDown, and then delegates all
@@ -82,6 +88,10 @@ Implemented but disabled pending a successful deployment-environment smoke:
 | `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
+| `coinglass-margin-borrow` | Every four hours | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication |
+| `coinglass-liquidation-maxpain` | Every four hours | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication |
+| `blockchaincenter-altcoin-season` | Daily | Fixture parser is implemented; pending live SSR schema verification and PostgreSQL publication |
+| `cbbi-public` | Daily | Public page/JSON parser is implemented; pending live schema verification and PostgreSQL publication |
 
 WGC is retired from the active registry, scheduler, Data Health, and Gold score. Historical WGC
 providers, runs, snapshots, observations, evidence, and derived snapshots remain in PostgreSQL for
@@ -100,6 +110,32 @@ Use the source's configured schedule (`daily` or `weekly`). CryptoCraft uses:
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
   -Schedule calendar-current -Source cryptocraft -LiveSmoke
 ```
+
+Smoke the four crawled Crypto Pulse sources independently:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule four-hourly -Source coinglass-margin-borrow -LiveSmoke
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule four-hourly -Source coinglass-liquidation-maxpain -LiveSmoke
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source blockchaincenter-altcoin-season -LiveSmoke
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source cbbi-public -LiveSmoke
+```
+
+These gates are independent. A success from one provider never enables another. CBBI historical
+backfill is explicit and may run only with `--source cbbi-public --cbbi-backfill`; normal daily runs
+publish at most the latest seven provider days.
+
+Activation evidence on 2026-08-14 for the crawled Crypto Pulse sources: PostgreSQL reported all 26
+migrations applied. Independent bounded live smokes succeeded for CoinGlass Margin Borrow (60
+observations, latest effective 2026-08-14 16:00 UTC), CoinGlass Liquidation Max Pain (21
+observations across BTC/ETH/SOL), BlockchainCenter Altcoin Season (three horizon observations), and
+CBBI (60 observations, latest provider day 2026-08-13). Production publication then succeeded for
+all four sources. Direct database read-back showed the latest provider run as `succeeded`, each raw
+snapshot as `validated`, and observation counts of 60, 21, 3, and 60 respectively. The web read
+model returned `system` for both CoinGlass sections and both cycle sections, including 20 hourly
+margin points, BTC/ETH/SOL max-pain rows, Altcoin Season 61/43/37, CBBI Confidence 31.34, and all nine
+CBBI components. The worktree web listener returned HTTP 200 on port 3117; authenticated visual QA
+remained unavailable because the local env had no configured demo login password, so this evidence
+does not claim an authenticated browser pass.
 
 After a smoke succeeds, add only that source code to `ENABLED_SOURCE_CODES`, run tests, and deploy
 the code change. To roll back a provider, remove its code from that set. Never delete historical
@@ -125,6 +161,7 @@ The repository provides commands but does not create OS scheduled tasks.
 | Job | Recommended trigger | Command |
 | --- | --- | --- |
 | Daily market collection and regime calculation | Daily after source-day close | `scripts/run-smart-insights.ps1 -Schedule daily` |
+| CoinGlass public pressure tables | Every four hours | `scripts/run-smart-insights.ps1 -Schedule four-hourly` |
 | Weekly flows and positioning | Weekly after provider publication | `scripts/run-smart-insights.ps1 -Schedule weekly` |
 | CryptoCraft current week | Every 15 minutes | `scripts/run-smart-insights.ps1 -Schedule calendar-current` |
 | CryptoCraft next week | Every 12 hours | `scripts/run-smart-insights.ps1 -Schedule calendar-next` |

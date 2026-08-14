@@ -41,13 +41,15 @@ class ScraplingClient:
         clock: Callable[[], datetime] | None = None,
         max_html_bytes: int = 20_000_000,
         max_image_bytes: int = 10_000_000,
+        max_json_bytes: int = 20_000_000,
     ) -> None:
-        if max_html_bytes <= 0 or max_image_bytes <= 0:
+        if min(max_html_bytes, max_image_bytes, max_json_bytes) <= 0:
             raise ValueError("Scrapling response limits must be positive.")
         self._fetcher = fetcher or _fetch
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._max_html_bytes = max_html_bytes
         self._max_image_bytes = max_image_bytes
+        self._max_json_bytes = max_json_bytes
 
     def scrape(self, source: SourceDefinition, url: str) -> RawSnapshot:
         response = self._request(source, url, max_bytes=self._max_html_bytes)
@@ -99,6 +101,31 @@ class ScraplingClient:
             raise SourceFetchError("INVALID_RESPONSE")
         return DownloadedAsset(
             content=_body(response),
+            content_type=content_type,
+            source_url=url,
+            observed_at=self._clock(),
+            metadata={
+                "collector": "scrapling",
+                "parser_version": source.parser_version,
+                "status_code": int(response.status),
+            },
+        )
+
+    def download_json(
+        self, source: SourceDefinition, url: str
+    ) -> DownloadedAsset:
+        response = self._request(source, url, max_bytes=self._max_json_bytes)
+        content_type = _content_type(response)
+        if content_type != "application/json":
+            raise SourceFetchError("INVALID_RESPONSE")
+        body = _body(response)
+        try:
+            text = body.decode("utf-8", errors="strict")
+            json.loads(text)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise SourceFetchError("INVALID_RESPONSE") from error
+        return DownloadedAsset(
+            content=body,
             content_type=content_type,
             source_url=url,
             observed_at=self._clock(),

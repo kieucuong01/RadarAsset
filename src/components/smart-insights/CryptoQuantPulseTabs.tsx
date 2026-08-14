@@ -13,6 +13,8 @@ import {
   ONCHAIN_METRIC_CODES,
 } from "@/lib/crypto-quant-pulse";
 import type { MetricModel, RegimeModel } from "@/lib/smart-insights-client";
+import { CryptoCyclePanel } from "./CryptoCyclePanel";
+import { CryptoDerivativesPressurePanel } from "./CryptoDerivativesPressurePanel";
 import { CryptoEtfFlowPanel } from "./CryptoEtfFlowPanel";
 import { CryptoFearGreedPanel, type CryptoPanelMode } from "./CryptoFearGreedPanel";
 import { CryptoFundFlowPanel } from "./CryptoFundFlowPanel";
@@ -184,6 +186,7 @@ export function CryptoQuantPulseTabs({
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="flows">Dòng tiền</TabsTrigger>
           <TabsTrigger value="sentiment">Tâm lý &amp; Phái sinh</TabsTrigger>
+          <TabsTrigger value="cycle">Chu kỳ</TabsTrigger>
           <TabsTrigger value="onchain">On-chain</TabsTrigger>
           <TabsTrigger value="whales">Cá voi BTC</TabsTrigger>
         </TabsList>
@@ -221,11 +224,20 @@ export function CryptoQuantPulseTabs({
           mode={fearMode}
           locale={locale}
         />
+        <CryptoDerivativesPressurePanel data={cryptoPulse} mode={requestMode} locale={locale} />
         <CryptoMetricTrendPanel
           title="Phái sinh Crypto"
           description="Funding, open interest và implied volatility theo chuỗi thời gian đã kiểm định."
           series={derivativeSeries}
           emptyDescription="Chưa đủ ít nhất hai quan sát hợp lệ để hiển thị xu hướng phái sinh."
+          locale={locale}
+        />
+      </TabsContent>
+
+      <TabsContent value="cycle" className="mt-4 min-w-0">
+        <CryptoCyclePanel
+          data={cryptoPulse?.cycleIndicators ?? null}
+          mode={requestMode}
           locale={locale}
         />
       </TabsContent>

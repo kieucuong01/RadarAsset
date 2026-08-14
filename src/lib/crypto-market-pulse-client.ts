@@ -7,6 +7,38 @@ const datedValue = z.object({
 });
 
 const flowValue = z.number().nullable();
+const timestamp = z.string().min(1);
+const finite = z.number().finite();
+const sourceStatus = z.enum(["system", "partial", "unavailable"]);
+const cbbiComponentCode = z.enum([
+  "pi_cycle",
+  "rupl_nupl",
+  "rhodl",
+  "puell",
+  "two_year_ma",
+  "trolololo",
+  "mvrv",
+  "reserve_risk",
+  "woobull",
+]);
+const cbbiComponents = z
+  .array(z.object({ code: cbbiComponentCode, value: finite.min(0).max(100) }))
+  .max(9)
+  .superRefine((items, context) => {
+    if (new Set(items.map((item) => item.code)).size !== items.length) {
+      context.addIssue({ code: "custom", message: "CBBI components must be unique." });
+    }
+  });
+const cbbiPoint = z.object({
+  effectiveAt: timestamp,
+  confidence: finite.min(0).max(100),
+  components: cbbiComponents,
+});
+const liquidationSide = z.object({
+  priceUsd: finite.nonnegative(),
+  levelUsd: finite.nonnegative(),
+  distanceRatio: finite,
+});
 const nullableCount = z.number().int().nonnegative().nullable();
 const nullableRatio = z.number().min(0).max(1).nullable();
 const largeAddressHorizon = z.object({
@@ -61,6 +93,84 @@ export const cryptoMarketPulseSchema = z.object({
       }),
     ),
     latestBreakdown: z.array(z.object({ label: z.string(), value: z.number() })),
+  }),
+  marginBorrow: z.object({
+    status: sourceStatus,
+    sourceCode: z.literal("coinglass-margin-borrow"),
+    sourceUrl: z.string().min(1),
+    observedAt: timestamp.nullable(),
+    series: z.array(
+      z.object({
+        effectiveAt: timestamp,
+        annualizedRate: finite.nullable(),
+        dailyRate: finite.nullable(),
+        hourlyRate: finite.nullable(),
+      }),
+    ),
+  }),
+  liquidationMaxPain: z
+    .object({
+      status: sourceStatus,
+      sourceCode: z.literal("coinglass-liquidation-maxpain"),
+      sourceUrl: z.string().min(1),
+      observedAt: timestamp.nullable(),
+      rows: z.array(
+        z.object({
+          asset: z.enum(["BTC", "ETH", "SOL"]),
+          range: z.literal("24h"),
+          effectiveAt: timestamp,
+          currentPriceUsd: finite.nonnegative().nullable(),
+          long: liquidationSide.nullable(),
+          short: liquidationSide.nullable(),
+        }),
+      ),
+    })
+    .superRefine((value, context) => {
+      if (new Set(value.rows.map((row) => row.asset)).size !== value.rows.length) {
+        context.addIssue({ code: "custom", message: "Liquidation assets must be unique." });
+      }
+    }),
+  cycleIndicators: z.object({
+    altcoinSeason: z.object({
+      status: sourceStatus,
+      sourceCode: z.literal("blockchaincenter-altcoin-season"),
+      sourceUrl: z.string().min(1),
+      observedAt: timestamp.nullable(),
+      latest: z
+        .object({
+          effectiveAt: timestamp,
+          season90d: finite.min(0).max(100).nullable(),
+          month: finite.min(0).max(100).nullable(),
+          year: finite.min(0).max(100).nullable(),
+          classification: z.enum(["bitcoin_season", "neutral", "altcoin_season"]).nullable(),
+        })
+        .nullable(),
+      series: z.array(
+        z.object({
+          effectiveAt: timestamp,
+          season90d: finite.min(0).max(100).nullable(),
+          month: finite.min(0).max(100).nullable(),
+          year: finite.min(0).max(100).nullable(),
+        }),
+      ),
+    }),
+    cbbi: z
+      .object({
+        status: sourceStatus,
+        sourceCode: z.literal("cbbi-public"),
+        sourceUrl: z.string().min(1),
+        observedAt: timestamp.nullable(),
+        latest: cbbiPoint.nullable(),
+        series: z.array(cbbiPoint),
+      })
+      .superRefine((value, context) => {
+        if (value.status === "system" && value.latest?.components.length !== 9) {
+          context.addIssue({
+            code: "custom",
+            message: "System CBBI data requires exactly nine components.",
+          });
+        }
+      }),
   }),
   largeAddressActivity: z
     .object({

@@ -82,6 +82,38 @@ const pulse = cryptoMarketPulseSchema.parse({
     series: [],
     latestBreakdown: [],
   },
+  marginBorrow: {
+    status: "unavailable",
+    sourceCode: "coinglass-margin-borrow",
+    sourceUrl: "https://www.coinglass.com/pro/i/MarginFeeChart",
+    observedAt: null,
+    series: [],
+  },
+  liquidationMaxPain: {
+    status: "unavailable",
+    sourceCode: "coinglass-liquidation-maxpain",
+    sourceUrl: "https://www.coinglass.com/liquidation-maxpain",
+    observedAt: null,
+    rows: [],
+  },
+  cycleIndicators: {
+    altcoinSeason: {
+      status: "unavailable",
+      sourceCode: "blockchaincenter-altcoin-season",
+      sourceUrl: "https://www.blockchaincenter.net/altcoin-season-index/",
+      observedAt: null,
+      latest: null,
+      series: [],
+    },
+    cbbi: {
+      status: "unavailable",
+      sourceCode: "cbbi-public",
+      sourceUrl: "https://colintalkscrypto.com/cbbi/",
+      observedAt: null,
+      latest: null,
+      series: [],
+    },
+  },
 });
 
 describe("Crypto Quant Pulse chart model", () => {

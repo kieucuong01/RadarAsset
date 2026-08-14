@@ -19,7 +19,12 @@ from smart_insights.metrics.common import (
     simple_return,
     weighted_score,
 )
-from smart_insights.metrics.crypto import METRIC_DEFINITIONS_BY_CODE
+from smart_insights.metrics.crypto import (
+    COMPONENT_WEIGHTS,
+    CRYPTO_GROUP_COMPONENTS,
+    METRIC_DEFINITIONS_BY_CODE,
+)
+from smart_insights.metrics import crypto as crypto_metrics
 from smart_insights.signals import MetricSignalInput, detect_signals
 
 
@@ -49,6 +54,48 @@ def test_large_address_metric_contract_is_registered() -> None:
     assert {
         METRIC_DEFINITIONS_BY_CODE[code].metadata["source"] for code in expected
     } == {"mempool-btc-large-addresses"}
+
+
+def test_crawled_cycle_and_derivative_metrics_are_evidence_only() -> None:
+    cbbi_components = {
+        "PiCycle": "pi_cycle",
+        "RUPL": "rupl_nupl",
+        "RHODL": "rhodl",
+        "Puell": "puell",
+        "2YMA": "two_year_ma",
+        "Trolololo": "trolololo",
+        "MVRV": "mvrv",
+        "ReserveRisk": "reserve_risk",
+        "Woobull": "woobull",
+    }
+    assert getattr(crypto_metrics, "CBBI_COMPONENTS", None) == cbbi_components
+    expected = {
+        "crypto.derivatives.margin_borrow.annualized_rate": ("percent", "coinglass-margin-borrow"),
+        "crypto.derivatives.margin_borrow.daily_rate": ("percent", "coinglass-margin-borrow"),
+        "crypto.derivatives.margin_borrow.hourly_rate": ("percent", "coinglass-margin-borrow"),
+        "crypto.derivatives.liquidation.current_price_usd": ("USD", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.long_max_pain_price_usd": ("USD", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.short_max_pain_price_usd": ("USD", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.long_max_pain_level_usd": ("USD", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.short_max_pain_level_usd": ("USD", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.long_distance_ratio": ("ratio", "coinglass-liquidation-maxpain"),
+        "crypto.derivatives.liquidation.short_distance_ratio": ("ratio", "coinglass-liquidation-maxpain"),
+        "crypto.cycle.altcoin_season.index": ("index", "blockchaincenter-altcoin-season"),
+        "crypto.cycle.cbbi.confidence": ("percent", "cbbi-public"),
+        **{
+            f"crypto.cycle.cbbi.component.{slug}": ("percent", "cbbi-public")
+            for slug in cbbi_components.values()
+        },
+    }
+
+    for code, (unit, source) in expected.items():
+        definition = METRIC_DEFINITIONS_BY_CODE[code]
+        assert definition.unit == unit
+        assert definition.direction == 0
+        assert definition.metadata["source"] == source
+        assert definition.metadata["evidence_only"] is True
+        assert code not in COMPONENT_WEIGHTS
+        assert all(code not in components for components in CRYPTO_GROUP_COMPONENTS.values())
 
 
 def metric(
