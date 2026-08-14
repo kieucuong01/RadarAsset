@@ -242,3 +242,46 @@ export type EnergyPulseView = {
     observedAt: string;
   }>;
 };
+
+export type KronosShadowView = {
+  asset: "BTC";
+  model: "kronos-small";
+  state: "ACCUMULATING" | "READY_SHADOW" | "FAILED" | "UNAVAILABLE";
+  decisionUse: "NONE";
+  completedOos: number;
+  minimumOos: 180;
+  generatedAt: string | null;
+  modelRevision: string | null;
+  forecasts: Array<{
+    days: 1 | 3 | 7;
+    median: number;
+    lower: number;
+    upper: number;
+    forecastFor: string;
+  }>;
+  metrics: Array<{
+    model: string;
+    mae: number;
+    mase: number;
+    directionalAccuracy: number;
+    spearmanIc: number;
+    intervalCoverage: number | null;
+    calibrationError: number | null;
+  }>;
+  rollingErrors: Array<{
+    ts: string;
+    horizon: number;
+    model: string;
+    absoluteError: number;
+    directionCorrect: boolean;
+    volatilityRegime: "LOW" | "NORMAL" | "HIGH";
+  }>;
+  history: Array<{
+    generatedAt: string;
+    forecastFor: string;
+    days: 1 | 3 | 7;
+    predicted: number;
+    realized: number;
+  }>;
+  methodology: "kronos-btc-shadow-v1";
+};

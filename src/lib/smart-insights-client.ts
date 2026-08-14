@@ -260,6 +260,57 @@ export const energyPulseSchema = z.object({
   ),
 });
 
+export const kronosShadowSchema = z.object({
+  asset: z.literal("BTC"),
+  model: z.literal("kronos-small"),
+  state: z.enum(["ACCUMULATING", "READY_SHADOW", "FAILED", "UNAVAILABLE"]),
+  decisionUse: z.literal("NONE"),
+  completedOos: z.number().int().nonnegative(),
+  minimumOos: z.literal(180),
+  generatedAt: z.string().nullable(),
+  modelRevision: z.string().nullable(),
+  forecasts: z.array(
+    z.object({
+      days: z.union([z.literal(1), z.literal(3), z.literal(7)]),
+      median: z.number().positive(),
+      lower: z.number().positive(),
+      upper: z.number().positive(),
+      forecastFor: z.string(),
+    }),
+  ),
+  metrics: z.array(
+    z.object({
+      model: z.string(),
+      mae: z.number().nonnegative(),
+      mase: z.number().nonnegative(),
+      directionalAccuracy: z.number().min(0).max(1),
+      spearmanIc: z.number().min(-1).max(1),
+      intervalCoverage: z.number().min(0).max(1).nullable(),
+      calibrationError: z.number().min(0).max(1).nullable(),
+    }),
+  ),
+  rollingErrors: z.array(
+    z.object({
+      ts: z.string(),
+      horizon: z.number().int().positive(),
+      model: z.string(),
+      absoluteError: z.number().nonnegative(),
+      directionCorrect: z.boolean(),
+      volatilityRegime: z.enum(["LOW", "NORMAL", "HIGH"]),
+    }),
+  ),
+  history: z.array(
+    z.object({
+      generatedAt: z.string(),
+      forecastFor: z.string(),
+      days: z.union([z.literal(1), z.literal(3), z.literal(7)]),
+      predicted: z.number().positive(),
+      realized: z.number().positive(),
+    }),
+  ),
+  methodology: z.literal("kronos-btc-shadow-v1"),
+});
+
 export type BriefingModel = z.infer<typeof briefingSchema>;
 export type BriefingItemModel = z.infer<typeof briefingItemSchema>;
 export type RegimeModel = z.infer<typeof regimesSchema>["regimes"][number];
@@ -270,6 +321,7 @@ export type PreferencesModel = z.infer<typeof preferencesSchema>;
 export type HealthModel = z.infer<typeof healthSchema>;
 export type MacroEventRiskModel = z.infer<typeof macroEventRiskSchema>;
 export type EnergyPulseModel = z.infer<typeof energyPulseSchema>;
+export type KronosShadowModel = z.infer<typeof kronosShadowSchema>;
 
 export async function fetchParsed<T>(
   url: string,
