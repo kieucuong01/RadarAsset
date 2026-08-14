@@ -17,6 +17,7 @@ node_modules
 .npm-cache
 .venv/
 .local-data/
+quant-worker/.runtime/
 .tmp/
 .pytest-tmp-*/
 .pytest-*/
