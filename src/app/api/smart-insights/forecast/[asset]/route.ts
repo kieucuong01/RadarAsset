@@ -6,10 +6,7 @@ import { loadKronosShadow } from "@/lib/backend/smart-insights-forecast";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ asset: string }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ asset: string }> }) {
   try {
     const { asset } = await params;
     const model = new URL(request.url).searchParams.get("model") ?? "kronos-small";

@@ -72,36 +72,51 @@ export async function loadKronosShadow(
   if (!run) return EMPTY;
   const parameters = object(run.parameters);
   if (run.status === "failed") {
-    return { ...EMPTY, state: "FAILED", modelRevision: String(parameters.modelRevision ?? "") || null };
+    return {
+      ...EMPTY,
+      state: "FAILED",
+      modelRevision: String(parameters.modelRevision ?? "") || null,
+    };
   }
   const evaluation = run.evaluations[0];
-  if (run.status !== "completed" || !evaluation || !hasCompleteProvenance(run.parameters)) return EMPTY;
+  if (run.status !== "completed" || !evaluation || !hasCompleteProvenance(run.parameters))
+    return EMPTY;
 
   const metricRoot = object(evaluation.metrics);
   const modelRows = Array.isArray(metricRoot.models) ? metricRoot.models : [];
   const errorRows = Array.isArray(metricRoot.rollingErrors) ? metricRoot.rollingErrors : [];
-  const metrics = modelRows.map((value) => object(value)).map((row) => ({
-    model: String(row.model ?? ""),
-    mae: Math.max(0, finite(row.mae)),
-    mase: Math.max(0, finite(row.mase)),
-    directionalAccuracy: Math.min(1, Math.max(0, finite(row.directional_accuracy))),
-    spearmanIc: Math.min(1, Math.max(-1, finite(row.spearman_ic))),
-    intervalCoverage: row.interval_coverage == null ? null : Math.min(1, Math.max(0, finite(row.interval_coverage))),
-    calibrationError: row.calibration_error == null ? null : Math.min(1, Math.max(0, finite(row.calibration_error))),
-  }));
+  const metrics = modelRows
+    .map((value) => object(value))
+    .map((row) => ({
+      model: String(row.model ?? ""),
+      mae: Math.max(0, finite(row.mae)),
+      mase: Math.max(0, finite(row.mase)),
+      directionalAccuracy: Math.min(1, Math.max(0, finite(row.directional_accuracy))),
+      spearmanIc: Math.min(1, Math.max(-1, finite(row.spearman_ic))),
+      intervalCoverage:
+        row.interval_coverage == null
+          ? null
+          : Math.min(1, Math.max(0, finite(row.interval_coverage))),
+      calibrationError:
+        row.calibration_error == null
+          ? null
+          : Math.min(1, Math.max(0, finite(row.calibration_error))),
+    }));
   const rollingErrors = errorRows
     .map((value) => object(value))
     .flatMap((row) => {
       const regime = String(row.volatilityRegime ?? "");
       if (!row.ts || !["LOW", "NORMAL", "HIGH"].includes(regime)) return [];
-      return [{
-        ts: String(row.ts),
-        horizon: Math.max(1, Math.trunc(finite(row.horizon, 1))),
-        model: String(row.model ?? ""),
-        absoluteError: Math.max(0, finite(row.absoluteError)),
-        directionCorrect: row.directionCorrect === true,
-        volatilityRegime: regime as "LOW" | "NORMAL" | "HIGH",
-      }];
+      return [
+        {
+          ts: String(row.ts),
+          horizon: Math.max(1, Math.trunc(finite(row.horizon, 1))),
+          model: String(row.model ?? ""),
+          absoluteError: Math.max(0, finite(row.absoluteError)),
+          directionCorrect: row.directionCorrect === true,
+          volatilityRegime: regime as "LOW" | "NORMAL" | "HIGH",
+        },
+      ];
     })
     .slice(-360);
 
@@ -120,17 +135,21 @@ export async function loadKronosShadow(
     })
     .sort((left, right) => left.days - right.days);
   const history = run.forecasts
-    .filter((row) => row.status === "evaluated" && row.realizedPrice != null && row.forecastFor != null)
+    .filter(
+      (row) => row.status === "evaluated" && row.realizedPrice != null && row.forecastFor != null,
+    )
     .flatMap((row) => {
       const horizon = days(row.horizon);
       if (!horizon) return [];
-      return [{
-        generatedAt: row.generatedAt.toISOString(),
-        forecastFor: row.forecastFor!.toISOString(),
-        days: horizon,
-        predicted: finite(row.targetPrice),
-        realized: finite(row.realizedPrice),
-      }];
+      return [
+        {
+          generatedAt: row.generatedAt.toISOString(),
+          forecastFor: row.forecastFor!.toISOString(),
+          days: horizon,
+          predicted: finite(row.targetPrice),
+          realized: finite(row.realizedPrice),
+        },
+      ];
     })
     .slice(0, 180)
     .reverse();

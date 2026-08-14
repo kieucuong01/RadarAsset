@@ -34,17 +34,26 @@ describe("loadKronosShadow", () => {
         inputFingerprint: "input",
         runtime: { manifestDigest: "secret-digest", runtimePath: "C:/private/runtime" },
       },
-      evaluations: [{
-        status: "ready_shadow",
-        metrics: {
-          completedOos: 180,
-          models: [{
-            model: "kronos-small", mae: 5, mase: 0.9, directional_accuracy: 0.55,
-            spearman_ic: 0.1, interval_coverage: 0.8, calibration_error: 0,
-          }],
-          rollingErrors: [],
+      evaluations: [
+        {
+          status: "ready_shadow",
+          metrics: {
+            completedOos: 180,
+            models: [
+              {
+                model: "kronos-small",
+                mae: 5,
+                mase: 0.9,
+                directional_accuracy: 0.55,
+                spearman_ic: 0.1,
+                interval_coverage: 0.8,
+                calibration_error: 0,
+              },
+            ],
+            rollingErrors: [],
+          },
         },
-      }],
+      ],
       forecasts: [1, 3, 7].map((days) => ({
         status: "shadow",
         generatedAt,
