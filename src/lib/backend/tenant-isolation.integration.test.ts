@@ -576,6 +576,7 @@ describe("database tenant isolation", () => {
 
   it("persists an immutable strategy version link on a tenant quant run", async () => {
     const strategyId = randomUUID();
+    const strategyCode = `isolation-ma-${suffix}`;
     try {
       await prisma.$executeRaw`
         INSERT INTO "strategy_versions" (
@@ -583,7 +584,7 @@ describe("database tenant isolation", () => {
           "parameter_schema", "default_parameters", "supported_markets",
           "supported_timeframes", "implementation_hash", "created_at"
         ) VALUES (
-          ${strategyId}::uuid, 'ma_crossover', '1.0.0', 'MA Crossover', 'rule_based', 'active',
+          ${strategyId}::uuid, ${strategyCode}, '1.0.0', 'MA Crossover', 'rule_based', 'active',
           '{"type":"object"}'::jsonb, '{"fastPeriod":5,"slowPeriod":20}'::jsonb,
           '["vn_equity","crypto_spot","metal_spot"]'::jsonb, '["1d","1h"]'::jsonb,
           ${"a".repeat(64)}, NOW()

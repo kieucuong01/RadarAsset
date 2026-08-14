@@ -122,9 +122,6 @@ describe("authenticated Quant fixture boundary", () => {
       where: { canonicalKey: { startsWith: `test_fixture:${suffix}:` } },
     });
     await prisma.dataProvider.deleteMany({ where: { code: `quant-e2e-${suffix}` } });
-    await prisma.strategyVersion.deleteMany({
-      where: { code: "ma_crossover", version: "1.0.0" },
-    });
     await prisma.$disconnect();
   });
 
@@ -177,8 +174,10 @@ describe("authenticated Quant fixture boundary", () => {
         providerId: provider.id,
       }),
     ]);
-    const strategy = await prisma.strategyVersion.create({
-      data: {
+    const strategy = await prisma.strategyVersion.upsert({
+      where: { code_version: { code: "ma_crossover", version: "1.0.0" } },
+      update: { status: "active" },
+      create: {
         code: "ma_crossover",
         version: "1.0.0",
         name: "Quant E2E MA",

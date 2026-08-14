@@ -145,6 +145,11 @@ The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `e
 
 ## Smart Insights Crypto Worker
 
+Capacity verification is local and test-only. Set `TEST_DATABASE_URL` to a local database ending
+in `_test`, then run `python run_backtest_capacity.py --runs 20 --workers 10` and the corresponding
+50-run gate with `--workers 20`. The harness uses the production PostgreSQL claim and execution
+path, deletes its temporary organizations, and is not provider-data evidence.
+
 `collect_smart_insights.py` owns the allow-listed Crypto collectors, immutable raw-artifact
 publication, metric definition seeding, point-in-time observation queries, and Crypto Regime Score
 publication. Fixture parsers do not enable a source; use the live-smoke boundary first:

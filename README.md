@@ -261,6 +261,10 @@ server; clients cannot choose it.
 
 ## Notes
 
+Authenticated Quant browser QA and the 20/50-run PostgreSQL capacity gate use only the isolated
+local `_test` database. See `docs/verification/2026-08-14-quant-p0-4-e2e-capacity.md`; passing test
+fixtures does not certify provider-backed market data.
+
 The UI currently preserves the original prototype screens while removing
 Lovable, TanStack Start, Vite, Wrangler, and Cloudflare-specific runtime
 dependencies. Local development seeds a real email/password Better Auth login

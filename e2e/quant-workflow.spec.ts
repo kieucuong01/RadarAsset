@@ -49,7 +49,10 @@ test("authenticated Quant shell is usable without overflow", async ({ page }, te
   await expect(page.getByText("Equity Curve & Drawdown")).toBeVisible();
   await expect(page.getByText(/Trade List|Danh sách lệnh/)).toBeVisible();
   if (testInfo.project.name === "desktop") {
-    await page.locator("summary").filter({ hasText: /Phân tích nâng cao|Advanced Analysis/ }).click();
+    await page
+      .locator("summary")
+      .filter({ hasText: /Phân tích nâng cao|Advanced Analysis/ })
+      .click();
     await page.getByRole("tab", { name: "E2EVN" }).click();
     const apply = page.getByRole("button", { name: /Áp dụng|Apply/ }).first();
     const appliedResponse = page.waitForResponse(

@@ -14,6 +14,7 @@ export default defineConfig({
       ".worktrees/**",
       "**/.worktrees/**",
       "**/*.integration.test.ts",
+      "e2e/**",
       "scripts/dev-local.test.mjs",
     ],
   },
