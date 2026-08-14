@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import re
 
-from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
+from smart_insights.macro_registry import CFTC_MARKETS, EVENT_RISK_COMPONENTS, FRED_SERIES
 
 from .common import rolling_z_score
 from .crypto import MetricDefinitionInput
@@ -133,7 +133,29 @@ _DERIVED_DEFINITIONS = (
     _definition("macro.growth_surprise", "Growth release surprise", "z_score", "event", 1, 10_080, source="cryptocraft"),
     _definition("macro.inflation_surprise", "Inflation release surprise", "z_score", "event", -1, 10_080, source="cryptocraft"),
     _definition("macro.regime.score", "Macro Risk-Asset Regime Score", "score", "daily", 1, 4_320),
-    _definition("macro.event_risk", "Macro Event Risk", "score", "event", 0, 120, source="cryptocraft"),
+    *(
+        _definition(
+            metric_code,
+            f"Macro Event Risk {component.replace('_', ' ').title()}",
+            "score",
+            "event",
+            0,
+            360,
+            methodology="macro-event-risk-v1",
+            component=component,
+        )
+        for component, metric_code in EVENT_RISK_COMPONENTS.items()
+    ),
+    _definition(
+        "macro.event_risk",
+        "Macro Event Risk",
+        "score",
+        "event",
+        0,
+        360,
+        methodology="macro-event-risk-v1",
+        minimum_fresh_weight="0.60",
+    ),
 )
 
 MACRO_METRIC_DEFINITIONS = _FRED_DEFINITIONS + _CFTC_DEFINITIONS + _DERIVED_DEFINITIONS
