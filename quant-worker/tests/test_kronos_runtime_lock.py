@@ -43,3 +43,8 @@ def test_setup_script_rejects_revision_drift() -> None:
     assert "if ($LASTEXITCODE -ne 0)" in script
     assert "-c $downloadScript" not in script
     assert "sha256-manifest.json" in script
+
+
+def test_runtime_verifier_scopes_git_safe_directory_to_checkout() -> None:
+    adapter = (ROOT / "quant-worker/smart_insights/kronos/adapter.py").read_text()
+    assert '"safe.directory=" + str(source)' in adapter

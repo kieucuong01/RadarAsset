@@ -141,7 +141,15 @@ def _verify_runtime(lock: RuntimeLock) -> None:
         raise RuntimeUnavailableError("Kronos runtime has not been installed")
     try:
         revision = subprocess.run(
-            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            [
+                "git",
+                "-c",
+                "safe.directory=" + str(source),
+                "-C",
+                str(source),
+                "rev-parse",
+                "HEAD",
+            ],
             check=True,
             capture_output=True,
             text=True,
