@@ -2,21 +2,23 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from html import escape
 from io import BytesIO
 import json
-from tempfile import TemporaryDirectory
 import time
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
-from .contracts import CollectionMode, RawSnapshot, SourceDefinition
+from .contracts import RawSnapshot, SourceDefinition
 from .http import SourceFetchError
-from .sources import is_source_url_allowed
+from .rendered_page_client import (
+    BrowserHtmlResult,
+    NodriverRenderedPageClient,
+    _fetch_with_nodriver as _fetch_shared_rendered_page,
+)
 
 
 _REQUIRED_HEADERS = ("Address", "Balance", "First In", "Last In")
@@ -182,12 +184,6 @@ def convert_bitinfocharts_html(
     return markdown
 
 
-@dataclass(frozen=True, slots=True)
-class BrowserHtmlResult:
-    html: str
-    final_url: str
-
-
 async def poll_bitinfocharts_html(
     page: Any,
     *,
@@ -224,39 +220,13 @@ async def poll_bitinfocharts_html(
         await sleep(poll_interval_seconds)
 
 
-async def _close_nodriver_resources(browser: Any, process: Any) -> None:
-    try:
-        if browser is not None:
-            targets = tuple(getattr(browser, "targets", ()))
-            if targets:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(
-                            *(target.aclose() for target in targets),
-                            return_exceptions=True,
-                        ),
-                        timeout=2,
-                    )
-                except asyncio.TimeoutError:
-                    pass
-            try:
-                await asyncio.wait_for(browser.aclose(), timeout=2)
-            except Exception:
-                pass
-    finally:
-        if process is not None:
-            try:
-                if getattr(process, "returncode", None) is None:
-                    process.terminate()
-                await asyncio.wait_for(process.wait(), timeout=3)
-            except asyncio.TimeoutError:
-                try:
-                    process.kill()
-                    await asyncio.wait_for(process.wait(), timeout=1)
-                except (asyncio.TimeoutError, OSError, ProcessLookupError):
-                    pass
-            except (OSError, ProcessLookupError):
-                pass
+def _bitinfocharts_ready(html: str) -> bool:
+    lowered = html.casefold()
+    return (
+        "/bitcoin/address/" in html
+        and all(header.casefold() in lowered for header in _REQUIRED_HEADERS)
+        and not any(marker in lowered for marker in _CHALLENGE_MARKERS)
+    )
 
 
 async def _fetch_with_nodriver(
@@ -265,44 +235,13 @@ async def _fetch_with_nodriver(
     poll_timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> BrowserHtmlResult:
-    try:
-        import nodriver
-    except Exception as error:
-        raise SourceFetchError("BROWSER_LAUNCH_FAILED") from error
-
-    browser = None
-    process = None
-    with TemporaryDirectory(
-        prefix="smart-insights-bitinfocharts-", ignore_cleanup_errors=True
-    ) as profile_dir:
-        try:
-            try:
-                browser = await nodriver.start(
-                    headless=False,
-                    browser_args=[
-                        "--window-position=-32000,-32000",
-                        "--window-size=800,600",
-                    ],
-                    user_data_dir=profile_dir,
-                )
-            except Exception as error:
-                raise SourceFetchError("BROWSER_LAUNCH_FAILED") from error
-            process = getattr(browser, "_process", None)
-            page = await browser.get(url)
-            html = await poll_bitinfocharts_html(
-                page,
-                timeout_seconds=poll_timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
-            final_url = await page.evaluate(
-                "window.location.href", return_by_value=True
-            )
-            return BrowserHtmlResult(
-                html=html,
-                final_url=final_url if isinstance(final_url, str) else "",
-            )
-        finally:
-            await _close_nodriver_resources(browser, process)
+    return await _fetch_shared_rendered_page(
+        url,
+        ready=_bitinfocharts_ready,
+        poll_timeout_seconds=poll_timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        timezone_id="UTC",
+    )
 
 
 def _default_browser_fetch(
@@ -335,6 +274,7 @@ class NodriverBitInfoChartsClient:
     def __init__(
         self,
         *,
+        renderer: Any | None = None,
         browser_fetch: Callable[[str], BrowserHtmlResult] | None = None,
         clock: Callable[[], datetime] | None = None,
         timeout_seconds: float = 60,
@@ -342,61 +282,30 @@ class NodriverBitInfoChartsClient:
         poll_interval_seconds: float = 1,
         max_html_bytes: int = 20_000_000,
     ) -> None:
-        if (
-            min(
-                timeout_seconds,
-                poll_timeout_seconds,
-                poll_interval_seconds,
-                max_html_bytes,
-            )
-            <= 0
-        ):
-            raise ValueError("Nodriver limits must be positive.")
-        self._browser_fetch = browser_fetch
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
-        self._timeout_seconds = timeout_seconds
-        self._poll_timeout_seconds = poll_timeout_seconds
-        self._poll_interval_seconds = poll_interval_seconds
-        self._max_html_bytes = max_html_bytes
+        if renderer is not None and browser_fetch is not None:
+            raise ValueError("Provide either renderer or browser_fetch, not both.")
+        adapted_fetch = (
+            None
+            if browser_fetch is None
+            else lambda url, _ready: browser_fetch(url)
+        )
+        self._renderer = renderer or NodriverRenderedPageClient(
+            browser_fetch=adapted_fetch,
+            clock=clock,
+            timeout_seconds=timeout_seconds,
+            poll_timeout_seconds=poll_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            max_html_bytes=max_html_bytes,
+            timezone_id="UTC",
+        )
 
     def scrape(self, source: SourceDefinition, url: str) -> RawSnapshot:
         if source.code != "bitinfocharts-top-addresses":
             raise ValueError("Nodriver fallback is restricted to BitInfoCharts.")
-        if source.collection_mode is not CollectionMode.SCRAPLING:
-            raise ValueError("Source is not configured for browser fallback.")
-        if not is_source_url_allowed(source, url):
-            raise ValueError("URL is not allow-listed for this source.")
-        if self._browser_fetch is None:
-            result = _default_browser_fetch(
-                url,
-                timeout_seconds=self._timeout_seconds,
-                poll_timeout_seconds=self._poll_timeout_seconds,
-                poll_interval_seconds=self._poll_interval_seconds,
-            )
-        else:
-            result = self._browser_fetch(url)
-        if result.final_url != url:
-            raise SourceFetchError("REDIRECT_REJECTED")
-        if not isinstance(result.html, str) or not result.html.strip():
-            raise SourceFetchError("INVALID_RESPONSE")
-        if len(result.html.encode("utf-8")) > self._max_html_bytes:
-            raise SourceFetchError("RESPONSE_TOO_LARGE")
-        return RawSnapshot(
-            content=json.dumps(
-                {"rawHtml": result.html, "metadata": {"sourceURL": url}},
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8"),
-            content_type="application/json",
-            source_url=url,
-            effective_at=None,
-            published_at=None,
-            observed_at=self._clock(),
-            metadata={
-                "collector": "nodriver",
-                "parser_version": source.parser_version,
-            },
+        return self._renderer.scrape(
+            source,
+            url,
+            ready=_bitinfocharts_ready,
         )
 
 

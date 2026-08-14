@@ -333,9 +333,10 @@ def test_nodriver_client_rejects_redirects_and_oversized_html() -> None:
         redirecting.scrape(source, URL)
     assert redirect_error.value.code == "REDIRECT_REJECTED"
 
+    valid_html = _provider_html()
     oversized = NodriverBitInfoChartsClient(
-        browser_fetch=lambda _url: BrowserHtmlResult("x" * 11, URL),
-        max_html_bytes=10,
+        browser_fetch=lambda _url: BrowserHtmlResult(valid_html, URL),
+        max_html_bytes=len(valid_html.encode("utf-8")) - 1,
     )
     with pytest.raises(SourceFetchError) as size_error:
         oversized.scrape(source, URL)
@@ -353,6 +354,28 @@ def test_nodriver_client_is_restricted_to_bitinfocharts_source() -> None:
 
     with pytest.raises(ValueError, match="BitInfoCharts"):
         client.scrape(source, URL)
+
+
+def test_nodriver_client_delegates_bitinfocharts_readiness_to_shared_renderer() -> None:
+    calls: list[tuple[object, str]] = []
+
+    class Renderer:
+        def scrape(
+            self, source: object, url: str, *, ready: object
+        ) -> RawSnapshot:
+            assert callable(ready)
+            assert ready(_provider_html())
+            assert not ready("<html><body>placeholder</body></html>")
+            calls.append((source, url))
+            return _snapshot(collector="nodriver", html=_provider_html())
+
+    source = source_for_code("bitinfocharts-top-addresses")
+    client = NodriverBitInfoChartsClient(renderer=Renderer())
+
+    snapshot = client.scrape(source, URL)
+
+    assert snapshot.source_url == URL
+    assert calls == [(source, URL)]
 
 
 def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
@@ -390,6 +413,9 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
         _process = Process()
         targets = [Target()]
 
+        async def send(self, command: object) -> None:
+            calls.append(command)
+
         async def get(self, url: str) -> Page:
             calls.append(url)
             return Page()
@@ -406,7 +432,12 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
         calls.append((headless, browser_args))
         return Browser()
 
-    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start))
+    cdp = SimpleNamespace(
+        emulation=SimpleNamespace(
+            set_timezone_override=lambda *, timezone_id: ("timezone", timezone_id)
+        )
+    )
+    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start, cdp=cdp))
 
     result = asyncio.run(
         _fetch_with_nodriver(
@@ -422,6 +453,7 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
             False,
             ["--window-position=-32000,-32000", "--window-size=800,600"],
         ),
+        ("timezone", "UTC"),
         URL,
         ("window.location.href", True),
         "target-closed",
@@ -452,6 +484,9 @@ def test_nodriver_cleans_up_when_navigation_fails(
         _process = Process()
         targets: list[object] = []
 
+        async def send(self, _command: object) -> None:
+            calls.append("timezone-set")
+
         async def get(self, _url: str) -> object:
             raise RuntimeError("navigation failed")
 
@@ -463,7 +498,12 @@ def test_nodriver_cleans_up_when_navigation_fails(
         profile_path = Path(str(kwargs["user_data_dir"]))
         return Browser()
 
-    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start))
+    cdp = SimpleNamespace(
+        emulation=SimpleNamespace(
+            set_timezone_override=lambda *, timezone_id: timezone_id
+        )
+    )
+    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start, cdp=cdp))
 
     with pytest.raises(RuntimeError, match="navigation failed"):
         asyncio.run(
@@ -474,7 +514,12 @@ def test_nodriver_cleans_up_when_navigation_fails(
 
     assert profile_path is not None
     assert not profile_path.exists()
-    assert calls == ["browser-closed", "terminated", "process-waited"]
+    assert calls == [
+        "timezone-set",
+        "browser-closed",
+        "terminated",
+        "process-waited",
+    ]
 
 
 def test_nodriver_terminates_process_when_browser_close_raises(
@@ -504,6 +549,9 @@ def test_nodriver_terminates_process_when_browser_close_raises(
         _process = Process()
         targets: list[object] = []
 
+        async def send(self, _command: object) -> None:
+            calls.append("timezone-set")
+
         async def get(self, _url: str) -> Page:
             return Page()
 
@@ -514,7 +562,12 @@ def test_nodriver_terminates_process_when_browser_close_raises(
     async def start(**_kwargs: object) -> Browser:
         return Browser()
 
-    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start))
+    cdp = SimpleNamespace(
+        emulation=SimpleNamespace(
+            set_timezone_override=lambda *, timezone_id: timezone_id
+        )
+    )
+    monkeypatch.setitem(sys.modules, "nodriver", SimpleNamespace(start=start, cdp=cdp))
 
     result = asyncio.run(
         _fetch_with_nodriver(
@@ -524,6 +577,7 @@ def test_nodriver_terminates_process_when_browser_close_raises(
 
     assert result.final_url == URL
     assert calls == [
+        "timezone-set",
         "browser-close-failed",
         "terminated",
         "process-waited",
