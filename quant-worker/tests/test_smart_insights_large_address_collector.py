@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import importlib
 import json
@@ -234,3 +234,39 @@ def test_transaction_history_paginates_until_the_previous_cutoff() -> None:
         [url for url in transport.calls if f"/api/address/{TRACKED}/txs/chain/" in url]
     ) == 1
     assert all(row.dimensions.get("txid") != "f" * 64 for row in batch.observations)
+
+
+def test_reviewed_exchange_flow_marks_eligible_dormant_activation() -> None:
+    labels_module = importlib.import_module("smart_insights.exchange_labels")
+    collector_module = importlib.import_module(
+        "smart_insights.collectors.mempool_large_addresses"
+    )
+    label = labels_module.ExchangeLabel(
+        EXCHANGE,
+        "Test Exchange",
+        "exchange",
+        "https://example.com/exchange-proof",
+        date(2026, 8, 1),
+        "test-v1",
+        "reviewed",
+    )
+    watch = collector_module.AddressWatch(
+        TRACKED, 2, Decimal("1200"), "unknown", "cohort-v1"
+    )
+
+    batch = collector_module.MempoolLargeAddressCollector(
+        transport=RoutingTransport(), labels={EXCHANGE: label}
+    ).collect(
+        NOW,
+        watchlist=(watch,),
+        previous_cutoff=datetime(2026, 8, 13, tzinfo=timezone.utc),
+        balance_history={},
+        last_outgoing={TRACKED: NOW - timedelta(days=182)},
+    )
+
+    assert metric(
+        batch, "crypto.large_address.dormant_to_exchange_btc"
+    ).value == Decimal("25")
+    assert metric(
+        batch, "crypto.large_address.dormant_from_exchange_btc"
+    ).value == Decimal("10")

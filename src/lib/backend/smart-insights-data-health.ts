@@ -124,6 +124,14 @@ const SOURCE_POLICIES = [
     freshnessSlaMinutes: 4_320,
   },
   {
+    sourceCode: "mempool-btc-large-addresses",
+    sourceName: "mempool.space BTC Large Addresses",
+    market: "crypto",
+    collectionMode: "api",
+    parserVersion: "mempool-btc-large-addresses-v1",
+    freshnessSlaMinutes: 2_880,
+  },
+  {
     sourceCode: "mempool-space",
     sourceName: "mempool.space",
     market: "crypto",

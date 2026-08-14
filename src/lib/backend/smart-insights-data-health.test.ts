@@ -55,7 +55,17 @@ describe("Smart Insights data health", () => {
     const response = await loadSmartInsightsDataHealth(new Date("2026-08-13T02:00:00.000Z"));
     const fearGreed = response.sources.find((source) => source.sourceCode === "alternative-fng");
 
-    expect(response.sources).toHaveLength(15);
+    expect(response.sources).toHaveLength(16);
+    expect(
+      response.sources.find((source) => source.sourceCode === "mempool-btc-large-addresses"),
+    ).toMatchObject({
+      sourceName: "mempool.space BTC Large Addresses",
+      market: "crypto",
+      collectionMode: "api",
+      parserVersion: "mempool-btc-large-addresses-v1",
+      lastStatus: "unavailable",
+      freshness: "UNAVAILABLE",
+    });
     expect(
       response.sources
         .filter(

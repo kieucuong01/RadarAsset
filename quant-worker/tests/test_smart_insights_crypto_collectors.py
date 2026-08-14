@@ -22,6 +22,7 @@ from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
 from smart_insights.contracts import RawSnapshot
 from smart_insights.http import HttpResponse
+from smart_insights.metrics.crypto import ObservationPoint
 from smart_insights.parsers.markdown_table import parse_markdown_table
 from smart_insights.validation import validate_observations
 
@@ -68,6 +69,56 @@ class FakeTransport:
             headers={"Content-Type": "application/json"},
             body=self.payload.encode("utf-8"),
             url=url,
+        )
+
+
+class LargeAddressTransport:
+    def fetch(
+        self, url: str, *, timeout_seconds: float, max_bytes: int
+    ) -> HttpResponse:
+        if url.endswith("/api/blocks/tip/height"):
+            body = b"1000"
+        elif url.endswith("/txs"):
+            body = b"[]"
+        elif "/api/address/" in url:
+            body = json.dumps(
+                {
+                    "chain_stats": {
+                        "funded_txo_sum": 120000000000,
+                        "spent_txo_sum": 0,
+                    }
+                }
+            ).encode("utf-8")
+        else:
+            raise AssertionError(f"Unexpected URL: {url}")
+        return HttpResponse(200, {"Content-Type": "application/json"}, body, url)
+
+
+class LargeAddressRepository:
+    def metric_observations(
+        self, metric_code: str, *, as_of: datetime, limit: int = 5_000
+    ) -> tuple[ObservationPoint, ...]:
+        if metric_code != "crypto.large_address.address_balance_btc":
+            return ()
+        return (
+            ObservationPoint(
+                id="watch-1",
+                metric_code=metric_code,
+                value=Decimal("1200"),
+                effective_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+                observed_at=datetime(2026, 8, 12, 1, tzinfo=timezone.utc),
+                provider_code="bitinfocharts-top-addresses",
+                quality_status="warning",
+                natural_key="watch-1",
+                revision=1,
+                dimensions={
+                    "address": "bc1q0000000000000000000000000000000000001",
+                    "cohort_version": "cohort-v1",
+                    "label_status": "unknown",
+                    "rank": "2",
+                },
+                asset_symbol="BTC",
+            ),
         )
 
 
@@ -200,6 +251,25 @@ def test_bitinfocharts_uses_the_injected_scrapling_client() -> None:
     assert scrapling.calls == [
         "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
     ]
+
+
+def test_batch_collectors_build_large_address_watchlist_from_repository() -> None:
+    collectors = build_batch_collectors(
+        LargeAddressRepository(),
+        scrapling_client=FakeCrawler(fixture_text("bitinfocharts.md")),
+        large_address_transport=LargeAddressTransport(),
+    )
+
+    batch = collectors["mempool-btc-large-addresses"](NOW)
+
+    assert batch.error_code is None
+    balance = next(
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.confirmed_balance_btc"
+    )
+    assert balance.value == Decimal("1200")
+    assert balance.dimensions["rank"] == "2"
 
 
 def test_farside_normalizes_live_multirow_html_and_ignores_open_date() -> None:

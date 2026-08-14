@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import json
 import os
@@ -38,6 +38,10 @@ from smart_insights.collectors.deribit import DeribitCollector
 from smart_insights.collectors.farside import FarsideEtfCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.collectors.mempool import MempoolSpaceCollector
+from smart_insights.collectors.mempool_large_addresses import (
+    AddressWatch,
+    MempoolLargeAddressCollector,
+)
 from smart_insights.contracts import RawSnapshot, SourceDefinition, SourceRunResult
 from smart_insights.crypto_pipeline import run_crypto_pipeline
 from smart_insights.scrapling_client import ScraplingClient
@@ -360,6 +364,75 @@ def _previous_large_address_balances(
     }
 
 
+def _latest_large_address_watchlist(
+    repository: PostgresInsightRepository | None, as_of: datetime
+) -> tuple[AddressWatch, ...]:
+    if repository is None:
+        return ()
+    rows = tuple(
+        row
+        for row in repository.metric_observations(
+            "crypto.large_address.address_balance_btc", as_of=as_of
+        )
+        if row.dimensions.get("address")
+        and row.dimensions.get("rank")
+        and row.dimensions.get("cohort_version")
+    )
+    if not rows:
+        return ()
+    latest_effective_at = max(row.effective_at for row in rows)
+    result: list[AddressWatch] = []
+    for row in rows:
+        if row.effective_at != latest_effective_at:
+            continue
+        try:
+            result.append(
+                AddressWatch(
+                    address=row.dimensions["address"],
+                    rank=int(row.dimensions["rank"]),
+                    discovery_balance_btc=row.value,
+                    label_status=row.dimensions.get("label_status", "unknown"),
+                    cohort_version=row.dimensions["cohort_version"],
+                )
+            )
+        except (KeyError, ValueError):
+            continue
+    return tuple(sorted(result, key=lambda item: (item.rank, item.address)))
+
+
+def _large_address_history(
+    repository: PostgresInsightRepository | None, as_of: datetime
+) -> tuple[
+    datetime | None,
+    dict[date, dict[str, Decimal]],
+    dict[str, datetime],
+]:
+    if repository is None:
+        return None, {}, {}
+    balance_rows = repository.metric_observations(
+        "crypto.large_address.confirmed_balance_btc", as_of=as_of
+    )
+    balance_history: dict[date, dict[str, Decimal]] = {}
+    for row in balance_rows:
+        address = row.dimensions.get("address")
+        if address:
+            balance_history.setdefault(row.effective_at.date(), {})[address] = row.value
+    previous_cutoff = (
+        max(row.effective_at for row in balance_rows) if balance_rows else None
+    )
+    outgoing_rows = repository.metric_observations(
+        "crypto.large_address.confirmed_outgoing_btc", as_of=as_of
+    )
+    last_outgoing: dict[str, datetime] = {}
+    for row in outgoing_rows:
+        address = row.dimensions.get("address")
+        if address and (
+            address not in last_outgoing or row.effective_at > last_outgoing[address]
+        ):
+            last_outgoing[address] = row.effective_at
+    return previous_cutoff, balance_history, last_outgoing
+
+
 def _bounded_environment_int(
     name: str, default: int, *, minimum: int, maximum: int
 ) -> int:
@@ -417,6 +490,7 @@ def build_batch_collectors(
     repository: PostgresInsightRepository | None = None,
     *,
     scrapling_client: Any | None = None,
+    large_address_transport: Any | None = None,
 ) -> Mapping[str, BatchCollector]:
     scrapling = scrapling_client or ScraplingClient()
 
@@ -431,6 +505,20 @@ def build_batch_collectors(
         return BitInfoChartsCollector(crawler=scrapling).collect(
             as_of,
             previous_balances=previous or None,
+        )
+
+    def mempool_large_addresses(as_of: datetime) -> CollectionBatch:
+        previous_cutoff, balance_history, last_outgoing = _large_address_history(
+            repository, as_of
+        )
+        return MempoolLargeAddressCollector(
+            transport=large_address_transport
+        ).collect(
+            as_of,
+            watchlist=_latest_large_address_watchlist(repository, as_of),
+            previous_cutoff=previous_cutoff,
+            balance_history=balance_history,
+            last_outgoing=last_outgoing,
         )
 
     def fred(as_of: datetime) -> CollectionBatch:
@@ -487,6 +575,7 @@ def build_batch_collectors(
         ).collect(as_of),
         "coinmetrics-community": lambda as_of: CoinMetricsCollector().collect(as_of),
         "mempool-space": lambda as_of: MempoolSpaceCollector().collect(as_of),
+        "mempool-btc-large-addresses": mempool_large_addresses,
         "defillama-stablecoins": lambda as_of: DefiLlamaStablecoinsCollector().collect(as_of),
         "defillama-chains": lambda as_of: DefiLlamaChainsCollector().collect(as_of),
         "deribit-public": lambda as_of: DeribitCollector().collect(as_of),

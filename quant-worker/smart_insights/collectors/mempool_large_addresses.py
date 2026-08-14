@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
 from typing import Any
@@ -72,7 +72,7 @@ class MempoolLargeAddressCollector:
         balance_history: Mapping[date, Mapping[str, Decimal]],
         last_outgoing: Mapping[str, datetime],
     ) -> CollectionBatch:
-        del balance_history, last_outgoing
+        del balance_history
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware.")
         effective_at = as_of.astimezone(timezone.utc).replace(
@@ -98,8 +98,11 @@ class MempoolLargeAddressCollector:
         external_value = Decimal("0")
         to_exchange = Decimal("0")
         from_exchange = Decimal("0")
+        dormant_to_exchange = Decimal("0")
+        dormant_from_exchange = Decimal("0")
         balances: list[tuple[AddressWatch, Decimal]] = []
         seen_txids: set[str] = set()
+        latest_outgoing = dict(last_outgoing)
 
         for watch in watchlist:
             address_url = f"{self.source.urls[0]}{quote(watch.address, safe='')}"
@@ -144,7 +147,7 @@ class MempoolLargeAddressCollector:
             except (SourceFetchError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
                 continue
 
-            for transaction in transactions:
+            for transaction in sorted(transactions, key=self._transaction_time):
                 parsed = self._transaction(
                     transaction,
                     watch=watch,
@@ -160,6 +163,16 @@ class MempoolLargeAddressCollector:
                 external_value += external
                 to_exchange += to_value
                 from_exchange += from_value
+                previous_outgoing = latest_outgoing.get(watch.address)
+                dormant_eligible = (
+                    previous_outgoing is not None
+                    and row.effective_at - previous_outgoing >= timedelta(days=180)
+                )
+                if dormant_eligible:
+                    dormant_to_exchange += to_value
+                    dormant_from_exchange += from_value
+                if row.dimensions.get("direction") == "outgoing":
+                    latest_outgoing[watch.address] = row.effective_at
 
         address_coverage = _ratio(successful_balances, len(watchlist))
         transaction_coverage = _ratio(successful_transactions, len(watchlist))
@@ -173,6 +186,8 @@ class MempoolLargeAddressCollector:
                 self._row("crypto.large_address.to_exchange_btc", to_exchange, effective_at, common_dimensions),
                 self._row("crypto.large_address.from_exchange_btc", from_exchange, effective_at, common_dimensions),
                 self._row("crypto.large_address.exchange_flow_pressure_btc", to_exchange - from_exchange, effective_at, common_dimensions),
+                self._row("crypto.large_address.dormant_to_exchange_btc", dormant_to_exchange, effective_at, common_dimensions),
+                self._row("crypto.large_address.dormant_from_exchange_btc", dormant_from_exchange, effective_at, common_dimensions),
                 self._row("crypto.large_address.address_coverage", address_coverage, effective_at, common_dimensions),
                 self._row("crypto.large_address.transaction_coverage", transaction_coverage, effective_at, common_dimensions),
                 self._row("crypto.large_address.flow_label_coverage", flow_label_coverage, effective_at, common_dimensions),
@@ -206,6 +221,15 @@ class MempoolLargeAddressCollector:
             ]
         snapshot = self._snapshot(payloads, as_of, effective_at)
         return CollectionBatch(self.source, snapshot, tuple(observations))
+
+    @staticmethod
+    def _transaction_time(payload: object) -> int:
+        if not isinstance(payload, dict) or not isinstance(payload.get("status"), dict):
+            return 0
+        try:
+            return int(payload["status"].get("block_time", 0))
+        except (TypeError, ValueError):
+            return 0
 
     def _transaction_history(
         self, address_url: str, *, previous_cutoff: datetime | None
