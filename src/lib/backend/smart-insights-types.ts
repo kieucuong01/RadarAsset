@@ -168,3 +168,77 @@ export type SmartInsightsDataHealthResponse = {
   generatedAt: string;
   sources: SmartInsightSourceHealth[];
 };
+
+export type Availability = "AVAILABLE" | "STALE" | "LIMITED_DATA" | "UNAVAILABLE";
+
+export type MacroEventRow = {
+  id: string;
+  category: string;
+  subcategory: string | null;
+  title: string;
+  country: string | null;
+  region: string | null;
+  occurredAt: string;
+  severity: number;
+  corroborationCount: number;
+  status: string;
+  qualityFlags: string[];
+  sources: Array<{
+    sourceCode: string;
+    sourceUrl: string | null;
+    observedAt: string;
+  }>;
+};
+
+export type MacroEventRiskView = {
+  generatedAt: string;
+  methodology: "macro-event-risk-v1";
+  status: Availability;
+  score: number | null;
+  freshWeight: number;
+  asOf: string;
+  components: Array<{
+    code: string;
+    value: number | null;
+    weight: number;
+    fresh: boolean;
+    evidenceIds: string[];
+  }>;
+  timeline: Array<{ ts: string; score: number; category: string }>;
+  events: MacroEventRow[];
+  assetImpacts: Array<{
+    asset: "BTC" | "XAU";
+    direction: "headwind" | "tailwind";
+    score: number;
+    methodology: "macro-event-asset-impact-v1";
+  }>;
+};
+
+export type EnergyPulseView = {
+  generatedAt: string;
+  methodology: "energy-oil-shock-v1";
+  status: Availability;
+  oilShockScore: number | null;
+  freshWeight: number;
+  asOf: string;
+  cards: Array<{
+    code: "brent" | "wti" | "spread" | "oil_shock";
+    label: string;
+    value: number | null;
+    unit: string;
+    asOf: string | null;
+  }>;
+  priceSeries: Array<{ ts: string; brent: number | null; wti: number | null }>;
+  inventoryProduction: Array<{
+    ts: string;
+    inventory: number | null;
+    production: number | null;
+  }>;
+  evidence: Array<{
+    observationId: string;
+    metricCode: string;
+    sourceCode: string;
+    sourceUrl: string | null;
+    observedAt: string;
+  }>;
+};
