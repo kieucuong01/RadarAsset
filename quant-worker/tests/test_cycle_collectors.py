@@ -117,6 +117,18 @@ def test_altseason_parser_keeps_three_horizons_and_boundaries() -> None:
     assert blockchaincenter.classify_altcoin_season(75) == "altcoin_season"
 
 
+def test_altseason_parser_accepts_live_navigation_button_contract() -> None:
+    observations = blockchaincenter.parse_altcoin_season(
+        fixture_text("blockchaincenter-altseason-live.html"), NOW
+    )
+
+    assert [(row.dimensions["horizon"], row.value) for row in observations] == [
+        ("season_90d", Decimal("61")),
+        ("month", Decimal("43")),
+        ("year", Decimal("37")),
+    ]
+
+
 @pytest.mark.parametrize(
     "html",
     (

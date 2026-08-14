@@ -142,9 +142,7 @@ export const cryptoMarketPulseSchema = z.object({
           season90d: finite.min(0).max(100).nullable(),
           month: finite.min(0).max(100).nullable(),
           year: finite.min(0).max(100).nullable(),
-          classification: z
-            .enum(["bitcoin_season", "neutral", "altcoin_season"])
-            .nullable(),
+          classification: z.enum(["bitcoin_season", "neutral", "altcoin_season"]).nullable(),
         })
         .nullable(),
       series: z.array(

@@ -409,7 +409,9 @@ function buildLiquidationMaxPain(
             }
           : null,
     }));
-  const complete = rowsOut.length > 0 && rowsOut.every((row) => row.currentPriceUsd != null && row.long && row.short);
+  const complete =
+    rowsOut.length > 0 &&
+    rowsOut.every((row) => row.currentPriceUsd != null && row.long && row.short);
   return {
     status: rowsOut.length === 0 ? "unavailable" : complete ? "system" : "partial",
     sourceCode: "coinglass-liquidation-maxpain",
@@ -444,15 +446,15 @@ function buildCycleIndicators(
     else if (horizon === "year") item.year = number(row);
     altGrouped.set(effectiveAt, item);
   }
-  const altSeries = [...altGrouped.values()].sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
+  const altSeries = [...altGrouped.values()].sort((a, b) =>
+    a.effectiveAt.localeCompare(b.effectiveAt),
+  );
   const latestAltPoint = altSeries.at(-1);
   const latestAlt = latestAltPoint
     ? {
         ...latestAltPoint,
         classification:
-          latestAltPoint.season90d == null
-            ? null
-            : classifyAltcoinSeason(latestAltPoint.season90d),
+          latestAltPoint.season90d == null ? null : classifyAltcoinSeason(latestAltPoint.season90d),
       }
     : null;
   const altComplete =
@@ -774,103 +776,102 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
     rawPressureRows,
     rawCycleRows,
     largeAddressSignal,
-  ] =
-    await Promise.all([
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { gte: thirtyDaysAgo, lte: now },
-          metricDefinition: { code: "crypto.fear_greed.index" },
-          provider: { code: "alternative-fng" },
+  ] = await Promise.all([
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { gte: thirtyDaysAgo, lte: now },
+        metricDefinition: { code: "crypto.fear_greed.index" },
+        provider: { code: "alternative-fng" },
+      },
+      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+      include: { rawSnapshot: { select: { sourceUrl: true } } },
+    }),
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { gte: thirtyDaysAgo, lte: now },
+        metricDefinition: { code: "crypto.etf.net_flow_usd" },
+        provider: { code: { in: [...FARSIDE_PROVIDERS] } },
+      },
+      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+      include: { provider: { select: { code: true } } },
+    }),
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { lte: now },
+        metricDefinition: { code: "crypto.coinshares.net_flow_usd" },
+        provider: { code: "coinshares-weekly" },
+      },
+      orderBy: [{ effectiveAt: "desc" }, { revision: "desc" }],
+      take: 500,
+    }),
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { gte: ninetyDaysAgo, lte: now },
+        metricDefinition: { code: { in: [...LARGE_ADDRESS_METRICS] } },
+        provider: {
+          code: { in: ["mempool-btc-large-addresses", "bitinfocharts-top-addresses"] },
         },
-        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-        include: { rawSnapshot: { select: { sourceUrl: true } } },
-      }),
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { gte: thirtyDaysAgo, lte: now },
-          metricDefinition: { code: "crypto.etf.net_flow_usd" },
-          provider: { code: { in: [...FARSIDE_PROVIDERS] } },
+      },
+      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+      include: {
+        metricDefinition: { select: { code: true } },
+        provider: { select: { code: true } },
+        rawSnapshot: { select: { sourceUrl: true } },
+      },
+    }),
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { gte: thirtyOneDaysAgo, lte: now },
+        metricDefinition: { code: { in: [...PRESSURE_METRICS] } },
+        provider: {
+          code: { in: ["coinglass-margin-borrow", "coinglass-liquidation-maxpain"] },
         },
-        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-        include: { provider: { select: { code: true } } },
-      }),
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { lte: now },
-          metricDefinition: { code: "crypto.coinshares.net_flow_usd" },
-          provider: { code: "coinshares-weekly" },
-        },
-        orderBy: [{ effectiveAt: "desc" }, { revision: "desc" }],
-        take: 500,
-      }),
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { gte: ninetyDaysAgo, lte: now },
-          metricDefinition: { code: { in: [...LARGE_ADDRESS_METRICS] } },
-          provider: {
-            code: { in: ["mempool-btc-large-addresses", "bitinfocharts-top-addresses"] },
-          },
-        },
-        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-        include: {
-          metricDefinition: { select: { code: true } },
-          provider: { select: { code: true } },
-          rawSnapshot: { select: { sourceUrl: true } },
-        },
-      }),
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { gte: thirtyOneDaysAgo, lte: now },
-          metricDefinition: { code: { in: [...PRESSURE_METRICS] } },
-          provider: {
-            code: { in: ["coinglass-margin-borrow", "coinglass-liquidation-maxpain"] },
-          },
-        },
-        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-        include: {
-          metricDefinition: { select: { code: true } },
-          provider: { select: { code: true } },
-          rawSnapshot: { select: { sourceUrl: true } },
-          asset: { select: { symbol: true } },
-        },
-      }),
-      prisma.metricObservation.findMany({
-        where: {
-          qualityStatus: { in: ACCEPTED_QUALITY },
-          effectiveAt: { gte: cycleHistoryStart, lte: now },
-          metricDefinition: { code: { in: [...CYCLE_METRICS] } },
-          provider: { code: { in: ["blockchaincenter-altcoin-season", "cbbi-public"] } },
-        },
-        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-        include: {
-          metricDefinition: { select: { code: true } },
-          provider: { select: { code: true } },
-          rawSnapshot: { select: { sourceUrl: true } },
-        },
-      }),
-      prisma.signalSnapshot.findFirst({
-        where: {
-          market: "crypto",
-          signalType: "large_address_action",
-          effectiveAt: { lte: now },
-          asset: { symbol: "BTC" },
-        },
-        orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
-        select: {
-          score: true,
-          label: true,
-          dataConfidence: true,
-          status: true,
-          effectiveAt: true,
-          methodologyVersion: true,
-        },
-      }),
-    ]);
+      },
+      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+      include: {
+        metricDefinition: { select: { code: true } },
+        provider: { select: { code: true } },
+        rawSnapshot: { select: { sourceUrl: true } },
+        asset: { select: { symbol: true } },
+      },
+    }),
+    prisma.metricObservation.findMany({
+      where: {
+        qualityStatus: { in: ACCEPTED_QUALITY },
+        effectiveAt: { gte: cycleHistoryStart, lte: now },
+        metricDefinition: { code: { in: [...CYCLE_METRICS] } },
+        provider: { code: { in: ["blockchaincenter-altcoin-season", "cbbi-public"] } },
+      },
+      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+      include: {
+        metricDefinition: { select: { code: true } },
+        provider: { select: { code: true } },
+        rawSnapshot: { select: { sourceUrl: true } },
+      },
+    }),
+    prisma.signalSnapshot.findFirst({
+      where: {
+        market: "crypto",
+        signalType: "large_address_action",
+        effectiveAt: { lte: now },
+        asset: { symbol: "BTC" },
+      },
+      orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        score: true,
+        label: true,
+        dataConfidence: true,
+        status: true,
+        effectiveAt: true,
+        methodologyVersion: true,
+      },
+    }),
+  ]);
 
   const fearRows = latestRevision(rawFearRows as unknown as ObservationRow[]).sort(
     (a, b) => a.effectiveAt.getTime() - b.effectiveAt.getTime(),
@@ -976,9 +977,7 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
       latestBreakdown,
     },
     marginBorrow: buildMarginBorrow(rawPressureRows as unknown as ObservationRow[]),
-    liquidationMaxPain: buildLiquidationMaxPain(
-      rawPressureRows as unknown as ObservationRow[],
-    ),
+    liquidationMaxPain: buildLiquidationMaxPain(rawPressureRows as unknown as ObservationRow[]),
     cycleIndicators: buildCycleIndicators(rawCycleRows as unknown as ObservationRow[]),
     largeAddressActivity: buildLargeAddressActivity(
       rawLargeAddressRows as unknown as ObservationRow[],

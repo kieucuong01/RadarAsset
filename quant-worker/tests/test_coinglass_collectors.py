@@ -33,8 +33,25 @@ def test_margin_parser_preserves_reported_rates_and_utc_hours() -> None:
         ("crypto.derivatives.margin_borrow.hourly_rate", Decimal("0.000469")),
     ]
     assert len(rows) == 6
-    assert all(row.asset_symbol == "USDT" for row in rows)
+    assert all(row.asset_symbol is None for row in rows)
     assert all(row.dimensions["exchange"] == "Binance" for row in rows)
+    assert all(row.dimensions["quote_asset"] == "USDT" for row in rows)
+
+
+def test_margin_parser_accepts_ant_design_split_header_and_body_tables() -> None:
+    split = fixture_text("coinglass-margin.html").replace(
+        "</thead>\n  <tbody>", "</thead></table><table><tbody>", 1
+    )
+
+    rows = coinglass.parse_margin_table(split, NOW)
+
+    assert len(rows) == 6
+    assert coinglass._table_ready(split, coinglass._MARGIN_HEADERS)
+    empty = split[: split.index("<tbody>") + len("<tbody>")] + (
+        "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>"
+        "</tbody></table></body></html>"
+    )
+    assert not coinglass._table_ready(empty, coinglass._MARGIN_HEADERS)
 
 
 @pytest.mark.parametrize(
@@ -90,6 +107,34 @@ def test_maxpain_parser_keeps_sides_and_filters_symbols() -> None:
         "crypto.derivatives.liquidation.long_max_pain_price_usd": Decimal("60000"),
         "crypto.derivatives.liquidation.long_distance_ratio": Decimal("-0.0417"),
         "crypto.derivatives.liquidation.long_max_pain_level_usd": Decimal("98500000"),
+    }
+
+
+def test_maxpain_parser_accepts_live_grouped_side_cells() -> None:
+    rows = coinglass.parse_maxpain_table(
+        fixture_text("coinglass-maxpain-live.html"),
+        NOW,
+        symbols=frozenset({"BTC", "ETH", "SOL"}),
+    )
+
+    assert len(rows) == 14
+    btc = {row.metric_code: row.value for row in rows if row.asset_symbol == "BTC"}
+    assert btc == {
+        "crypto.derivatives.liquidation.current_price_usd": Decimal("63034.3"),
+        "crypto.derivatives.liquidation.short_max_pain_price_usd": Decimal(
+            "63386.16"
+        ),
+        "crypto.derivatives.liquidation.short_distance_ratio": Decimal("0.0056"),
+        "crypto.derivatives.liquidation.short_max_pain_level_usd": Decimal(
+            "45300000"
+        ),
+        "crypto.derivatives.liquidation.long_max_pain_price_usd": Decimal(
+            "62129.04"
+        ),
+        "crypto.derivatives.liquidation.long_distance_ratio": Decimal("-0.0144"),
+        "crypto.derivatives.liquidation.long_max_pain_level_usd": Decimal(
+            "47080000"
+        ),
     }
 
 

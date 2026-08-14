@@ -111,12 +111,13 @@ async def _fetch_with_nodriver(
             except Exception as error:
                 raise SourceFetchError("BROWSER_LAUNCH_FAILED") from error
             process = getattr(browser, "_process", None)
-            await browser.send(
+            page = await browser.get("about:blank")
+            await page.send(
                 nodriver.cdp.emulation.set_timezone_override(
                     timezone_id=timezone_id
                 )
             )
-            page = await browser.get(url)
+            page = await page.get(url)
             html = await _poll_rendered_html(
                 page,
                 ready=ready,

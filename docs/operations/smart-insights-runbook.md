@@ -124,6 +124,19 @@ These gates are independent. A success from one provider never enables another. 
 backfill is explicit and may run only with `--source cbbi-public --cbbi-backfill`; normal daily runs
 publish at most the latest seven provider days.
 
+Activation evidence on 2026-08-14 for the crawled Crypto Pulse sources: PostgreSQL reported all 26
+migrations applied. Independent bounded live smokes succeeded for CoinGlass Margin Borrow (60
+observations, latest effective 2026-08-14 16:00 UTC), CoinGlass Liquidation Max Pain (21
+observations across BTC/ETH/SOL), BlockchainCenter Altcoin Season (three horizon observations), and
+CBBI (60 observations, latest provider day 2026-08-13). Production publication then succeeded for
+all four sources. Direct database read-back showed the latest provider run as `succeeded`, each raw
+snapshot as `validated`, and observation counts of 60, 21, 3, and 60 respectively. The web read
+model returned `system` for both CoinGlass sections and both cycle sections, including 20 hourly
+margin points, BTC/ETH/SOL max-pain rows, Altcoin Season 61/43/37, CBBI Confidence 31.34, and all nine
+CBBI components. The worktree web listener returned HTTP 200 on port 3117; authenticated visual QA
+remained unavailable because the local env had no configured demo login password, so this evidence
+does not claim an authenticated browser pass.
+
 After a smoke succeeds, add only that source code to `ENABLED_SOURCE_CODES`, run tests, and deploy
 the code change. To roll back a provider, remove its code from that set. Never delete historical
 observations or immutable artifacts as part of source rollback.

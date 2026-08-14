@@ -385,6 +385,13 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
     profile_path: Path | None = None
 
     class Page:
+        async def send(self, command: object) -> None:
+            calls.append(command)
+
+        async def get(self, url: str) -> "Page":
+            calls.append(url)
+            return self
+
         async def get_content(self) -> str:
             return _provider_html()
 
@@ -412,9 +419,6 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
 
         _process = Process()
         targets = [Target()]
-
-        async def send(self, command: object) -> None:
-            calls.append(command)
 
         async def get(self, url: str) -> Page:
             calls.append(url)
@@ -453,6 +457,7 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
             False,
             ["--window-position=-32000,-32000", "--window-size=800,600"],
         ),
+        "about:blank",
         ("timezone", "UTC"),
         URL,
         ("window.location.href", True),
@@ -484,11 +489,15 @@ def test_nodriver_cleans_up_when_navigation_fails(
         _process = Process()
         targets: list[object] = []
 
-        async def send(self, _command: object) -> None:
-            calls.append("timezone-set")
+        class Page:
+            async def send(self, _command: object) -> None:
+                calls.append("timezone-set")
 
-        async def get(self, _url: str) -> object:
-            raise RuntimeError("navigation failed")
+            async def get(self, _url: str) -> object:
+                raise RuntimeError("navigation failed")
+
+        async def get(self, _url: str) -> "Browser.Page":
+            return self.Page()
 
         async def aclose(self) -> None:
             calls.append("browser-closed")
@@ -539,6 +548,12 @@ def test_nodriver_terminates_process_when_browser_close_raises(
             return 0
 
     class Page:
+        async def send(self, _command: object) -> None:
+            calls.append("timezone-set")
+
+        async def get(self, _url: str) -> "Page":
+            return self
+
         async def get_content(self) -> str:
             return _provider_html()
 
@@ -548,9 +563,6 @@ def test_nodriver_terminates_process_when_browser_close_raises(
     class Browser:
         _process = Process()
         targets: list[object] = []
-
-        async def send(self, _command: object) -> None:
-            calls.append("timezone-set")
 
         async def get(self, _url: str) -> Page:
             return Page()

@@ -290,10 +290,7 @@ describe("Crypto Market Pulse client contract", () => {
         ...validPayload,
         liquidationMaxPain: {
           ...validPayload.liquidationMaxPain,
-          rows: [
-            validPayload.liquidationMaxPain.rows[0],
-            validPayload.liquidationMaxPain.rows[0],
-          ],
+          rows: [validPayload.liquidationMaxPain.rows[0], validPayload.liquidationMaxPain.rows[0]],
         },
       }),
     ).toThrow();

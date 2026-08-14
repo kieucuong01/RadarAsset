@@ -188,6 +188,10 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
         "bitinfocharts-top-addresses",
+        "blockchaincenter-altcoin-season",
+        "cbbi-public",
+        "coinglass-liquidation-maxpain",
+        "coinglass-margin-borrow",
         "coinmetrics-community",
         "cryptocraft",
         "defillama-chains",
@@ -219,6 +223,8 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert tuple(source.code for source in sources_for_schedule("daily")) == (
         "alternative-fng",
         "bitinfocharts-top-addresses",
+        "blockchaincenter-altcoin-season",
+        "cbbi-public",
         "coinmetrics-community",
         "defillama-chains",
         "defillama-stablecoins",
@@ -230,7 +236,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     )
 
 
-def test_cycle_and_coinglass_sources_are_registered_fail_closed() -> None:
+def test_cycle_and_coinglass_sources_are_enabled_after_independent_live_smokes() -> None:
     expected = {
         "coinglass-margin-borrow": ("four-hourly", 480),
         "coinglass-liquidation-maxpain": ("four-hourly", 480),
@@ -243,7 +249,7 @@ def test_cycle_and_coinglass_sources_are_registered_fail_closed() -> None:
         assert source.license_scope is LicenseScope.RESEARCH_ONLY
         assert source.schedule == schedule
         assert source.freshness_sla_minutes == sla
-        assert source.enabled is False
+        assert source.enabled is True
 
     assert source_for_code("coinglass-margin-borrow").urls == (
         "https://www.coinglass.com/pro/i/MarginFeeChart",

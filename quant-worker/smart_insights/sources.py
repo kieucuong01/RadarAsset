@@ -23,6 +23,10 @@ ENABLED_SOURCE_CODES = frozenset(
     {
         "alternative-fng",
         "bitinfocharts-top-addresses",
+        "blockchaincenter-altcoin-season",
+        "cbbi-public",
+        "coinglass-liquidation-maxpain",
+        "coinglass-margin-borrow",
         "coinmetrics-community",
         "cryptocraft",
         "defillama-chains",

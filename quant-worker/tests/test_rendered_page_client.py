@@ -92,6 +92,13 @@ def test_nodriver_sets_utc_before_navigation_and_always_cleans_up(
     profile_path: Path | None = None
 
     class Page:
+        async def send(self, command: object) -> None:
+            calls.append(command)
+
+        async def get(self, url: str) -> "Page":
+            calls.append(url)
+            return self
+
         async def get_content(self) -> str:
             return "<table><tr><td>ready</td></tr></table>"
 
@@ -117,9 +124,6 @@ def test_nodriver_sets_utc_before_navigation_and_always_cleans_up(
     class Browser:
         _process = Process()
         targets = [Target()]
-
-        async def send(self, command: object) -> None:
-            calls.append(command)
 
         async def get(self, url: str) -> Page:
             calls.append(url)
@@ -156,8 +160,9 @@ def test_nodriver_sets_utc_before_navigation_and_always_cleans_up(
 
     assert result.final_url == URL
     assert profile_path is not None and not profile_path.exists()
-    assert calls[:3] == [
+    assert calls[:4] == [
         (False, ["--window-position=-32000,-32000", "--window-size=800,600"]),
+        "about:blank",
         ("timezone", "UTC"),
         URL,
     ]
@@ -185,15 +190,20 @@ def test_nodriver_cleans_up_after_navigation_failure(
             calls.append("process-waited")
             return 0
 
-    class Browser:
-        _process = Process()
-        targets: list[object] = []
-
+    class Page:
         async def send(self, _command: object) -> None:
             calls.append("timezone-set")
 
         async def get(self, _url: str) -> object:
             raise RuntimeError("navigation failed")
+
+    class Browser:
+        _process = Process()
+        targets: list[object] = []
+
+        async def get(self, url: str) -> Page:
+            calls.append(url)
+            return Page()
 
         async def aclose(self) -> None:
             calls.append("browser-closed")
@@ -220,6 +230,7 @@ def test_nodriver_cleans_up_after_navigation_failure(
         )
 
     assert calls == [
+        "about:blank",
         "timezone-set",
         "browser-closed",
         "terminated",

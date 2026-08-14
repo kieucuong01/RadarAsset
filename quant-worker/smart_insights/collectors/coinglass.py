@@ -19,7 +19,7 @@ _MARGIN_HEADERS = (
     "Daily Interest Rate",
     "Hourly Interest Rate",
 )
-_MAXPAIN_HEADERS = (
+_LEGACY_MAXPAIN_HEADERS = (
     "Coin",
     "Current Price",
     "Short Max Pain Price",
@@ -28,6 +28,16 @@ _MAXPAIN_HEADERS = (
     "Long Max Pain Price",
     "Long Distance",
     "Long Max Pain Level",
+)
+_MAXPAIN_HEADERS = (
+    "",
+    "Ranking",
+    "Symbol",
+    "Price",
+    "Short Max Pain",
+    "Short Distance",
+    "Long Max Pain",
+    "Long Distance",
 )
 _DEFAULT_SYMBOLS = frozenset({"BTC", "ETH", "SOL"})
 
@@ -62,7 +72,7 @@ class _TableParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"th", "td"} and self._cell is not None and self._row is not None:
-            self._row.append(_text("".join(self._cell)))
+            self._row.append(_text(" ".join(self._cell)))
             self._cell = None
         elif tag == "tr" and self._row is not None and self._table is not None:
             if any(self._row):
@@ -84,10 +94,37 @@ def _matching_table(html: str, headers: tuple[str, ...]) -> list[list[str]]:
         raise
     except Exception as error:
         raise ValueError("SCHEMA_DRIFT") from error
-    matches = [table for table in parser.tables if table and tuple(table[0]) == headers]
-    if len(matches) != 1:
+    combined = [
+        table
+        for table in parser.tables
+        if len(table) > 1 and tuple(table[0]) == headers
+    ]
+    if len(combined) == 1:
+        return combined[0]
+    if combined:
         raise ValueError("SCHEMA_DRIFT")
-    return matches[0]
+
+    header_indexes = [
+        index
+        for index, table in enumerate(parser.tables)
+        if table == [list(headers)]
+    ]
+    if len(header_indexes) != 1:
+        raise ValueError("SCHEMA_DRIFT")
+    body_index = header_indexes[0] + 1
+    if body_index >= len(parser.tables):
+        raise ValueError("SCHEMA_DRIFT")
+    body = [row for row in parser.tables[body_index] if any(row)]
+    if not body:
+        raise ValueError("SCHEMA_DRIFT")
+    return [list(headers), *body]
+
+
+def _table_ready(html: str, headers: tuple[str, ...]) -> bool:
+    try:
+        return len(_matching_table(html, headers)) > 1
+    except ValueError:
+        return False
 
 
 def parse_percent(text: str) -> Decimal:
@@ -101,7 +138,7 @@ def parse_percent(text: str) -> Decimal:
 
 def parse_compact_usd(text: str) -> Decimal:
     match = re.fullmatch(
-        r"\$?([+-]?\d+(?:\.\d+)?)([KMB])?", text.replace(",", "")
+        r"([+-]?)\$?(\d+(?:\.\d+)?)([KMB])?", text.replace(",", "")
     )
     if not match:
         raise ValueError("INVALID_VALUE")
@@ -110,8 +147,8 @@ def parse_compact_usd(text: str) -> Decimal:
         "M": Decimal("1000000"),
         "B": Decimal("1000000000"),
         None: Decimal("1"),
-    }[match.group(2)]
-    value = Decimal(match.group(1)) * multiplier
+    }[match.group(3)]
+    value = Decimal(f"{match.group(1)}{match.group(2)}") * multiplier
     if not value.is_finite():
         raise ValueError("INVALID_VALUE")
     return value
@@ -162,7 +199,6 @@ def parse_margin_table(html: str, observed_at: datetime) -> list[ObservationInpu
                     metric_code=code,
                     value=value,
                     effective_at=effective_at,
-                    asset_symbol="USDT",
                     dimensions={
                         "exchange": "Binance",
                         "quote_asset": "USDT",
@@ -176,33 +212,77 @@ def parse_margin_table(html: str, observed_at: datetime) -> list[ObservationInpu
     return observations
 
 
+def _parse_grouped_side(
+    text: str,
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    parts = text.split()
+    if len(parts) == 5 and parts[-1] == "💥":
+        parts.pop()
+    if len(parts) != 4:
+        raise ValueError("SCHEMA_DRIFT")
+    price, level, absolute_distance, distance = parts
+    return (
+        parse_compact_usd(price),
+        parse_compact_usd(level),
+        parse_compact_usd(absolute_distance),
+        parse_percent(distance) / Decimal("100"),
+    )
+
+
 def parse_maxpain_table(
     html: str,
     observed_at: datetime,
     symbols: frozenset[str],
 ) -> list[ObservationInput]:
     observed_utc = _aware_utc(observed_at)
-    table = _matching_table(html, _MAXPAIN_HEADERS)
+    try:
+        table = _matching_table(html, _MAXPAIN_HEADERS)
+        grouped_sides = True
+    except ValueError:
+        table = _matching_table(html, _LEGACY_MAXPAIN_HEADERS)
+        grouped_sides = False
     seen: set[str] = set()
     observations: list[ObservationInput] = []
     for cells in table[1:]:
         if not any(cells):
             continue
-        if len(cells) != len(_MAXPAIN_HEADERS) or not all(cells):
-            raise ValueError("SCHEMA_DRIFT")
-        asset = cells[0].upper()
+        if grouped_sides:
+            if (
+                len(cells) != 6
+                or cells[0]
+                or not all(cells[1:])
+                or not cells[1].isdigit()
+            ):
+                raise ValueError("SCHEMA_DRIFT")
+            asset = cells[2].upper()
+            current = parse_compact_usd(cells[3])
+            short_price, short_level, short_absolute, short_distance = (
+                _parse_grouped_side(cells[4])
+            )
+            long_price, long_level, long_absolute, long_distance = (
+                _parse_grouped_side(cells[5])
+            )
+            if (
+                abs(short_absolute - (short_price - current)) > Decimal("0.02")
+                or abs(long_absolute - (long_price - current)) > Decimal("0.02")
+            ):
+                raise ValueError("INVALID_DISTANCE")
+        else:
+            if len(cells) != len(_LEGACY_MAXPAIN_HEADERS) or not all(cells):
+                raise ValueError("SCHEMA_DRIFT")
+            asset = cells[0].upper()
+            current = parse_compact_usd(cells[1])
+            short_price = parse_compact_usd(cells[2])
+            short_distance = parse_percent(cells[3]) / Decimal("100")
+            short_level = parse_compact_usd(cells[4])
+            long_price = parse_compact_usd(cells[5])
+            long_distance = parse_percent(cells[6]) / Decimal("100")
+            long_level = parse_compact_usd(cells[7])
         if asset not in symbols:
             continue
         if asset in seen:
             raise ValueError("DUPLICATE_ASSET")
         seen.add(asset)
-        current = parse_compact_usd(cells[1])
-        short_price = parse_compact_usd(cells[2])
-        short_distance = parse_percent(cells[3]) / Decimal("100")
-        short_level = parse_compact_usd(cells[4])
-        long_price = parse_compact_usd(cells[5])
-        long_distance = parse_percent(cells[6]) / Decimal("100")
-        long_level = parse_compact_usd(cells[7])
         if current <= 0 or min(short_price, short_level, long_price, long_level) < 0:
             raise ValueError("INVALID_VALUE")
         expected_short = (short_price - current) / current
@@ -284,10 +364,7 @@ class CoinGlassMarginCollector:
         snapshot = self._crawler.scrape(
             self.source,
             self.source.urls[0],
-            ready=lambda html: (
-                "Annualized Interest Rate" in html
-                and re.search(r"\d+(?:\.\d+)?%", html) is not None
-            ),
+            ready=lambda html: _table_ready(html, _MARGIN_HEADERS),
         )
         try:
             observations = parse_margin_table(
@@ -315,11 +392,9 @@ class CoinGlassMaxPainCollector:
         snapshot = self._crawler.scrape(
             self.source,
             self.source.urls[0],
-            ready=lambda html: (
-                "Short Max Pain" in html
-                and "Long Max Pain" in html
-                and re.search(r">\s*BTC\s*<", html, re.IGNORECASE) is not None
-            ),
+            ready=lambda html: _table_ready(
+                html, _MAXPAIN_HEADERS
+            ) or _table_ready(html, _LEGACY_MAXPAIN_HEADERS),
         )
         try:
             observations = parse_maxpain_table(

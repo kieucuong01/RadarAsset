@@ -18,15 +18,23 @@ _HORIZONS = (
     ("month", "Altcoin Month Index"),
     ("year", "Altcoin Year Index"),
 )
+_BUTTON_HORIZONS = (
+    ("season_90d", "Altcoin Season"),
+    ("month", "Month"),
+    ("year", "Year"),
+)
 
 
 class _SectionTextParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.sections: list[str] = []
+        self.buttons: list[str] = []
         self.all_text: list[str] = []
         self._depth = 0
         self._current: list[str] = []
+        self._button_depth = 0
+        self._current_button: list[str] = []
 
     def handle_starttag(
         self, tag: str, _attrs: list[tuple[str, str | None]]
@@ -35,17 +43,29 @@ class _SectionTextParser(HTMLParser):
             if self._depth == 0:
                 self._current = []
             self._depth += 1
+        if tag == "button":
+            if self._button_depth == 0:
+                self._current_button = []
+            self._button_depth += 1
 
     def handle_data(self, data: str) -> None:
         self.all_text.append(data)
         if self._depth:
             self._current.append(data)
+        if self._button_depth:
+            self._current_button.append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "section" and self._depth:
             self._depth -= 1
             if self._depth == 0:
                 self.sections.append(" ".join(" ".join(self._current).split()))
+        if tag == "button" and self._button_depth:
+            self._button_depth -= 1
+            if self._button_depth == 0:
+                self.buttons.append(
+                    " ".join(" ".join(self._current_button).split())
+                )
 
 
 def classify_altcoin_season(value: int | Decimal) -> str:
@@ -73,32 +93,52 @@ def parse_altcoin_season(
     except Exception as error:
         raise ValueError("SCHEMA_DRIFT") from error
     page_text = " ".join(" ".join(parser.all_text).split())
-    if (
-        re.search(
-            r"75%.*last season \(90 days\).*Altcoin Season",
-            page_text,
-            re.IGNORECASE,
-        )
-        is None
-        or re.search(
-            r"25% or less.*Bitcoin Season", page_text, re.IGNORECASE
-        )
-        is None
-    ):
+    if re.search(
+        r"75%.*last season \(90 days\).*Altcoin Season",
+        page_text,
+        re.IGNORECASE,
+    ) is None:
         raise ValueError("SCHEMA_DRIFT")
-    values: list[tuple[str, Decimal]] = []
-    for horizon, label in _HORIZONS:
-        matches = []
-        pattern = re.compile(rf"^{re.escape(label)}\s+(\d+(?:\.\d+)?)\b")
-        for section in parser.sections:
-            match = pattern.search(section)
-            if match:
-                matches.append(Decimal(match.group(1)))
-        if len(matches) != 1:
-            raise ValueError("SCHEMA_DRIFT")
-        if not Decimal("0") <= matches[0] <= Decimal("100"):
-            raise ValueError("INVALID_VALUE")
-        values.append((horizon, matches[0]))
+    def extract_contract(
+        containers: list[str],
+        contract: tuple[tuple[str, str], ...],
+        *,
+        button: bool,
+    ) -> list[tuple[str, Decimal]] | None:
+        extracted: list[tuple[str, Decimal]] = []
+        for horizon, label in contract:
+            pattern = (
+                re.compile(
+                    rf"^{re.escape(label)}\s*\(\s*(\d+(?:\.\d+)?)\s*\)$"
+                )
+                if button
+                else re.compile(
+                    rf"^{re.escape(label)}\s+(\d+(?:\.\d+)?)\b"
+                )
+            )
+            matches = [
+                Decimal(match.group(1))
+                for container in containers
+                if (match := pattern.search(container))
+            ]
+            if len(matches) != 1:
+                return None
+            extracted.append((horizon, matches[0]))
+        return extracted
+
+    candidates = [
+        values
+        for values in (
+            extract_contract(parser.sections, _HORIZONS, button=False),
+            extract_contract(parser.buttons, _BUTTON_HORIZONS, button=True),
+        )
+        if values is not None
+    ]
+    if len(candidates) != 1:
+        raise ValueError("SCHEMA_DRIFT")
+    values = candidates[0]
+    if any(not Decimal("0") <= value <= Decimal("100") for _, value in values):
+        raise ValueError("INVALID_VALUE")
     effective_at = observed_at.astimezone(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
