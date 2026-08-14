@@ -59,8 +59,8 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `bitinfocharts-top-addresses` | Daily | Scrapling HTTP fetch received Cloudflare 403 (`HTTP_ERROR`) and the bounded StealthyFetcher attempt timed out on 2026-08-14 |
-| `mempool-btc-large-addresses` | Daily | Address/transaction verifier is implemented but remains disabled until a validated BitInfoCharts watchlist exists and its own live plus publication smokes pass |
+| `bitinfocharts-top-addresses` | Daily | Live smoke on 2026-08-14 reached the provider but Cloudflare returned 403 (`HTTP_ERROR`); no observations were accepted |
+| `mempool-btc-large-addresses` | Daily | Live smoke on 2026-08-14 failed closed with `MISSING_WATCHLIST` because no validated BitInfoCharts cohort exists yet; publication was not attempted |
 | `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
 | `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
