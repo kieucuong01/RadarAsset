@@ -180,4 +180,28 @@ describe("Smart Insights source guard", () => {
       expect(source).toContain(token);
     }
   });
+
+  it("organizes Crypto Quant Pulse into the five approved chart-first tabs", () => {
+    const source = readSmartInsightsSourceTree();
+
+    expect(source).toContain("function CryptoQuantPulseTabs");
+    expect(source).toContain('defaultValue="overview"');
+    for (const value of ["overview", "flows", "sentiment", "onchain", "whales"])
+      expect(source).toContain(`value="${value}"`);
+    for (const label of [
+      "Tổng quan",
+      "Dòng tiền",
+      "Tâm lý &amp; Phái sinh",
+      "On-chain",
+      "Cá voi BTC",
+    ])
+      expect(source).toContain(label);
+
+    const tabs = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoQuantPulseTabs.tsx"),
+      "utf8",
+    );
+    expect(tabs).not.toContain("fetch(");
+    expect(tabs).not.toContain("fetchCryptoMarketPulse");
+  });
 });

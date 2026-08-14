@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { MarketTickerResponse } from "@/lib/backend/types";
-import {
-  curatedTickerUrl,
-  resolveCuratedTickerSnapshot,
-} from "@/lib/ticker-presentation";
+import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 export function TickerTape() {
   const [snapshot, setSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));

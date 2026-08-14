@@ -46,13 +46,7 @@ function formatMetric(value: number, unit: string, locale: "vi" | "en") {
   }).format(value);
 }
 
-function TrendChart({
-  series,
-  locale,
-}: {
-  series: CryptoMetricSeries[];
-  locale: "vi" | "en";
-}) {
+function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: "vi" | "en" }) {
   const chartSeries = series.filter((item) => item.trendPoints.length >= 2);
   const chartRows = mergeSeriesPoints(chartSeries);
   if (!chartRows.length) return null;
@@ -70,7 +64,11 @@ function TrendChart({
             minTickGap={24}
             fontSize={11}
           />
-          <YAxis fontSize={11} width={56} tickFormatter={(value) => formatMetric(value, series[0].unit, locale)} />
+          <YAxis
+            fontSize={11}
+            width={56}
+            tickFormatter={(value) => formatMetric(value, series[0].unit, locale)}
+          />
           <Tooltip
             labelFormatter={(value) => dateLabel(String(value), locale)}
             formatter={(value, name) => [
@@ -142,7 +140,10 @@ export function CryptoMetricTrendPanel({
         <div key={unit} className="mt-5 min-w-0 first:mt-4">
           <div className="flex flex-wrap gap-2" aria-label={`${title} legend`}>
             {unitSeries.map((item, index) => (
-              <span key={item.key} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              <span
+                key={item.key}
+                className="inline-flex items-center gap-2 text-xs text-muted-foreground"
+              >
                 <span
                   className="size-2 rounded-full"
                   style={{ backgroundColor: SERIES_COLORS[index % SERIES_COLORS.length] }}
@@ -167,7 +168,9 @@ export function CryptoMetricTrendPanel({
               <span className="text-xs font-normal text-muted-foreground">{item.unit}</span>
             </p>
             <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-              <time dateTime={item.latest.effectiveAt}>{dateLabel(item.latest.effectiveAt, locale)}</time>
+              <time dateTime={item.latest.effectiveAt}>
+                {dateLabel(item.latest.effectiveAt, locale)}
+              </time>
               <a
                 href={item.latest.sourceUrl}
                 target="_blank"

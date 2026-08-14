@@ -50,9 +50,7 @@ const pulse = cryptoMarketPulseSchema.parse({
   etfFlows: {
     status: "system",
     sourceCodes: ["farside-btc-etf", "farside-eth-etf", "farside-sol-etf"],
-    series: [
-      { effectiveAt: "2026-08-14T00:00:00Z", btc: 10, eth: 2, sol: -1, total: 11 },
-    ],
+    series: [{ effectiveAt: "2026-08-14T00:00:00Z", btc: 10, eth: 2, sol: -1, total: 11 }],
     summaries: [
       {
         asset: "BTC",
@@ -124,28 +122,9 @@ describe("Crypto Quant Pulse chart model", () => {
   it("merges compatible trend points without filling missing dates", () => {
     const series = buildCryptoMetricSeries(
       [
-        metric(
-          "1",
-          "crypto.derivatives.btc_dvol",
-          "40",
-          "2026-08-13T00:00:00Z",
-          "index",
-        ),
-        metric(
-          "2",
-          "crypto.derivatives.btc_dvol",
-          "42",
-          "2026-08-14T00:00:00Z",
-          "index",
-        ),
-        metric(
-          "3",
-          "crypto.derivatives.eth_dvol",
-          "55",
-          "2026-08-14T00:00:00Z",
-          "index",
-          "ETH",
-        ),
+        metric("1", "crypto.derivatives.btc_dvol", "40", "2026-08-13T00:00:00Z", "index"),
+        metric("2", "crypto.derivatives.btc_dvol", "42", "2026-08-14T00:00:00Z", "index"),
+        metric("3", "crypto.derivatives.eth_dvol", "55", "2026-08-14T00:00:00Z", "index", "ETH"),
       ],
       DERIVATIVE_METRIC_CODES,
     );
