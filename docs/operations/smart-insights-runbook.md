@@ -59,7 +59,7 @@ Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source | Intended frequency | Current reason |
 | --- | --- | --- |
-| `bitinfocharts-top-addresses` | Daily | Live smoke on 2026-08-14 reached the provider but Cloudflare returned 403 (`HTTP_ERROR`); no observations were accepted |
+| `bitinfocharts-top-addresses` | Daily | Scrapling live smoke on 2026-08-14 reached the provider but Cloudflare returned 403 (`HTTP_ERROR`). A separate Nodriver 0.50.1 probe launched Chrome but failed closed after 14.704 seconds on an invalid browser/CDP response (`INVALID_RESPONSE`) before a richest-address table was accepted. Nodriver was not added to production dependencies and no observations were published |
 | `mempool-btc-large-addresses` | Daily | Live smoke on 2026-08-14 failed closed with `MISSING_WATCHLIST` because no validated BitInfoCharts cohort exists yet; publication was not attempted |
 | `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
 | `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
