@@ -12,7 +12,7 @@ import {
   DERIVATIVE_METRIC_CODES,
   ONCHAIN_METRIC_CODES,
 } from "@/lib/crypto-quant-pulse";
-import type { MetricModel, RegimeModel } from "@/lib/smart-insights-client";
+import type { KronosShadowModel, MetricModel, RegimeModel } from "@/lib/smart-insights-client";
 import { CryptoCyclePanel } from "./CryptoCyclePanel";
 import { CryptoDerivativesPressurePanel } from "./CryptoDerivativesPressurePanel";
 import { CryptoEtfFlowPanel } from "./CryptoEtfFlowPanel";
@@ -21,6 +21,7 @@ import { CryptoFundFlowPanel } from "./CryptoFundFlowPanel";
 import { CryptoLargeAddressPanel } from "./CryptoLargeAddressPanel";
 import { CryptoMetricTrendPanel } from "./CryptoMetricTrendPanel";
 import { FreshnessBadge } from "./FreshnessBadge";
+import { KronosShadowPanel } from "./KronosShadowPanel";
 
 type CryptoPulseState = "idle" | "loading" | "loaded" | "failed";
 
@@ -143,12 +144,16 @@ export function CryptoQuantPulseTabs({
   metrics,
   regime,
   locale,
+  kronosShadow,
+  kronosShadowState,
 }: {
   cryptoPulse: CryptoMarketPulseModel | null;
   cryptoPulseState: CryptoPulseState;
   metrics: MetricModel[];
   regime: RegimeModel | undefined;
   locale: "vi" | "en";
+  kronosShadow: KronosShadowModel | null;
+  kronosShadowState: CryptoPulseState;
 }) {
   const derivativeSeries = useMemo(
     () => buildCryptoMetricSeries(metrics, DERIVATIVE_METRIC_CODES),
@@ -189,6 +194,7 @@ export function CryptoQuantPulseTabs({
           <TabsTrigger value="cycle">Chu kỳ</TabsTrigger>
           <TabsTrigger value="onchain">On-chain</TabsTrigger>
           <TabsTrigger value="whales">Cá voi BTC</TabsTrigger>
+          <TabsTrigger value="forecast">BTC Forecast</TabsTrigger>
         </TabsList>
       </div>
 
@@ -258,6 +264,10 @@ export function CryptoQuantPulseTabs({
           mode={largeAddressMode}
           locale={locale}
         />
+      </TabsContent>
+
+      <TabsContent value="forecast" className="mt-4 min-w-0">
+        <KronosShadowPanel data={kronosShadow} state={kronosShadowState} locale={locale} />
       </TabsContent>
     </Tabs>
   );
