@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { prisma } = vi.hoisted(() => ({
-  prisma: { metricObservation: { findMany: vi.fn() } },
+  prisma: {
+    metricObservation: { findMany: vi.fn() },
+    signalSnapshot: { findFirst: vi.fn() },
+  },
 }));
 
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
@@ -31,6 +34,8 @@ function observation(input: {
 describe("Crypto Market Pulse read model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prisma.metricObservation.findMany.mockResolvedValue([]);
+    prisma.signalSnapshot.findFirst.mockResolvedValue(null);
   });
 
   it("deduplicates revisions and classifies the latest Fear & Greed value", async () => {
@@ -162,5 +167,113 @@ describe("Crypto Market Pulse read model", () => {
     expect(result.fearGreed.status).toBe("unavailable");
     expect(result.etfFlows.status).toBe("unavailable");
     expect(result.fundFlows.status).toBe("unavailable");
+    expect(result.largeAddressActivity.status).toBe("unavailable");
+  });
+
+  it("builds common-cohort large-address activity from accepted observations", async () => {
+    const balances = [
+      ["2026-08-10T00:00:00.000Z", "a", 1_000],
+      ["2026-08-10T00:00:00.000Z", "b", 2_000],
+      ["2026-08-11T00:00:00.000Z", "a", 1_020],
+      ["2026-08-11T00:00:00.000Z", "b", 2_000],
+      ["2026-08-12T00:00:00.000Z", "a", 1_040],
+      ["2026-08-12T00:00:00.000Z", "b", 1_980],
+    ].map(([effectiveAt, address, value], index) =>
+      observation({
+        naturalKey: `balance:${index}`,
+        effectiveAt: String(effectiveAt),
+        value: Number(value),
+        dimensions: { address: String(address), rank: address === "a" ? "1" : "2" },
+        provider: "mempool-btc-large-addresses",
+      }),
+    );
+    const largeRows = [
+      ...balances.map((row) => ({
+        ...row,
+        metricDefinition: { code: "crypto.large_address.confirmed_balance_btc" },
+      })),
+      {
+        ...observation({
+          naturalKey: "flow:to",
+          effectiveAt: "2026-08-12T00:00:00.000Z",
+          value: 25,
+          provider: "mempool-btc-large-addresses",
+        }),
+        metricDefinition: { code: "crypto.large_address.to_exchange_btc" },
+      },
+      {
+        ...observation({
+          naturalKey: "flow:from",
+          effectiveAt: "2026-08-12T00:00:00.000Z",
+          value: 10,
+          provider: "mempool-btc-large-addresses",
+        }),
+        metricDefinition: { code: "crypto.large_address.from_exchange_btc" },
+      },
+      {
+        ...observation({
+          naturalKey: "activity:out",
+          effectiveAt: "2026-08-12T03:00:00.000Z",
+          value: 5,
+          dimensions: {
+            address: "a",
+            counterparty: "unknown",
+            direction: "outgoing",
+            txid: "a".repeat(64),
+          },
+          provider: "mempool-btc-large-addresses",
+          sourceUrl: "https://mempool.space/api/address/a/txs",
+        }),
+        metricDefinition: { code: "crypto.large_address.confirmed_outgoing_btc" },
+      },
+      {
+        ...observation({
+          naturalKey: "universe:a",
+          effectiveAt: "2026-08-12T00:00:00.000Z",
+          value: 1_040,
+          dimensions: { address: "a", cohort_version: "cohort-v1" },
+          provider: "bitinfocharts-top-addresses",
+          sourceUrl: "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html",
+        }),
+        metricDefinition: { code: "crypto.large_address.address_balance_btc" },
+      },
+    ];
+    prisma.metricObservation.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(largeRows);
+    prisma.signalSnapshot.findFirst.mockResolvedValue({
+      score: { toString: () => "42.5" },
+      label: "accumulation",
+      dataConfidence: { toString: () => "88.5" },
+      status: "active",
+      effectiveAt: new Date("2026-08-12T00:00:00.000Z"),
+      methodologyVersion: "btc-large-address-action-v1",
+    });
+
+    const result = await loadCryptoMarketPulse(new Date("2026-08-14T12:00:00.000Z"));
+
+    expect(result.largeAddressActivity.status).toBe("system");
+    expect(result.largeAddressActivity.score).toBe(42.5);
+    expect(result.largeAddressActivity.state).toBe("accumulation");
+    expect(result.largeAddressActivity.confidence).toBe(88.5);
+    expect(result.largeAddressActivity.horizons.oneDay).toMatchObject({
+      netAccumulationBtc: 0,
+      accumulationBreadth: 0.5,
+      distributionBreadth: 0.5,
+    });
+    expect(result.largeAddressActivity.horizons.sevenDay.netAccumulationBtc).toBeNull();
+    expect(result.largeAddressActivity.exchangeFlows.at(-1)).toMatchObject({
+      toExchangeBtc: 25,
+      fromExchangeBtc: 10,
+      pressureBtc: 15,
+    });
+    expect(result.largeAddressActivity.notableActivity[0]).toMatchObject({
+      address: "a",
+      counterparty: "unknown",
+      direction: "outgoing",
+      valueBtc: 5,
+    });
   });
 });

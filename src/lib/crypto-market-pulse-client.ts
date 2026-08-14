@@ -7,6 +7,16 @@ const datedValue = z.object({
 });
 
 const flowValue = z.number().nullable();
+const nullableCount = z.number().int().nonnegative().nullable();
+const nullableRatio = z.number().min(0).max(1).nullable();
+const largeAddressHorizon = z.object({
+  netAccumulationBtc: z.number().nullable(),
+  accumulationBreadth: nullableRatio,
+  distributionBreadth: nullableRatio,
+  accumulatingCount: nullableCount,
+  distributingCount: nullableCount,
+  unchangedCount: nullableCount,
+});
 
 export const cryptoMarketPulseSchema = z.object({
   generatedAt: z.string(),
@@ -52,6 +62,74 @@ export const cryptoMarketPulseSchema = z.object({
     ),
     latestBreakdown: z.array(z.object({ label: z.string(), value: z.number() })),
   }),
+  largeAddressActivity: z
+    .object({
+      status: z.enum(["system", "partial", "unavailable"]),
+      sourceCodes: z.array(z.string()),
+      effectiveAt: z.string().nullable(),
+      universeObservedAt: z.string().nullable(),
+      score: z.number().min(-100).max(100).nullable(),
+      state: z.enum(["accumulation", "neutral", "distribution", "calibrating", "unavailable"]),
+      confidence: z.number().min(0).max(100).nullable(),
+      calibrationStatus: z.enum(["calibrating", "calibrated", "unavailable"]),
+      horizons: z.object({
+        oneDay: largeAddressHorizon,
+        sevenDay: largeAddressHorizon,
+        thirtyDay: largeAddressHorizon,
+      }),
+      exchangeFlows: z.array(
+        z.object({
+          effectiveAt: z.string(),
+          toExchangeBtc: z.number(),
+          fromExchangeBtc: z.number(),
+          pressureBtc: z.number(),
+        }),
+      ),
+      concentrationSeries: z.array(
+        z.object({ effectiveAt: z.string(), top10Ratio: z.number().min(0).max(1) }),
+      ),
+      breadthSeries: z.array(
+        z.object({
+          effectiveAt: z.string(),
+          netAccumulationBtc: z.number(),
+          accumulationBreadth: z.number().min(0).max(1),
+          distributionBreadth: z.number().min(0).max(1),
+          accumulatingCount: z.number().int().nonnegative(),
+          distributingCount: z.number().int().nonnegative(),
+          unchangedCount: z.number().int().nonnegative(),
+        }),
+      ),
+      notableActivity: z.array(
+        z.object({
+          effectiveAt: z.string(),
+          address: z.string(),
+          valueBtc: z.number().nonnegative(),
+          direction: z.enum(["incoming", "outgoing"]),
+          counterparty: z.string(),
+          txid: z.string(),
+          sourceUrl: z.string(),
+          explorerUrl: z.string(),
+        }),
+      ),
+      entrantsExits: z
+        .object({
+          entrantCount: z.number().int().nonnegative(),
+          exitCount: z.number().int().nonnegative(),
+          entrantBalanceBtc: z.number().nonnegative(),
+          exitBalanceBtc: z.number().nonnegative(),
+        })
+        .nullable(),
+      qualityFlags: z.array(z.string()),
+      sources: z.array(
+        z.object({
+          sourceCode: z.string(),
+          sourceUrl: z.string(),
+          observedAt: z.string().nullable(),
+        }),
+      ),
+      methodologyVersion: z.string().nullable(),
+    })
+    .optional(),
 });
 
 export type CryptoMarketPulseModel = z.infer<typeof cryptoMarketPulseSchema>;

@@ -7,6 +7,15 @@ const COINSHARES_SOURCE_URL = "https://coinshares.com/corp/resources/market-acti
 const FARSIDE_PROVIDERS = ["farside-btc-etf", "farside-eth-etf", "farside-sol-etf"] as const;
 const ACCEPTED_QUALITY = ["passed", "warning"];
 const DAY_MS = 86_400_000;
+const LARGE_ADDRESS_METRICS = [
+  "crypto.large_address.confirmed_balance_btc",
+  "crypto.large_address.to_exchange_btc",
+  "crypto.large_address.from_exchange_btc",
+  "crypto.large_address.confirmed_incoming_btc",
+  "crypto.large_address.confirmed_outgoing_btc",
+  "crypto.large_address.address_balance_btc",
+  "crypto.large_address.balance_change_btc",
+] as const;
 
 type AssetCode = "BTC" | "ETH" | "SOL";
 
@@ -15,10 +24,29 @@ type ObservationRow = {
   effectiveAt: Date;
   value: { toString(): string };
   revision: number;
+  observedAt?: Date;
   dimensions: Prisma.JsonValue;
+  qualityFlags?: Prisma.JsonValue;
   provider?: { code: string };
+  metricDefinition?: { code: string };
   rawSnapshot?: { sourceUrl: string };
 };
+
+type LargeAddressHorizon = {
+  netAccumulationBtc: number | null;
+  accumulationBreadth: number | null;
+  distributionBreadth: number | null;
+  accumulatingCount: number | null;
+  distributingCount: number | null;
+  unchangedCount: number | null;
+};
+
+type LargeAddressState =
+  | "accumulation"
+  | "neutral"
+  | "distribution"
+  | "calibrating"
+  | "unavailable";
 
 export type CryptoMarketPulseResponse = {
   generatedAt: string;
@@ -57,6 +85,56 @@ export type CryptoMarketPulseResponse = {
       assets: Array<{ label: string; value: number }>;
     }>;
     latestBreakdown: Array<{ label: string; value: number }>;
+  };
+  largeAddressActivity: {
+    status: "system" | "partial" | "unavailable";
+    sourceCodes: string[];
+    effectiveAt: string | null;
+    universeObservedAt: string | null;
+    score: number | null;
+    state: LargeAddressState;
+    confidence: number | null;
+    calibrationStatus: "calibrating" | "calibrated" | "unavailable";
+    horizons: {
+      oneDay: LargeAddressHorizon;
+      sevenDay: LargeAddressHorizon;
+      thirtyDay: LargeAddressHorizon;
+    };
+    exchangeFlows: Array<{
+      effectiveAt: string;
+      toExchangeBtc: number;
+      fromExchangeBtc: number;
+      pressureBtc: number;
+    }>;
+    concentrationSeries: Array<{ effectiveAt: string; top10Ratio: number }>;
+    breadthSeries: Array<{
+      effectiveAt: string;
+      netAccumulationBtc: number;
+      accumulationBreadth: number;
+      distributionBreadth: number;
+      accumulatingCount: number;
+      distributingCount: number;
+      unchangedCount: number;
+    }>;
+    notableActivity: Array<{
+      effectiveAt: string;
+      address: string;
+      valueBtc: number;
+      direction: "incoming" | "outgoing";
+      counterparty: string;
+      txid: string;
+      sourceUrl: string;
+      explorerUrl: string;
+    }>;
+    entrantsExits: {
+      entrantCount: number;
+      exitCount: number;
+      entrantBalanceBtc: number;
+      exitBalanceBtc: number;
+    } | null;
+    qualityFlags: string[];
+    sources: Array<{ sourceCode: string; sourceUrl: string; observedAt: string | null }>;
+    methodologyVersion: string | null;
   };
 };
 
@@ -99,41 +177,318 @@ function providerAsset(code: string): AssetCode | null {
   return null;
 }
 
+const EMPTY_HORIZON: LargeAddressHorizon = {
+  netAccumulationBtc: null,
+  accumulationBreadth: null,
+  distributionBreadth: null,
+  accumulatingCount: null,
+  distributingCount: null,
+  unchangedCount: null,
+};
+
+function dimensions(row: ObservationRow): Record<string, unknown> {
+  return object(row.dimensions);
+}
+
+function metricCode(row: ObservationRow): string {
+  return row.metricDefinition?.code ?? "";
+}
+
+function addressDays(rows: ObservationRow[]) {
+  const grouped = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    if (metricCode(row) !== "crypto.large_address.confirmed_balance_btc") continue;
+    const address = dimensions(row).address;
+    if (typeof address !== "string") continue;
+    const effectiveAt = row.effectiveAt.toISOString();
+    const period = grouped.get(effectiveAt) ?? new Map<string, number>();
+    period.set(address, number(row));
+    grouped.set(effectiveAt, period);
+  }
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([effectiveAt, balances]) => ({ effectiveAt, balances }));
+}
+
+function commonHorizon(
+  current: Map<string, number>,
+  previous: Map<string, number>,
+): LargeAddressHorizon {
+  const common = [...current.keys()].filter((address) => previous.has(address));
+  if (!common.length) return { ...EMPTY_HORIZON };
+  let net = 0;
+  let accumulating = 0;
+  let distributing = 0;
+  let unchanged = 0;
+  for (const address of common) {
+    const before = previous.get(address)!;
+    const change = current.get(address)! - before;
+    net += change;
+    const threshold = Math.max(10, Math.abs(before) * 0.001);
+    if (change > threshold) accumulating += 1;
+    else if (change < -threshold) distributing += 1;
+    else unchanged += 1;
+  }
+  return {
+    netAccumulationBtc: net,
+    accumulationBreadth: accumulating / common.length,
+    distributionBreadth: distributing / common.length,
+    accumulatingCount: accumulating,
+    distributingCount: distributing,
+    unchangedCount: unchanged,
+  };
+}
+
+function horizonAt(days: ReturnType<typeof addressDays>, lookback: number): LargeAddressHorizon {
+  const current = days.at(-1);
+  const previous = days.at(-(lookback + 1));
+  return current && previous
+    ? commonHorizon(current.balances, previous.balances)
+    : { ...EMPTY_HORIZON };
+}
+
+function buildLargeAddressActivity(
+  rows: ObservationRow[],
+  signal: {
+    score: { toString(): string } | null;
+    label: string;
+    dataConfidence: { toString(): string };
+    status: string;
+    effectiveAt: Date;
+    methodologyVersion: string;
+  } | null,
+): CryptoMarketPulseResponse["largeAddressActivity"] {
+  const accepted = latestRevision(rows);
+  const days = addressDays(accepted);
+  const breadthSeries = days.slice(1).map((day, index) => ({
+    effectiveAt: day.effectiveAt,
+    ...commonHorizon(day.balances, days[index]!.balances),
+  }));
+  const normalizedBreadth = breadthSeries.map((row) => ({
+    effectiveAt: row.effectiveAt,
+    netAccumulationBtc: row.netAccumulationBtc ?? 0,
+    accumulationBreadth: row.accumulationBreadth ?? 0,
+    distributionBreadth: row.distributionBreadth ?? 0,
+    accumulatingCount: row.accumulatingCount ?? 0,
+    distributingCount: row.distributingCount ?? 0,
+    unchangedCount: row.unchangedCount ?? 0,
+  }));
+  const concentrationSeries = days.map((day) => {
+    const ordered = [...day.balances.values()].sort((a, b) => b - a);
+    const total = ordered.reduce((sum, value) => sum + value, 0);
+    return {
+      effectiveAt: day.effectiveAt,
+      top10Ratio: total ? ordered.slice(0, 10).reduce((sum, value) => sum + value, 0) / total : 0,
+    };
+  });
+  const flows = new Map<string, { toExchangeBtc: number; fromExchangeBtc: number }>();
+  for (const row of accepted) {
+    const code = metricCode(row);
+    if (
+      code !== "crypto.large_address.to_exchange_btc" &&
+      code !== "crypto.large_address.from_exchange_btc"
+    )
+      continue;
+    const effectiveAt = row.effectiveAt.toISOString();
+    const period = flows.get(effectiveAt) ?? { toExchangeBtc: 0, fromExchangeBtc: 0 };
+    if (code.endsWith("to_exchange_btc")) period.toExchangeBtc = number(row);
+    else period.fromExchangeBtc = number(row);
+    flows.set(effectiveAt, period);
+  }
+  const exchangeFlows = [...flows.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([effectiveAt, row]) => ({
+      effectiveAt,
+      ...row,
+      pressureBtc: row.toExchangeBtc - row.fromExchangeBtc,
+    }));
+  const notableActivity = accepted
+    .filter((row) =>
+      [
+        "crypto.large_address.confirmed_incoming_btc",
+        "crypto.large_address.confirmed_outgoing_btc",
+      ].includes(metricCode(row)),
+    )
+    .map((row) => {
+      const rowDimensions = dimensions(row);
+      const txid = typeof rowDimensions.txid === "string" ? rowDimensions.txid : "";
+      const direction =
+        rowDimensions.direction === "incoming" ? ("incoming" as const) : ("outgoing" as const);
+      return {
+        effectiveAt: row.effectiveAt.toISOString(),
+        address: typeof rowDimensions.address === "string" ? rowDimensions.address : "",
+        valueBtc: number(row),
+        direction,
+        counterparty:
+          typeof rowDimensions.counterparty === "string" ? rowDimensions.counterparty : "unknown",
+        txid,
+        sourceUrl: row.rawSnapshot?.sourceUrl ?? "https://mempool.space/",
+        explorerUrl: txid ? `https://mempool.space/tx/${txid}` : "https://mempool.space/",
+      };
+    })
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
+    .slice(0, 25);
+  const universeRows = accepted.filter(
+    (row) => metricCode(row) === "crypto.large_address.address_balance_btc",
+  );
+  const universeObservedAt = universeRows
+    .map((row) => row.observedAt)
+    .filter((value): value is Date => value instanceof Date)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const membership = accepted
+    .filter((row) => metricCode(row) === "crypto.large_address.balance_change_btc")
+    .sort((a, b) => b.effectiveAt.getTime() - a.effectiveAt.getTime())[0];
+  const membershipDimensions = membership ? dimensions(membership) : {};
+  const entrantsExits = membership
+    ? {
+        entrantCount: Number(membershipDimensions.entrant_count ?? 0),
+        exitCount: Number(membershipDimensions.exit_count ?? 0),
+        entrantBalanceBtc: Number(membershipDimensions.entrant_balance_btc ?? 0),
+        exitBalanceBtc: Number(membershipDimensions.exit_balance_btc ?? 0),
+      }
+    : null;
+  const sourceMap = new Map<
+    string,
+    { sourceCode: string; sourceUrl: string; observedAt: string | null }
+  >();
+  for (const row of accepted) {
+    const sourceCode = row.provider?.code;
+    if (!sourceCode) continue;
+    const sourceUrl = row.rawSnapshot?.sourceUrl ?? "";
+    sourceMap.set(`${sourceCode}:${sourceUrl}`, {
+      sourceCode,
+      sourceUrl,
+      observedAt: row.observedAt?.toISOString() ?? null,
+    });
+  }
+  const qualityFlags = [
+    ...new Set(
+      accepted.flatMap((row) =>
+        Array.isArray(row.qualityFlags)
+          ? row.qualityFlags.filter((flag): flag is string => typeof flag === "string")
+          : [],
+      ),
+    ),
+  ].sort();
+  const score = signal?.score == null ? null : Number(signal.score.toString());
+  const confidence = signal ? Number(signal.dataConfidence.toString()) : null;
+  const allowedStates = new Set<LargeAddressState>([
+    "accumulation",
+    "neutral",
+    "distribution",
+    "calibrating",
+    "unavailable",
+  ]);
+  const state = allowedStates.has(signal?.label as LargeAddressState)
+    ? (signal!.label as LargeAddressState)
+    : "unavailable";
+  const status = days.length
+    ? signal?.status === "active" && score !== null
+      ? "system"
+      : "partial"
+    : "unavailable";
+  return {
+    status,
+    sourceCodes: [
+      ...new Set(accepted.map((row) => row.provider?.code).filter(Boolean) as string[]),
+    ].sort(),
+    effectiveAt: days.at(-1)?.effectiveAt ?? null,
+    universeObservedAt: universeObservedAt?.toISOString() ?? null,
+    score,
+    state,
+    confidence,
+    calibrationStatus:
+      state === "calibrating"
+        ? "calibrating"
+        : signal?.status === "active"
+          ? "calibrated"
+          : "unavailable",
+    horizons: {
+      oneDay: horizonAt(days, 1),
+      sevenDay: horizonAt(days, 7),
+      thirtyDay: horizonAt(days, 30),
+    },
+    exchangeFlows,
+    concentrationSeries,
+    breadthSeries: normalizedBreadth,
+    notableActivity,
+    entrantsExits,
+    qualityFlags,
+    sources: [...sourceMap.values()].sort((a, b) => a.sourceCode.localeCompare(b.sourceCode)),
+    methodologyVersion: signal?.methodologyVersion ?? null,
+  };
+}
+
 export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMarketPulseResponse> {
   const prisma = getPrisma();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS);
-  const [rawFearRows, rawEtfRows, rawCoinSharesRows] = await Promise.all([
-    prisma.metricObservation.findMany({
-      where: {
-        qualityStatus: { in: ACCEPTED_QUALITY },
-        effectiveAt: { gte: thirtyDaysAgo, lte: now },
-        metricDefinition: { code: "crypto.fear_greed.index" },
-        provider: { code: "alternative-fng" },
-      },
-      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-      include: { rawSnapshot: { select: { sourceUrl: true } } },
-    }),
-    prisma.metricObservation.findMany({
-      where: {
-        qualityStatus: { in: ACCEPTED_QUALITY },
-        effectiveAt: { gte: thirtyDaysAgo, lte: now },
-        metricDefinition: { code: "crypto.etf.net_flow_usd" },
-        provider: { code: { in: [...FARSIDE_PROVIDERS] } },
-      },
-      orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
-      include: { provider: { select: { code: true } } },
-    }),
-    prisma.metricObservation.findMany({
-      where: {
-        qualityStatus: { in: ACCEPTED_QUALITY },
-        effectiveAt: { lte: now },
-        metricDefinition: { code: "crypto.coinshares.net_flow_usd" },
-        provider: { code: "coinshares-weekly" },
-      },
-      orderBy: [{ effectiveAt: "desc" }, { revision: "desc" }],
-      take: 500,
-    }),
-  ]);
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * DAY_MS);
+  const [rawFearRows, rawEtfRows, rawCoinSharesRows, rawLargeAddressRows, largeAddressSignal] =
+    await Promise.all([
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { gte: thirtyDaysAgo, lte: now },
+          metricDefinition: { code: "crypto.fear_greed.index" },
+          provider: { code: "alternative-fng" },
+        },
+        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+        include: { rawSnapshot: { select: { sourceUrl: true } } },
+      }),
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { gte: thirtyDaysAgo, lte: now },
+          metricDefinition: { code: "crypto.etf.net_flow_usd" },
+          provider: { code: { in: [...FARSIDE_PROVIDERS] } },
+        },
+        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+        include: { provider: { select: { code: true } } },
+      }),
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { lte: now },
+          metricDefinition: { code: "crypto.coinshares.net_flow_usd" },
+          provider: { code: "coinshares-weekly" },
+        },
+        orderBy: [{ effectiveAt: "desc" }, { revision: "desc" }],
+        take: 500,
+      }),
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { gte: ninetyDaysAgo, lte: now },
+          metricDefinition: { code: { in: [...LARGE_ADDRESS_METRICS] } },
+          provider: {
+            code: { in: ["mempool-btc-large-addresses", "bitinfocharts-top-addresses"] },
+          },
+        },
+        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+        include: {
+          metricDefinition: { select: { code: true } },
+          provider: { select: { code: true } },
+          rawSnapshot: { select: { sourceUrl: true } },
+        },
+      }),
+      prisma.signalSnapshot.findFirst({
+        where: {
+          market: "crypto",
+          signalType: "large_address_action",
+          effectiveAt: { lte: now },
+          asset: { symbol: "BTC" },
+        },
+        orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          score: true,
+          label: true,
+          dataConfidence: true,
+          status: true,
+          effectiveAt: true,
+          methodologyVersion: true,
+        },
+      }),
+    ]);
 
   const fearRows = latestRevision(rawFearRows as unknown as ObservationRow[]).sort(
     (a, b) => a.effectiveAt.getTime() - b.effectiveAt.getTime(),
@@ -238,5 +593,9 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
       series: trustedCoinSeries,
       latestBreakdown,
     },
+    largeAddressActivity: buildLargeAddressActivity(
+      rawLargeAddressRows as unknown as ObservationRow[],
+      largeAddressSignal,
+    ),
   };
 }
