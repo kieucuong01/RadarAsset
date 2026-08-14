@@ -36,4 +36,39 @@ describe("Smart Insights read bounds", () => {
       expect.objectContaining({ take: 5_000 }),
     );
   });
+
+  it("returns only the newest immutable revision for each natural key", async () => {
+    const base = {
+      naturalKey: "crypto:onchain:nvt:BTC:2026-08-14",
+      effectiveAt: new Date("2026-08-14T00:00:00Z"),
+      effectiveStart: new Date("2026-08-14T00:00:00Z"),
+      effectiveEnd: new Date("2026-08-14T00:00:00Z"),
+      observedAt: new Date("2026-08-14T01:00:00Z"),
+      qualityStatus: "passed",
+      qualityFlags: [],
+      metricDefinition: {
+        code: "crypto.onchain.nvt",
+        market: "crypto",
+        unit: "ratio",
+        freshnessSlaMinutes: 2_880,
+        methodologyVersion: "v1",
+      },
+      provider: { code: "coinmetrics-community" },
+      asset: { symbol: "BTC" },
+      rawSnapshot: { sourceUrl: "https://example.test/coinmetrics" },
+    };
+    prisma.metricObservation.findMany.mockResolvedValue([
+      { ...base, id: "revision-2", revision: 2, value: { toString: () => "20" } },
+      { ...base, id: "revision-1", revision: 1, value: { toString: () => "18" } },
+    ]);
+
+    const result = await loadMetrics({
+      market: "crypto",
+      from: new Date("2026-08-01T00:00:00Z"),
+      to: new Date("2026-08-14T00:00:00Z"),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ observationId: "revision-2", value: "20" });
+  });
 });

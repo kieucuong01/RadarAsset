@@ -248,7 +248,13 @@ export async function loadMetrics(input: {
       rawSnapshot: { select: { sourceUrl: true } },
     },
   });
-  return rows.map((row) => ({
+  const seenNaturalKeys = new Set<string>();
+  const latestRows = rows.filter((row) => {
+    if (seenNaturalKeys.has(row.naturalKey)) return false;
+    seenNaturalKeys.add(row.naturalKey);
+    return true;
+  });
+  return latestRows.map((row) => ({
     observationId: row.id,
     metricCode: row.metricDefinition.code,
     market: row.metricDefinition.market as InsightMarket,

@@ -119,6 +119,17 @@ describe("Crypto Quant Pulse chart model", () => {
     ).toEqual([]);
   });
 
+  it("excludes conflicting and unavailable observations from live series", () => {
+    const conflicting = metric("conflicting", "crypto.onchain.nvt", "20", "2026-08-14T00:00:00Z");
+    conflicting.freshness = "conflicting";
+    const unavailable = metric("unavailable", "crypto.onchain.nvt", "21", "2026-08-14T00:00:00Z");
+    unavailable.freshness = "unavailable";
+
+    expect(
+      buildCryptoMetricSeries([conflicting, unavailable], new Set(["crypto.onchain.nvt"])),
+    ).toEqual([]);
+  });
+
   it("merges compatible trend points without filling missing dates", () => {
     const series = buildCryptoMetricSeries(
       [
@@ -132,6 +143,22 @@ describe("Crypto Quant Pulse chart model", () => {
     expect(mergeSeriesPoints(series)).toEqual([
       { effectiveAt: "2026-08-13T00:00:00Z", [series[0].key]: 40 },
       { effectiveAt: "2026-08-14T00:00:00Z", [series[0].key]: 42 },
+    ]);
+  });
+
+  it("inserts a null breakpoint when a daily series has a missing period", () => {
+    const [series] = buildCryptoMetricSeries(
+      [
+        metric("1", "crypto.onchain.nvt", "18", "2026-08-10T00:00:00Z"),
+        metric("2", "crypto.onchain.nvt", "20", "2026-08-13T00:00:00Z"),
+      ],
+      new Set(["crypto.onchain.nvt"]),
+    );
+
+    expect(mergeSeriesPoints([series])).toEqual([
+      { effectiveAt: "2026-08-10T00:00:00Z", [series.key]: 18 },
+      { effectiveAt: "2026-08-11T00:00:00.000Z", [series.key]: null },
+      { effectiveAt: "2026-08-13T00:00:00Z", [series.key]: 20 },
     ]);
   });
 
@@ -164,5 +191,37 @@ describe("Crypto Quant Pulse chart model", () => {
 
     expect(buildCryptoOverviewObservations(unavailable, [])).toEqual([]);
     expect(buildCryptoOverviewObservations(null, [])).toEqual([]);
+  });
+
+  it("keeps independent on-chain facts when the Crypto Pulse request is unavailable", () => {
+    const observations = buildCryptoOverviewObservations(null, [
+      metric(
+        "onchain-change",
+        "crypto.onchain.active_addresses_change_30d",
+        "0.08",
+        "2026-08-14T00:00:00Z",
+        "return",
+      ),
+    ]);
+
+    expect(observations.map((item) => item.kind)).toEqual(["onchain"]);
+  });
+
+  it("derives stale Pulse freshness from effective time instead of assuming fresh", () => {
+    const stalePulse = cryptoMarketPulseSchema.parse({
+      ...pulse,
+      generatedAt: "2026-08-14T12:00:00Z",
+      fearGreed: {
+        ...pulse.fearGreed,
+        latest: { ...pulse.fearGreed.latest, effectiveAt: "2026-08-10T00:00:00Z" },
+      },
+      etfFlows: {
+        ...pulse.etfFlows,
+        series: [{ ...pulse.etfFlows.series[0], effectiveAt: "2026-08-10T00:00:00Z" }],
+      },
+    });
+
+    const observations = buildCryptoOverviewObservations(stalePulse, []);
+    expect(observations.map((item) => item.freshness)).toEqual(["stale", "stale"]);
   });
 });

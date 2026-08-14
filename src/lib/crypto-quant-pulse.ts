@@ -57,7 +57,13 @@ export function buildCryptoMetricSeries(
 
   for (const metric of metrics) {
     const value = Number(metric.value);
-    if (metric.market !== "crypto" || !codes.has(metric.metricCode) || !Number.isFinite(value)) {
+    if (
+      metric.market !== "crypto" ||
+      !codes.has(metric.metricCode) ||
+      !Number.isFinite(value) ||
+      metric.freshness === "conflicting" ||
+      metric.freshness === "unavailable"
+    ) {
       continue;
     }
 
@@ -97,9 +103,22 @@ export function buildCryptoMetricSeries(
 }
 
 export function mergeSeriesPoints(series: CryptoMetricSeries[]) {
-  const rows = new Map<string, Record<string, string | number>>();
+  const rows = new Map<string, Record<string, string | number | null>>();
   for (const item of series) {
-    for (const point of item.trendPoints) {
+    for (const [index, point] of item.trendPoints.entries()) {
+      const previous = item.trendPoints[index - 1];
+      const previousTime = previous ? Date.parse(previous.effectiveAt) : Number.NaN;
+      const currentTime = Date.parse(point.effectiveAt);
+      if (
+        Number.isFinite(previousTime) &&
+        Number.isFinite(currentTime) &&
+        currentTime - previousTime > 36 * 60 * 60 * 1_000
+      ) {
+        const breakpointAt = new Date(previousTime + 24 * 60 * 60 * 1_000).toISOString();
+        const breakpoint = rows.get(breakpointAt) ?? { effectiveAt: breakpointAt };
+        breakpoint[item.key] = null;
+        rows.set(breakpointAt, breakpoint);
+      }
       const row = rows.get(point.effectiveAt) ?? { effectiveAt: point.effectiveAt };
       row[item.key] = point.value;
       rows.set(point.effectiveAt, row);
@@ -116,41 +135,54 @@ const ONCHAIN_OVERVIEW_PRIORITY = [
   "crypto.stablecoin.supply_change_7d",
 ] as const;
 
+function pulseFreshness(
+  effectiveAt: string,
+  generatedAt: string,
+): CryptoOverviewObservation["freshness"] {
+  const effectiveTime = Date.parse(effectiveAt);
+  const generatedTime = Date.parse(generatedAt);
+  if (!Number.isFinite(effectiveTime) || !Number.isFinite(generatedTime)) return "unavailable";
+  return generatedTime - effectiveTime <= 48 * 60 * 60 * 1_000 ? "fresh" : "stale";
+}
+
 export function buildCryptoOverviewObservations(
   pulse: CryptoMarketPulseModel | null,
   metrics: MetricModel[],
 ): CryptoOverviewObservation[] {
-  if (!pulse) return [];
-
   const observations: CryptoOverviewObservation[] = [];
-  const fearGreed = pulse.fearGreed.latest;
-  if (pulse.fearGreed.status !== "unavailable" && fearGreed) {
-    observations.push({
-      kind: "sentiment",
-      label: `Fear & Greed: ${fearGreed.value} (${fearGreed.classification})`,
-      value: fearGreed.value,
-      unit: "index",
-      sourceCode: pulse.fearGreed.sourceCode,
-      sourceUrl: pulse.fearGreed.sourceUrl,
-      effectiveAt: fearGreed.effectiveAt,
-      freshness: "fresh",
-    });
-  }
+  if (pulse) {
+    const fearGreed = pulse.fearGreed.latest;
+    if (pulse.fearGreed.status !== "unavailable" && fearGreed) {
+      observations.push({
+        kind: "sentiment",
+        label: `Fear & Greed: ${fearGreed.value} (${fearGreed.classification})`,
+        value: fearGreed.value,
+        unit: "index",
+        sourceCode: pulse.fearGreed.sourceCode,
+        sourceUrl: pulse.fearGreed.sourceUrl,
+        effectiveAt: fearGreed.effectiveAt,
+        freshness: pulseFreshness(fearGreed.effectiveAt, pulse.generatedAt),
+      });
+    }
 
-  const latestEtf = [...pulse.etfFlows.series]
-    .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt))
-    .at(-1);
-  if (pulse.etfFlows.status !== "unavailable" && latestEtf) {
-    observations.push({
-      kind: "etf",
-      label: "ETF flow phiên gần nhất",
-      value: latestEtf.total,
-      unit: "USD",
-      sourceCode: pulse.etfFlows.sourceCodes.join(", "),
-      sourceUrl: "https://farside.co.uk",
-      effectiveAt: latestEtf.effectiveAt,
-      freshness: pulse.etfFlows.status === "partial" ? "partial" : "fresh",
-    });
+    const latestEtf = [...pulse.etfFlows.series]
+      .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt))
+      .at(-1);
+    if (pulse.etfFlows.status !== "unavailable" && latestEtf) {
+      observations.push({
+        kind: "etf",
+        label: "ETF flow phiên gần nhất",
+        value: latestEtf.total,
+        unit: "USD",
+        sourceCode: pulse.etfFlows.sourceCodes.join(", "),
+        sourceUrl: "https://farside.co.uk",
+        effectiveAt: latestEtf.effectiveAt,
+        freshness:
+          pulse.etfFlows.status === "partial"
+            ? "partial"
+            : pulseFreshness(latestEtf.effectiveAt, pulse.generatedAt),
+      });
+    }
   }
 
   const onchain = ONCHAIN_OVERVIEW_PRIORITY.flatMap((metricCode) =>

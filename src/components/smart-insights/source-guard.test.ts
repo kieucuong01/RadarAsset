@@ -204,4 +204,19 @@ describe("Smart Insights source guard", () => {
     expect(tabs).not.toContain("fetch(");
     expect(tabs).not.toContain("fetchCryptoMarketPulse");
   });
+
+  it("uses theme chart colors and exposes the regime effective time", () => {
+    const trendPanel = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoMetricTrendPanel.tsx"),
+      "utf8",
+    );
+    const tabs = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoQuantPulseTabs.tsx"),
+      "utf8",
+    );
+
+    expect(trendPanel).toContain("hsl(var(--chart-1))");
+    expect(trendPanel).not.toContain("#6366f1");
+    expect(tabs).toContain("dateTime={regime.effectiveAt}");
+  });
 });

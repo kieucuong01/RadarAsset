@@ -74,6 +74,14 @@ function CryptoOverviewSummary({
         <article className="rounded-xl border bg-background/50 p-4">
           <p className="text-xs text-muted-foreground">Regime</p>
           <p className="mt-2 text-lg font-semibold">{regime?.label ?? "Unavailable"}</p>
+          {regime?.effectiveAt ? (
+            <time
+              dateTime={regime.effectiveAt}
+              className="mt-1 block text-[11px] text-muted-foreground"
+            >
+              {dateLabel(regime.effectiveAt, locale)}
+            </time>
+          ) : null}
           <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div>
               <dt className="text-muted-foreground">Confidence</dt>

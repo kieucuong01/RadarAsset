@@ -16,7 +16,13 @@ import type { CryptoMetricSeries } from "@/lib/crypto-quant-pulse";
 import { mergeSeriesPoints } from "@/lib/crypto-quant-pulse";
 import { FreshnessBadge } from "./FreshnessBadge";
 
-const SERIES_COLORS = ["#6366f1", "#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6"];
+const SERIES_COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+];
 
 function dateLabel(value: string, locale: "vi" | "en") {
   return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
@@ -72,7 +78,7 @@ function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: 
           <Tooltip
             labelFormatter={(value) => dateLabel(String(value), locale)}
             formatter={(value, name) => [
-              formatMetric(Number(value), series[0].unit, locale),
+              value == null ? "—" : formatMetric(Number(value), series[0].unit, locale),
               metricLabel(series.find((item) => item.key === name) ?? series[0]),
             ]}
           />
