@@ -213,6 +213,8 @@ _VERIFIED_LARGE_ADDRESS_DEFINITIONS = tuple(
     )
     for code, name, unit in (
         ("crypto.large_address.confirmed_balance_btc", "Confirmed large-address balance", "BTC"),
+        ("crypto.large_address.confirmed_incoming_btc", "Confirmed large-address incoming value", "BTC"),
+        ("crypto.large_address.confirmed_outgoing_btc", "Confirmed large-address outgoing value", "BTC"),
         ("crypto.large_address.net_accumulation_btc", "Common-cohort net accumulation", "BTC"),
         ("crypto.large_address.accumulation_breadth", "Large-address accumulation breadth", "ratio"),
         ("crypto.large_address.distribution_breadth", "Large-address distribution breadth", "ratio"),

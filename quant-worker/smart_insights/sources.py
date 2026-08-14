@@ -179,7 +179,10 @@ SOURCE_ROWS = (
         "mempool.space BTC Large Addresses",
         Market.CRYPTO,
         CollectionMode.API,
-        ("https://mempool.space/api/address/",),
+        (
+            "https://mempool.space/api/address/",
+            "https://mempool.space/api/blocks/tip/height",
+        ),
         "daily",
         "mempool-btc-large-addresses-v1",
         2_880,
