@@ -151,4 +151,23 @@ describe("Smart Insights source guard", () => {
     );
     expect(backend).not.toContain("LARGE_ADDRESS_SAMPLE");
   });
+
+  it("keeps generic Crypto metric trends unit-safe, sourced, and gap-aware", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "CryptoMetricTrendPanel.tsx"),
+      "utf8",
+    );
+
+    for (const token of [
+      "ResponsiveContainer",
+      "LineChart",
+      "connectNulls={false}",
+      "FreshnessBadge",
+      "sourceUrl",
+      "series.unit",
+      "Unavailable",
+    ]) {
+      expect(source).toContain(token);
+    }
+  });
 });
