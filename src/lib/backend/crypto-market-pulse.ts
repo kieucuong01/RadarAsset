@@ -4,6 +4,10 @@ import { getPrisma } from "@/lib/db/prisma";
 
 const ALTERNATIVE_SOURCE_URL = "https://alternative.me/crypto/fear-and-greed-index/";
 const COINSHARES_SOURCE_URL = "https://coinshares.com/corp/resources/market-activity/";
+const COINGLASS_MARGIN_URL = "https://www.coinglass.com/pro/i/MarginFeeChart";
+const COINGLASS_MAXPAIN_URL = "https://www.coinglass.com/liquidation-maxpain";
+const ALTCOIN_SEASON_URL = "https://www.blockchaincenter.net/altcoin-season-index/";
+const CBBI_URL = "https://colintalkscrypto.com/cbbi/";
 const FARSIDE_PROVIDERS = ["farside-btc-etf", "farside-eth-etf", "farside-sol-etf"] as const;
 const ACCEPTED_QUALITY = ["passed", "warning"];
 const DAY_MS = 86_400_000;
@@ -15,6 +19,34 @@ const LARGE_ADDRESS_METRICS = [
   "crypto.large_address.confirmed_outgoing_btc",
   "crypto.large_address.address_balance_btc",
   "crypto.large_address.balance_change_btc",
+] as const;
+const PRESSURE_METRICS = [
+  "crypto.derivatives.margin_borrow.annualized_rate",
+  "crypto.derivatives.margin_borrow.daily_rate",
+  "crypto.derivatives.margin_borrow.hourly_rate",
+  "crypto.derivatives.liquidation.current_price_usd",
+  "crypto.derivatives.liquidation.long_max_pain_price_usd",
+  "crypto.derivatives.liquidation.short_max_pain_price_usd",
+  "crypto.derivatives.liquidation.long_max_pain_level_usd",
+  "crypto.derivatives.liquidation.short_max_pain_level_usd",
+  "crypto.derivatives.liquidation.long_distance_ratio",
+  "crypto.derivatives.liquidation.short_distance_ratio",
+] as const;
+export const CBBI_COMPONENT_CODES = [
+  "pi_cycle",
+  "rupl_nupl",
+  "rhodl",
+  "puell",
+  "two_year_ma",
+  "trolololo",
+  "mvrv",
+  "reserve_risk",
+  "woobull",
+] as const;
+const CYCLE_METRICS = [
+  "crypto.cycle.altcoin_season.index",
+  "crypto.cycle.cbbi.confidence",
+  ...CBBI_COMPONENT_CODES.map((code) => `crypto.cycle.cbbi.component.${code}`),
 ] as const;
 
 type AssetCode = "BTC" | "ETH" | "SOL";
@@ -30,6 +62,7 @@ type ObservationRow = {
   provider?: { code: string };
   metricDefinition?: { code: string };
   rawSnapshot?: { sourceUrl: string };
+  asset?: { symbol: string } | null;
 };
 
 type LargeAddressHorizon = {
@@ -85,6 +118,69 @@ export type CryptoMarketPulseResponse = {
       assets: Array<{ label: string; value: number }>;
     }>;
     latestBreakdown: Array<{ label: string; value: number }>;
+  };
+  marginBorrow: {
+    status: "system" | "partial" | "unavailable";
+    sourceCode: "coinglass-margin-borrow";
+    sourceUrl: string;
+    observedAt: string | null;
+    series: Array<{
+      effectiveAt: string;
+      annualizedRate: number | null;
+      dailyRate: number | null;
+      hourlyRate: number | null;
+    }>;
+  };
+  liquidationMaxPain: {
+    status: "system" | "partial" | "unavailable";
+    sourceCode: "coinglass-liquidation-maxpain";
+    sourceUrl: string;
+    observedAt: string | null;
+    rows: Array<{
+      asset: AssetCode;
+      range: "24h";
+      effectiveAt: string;
+      currentPriceUsd: number | null;
+      long: { priceUsd: number; levelUsd: number; distanceRatio: number } | null;
+      short: { priceUsd: number; levelUsd: number; distanceRatio: number } | null;
+    }>;
+  };
+  cycleIndicators: {
+    altcoinSeason: {
+      status: "system" | "partial" | "unavailable";
+      sourceCode: "blockchaincenter-altcoin-season";
+      sourceUrl: string;
+      observedAt: string | null;
+      latest: {
+        effectiveAt: string;
+        season90d: number | null;
+        month: number | null;
+        year: number | null;
+        classification: "bitcoin_season" | "neutral" | "altcoin_season" | null;
+      } | null;
+      series: Array<{
+        effectiveAt: string;
+        season90d: number | null;
+        month: number | null;
+        year: number | null;
+      }>;
+    };
+    cbbi: {
+      status: "system" | "partial" | "unavailable";
+      sourceCode: "cbbi-public";
+      sourceUrl: string;
+      observedAt: string | null;
+      latest: {
+        effectiveAt: string;
+        confidence: number;
+        components: Array<{ code: (typeof CBBI_COMPONENT_CODES)[number]; value: number }>;
+      } | null;
+      series: Array<{
+        effectiveAt: string;
+        confidence: number;
+        components: Array<{ code: (typeof CBBI_COMPONENT_CODES)[number]; value: number }>;
+      }>;
+    };
   };
   largeAddressActivity: {
     status: "system" | "partial" | "unavailable";
@@ -146,6 +242,12 @@ export function classifyFearGreed(value: number): string {
   return "Extreme Greed";
 }
 
+export function classifyAltcoinSeason(value: number) {
+  if (value <= 25) return "bitcoin_season" as const;
+  if (value >= 75) return "altcoin_season" as const;
+  return "neutral" as const;
+}
+
 function object(value: Prisma.JsonValue): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -175,6 +277,245 @@ function providerAsset(code: string): AssetCode | null {
   if (code === "farside-eth-etf") return "ETH";
   if (code === "farside-sol-etf") return "SOL";
   return null;
+}
+
+function latestObservedAt(rows: ObservationRow[]): string | null {
+  return (
+    rows
+      .map((row) => row.observedAt)
+      .filter((value): value is Date => value instanceof Date)
+      .sort((a, b) => b.getTime() - a.getTime())[0]
+      ?.toISOString() ?? null
+  );
+}
+
+function buildMarginBorrow(rows: ObservationRow[]): CryptoMarketPulseResponse["marginBorrow"] {
+  const accepted = latestRevision(rows).filter(
+    (row) => row.provider?.code === "coinglass-margin-borrow",
+  );
+  const grouped = new Map<
+    string,
+    {
+      effectiveAt: string;
+      annualizedRate: number | null;
+      dailyRate: number | null;
+      hourlyRate: number | null;
+    }
+  >();
+  for (const row of accepted) {
+    const effectiveAt = row.effectiveAt.toISOString();
+    const point = grouped.get(effectiveAt) ?? {
+      effectiveAt,
+      annualizedRate: null,
+      dailyRate: null,
+      hourlyRate: null,
+    };
+    const code = metricCode(row);
+    if (code.endsWith("annualized_rate")) point.annualizedRate = number(row);
+    else if (code.endsWith("daily_rate")) point.dailyRate = number(row);
+    else if (code.endsWith("hourly_rate")) point.hourlyRate = number(row);
+    grouped.set(effectiveAt, point);
+  }
+  const series = [...grouped.values()].sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
+  const latest = series.at(-1);
+  const complete =
+    latest != null &&
+    latest.annualizedRate != null &&
+    latest.dailyRate != null &&
+    latest.hourlyRate != null;
+  return {
+    status: !latest ? "unavailable" : complete ? "system" : "partial",
+    sourceCode: "coinglass-margin-borrow",
+    sourceUrl: accepted.at(-1)?.rawSnapshot?.sourceUrl ?? COINGLASS_MARGIN_URL,
+    observedAt: latestObservedAt(accepted),
+    series,
+  };
+}
+
+type LiquidationAccumulator = {
+  asset: AssetCode;
+  range: "24h";
+  effectiveAt: string;
+  currentPriceUsd: number | null;
+  longPrice: number | null;
+  longLevel: number | null;
+  longDistance: number | null;
+  shortPrice: number | null;
+  shortLevel: number | null;
+  shortDistance: number | null;
+};
+
+function buildLiquidationMaxPain(
+  rows: ObservationRow[],
+): CryptoMarketPulseResponse["liquidationMaxPain"] {
+  const accepted = latestRevision(rows).filter(
+    (row) => row.provider?.code === "coinglass-liquidation-maxpain",
+  );
+  const assets = new Set<AssetCode>(["BTC", "ETH", "SOL"]);
+  const grouped = new Map<string, LiquidationAccumulator>();
+  for (const row of accepted) {
+    const rowDimensions = dimensions(row);
+    const rawAsset = row.asset?.symbol ?? rowDimensions.asset;
+    if (typeof rawAsset !== "string" || !assets.has(rawAsset as AssetCode)) continue;
+    if (rowDimensions.range !== "24h") continue;
+    const asset = rawAsset as AssetCode;
+    const effectiveAt = row.effectiveAt.toISOString();
+    const key = `${effectiveAt}:${asset}:24h`;
+    const item = grouped.get(key) ?? {
+      asset,
+      range: "24h",
+      effectiveAt,
+      currentPriceUsd: null,
+      longPrice: null,
+      longLevel: null,
+      longDistance: null,
+      shortPrice: null,
+      shortLevel: null,
+      shortDistance: null,
+    };
+    const code = metricCode(row);
+    if (code.endsWith("current_price_usd")) item.currentPriceUsd = number(row);
+    else if (code.endsWith("long_max_pain_price_usd")) item.longPrice = number(row);
+    else if (code.endsWith("long_max_pain_level_usd")) item.longLevel = number(row);
+    else if (code.endsWith("long_distance_ratio")) item.longDistance = number(row);
+    else if (code.endsWith("short_max_pain_price_usd")) item.shortPrice = number(row);
+    else if (code.endsWith("short_max_pain_level_usd")) item.shortLevel = number(row);
+    else if (code.endsWith("short_distance_ratio")) item.shortDistance = number(row);
+    grouped.set(key, item);
+  }
+  const latestByAsset = new Map<AssetCode, LiquidationAccumulator>();
+  for (const item of grouped.values()) {
+    const current = latestByAsset.get(item.asset);
+    if (!current || item.effectiveAt > current.effectiveAt) latestByAsset.set(item.asset, item);
+  }
+  const order: AssetCode[] = ["BTC", "ETH", "SOL"];
+  const rowsOut = [...latestByAsset.values()]
+    .sort((a, b) => order.indexOf(a.asset) - order.indexOf(b.asset))
+    .map((item) => ({
+      asset: item.asset,
+      range: item.range,
+      effectiveAt: item.effectiveAt,
+      currentPriceUsd: item.currentPriceUsd,
+      long:
+        item.longPrice != null && item.longLevel != null && item.longDistance != null
+          ? { priceUsd: item.longPrice, levelUsd: item.longLevel, distanceRatio: item.longDistance }
+          : null,
+      short:
+        item.shortPrice != null && item.shortLevel != null && item.shortDistance != null
+          ? {
+              priceUsd: item.shortPrice,
+              levelUsd: item.shortLevel,
+              distanceRatio: item.shortDistance,
+            }
+          : null,
+    }));
+  const complete = rowsOut.length > 0 && rowsOut.every((row) => row.currentPriceUsd != null && row.long && row.short);
+  return {
+    status: rowsOut.length === 0 ? "unavailable" : complete ? "system" : "partial",
+    sourceCode: "coinglass-liquidation-maxpain",
+    sourceUrl: accepted.at(-1)?.rawSnapshot?.sourceUrl ?? COINGLASS_MAXPAIN_URL,
+    observedAt: latestObservedAt(accepted),
+    rows: rowsOut,
+  };
+}
+
+function buildCycleIndicators(
+  rows: ObservationRow[],
+): CryptoMarketPulseResponse["cycleIndicators"] {
+  const accepted = latestRevision(rows);
+  const altRows = accepted.filter(
+    (row) => row.provider?.code === "blockchaincenter-altcoin-season",
+  );
+  const altGrouped = new Map<
+    string,
+    { effectiveAt: string; season90d: number | null; month: number | null; year: number | null }
+  >();
+  for (const row of altRows) {
+    const effectiveAt = row.effectiveAt.toISOString();
+    const item = altGrouped.get(effectiveAt) ?? {
+      effectiveAt,
+      season90d: null,
+      month: null,
+      year: null,
+    };
+    const horizon = dimensions(row).horizon;
+    if (horizon === "season_90d") item.season90d = number(row);
+    else if (horizon === "month") item.month = number(row);
+    else if (horizon === "year") item.year = number(row);
+    altGrouped.set(effectiveAt, item);
+  }
+  const altSeries = [...altGrouped.values()].sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
+  const latestAltPoint = altSeries.at(-1);
+  const latestAlt = latestAltPoint
+    ? {
+        ...latestAltPoint,
+        classification:
+          latestAltPoint.season90d == null
+            ? null
+            : classifyAltcoinSeason(latestAltPoint.season90d),
+      }
+    : null;
+  const altComplete =
+    latestAlt != null &&
+    latestAlt.season90d != null &&
+    latestAlt.month != null &&
+    latestAlt.year != null;
+
+  const cbbiRows = accepted.filter((row) => row.provider?.code === "cbbi-public");
+  const componentSet = new Set<string>(CBBI_COMPONENT_CODES);
+  const cbbiGrouped = new Map<
+    string,
+    { effectiveAt: string; confidence: number | null; components: Map<string, number> }
+  >();
+  for (const row of cbbiRows) {
+    const effectiveAt = row.effectiveAt.toISOString();
+    const item = cbbiGrouped.get(effectiveAt) ?? {
+      effectiveAt,
+      confidence: null,
+      components: new Map<string, number>(),
+    };
+    const code = metricCode(row);
+    if (code === "crypto.cycle.cbbi.confidence") item.confidence = number(row);
+    else if (code.startsWith("crypto.cycle.cbbi.component.")) {
+      const component = code.slice("crypto.cycle.cbbi.component.".length);
+      if (componentSet.has(component)) item.components.set(component, number(row));
+    }
+    cbbiGrouped.set(effectiveAt, item);
+  }
+  const cbbiSeries = [...cbbiGrouped.values()]
+    .filter((item) => item.confidence != null)
+    .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt))
+    .map((item) => ({
+      effectiveAt: item.effectiveAt,
+      confidence: item.confidence!,
+      components: CBBI_COMPONENT_CODES.filter((code) => item.components.has(code)).map((code) => ({
+        code,
+        value: item.components.get(code)!,
+      })),
+    }));
+  const latestCbbi = cbbiSeries.at(-1) ?? null;
+  return {
+    altcoinSeason: {
+      status: !latestAlt ? "unavailable" : altComplete ? "system" : "partial",
+      sourceCode: "blockchaincenter-altcoin-season",
+      sourceUrl: altRows.at(-1)?.rawSnapshot?.sourceUrl ?? ALTCOIN_SEASON_URL,
+      observedAt: latestObservedAt(altRows),
+      latest: latestAlt,
+      series: altSeries,
+    },
+    cbbi: {
+      status: !latestCbbi
+        ? "unavailable"
+        : latestCbbi.components.length === CBBI_COMPONENT_CODES.length
+          ? "system"
+          : "partial",
+      sourceCode: "cbbi-public",
+      sourceUrl: cbbiRows.at(-1)?.rawSnapshot?.sourceUrl ?? CBBI_URL,
+      observedAt: latestObservedAt(cbbiRows),
+      latest: latestCbbi,
+      series: cbbiSeries,
+    },
+  };
 }
 
 const EMPTY_HORIZON: LargeAddressHorizon = {
@@ -423,7 +764,17 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
   const prisma = getPrisma();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * DAY_MS);
-  const [rawFearRows, rawEtfRows, rawCoinSharesRows, rawLargeAddressRows, largeAddressSignal] =
+  const thirtyOneDaysAgo = new Date(now.getTime() - 31 * DAY_MS);
+  const cycleHistoryStart = new Date(now.getTime() - 730 * DAY_MS);
+  const [
+    rawFearRows,
+    rawEtfRows,
+    rawCoinSharesRows,
+    rawLargeAddressRows,
+    rawPressureRows,
+    rawCycleRows,
+    largeAddressSignal,
+  ] =
     await Promise.all([
       prisma.metricObservation.findMany({
         where: {
@@ -463,6 +814,37 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
           provider: {
             code: { in: ["mempool-btc-large-addresses", "bitinfocharts-top-addresses"] },
           },
+        },
+        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+        include: {
+          metricDefinition: { select: { code: true } },
+          provider: { select: { code: true } },
+          rawSnapshot: { select: { sourceUrl: true } },
+        },
+      }),
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { gte: thirtyOneDaysAgo, lte: now },
+          metricDefinition: { code: { in: [...PRESSURE_METRICS] } },
+          provider: {
+            code: { in: ["coinglass-margin-borrow", "coinglass-liquidation-maxpain"] },
+          },
+        },
+        orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
+        include: {
+          metricDefinition: { select: { code: true } },
+          provider: { select: { code: true } },
+          rawSnapshot: { select: { sourceUrl: true } },
+          asset: { select: { symbol: true } },
+        },
+      }),
+      prisma.metricObservation.findMany({
+        where: {
+          qualityStatus: { in: ACCEPTED_QUALITY },
+          effectiveAt: { gte: cycleHistoryStart, lte: now },
+          metricDefinition: { code: { in: [...CYCLE_METRICS] } },
+          provider: { code: { in: ["blockchaincenter-altcoin-season", "cbbi-public"] } },
         },
         orderBy: [{ effectiveAt: "asc" }, { revision: "desc" }],
         include: {
@@ -593,6 +975,11 @@ export async function loadCryptoMarketPulse(now = new Date()): Promise<CryptoMar
       series: trustedCoinSeries,
       latestBreakdown,
     },
+    marginBorrow: buildMarginBorrow(rawPressureRows as unknown as ObservationRow[]),
+    liquidationMaxPain: buildLiquidationMaxPain(
+      rawPressureRows as unknown as ObservationRow[],
+    ),
+    cycleIndicators: buildCycleIndicators(rawCycleRows as unknown as ObservationRow[]),
     largeAddressActivity: buildLargeAddressActivity(
       rawLargeAddressRows as unknown as ObservationRow[],
       largeAddressSignal,

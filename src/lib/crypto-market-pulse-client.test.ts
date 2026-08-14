@@ -50,6 +50,74 @@ const validPayload = {
     series: [],
     latestBreakdown: [],
   },
+  marginBorrow: {
+    status: "system",
+    sourceCode: "coinglass-margin-borrow",
+    sourceUrl: "https://www.coinglass.com/pro/i/MarginFeeChart",
+    observedAt: "2026-08-14T22:05:00.000Z",
+    series: [
+      {
+        effectiveAt: "2026-08-14T22:00:00.000Z",
+        annualizedRate: 4.05,
+        dailyRate: 0.0113,
+        hourlyRate: 0.000469,
+      },
+    ],
+  },
+  liquidationMaxPain: {
+    status: "system",
+    sourceCode: "coinglass-liquidation-maxpain",
+    sourceUrl: "https://www.coinglass.com/liquidation-maxpain",
+    observedAt: "2026-08-14T22:05:00.000Z",
+    rows: [
+      {
+        asset: "BTC",
+        range: "24h",
+        effectiveAt: "2026-08-14T22:00:00.000Z",
+        currentPriceUsd: 62609.4,
+        long: { priceUsd: 60000, levelUsd: 98500000, distanceRatio: -0.0417 },
+        short: { priceUsd: 65000, levelUsd: 120000000, distanceRatio: 0.0382 },
+      },
+    ],
+  },
+  cycleIndicators: {
+    altcoinSeason: {
+      status: "system",
+      sourceCode: "blockchaincenter-altcoin-season",
+      sourceUrl: "https://www.blockchaincenter.net/altcoin-season-index/",
+      observedAt: "2026-08-14T01:00:00.000Z",
+      latest: {
+        effectiveAt: "2026-08-14T00:00:00.000Z",
+        season90d: 61,
+        month: 43,
+        year: 37,
+        classification: "neutral",
+      },
+      series: [],
+    },
+    cbbi: {
+      status: "system",
+      sourceCode: "cbbi-public",
+      sourceUrl: "https://colintalkscrypto.com/cbbi/",
+      observedAt: "2026-08-14T01:00:00.000Z",
+      latest: {
+        effectiveAt: "2026-08-14T00:00:00.000Z",
+        confidence: 31.34,
+        components: [
+          "pi_cycle",
+          "rupl_nupl",
+          "rhodl",
+          "puell",
+          "two_year_ma",
+          "trolololo",
+          "mvrv",
+          "reserve_risk",
+          "woobull",
+        ].map((code, index) => ({ code, value: 20 + index })),
+      },
+      series: [],
+    },
+  },
   largeAddressActivity: {
     status: "system",
     sourceCodes: ["mempool-btc-large-addresses", "bitinfocharts-top-addresses"],
@@ -187,6 +255,45 @@ describe("Crypto Market Pulse client contract", () => {
               accumulationBreadth: "60%",
             },
           },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("requires all crawled pressure and cycle sections", () => {
+    const { cycleIndicators: _omitted, ...missingCycle } = validPayload;
+    expect(() => cryptoMarketPulseSchema.parse(missingCycle)).toThrow();
+  });
+
+  it("rejects duplicate CBBI components and duplicate liquidation assets", () => {
+    const duplicateComponent = validPayload.cycleIndicators.cbbi.latest!.components[0]!;
+    expect(() =>
+      cryptoMarketPulseSchema.parse({
+        ...validPayload,
+        cycleIndicators: {
+          ...validPayload.cycleIndicators,
+          cbbi: {
+            ...validPayload.cycleIndicators.cbbi,
+            latest: {
+              ...validPayload.cycleIndicators.cbbi.latest!,
+              components: [
+                ...validPayload.cycleIndicators.cbbi.latest!.components.slice(0, -1),
+                duplicateComponent,
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      cryptoMarketPulseSchema.parse({
+        ...validPayload,
+        liquidationMaxPain: {
+          ...validPayload.liquidationMaxPain,
+          rows: [
+            validPayload.liquidationMaxPain.rows[0],
+            validPayload.liquidationMaxPain.rows[0],
+          ],
         },
       }),
     ).toThrow();

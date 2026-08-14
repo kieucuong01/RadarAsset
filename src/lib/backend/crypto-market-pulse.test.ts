@@ -19,21 +19,26 @@ function observation(input: {
   dimensions?: Record<string, string>;
   provider?: string;
   sourceUrl?: string;
+  metricCode?: string;
+  observedAt?: string;
 }) {
   return {
     naturalKey: input.naturalKey,
     effectiveAt: new Date(input.effectiveAt),
     value: { toString: () => String(input.value) },
     revision: input.revision ?? 1,
+    observedAt: input.observedAt ? new Date(input.observedAt) : undefined,
     dimensions: input.dimensions ?? {},
     provider: input.provider ? { code: input.provider } : undefined,
     rawSnapshot: { sourceUrl: input.sourceUrl ?? "https://source.test" },
+    metricDefinition: input.metricCode ? { code: input.metricCode } : undefined,
   };
 }
 
 describe("Crypto Market Pulse read model", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    prisma.metricObservation.findMany.mockReset();
+    prisma.signalSnapshot.findFirst.mockReset();
     prisma.metricObservation.findMany.mockResolvedValue([]);
     prisma.signalSnapshot.findFirst.mockResolvedValue(null);
   });
@@ -168,6 +173,126 @@ describe("Crypto Market Pulse read model", () => {
     expect(result.etfFlows.status).toBe("unavailable");
     expect(result.fundFlows.status).toBe("unavailable");
     expect(result.largeAddressActivity.status).toBe("unavailable");
+    expect(result.marginBorrow.status).toBe("unavailable");
+    expect(result.liquidationMaxPain.status).toBe("unavailable");
+    expect(result.cycleIndicators.altcoinSeason.status).toBe("unavailable");
+    expect(result.cycleIndicators.cbbi.status).toBe("unavailable");
+  });
+
+  it("groups CoinGlass pressure and cycle observations without mixing units", async () => {
+    const at = "2026-08-14T22:00:00.000Z";
+    const pressureRows = [
+      ["crypto.derivatives.margin_borrow.annualized_rate", 4.05],
+      ["crypto.derivatives.margin_borrow.daily_rate", 0.0113],
+      ["crypto.derivatives.margin_borrow.hourly_rate", 0.000469],
+      ["crypto.derivatives.liquidation.current_price_usd", 62609.4],
+      ["crypto.derivatives.liquidation.long_max_pain_price_usd", 60000],
+      ["crypto.derivatives.liquidation.long_max_pain_level_usd", 98500000],
+      ["crypto.derivatives.liquidation.long_distance_ratio", -0.0417],
+      ["crypto.derivatives.liquidation.short_max_pain_price_usd", 65000],
+      ["crypto.derivatives.liquidation.short_max_pain_level_usd", 120000000],
+      ["crypto.derivatives.liquidation.short_distance_ratio", 0.0382],
+    ].map(([metricCode, value], index) =>
+      observation({
+        naturalKey: `pressure:${index}`,
+        effectiveAt: at,
+        value: Number(value),
+        metricCode: String(metricCode),
+        provider: String(metricCode).includes("margin_borrow")
+          ? "coinglass-margin-borrow"
+          : "coinglass-liquidation-maxpain",
+        dimensions: String(metricCode).includes("liquidation")
+          ? { asset: "BTC", range: "24h" }
+          : { exchange: "Binance" },
+        observedAt: "2026-08-14T22:05:00.000Z",
+      }),
+    );
+    pressureRows.push(
+      observation({
+        naturalKey: "pressure:0",
+        effectiveAt: at,
+        value: 9.99,
+        revision: 1,
+        metricCode: "crypto.derivatives.margin_borrow.annualized_rate",
+        provider: "coinglass-margin-borrow",
+      }),
+    );
+    pressureRows[0]!.revision = 2;
+
+    const cbbiComponents = [
+      "pi_cycle",
+      "rupl_nupl",
+      "rhodl",
+      "puell",
+      "two_year_ma",
+      "trolololo",
+      "mvrv",
+      "reserve_risk",
+      "woobull",
+    ];
+    const cycleRows = [
+      ...[
+        ["season_90d", 61],
+        ["month", 43],
+        ["year", 37],
+      ].map(([horizon, value], index) =>
+        observation({
+          naturalKey: `alt:${index}`,
+          effectiveAt: "2026-08-14T00:00:00.000Z",
+          value: Number(value),
+          metricCode: "crypto.cycle.altcoin_season.index",
+          provider: "blockchaincenter-altcoin-season",
+          dimensions: { horizon: String(horizon) },
+        }),
+      ),
+      observation({
+        naturalKey: "cbbi:confidence",
+        effectiveAt: "2026-08-14T00:00:00.000Z",
+        value: 31.34,
+        metricCode: "crypto.cycle.cbbi.confidence",
+        provider: "cbbi-public",
+      }),
+      ...cbbiComponents.map((code, index) =>
+        observation({
+          naturalKey: `cbbi:${code}`,
+          effectiveAt: "2026-08-14T00:00:00.000Z",
+          value: 20 + index,
+          metricCode: `crypto.cycle.cbbi.component.${code}`,
+          provider: "cbbi-public",
+        }),
+      ),
+    ];
+    prisma.metricObservation.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(pressureRows)
+      .mockResolvedValueOnce(cycleRows);
+
+    const result = await loadCryptoMarketPulse(new Date("2026-08-14T23:00:00.000Z"));
+
+    expect(result.marginBorrow.series[0]).toEqual({
+      effectiveAt: at,
+      annualizedRate: 4.05,
+      dailyRate: 0.0113,
+      hourlyRate: 0.000469,
+    });
+    expect(result.marginBorrow.status).toBe("system");
+    expect(result.liquidationMaxPain.rows[0]).toMatchObject({
+      asset: "BTC",
+      range: "24h",
+      currentPriceUsd: 62609.4,
+      long: { priceUsd: 60000, levelUsd: 98500000, distanceRatio: -0.0417 },
+      short: { priceUsd: 65000, levelUsd: 120000000, distanceRatio: 0.0382 },
+    });
+    expect(result.cycleIndicators.altcoinSeason.latest).toMatchObject({
+      season90d: 61,
+      month: 43,
+      year: 37,
+      classification: "neutral",
+    });
+    expect(result.cycleIndicators.cbbi.latest?.components).toHaveLength(9);
   });
 
   it("builds common-cohort large-address activity from accepted observations", async () => {
