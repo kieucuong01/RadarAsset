@@ -696,44 +696,136 @@ model Notification {
 }
 
 model DataProvider {
-  id                  String               @id @default(uuid()) @db.Uuid
-  code                String               @unique
+  id                  String                   @id @default(uuid()) @db.Uuid
+  code                String                   @unique
   name                String
-  termsUrl            String?              @map("terms_url")
-  licenseScope        String               @default("research_only") @map("license_scope")
-  status              String               @default("active")
-  createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime             @updatedAt @map("updated_at")
+  termsUrl            String?                  @map("terms_url")
+  licenseScope        String                   @default("research_only") @map("license_scope")
+  status              String                   @default("active")
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @updatedAt @map("updated_at")
   instruments         ProviderInstrument[]
   versions            DatasetVersion[]
   rawInsightSnapshots InsightRawSnapshot[]
   metricObservations  MetricObservation[]
+  globalEvents        GlobalEventObservation[]
 
   @@map("data_providers")
 }
 
 model InsightRawSnapshot {
-  id             String              @id @default(uuid()) @db.Uuid
-  providerId     String              @map("provider_id") @db.Uuid
-  sourceUrl      String              @map("source_url") @db.Text
-  effectiveAt    DateTime?           @map("effective_at") @db.Timestamptz(3)
-  publishedAt    DateTime?           @map("published_at") @db.Timestamptz(3)
-  observedAt     DateTime            @map("observed_at") @db.Timestamptz(3)
-  contentHash    String              @map("content_hash")
-  contentType    String              @map("content_type")
-  storageLocator String              @map("storage_locator") @db.Text
-  parserVersion  String              @map("parser_version")
+  id             String                   @id @default(uuid()) @db.Uuid
+  providerId     String                   @map("provider_id") @db.Uuid
+  sourceUrl      String                   @map("source_url") @db.Text
+  effectiveAt    DateTime?                @map("effective_at") @db.Timestamptz(3)
+  publishedAt    DateTime?                @map("published_at") @db.Timestamptz(3)
+  observedAt     DateTime                 @map("observed_at") @db.Timestamptz(3)
+  contentHash    String                   @map("content_hash")
+  contentType    String                   @map("content_type")
+  storageLocator String                   @map("storage_locator") @db.Text
+  parserVersion  String                   @map("parser_version")
   status         String
-  errorCode      String?             @map("error_code")
-  metadata       Json                @default("{}")
-  provider       DataProvider        @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  errorCode      String?                  @map("error_code")
+  metadata       Json                     @default("{}")
+  provider       DataProvider             @relation(fields: [providerId], references: [id], onDelete: Restrict)
   observations   MetricObservation[]
   economicEvents EconomicEvent[]
+  globalEvents   GlobalEventObservation[]
 
   @@unique([providerId, sourceUrl, contentHash])
   @@index([providerId, observedAt(sort: Desc)])
   @@index([status, observedAt])
   @@map("insight_raw_snapshots")
+}
+
+model GlobalEventObservation {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  providerId         String                    @map("provider_id") @db.Uuid
+  rawSnapshotId      String                    @map("raw_snapshot_id") @db.Uuid
+  providerEventKey   String                    @map("provider_event_key")
+  category           String
+  subcategory        String?
+  title              String                    @db.Text
+  country            String?
+  region             String?
+  latitude           Decimal?                  @db.Decimal(10, 6)
+  longitude          Decimal?                  @db.Decimal(10, 6)
+  occurredAt         DateTime                  @map("occurred_at") @db.Timestamptz(3)
+  firstObservedAt    DateTime                  @map("first_observed_at") @db.Timestamptz(3)
+  lastObservedAt     DateTime                  @map("last_observed_at") @db.Timestamptz(3)
+  normalizedSeverity Decimal                   @map("normalized_severity") @db.Decimal(8, 4)
+  providerSeverity   Decimal?                  @map("provider_severity") @db.Decimal(12, 4)
+  affectedCount      Int?                      @map("affected_count")
+  fatalities         Int?
+  sourceUrl          String?                   @map("source_url") @db.Text
+  contentHash        String                    @map("content_hash")
+  parserVersion      String                    @map("parser_version")
+  qualityStatus      String                    @default("passed") @map("quality_status")
+  qualityFlags       Json                      @default("[]") @map("quality_flags")
+  dimensions         Json                      @default("{}")
+  createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  provider           DataProvider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  rawSnapshot        InsightRawSnapshot        @relation(fields: [rawSnapshotId], references: [id], onDelete: Restrict)
+  clusterMember      GlobalEventClusterMember?
+
+  @@unique([providerId, providerEventKey])
+  @@index([rawSnapshotId])
+  @@index([occurredAt(sort: Desc)])
+  @@index([category, country, occurredAt(sort: Desc)])
+  @@map("global_event_observations")
+}
+
+model GlobalEventCluster {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  clusterKey         String                     @unique @map("cluster_key")
+  category           String
+  subcategory        String?
+  title              String                     @db.Text
+  country            String?
+  region             String?
+  latitude           Decimal?                   @db.Decimal(10, 6)
+  longitude          Decimal?                   @db.Decimal(10, 6)
+  occurredAt         DateTime                   @map("occurred_at") @db.Timestamptz(3)
+  normalizedSeverity Decimal                    @map("normalized_severity") @db.Decimal(8, 4)
+  corroborationCount Int                        @default(1) @map("corroboration_count")
+  status             String                     @default("active")
+  qualityFlags       Json                       @default("[]") @map("quality_flags")
+  members            GlobalEventClusterMember[]
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([category, occurredAt(sort: Desc)])
+  @@map("global_event_clusters")
+}
+
+model GlobalEventClusterMember {
+  id            String                 @id @default(uuid()) @db.Uuid
+  clusterId     String                 @map("cluster_id") @db.Uuid
+  observationId String                 @unique @map("observation_id") @db.Uuid
+  matchScore    Decimal                @map("match_score") @db.Decimal(8, 4)
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  cluster       GlobalEventCluster     @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  observation   GlobalEventObservation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("global_event_cluster_members")
+}
+
+model EventBaselineState {
+  id            String   @id @default(uuid()) @db.Uuid
+  baselineKey   String   @unique @map("baseline_key")
+  eventCategory String   @map("event_category")
+  region        String
+  weekday       Int
+  month         Int
+  count         Int      @default(0)
+  mean          Decimal  @default(0) @db.Decimal(30, 10)
+  m2            Decimal  @default(0) @db.Decimal(30, 10)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([eventCategory, region, weekday, month])
+  @@map("event_baseline_states")
 }
 
 model MetricDefinition {
