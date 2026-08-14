@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
@@ -13,6 +13,14 @@ from .event_common import completed, fetch_event_json, parse_iso_utc, required_s
 
 
 _EVENT_TYPES = {"EQ": "earthquake", "FL": "flood", "TC": "severe storm", "VO": "volcano", "WF": "wildfire", "DR": "other"}
+
+
+def _provider_time(value: object) -> tuple[datetime, tuple[str, ...]]:
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return parsed.replace(tzinfo=timezone.utc), ("provider_timezone_assumed_utc",)
+    return parse_iso_utc(value), ()
 
 
 class GdacsCollector:
@@ -58,13 +66,14 @@ class GdacsCollector:
                 url_value = props.get("url")
                 report_url = url_value.get("report") if isinstance(url_value, dict) else url_value
                 alert = required_str(props.get("alertlevel"))
+                occurred_at, time_flags = _provider_time(props.get("fromdate"))
                 events.append(normalize_event(EventInput(
                     source_code=self.source.code,
                     source_event_key=f"{event_type}:{event_id}",
                     category=_EVENT_TYPES.get(event_type, "other"),
                     subcategory=event_type,
                     title=required_str(props.get("name")),
-                    occurred_at=parse_iso_utc(props.get("fromdate")),
+                    occurred_at=occurred_at,
                     provider_severity=None,
                     country=props.get("country") if isinstance(props.get("country"), str) else None,
                     region=None,
@@ -74,6 +83,7 @@ class GdacsCollector:
                     fatalities=None,
                     source_url=required_str(report_url),
                     dimensions={"alert_level": alert, "episode_id": str(props.get("episodeid", ""))},
+                    quality_flags=time_flags,
                 ), observed_at))
         except (KeyError, TypeError, ValueError):
             return schema_drift(self.source, snapshot)

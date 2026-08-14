@@ -140,7 +140,9 @@ export function EventRiskPanel({
           <div key={event.id} className="rounded-xl border bg-background/40 p-3 text-sm">
             <div className="flex items-start justify-between gap-3">
               <strong>{event.title}</strong>
-              <span className="font-mono">{event.severity.toFixed(0)}/100</span>
+              <span className="font-mono">
+                {event.severity == null ? "—" : `${event.severity.toFixed(0)}/100`}
+              </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {event.country ?? "Global"} · {dateLabel(event.occurredAt, locale)} ·{" "}
@@ -166,7 +168,9 @@ export function EventRiskPanel({
                 <td className="px-4 py-2 font-medium">{event.title}</td>
                 <td className="px-4 py-2">{event.category}</td>
                 <td className="px-4 py-2">{event.country ?? "Global"}</td>
-                <td className="px-4 py-2 text-right font-mono">{event.severity.toFixed(0)}</td>
+                <td className="px-4 py-2 text-right font-mono">
+                  {event.severity == null ? "—" : event.severity.toFixed(0)}
+                </td>
                 <td className="px-4 py-2 text-right">
                   {event.sources[0]?.sourceUrl ? (
                     <a

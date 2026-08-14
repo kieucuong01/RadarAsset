@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from smart_insights.event_contracts import EventCollectionBatch, EventInput
 from smart_insights.event_normalization import normalize_event
@@ -49,12 +49,15 @@ class GdeltCollector:
                 if not isinstance(raw, dict):
                     raise ValueError("row")
                 seen = datetime.strptime(required_str(raw.get("seendate")), "%Y%m%dT%H%M%SZ").replace(tzinfo=observed_at.tzinfo)
-                source_url = required_str(raw.get("url"))
+                provider_url = required_str(raw.get("url"))
+                source_url = (
+                    provider_url if urlsplit(provider_url).scheme == "https" else None
+                )
                 events.append(
                     normalize_event(
                         EventInput(
                             source_code=self.source.code,
-                            source_event_key=source_url,
+                            source_event_key=provider_url,
                             category="geopolitical",
                             subcategory="news_corroboration",
                             title=required_str(raw.get("title")),
@@ -71,7 +74,14 @@ class GdeltCollector:
                                 "domain": required_str(raw.get("domain")),
                                 "language": required_str(raw.get("language")),
                             },
-                            quality_flags=("article_evidence_only",),
+                            quality_flags=(
+                                ("article_evidence_only",)
+                                if source_url is not None
+                                else (
+                                    "article_evidence_only",
+                                    "non_https_source_url_omitted",
+                                )
+                            ),
                         ),
                         observed_at,
                     )

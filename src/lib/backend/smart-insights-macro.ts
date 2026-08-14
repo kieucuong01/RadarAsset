@@ -121,7 +121,7 @@ export async function loadMacroEventRisk(
     country: cluster.country,
     region: cluster.region,
     occurredAt: cluster.occurredAt.toISOString(),
-    severity: number(cluster.normalizedSeverity) ?? 0,
+    severity: number(cluster.normalizedSeverity),
     corroborationCount: cluster.corroborationCount,
     status: cluster.status,
     qualityFlags: strings(cluster.qualityFlags),
@@ -156,7 +156,11 @@ export async function loadMacroEventRisk(
     components,
     timeline: [...events]
       .reverse()
-      .map((event) => ({ ts: event.occurredAt, score: event.severity, category: event.category })),
+      .flatMap((event) =>
+        event.severity == null
+          ? []
+          : [{ ts: event.occurredAt, score: event.severity, category: event.category }],
+      ),
     events,
     assetImpacts,
   };

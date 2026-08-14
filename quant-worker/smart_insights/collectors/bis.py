@@ -14,15 +14,11 @@ from smart_insights.sources import source_for_code
 from .energy_common import ContextCollectionBatch
 
 
-_REQUEST_URL = "https://stats.bis.org/api/v1/data/WS_LONG_CPI/Q.US.628/all?format=csvfile"
-
-
-def _quarter_end(value: str) -> datetime:
-    year_text, quarter_text = value.split("-Q", 1)
-    year, quarter = int(year_text), int(quarter_text)
-    if quarter not in {1, 2, 3, 4}:
-        raise ValueError("quarter")
-    month = quarter * 3
+def _month_end(value: str) -> datetime:
+    year_text, month_text = value.split("-", 1)
+    year, month = int(year_text), int(month_text)
+    if month not in range(1, 13):
+        raise ValueError("month")
     if month == 12:
         end = date(year, 12, 31)
     else:
@@ -36,7 +32,12 @@ class BisCollector:
         self._transport = transport or UrllibTransport()
 
     def collect_context(self, *, observed_at: datetime) -> ContextCollectionBatch:
-        response = self._transport.fetch(_REQUEST_URL, timeout_seconds=20, max_bytes=8_000_000)
+        start_period = f"{observed_at.year - 5}-01"
+        request_url = (
+            "https://stats.bis.org/api/v1/data/WS_LONG_CPI/M.US.771/all"
+            f"?startPeriod={start_period}&format=csvfile"
+        )
+        response = self._transport.fetch(request_url, timeout_seconds=20, max_bytes=8_000_000)
         snapshot = RawSnapshot(
             content=response.body,
             content_type="text/csv",
@@ -50,7 +51,7 @@ class BisCollector:
                 "flow": "WS_LONG_CPI",
             },
         )
-        if response.status != 200 or response.url != _REQUEST_URL:
+        if response.status != 200 or response.url != request_url:
             return ContextCollectionBatch(self.source.code, snapshot, (), "failed", "INVALID_RESPONSE")
         try:
             text = response.body.decode("utf-8-sig")
@@ -61,15 +62,17 @@ class BisCollector:
             for raw in rows:
                 if set(("FREQ", "REF_AREA", "UNIT_MEASURE", "TIME_PERIOD", "OBS_VALUE")) - set(raw):
                     raise ValueError("columns")
-                if raw["FREQ"] != "Q" or raw["REF_AREA"] != "US" or raw["UNIT_MEASURE"] != "628":
+                if raw["FREQ"] != "M" or raw["REF_AREA"] != "US" or raw["UNIT_MEASURE"] != "771":
                     raise ValueError("series")
+                if raw["OBS_VALUE"] == "NaN":
+                    continue
                 value = Decimal(raw["OBS_VALUE"])
                 if not value.is_finite():
                     raise ValueError("value")
                 observations.append(ObservationInput(
                     metric_code="macro.bis.us_cpi_yoy_pct",
                     value=value,
-                    effective_at=_quarter_end(raw["TIME_PERIOD"]),
+                    effective_at=_month_end(raw["TIME_PERIOD"]),
                     dimensions={
                         "provider_flow": "WS_LONG_CPI",
                         "unit": "% YoY",

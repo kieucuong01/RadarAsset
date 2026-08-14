@@ -786,7 +786,7 @@ model GlobalEventCluster {
   latitude           Decimal?                   @db.Decimal(10, 6)
   longitude          Decimal?                   @db.Decimal(10, 6)
   occurredAt         DateTime                   @map("occurred_at") @db.Timestamptz(3)
-  normalizedSeverity Decimal                    @map("normalized_severity") @db.Decimal(8, 4)
+  normalizedSeverity Decimal?                   @map("normalized_severity") @db.Decimal(8, 4)
   corroborationCount Int                        @default(1) @map("corroboration_count")
   status             String                     @default("active")
   qualityFlags       Json                       @default("[]") @map("quality_flags")

@@ -22,6 +22,7 @@ QUALITY_TIERS = MappingProxyType(
 ENABLED_SOURCE_CODES = frozenset(
     {
         "alternative-fng",
+        "bis-statistics",
         "bitinfocharts-top-addresses",
         "coinmetrics-community",
         "cryptocraft",
@@ -31,7 +32,10 @@ ENABLED_SOURCE_CODES = frozenset(
         "farside-btc-etf",
         "farside-eth-etf",
         "farside-sol-etf",
+        "gdacs-events",
         "mempool-space",
+        "nasa-eonet",
+        "usgs-earthquakes",
     }
 )
 

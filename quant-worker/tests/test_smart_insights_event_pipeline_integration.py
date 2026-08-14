@@ -38,27 +38,19 @@ def test_event_pipeline_links_raw_normalized_cluster_score_impact_and_health() -
     assert result.source_health.records_fetched == 1
 
 
-def test_normal_scheduler_never_calls_disabled_event_or_energy_sources() -> None:
+def test_normal_scheduler_selects_only_sources_that_passed_the_full_live_gate() -> None:
     import collect_smart_insights
 
-    called: list[str] = []
+    daily = {source.code for source in collect_smart_insights.select_sources("daily")}
+    weekly = {source.code for source in collect_smart_insights.select_sources("weekly")}
 
-    def forbidden(source):
-        called.append(source.code)
-        raise AssertionError("disabled collector was called")
-
-    collectors = {
-        code: forbidden
-        for code in collect_smart_insights.EVENT_SOURCE_CODES
-        | collect_smart_insights.ENERGY_SOURCE_CODES
-    }
-    selected = collect_smart_insights.select_sources("daily")
-
-    assert not ({source.code for source in selected} & set(collectors))
-    assert called == []
+    assert {"gdacs-events", "usgs-earthquakes", "nasa-eonet"} <= daily
+    assert "bis-statistics" in weekly
+    assert "gdelt-events" not in daily
+    assert "eia-energy" not in daily
 
 
-def test_disabled_event_sources_are_available_only_to_explicit_live_smoke() -> None:
+def test_event_sources_are_available_to_explicit_live_smoke() -> None:
     import collect_smart_insights
 
     collectors = collect_smart_insights.build_event_collectors(transport=FakeTransport())
@@ -69,3 +61,13 @@ def test_disabled_event_sources_are_available_only_to_explicit_live_smoke() -> N
     assert outcome.status == "succeeded"
     assert outcome.records_fetched == 1
     assert outcome.effective_at is not None
+
+
+def test_every_enabled_event_or_context_source_has_a_scheduler_handler() -> None:
+    import collect_smart_insights
+
+    event_handlers = set(collect_smart_insights.build_event_collectors())
+    batch_handlers = set(collect_smart_insights.build_batch_collectors())
+
+    assert {"gdacs-events", "usgs-earthquakes", "nasa-eonet"} <= event_handlers
+    assert "bis-statistics" in batch_handlers

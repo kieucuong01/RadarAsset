@@ -65,3 +65,17 @@ def test_bis_parses_fixed_sdmx_csv_as_context_only() -> None:
     assert len(result.observations) == 2
     assert all(row.dimensions["evidence_only"] == "true" for row in result.observations)
     assert all(row.effective_at.tzinfo is not None for row in result.observations)
+    assert "/WS_LONG_CPI/M.US.771/all?" in transport.calls[0]
+    assert "format=csvfile" in transport.calls[0]
+
+
+def test_energy_and_bis_metrics_are_registered_as_evidence() -> None:
+    from smart_insights.metrics.macro import METRIC_DEFINITIONS_BY_CODE
+
+    for code in (
+        "macro.energy.brent_usd_bbl",
+        "macro.energy.wti_usd_bbl",
+        "macro.bis.us_cpi_yoy_pct",
+    ):
+        definition = METRIC_DEFINITIONS_BY_CODE[code]
+        assert definition.metadata["evidence_only"] is True

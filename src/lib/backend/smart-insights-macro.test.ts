@@ -85,6 +85,30 @@ describe("Smart Insights macro read models", () => {
     expect(result.events).toEqual([]);
   });
 
+  it("preserves an unavailable provider severity instead of inventing zero", async () => {
+    prisma.globalEventCluster.findMany.mockResolvedValue([
+      {
+        id: "cluster-no-severity",
+        category: "natural_hazard",
+        subcategory: null,
+        title: "Wildfire observation",
+        country: null,
+        region: null,
+        occurredAt: to,
+        normalizedSeverity: null,
+        corroborationCount: 1,
+        status: "active",
+        qualityFlags: [],
+        members: [],
+      },
+    ]);
+
+    const result = await loadMacroEventRisk(context, { from, to }, to);
+
+    expect(result.events[0]?.severity).toBeNull();
+    expect(result.timeline).toEqual([]);
+  });
+
   it("builds energy cards and aligned Brent/WTI series from accepted observations", async () => {
     prisma.metricObservation.findMany.mockResolvedValue([
       {

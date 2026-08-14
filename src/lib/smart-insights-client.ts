@@ -200,7 +200,7 @@ export const macroEventRiskSchema = z.object({
       country: z.string().nullable(),
       region: z.string().nullable(),
       occurredAt: z.string(),
-      severity: z.number(),
+      severity: z.number().nullable(),
       corroborationCount: z.number().int().positive(),
       status: z.string(),
       qualityFlags: z.array(z.string()),

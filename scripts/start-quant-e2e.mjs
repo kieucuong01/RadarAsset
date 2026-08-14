@@ -32,7 +32,10 @@ const env = {
 };
 
 for (const [command, args] of [
-  [process.execPath, [path.join(repoRoot, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"]],
+  [
+    process.execPath,
+    [path.join(repoRoot, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"],
+  ],
   [process.execPath, ["--import", "tsx", path.join(repoRoot, "scripts", "seed-quant-e2e.ts")]],
 ]) {
   const result = spawnSync(command, args, { cwd: repoRoot, env, stdio: "inherit" });
@@ -43,7 +46,13 @@ const python = resolvePythonExecutable(repoRoot, env, existsSync);
 const children = [
   spawn(
     process.execPath,
-    [path.join(repoRoot, "node_modules", "next", "dist", "bin", "next"), "dev", "-p", "3102", "--webpack"],
+    [
+      path.join(repoRoot, "node_modules", "next", "dist", "bin", "next"),
+      "dev",
+      "-p",
+      "3102",
+      "--webpack",
+    ],
     { cwd: repoRoot, env, stdio: "inherit", windowsHide: true },
   ),
   spawn(python, [path.join(repoRoot, "quant-worker", "worker.py")], {

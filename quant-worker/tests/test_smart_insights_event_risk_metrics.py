@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
+from smart_insights.event_repository import EventRiskEvidence
 from smart_insights.metrics.event_risk import (
     EVENT_RISK_V1,
     EventRiskComponent,
@@ -76,3 +78,37 @@ def test_component_values_must_be_bounded_and_as_of_must_be_aware() -> None:
         EventRiskComponent("severity", 101.0, NOW, True, ())
     with pytest.raises(ValueError, match="timezone-aware"):
         calculate_event_risk(EventRiskInputs(NOW.replace(tzinfo=None), {}))
+
+
+def test_global_event_snapshot_uses_only_observed_components_without_renormalizing() -> None:
+    from smart_insights.macro_pipeline import calculate_global_event_risk_snapshot
+
+    class Repository:
+        def risk_evidence(self, *, as_of: datetime, freshness_minutes: int = 360):
+            assert as_of == NOW
+            assert freshness_minutes == 360
+            return (
+                EventRiskEvidence(
+                    cluster_key="cluster-a",
+                    category="natural_hazard",
+                    normalized_severity=90.0,
+                    corroboration_count=2,
+                    occurred_at=NOW - timedelta(hours=1),
+                    observed_at=NOW - timedelta(minutes=5),
+                    observation_ids=("obs-a", "obs-b"),
+                    provider_codes=("gdacs-events", "usgs-earthquakes"),
+                ),
+            )
+
+    snapshot = calculate_global_event_risk_snapshot(Repository(), as_of=NOW)
+
+    assert snapshot.signal_type == "global_event_risk"
+    assert snapshot.status == "active"
+    assert snapshot.coverage == Decimal("0.6500")
+    assert snapshot.score == Decimal("49.3333")
+    assert {row.metric_code for row in snapshot.inputs} == {
+        "macro.event.severity",
+        "macro.event.corroboration",
+        "macro.event.strategic_relevance",
+    }
+    assert all(row.source_observation_ids == ("obs-a", "obs-b") for row in snapshot.inputs)

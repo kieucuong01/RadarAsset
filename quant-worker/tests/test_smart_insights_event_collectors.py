@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -103,3 +104,31 @@ def test_event_collectors_reject_partial_schema_drift(
 
     assert batch.events == ()
     assert batch.error_code == "SCHEMA_DRIFT"
+
+
+def test_gdelt_omits_non_https_article_link_without_losing_the_observation() -> None:
+    from smart_insights.collectors.gdelt import GdeltCollector
+
+    payload = json.loads((FIXTURES / "gdelt.json").read_bytes())
+    payload["articles"][0]["url"] = "http://example.org/news/red-sea-shipping-disruption"
+    batch = GdeltCollector(transport=FakeTransport(json.dumps(payload).encode())).collect(
+        observed_at=NOW
+    )
+
+    assert batch.error_code is None
+    assert batch.events[0].source_url is None
+    assert "non_https_source_url_omitted" in batch.events[0].quality_flags
+
+
+def test_gdacs_marks_provider_timestamp_without_offset_as_assumed_utc() -> None:
+    from smart_insights.collectors.gdacs import GdacsCollector
+
+    payload = json.loads((FIXTURES / "gdacs.json").read_bytes())
+    payload["features"][0]["properties"]["fromdate"] = "2026-08-13T03:15:00"
+    batch = GdacsCollector(transport=FakeTransport(json.dumps(payload).encode())).collect(
+        observed_at=NOW
+    )
+
+    assert batch.error_code is None
+    assert batch.events[0].occurred_at.tzinfo is not None
+    assert "provider_timezone_assumed_utc" in batch.events[0].quality_flags

@@ -156,6 +156,37 @@ _DERIVED_DEFINITIONS = (
         methodology="macro-event-risk-v1",
         minimum_fresh_weight="0.60",
     ),
+    _definition(
+        "macro.energy.brent_usd_bbl",
+        "Brent crude spot price",
+        "USD/barrel",
+        "daily",
+        0,
+        11_520,
+        source="eia-energy",
+        evidence_only=True,
+    ),
+    _definition(
+        "macro.energy.wti_usd_bbl",
+        "WTI crude spot price",
+        "USD/barrel",
+        "daily",
+        0,
+        11_520,
+        source="eia-energy",
+        evidence_only=True,
+    ),
+    _definition(
+        "macro.bis.us_cpi_yoy_pct",
+        "US CPI year-over-year",
+        "% YoY",
+        "monthly",
+        -1,
+        20_160,
+        source="bis-statistics",
+        provider_flow="WS_LONG_CPI",
+        evidence_only=True,
+    ),
 )
 
 MACRO_METRIC_DEFINITIONS = _FRED_DEFINITIONS + _CFTC_DEFINITIONS + _DERIVED_DEFINITIONS

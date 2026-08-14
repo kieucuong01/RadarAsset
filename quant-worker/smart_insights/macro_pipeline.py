@@ -15,8 +15,9 @@ from smart_insights.event_repository import (
     EventCluster,
     EventPublicationResult,
     EventRepository,
+    EventRiskEvidence,
 )
-from smart_insights.macro_registry import classify_surprise_event
+from smart_insights.macro_registry import EVENT_RISK_COMPONENTS, classify_surprise_event
 from smart_insights.metrics.common import (
     ConfidenceInput,
     InsufficientCoverageError,
@@ -43,6 +44,8 @@ from smart_insights.metrics.macro import (
     surprise_z_score,
 )
 from smart_insights.metrics.event_risk import (
+    EVENT_RISK_V1,
+    METHODOLOGY_VERSION as EVENT_RISK_METHODOLOGY_VERSION,
     EventRiskComponent,
     EventRiskInputs,
     EventRiskResult,
@@ -72,6 +75,12 @@ class MacroRepository(Protocol):
     def publish_signal_snapshot(
         self, snapshot: SignalSnapshotInput
     ) -> tuple[str, str]: ...
+
+
+class GlobalEventRiskEvidenceRepository(Protocol):
+    def risk_evidence(
+        self, *, as_of: datetime, freshness_minutes: int = 360
+    ) -> tuple[EventRiskEvidence, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +219,134 @@ def process_global_event_batch(
         asset_impacts=_asset_impacts(risk, clusters),
         source_health=health,
     )
+
+
+def calculate_global_event_risk_snapshot(
+    repository: GlobalEventRiskEvidenceRepository, *, as_of: datetime
+) -> SignalSnapshotInput:
+    _aware(as_of, "as_of")
+    rows = repository.risk_evidence(as_of=as_of, freshness_minutes=360)
+    observation_ids = tuple(
+        sorted({observation_id for row in rows for observation_id in row.observation_ids})
+    )
+    provider_codes = tuple(
+        sorted({provider_code for row in rows for provider_code in row.provider_codes})
+    )
+    effective_at = max((row.occurred_at for row in rows), default=as_of)
+    observed_at = max((row.observed_at for row in rows), default=as_of)
+    components: dict[str, EventRiskComponent] = {}
+    severities = [
+        row.normalized_severity
+        for row in rows
+        if row.normalized_severity is not None
+    ]
+    if severities:
+        components["severity"] = EventRiskComponent(
+            "severity", max(severities), observed_at, True, observation_ids
+        )
+    if rows:
+        corroboration = min(
+            100.0,
+            sum(min(row.corroboration_count, 3) / 3 * 100 for row in rows)
+            / len(rows),
+        )
+        components["corroboration"] = EventRiskComponent(
+            "corroboration", corroboration, observed_at, True, observation_ids
+        )
+        relevance = {
+            "energy": 100.0,
+            "geopolitical": 85.0,
+            "sanctions": 80.0,
+            "trade": 75.0,
+            "natural_hazard": 60.0,
+            "other": 30.0,
+        }
+        components["strategic_relevance"] = EventRiskComponent(
+            "strategic_relevance",
+            max(relevance.get(row.category, 30.0) for row in rows),
+            observed_at,
+            True,
+            observation_ids,
+        )
+    result = calculate_event_risk(EventRiskInputs(as_of=as_of, components=components))
+    quality_tier = min(
+        (source_for_code(code).quality_tier for code in provider_codes),
+        default=Decimal("0"),
+    )
+    inputs = tuple(
+        SnapshotMetricInput(
+            metric_code=EVENT_RISK_COMPONENTS[name],
+            value=Decimal(str(component.value)),
+            score=Decimal(str(component.value)),
+            percentile=None,
+            configured_weight=Decimal(str(EVENT_RISK_V1[name])),
+            effective_at=effective_at,
+            observed_at=component.as_of,
+            source_observation_ids=component.source_evidence,
+            quality_tier=quality_tier,
+            validation_status="passed",
+            is_fresh=component.fresh,
+        )
+        for name in EVENT_RISK_V1
+        if (component := components.get(name)) is not None
+        and component.value is not None
+    )
+    score = (
+        None
+        if result.value is None
+        else Decimal(str(result.value)).quantize(Decimal("0.0001"))
+    )
+    status = "active" if score is not None else "unavailable"
+    label = (
+        "high"
+        if score is not None and score >= 75
+        else "elevated"
+        if score is not None and score >= 40
+        else "watch"
+        if score is not None and score > 0
+        else "low"
+        if score is not None
+        else "unavailable"
+    )
+    coverage = Decimal(str(result.coverage)).quantize(Decimal("0.0001"))
+    confidence = (quality_tier * coverage * Decimal("100")).quantize(
+        Decimal("0.01")
+    )
+    payload = {
+        "effectiveAt": as_of.isoformat(timespec="microseconds"),
+        "methodologyVersion": EVENT_RISK_METHODOLOGY_VERSION,
+        "observationIds": observation_ids,
+        "score": None if score is None else format(score, "f"),
+        "status": status,
+    }
+    idempotency_key = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return SignalSnapshotInput(
+        market="macro",
+        asset_symbol=None,
+        effective_at=as_of,
+        methodology_version=EVENT_RISK_METHODOLOGY_VERSION,
+        signal_type="global_event_risk",
+        score=score,
+        label=label,
+        data_confidence=confidence,
+        coverage=coverage,
+        inputs=inputs,
+        status=status,
+        idempotency_key=idempotency_key,
+    )
+
+
+def run_global_event_risk_pipeline(
+    event_repository: GlobalEventRiskEvidenceRepository,
+    insight_repository: MacroRepository,
+    *,
+    as_of: datetime,
+) -> tuple[SignalSnapshotInput, str, str]:
+    snapshot = calculate_global_event_risk_snapshot(event_repository, as_of=as_of)
+    snapshot_id, publication_status = insight_repository.publish_signal_snapshot(snapshot)
+    return snapshot, snapshot_id, publication_status
 
 
 @dataclass(frozen=True, slots=True)

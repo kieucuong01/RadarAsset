@@ -179,7 +179,7 @@ export type MacroEventRow = {
   country: string | null;
   region: string | null;
   occurredAt: string;
-  severity: number;
+  severity: number | null;
   corroborationCount: number;
   status: string;
   qualityFlags: string[];

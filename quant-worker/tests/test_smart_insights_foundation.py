@@ -182,6 +182,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     )
     assert ENABLED_SOURCE_CODES == {
         "alternative-fng",
+        "bis-statistics",
         "bitinfocharts-top-addresses",
         "coinmetrics-community",
         "cryptocraft",
@@ -191,7 +192,10 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-btc-etf",
         "farside-eth-etf",
         "farside-sol-etf",
+        "gdacs-events",
         "mempool-space",
+        "nasa-eonet",
+        "usgs-earthquakes",
     }
     assert {
         code for code in SOURCE_CODES if source_for_code(code).enabled
@@ -201,7 +205,9 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     for public_code in ("gdacs-events", "usgs-earthquakes", "nasa-eonet"):
         source = source_for_code(public_code)
         assert source.license_scope is LicenseScope.PUBLIC_OFFICIAL
-        assert source.enabled is False
+        assert source.enabled is True
+    assert source_for_code("gdelt-events").enabled is False
+    assert source_for_code("eia-energy").enabled is False
     assert source_for_code("fred").quality_tier == Decimal("1.00")
     assert source_for_code("farside-btc-etf").quality_tier == Decimal("0.70")
     assert (
@@ -226,7 +232,10 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-btc-etf",
         "farside-eth-etf",
         "farside-sol-etf",
+        "gdacs-events",
         "mempool-space",
+        "nasa-eonet",
+        "usgs-earthquakes",
     )
 
 
