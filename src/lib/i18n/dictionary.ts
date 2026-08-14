@@ -171,7 +171,7 @@ export const dictionaries = {
         noRisk: "Chưa có dữ liệu rủi ro",
         evidenceTrail: "Dấu vết bằng chứng",
         noEvidence:
-          "Bằng chứng sẽ xuất hiện sau khi last30days hoặc provider import ghi vào PostgreSQL.",
+          "Bằng chứng sẽ xuất hiện sau khi nguồn nghiên cứu đã cấu hình ghi vào PostgreSQL.",
         sentimentMix: "Tỷ trọng sentiment",
         forecast: "Dự báo Kronos",
         target: "mục tiêu",
@@ -1084,7 +1084,7 @@ export const dictionaries = {
         noRisk: "No risk data",
         evidenceTrail: "Evidence Trail",
         noEvidence:
-          "Evidence will appear after last30days or provider imports write to PostgreSQL.",
+          "Evidence will appear after a configured research provider writes to PostgreSQL.",
         sentimentMix: "Sentiment Mix",
         forecast: "Kronos Forecast",
         target: "target",

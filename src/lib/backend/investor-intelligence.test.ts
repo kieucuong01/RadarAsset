@@ -13,7 +13,7 @@ describe("investor intelligence domain", () => {
     const insights: InvestorInsightInput[] = [
       {
         id: "i1",
-        source: "last30days",
+        source: "research-provider",
         asset: "BTC",
         sentiment: "bull",
         title: "ETF inflows accelerate",
@@ -128,7 +128,7 @@ describe("investor intelligence domain", () => {
       insights: [
         {
           id: "i1",
-          source: "last30days",
+          source: "research-provider",
           asset: "BTC",
           sentiment: "bull",
           title: "ETF inflows accelerate",

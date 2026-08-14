@@ -303,7 +303,7 @@ async function main() {
   await prisma.investmentThesis.deleteMany({
     where: {
       researchRunId: null,
-      source: "ai-berkshire",
+      source: "seed-research",
       assetId: { in: [vn30AssetId, goldAssetId].filter((id): id is string => Boolean(id)) },
     },
   });
@@ -317,17 +317,18 @@ async function main() {
     });
   }
 
-  const last30daysRun = await prisma.researchRun.create({
+  const seedSentimentRun = await prisma.researchRun.create({
     data: {
       organizationId: organization.id,
       userId: user.id,
       assetId: btcAssetId,
-      source: "last30days",
+      source: "seed-research",
       kind: "sentiment",
       status: "succeeded",
       parameters: {
+        dataStatus: "sample",
+        method: "deterministic local fixture",
         topic: "Bitcoin BTC investment sentiment catalysts risks",
-        lookbackDays: 30,
         sources: ["reddit", "x", "youtube", "hackernews", "web"],
       },
       summary:
@@ -355,16 +356,17 @@ async function main() {
     },
   });
 
-  const berkshireRun = await prisma.researchRun.create({
+  const seedThesisRun = await prisma.researchRun.create({
     data: {
       organizationId: organization.id,
       userId: user.id,
       assetId: btcAssetId,
-      source: "ai-berkshire",
+      source: "seed-research",
       kind: "investment_thesis",
       status: "succeeded",
       parameters: {
-        method: "two-source thesis audit",
+        dataStatus: "sample",
+        method: "deterministic thesis fixture",
         arithmetic: "exact",
         output: "investor memo",
       },
@@ -399,10 +401,11 @@ async function main() {
     data: {
       organizationId: organization.id,
       userId: user.id,
-      source: "daily_stock_analysis",
+      source: "seed-provider-health",
       kind: "provider_health",
       status: "succeeded",
       parameters: {
+        dataStatus: "sample",
         providers: ["seed", "csv", "future-live-provider"],
         mode: "failover-template",
       },
@@ -427,7 +430,7 @@ async function main() {
     const createdInsight = await prisma.aiInsight.create({
       data: {
         assetId: insight.symbol ? assetBySymbol.get(insight.symbol)?.id : undefined,
-        researchRunId: insight.symbol === "BTC" ? last30daysRun.id : undefined,
+        researchRunId: insight.symbol === "BTC" ? seedSentimentRun.id : undefined,
         source: insight.source,
         sentiment: insight.sentiment,
         confidence: insight.confidence,
@@ -446,7 +449,7 @@ async function main() {
     await prisma.evidenceItem.createMany({
       data: [
         {
-          researchRunId: last30daysRun.id,
+          researchRunId: seedSentimentRun.id,
           assetId: btcAssetId,
           insightId: insightBySymbol.get("BTC"),
           sourceType: "reddit",
@@ -459,7 +462,7 @@ async function main() {
           observedAt: new Date("2026-07-26T22:00:00.000Z"),
         },
         {
-          researchRunId: last30daysRun.id,
+          researchRunId: seedSentimentRun.id,
           assetId: btcAssetId,
           insightId: insightBySymbol.get("BTC"),
           sourceType: "web",
@@ -477,8 +480,8 @@ async function main() {
     await prisma.investmentThesis.create({
       data: {
         assetId: btcAssetId,
-        researchRunId: berkshireRun.id,
-        source: "ai-berkshire",
+        researchRunId: seedThesisRun.id,
+        source: "seed-research",
         stance: "accumulate",
         conviction: 78,
         thesis:
@@ -534,7 +537,7 @@ async function main() {
     await prisma.investmentThesis.create({
       data: {
         assetId: vn30AssetId,
-        source: "ai-berkshire",
+        source: "seed-research",
         stance: "hold",
         conviction: 64,
         thesis:
@@ -550,7 +553,7 @@ async function main() {
     await prisma.investmentThesis.create({
       data: {
         assetId: goldAssetId,
-        source: "ai-berkshire",
+        source: "seed-research",
         stance: "hold",
         conviction: 69,
         thesis:

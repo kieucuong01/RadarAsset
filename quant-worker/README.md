@@ -136,10 +136,10 @@ Use `research_import.py` to post normalized research JSON into the Next.js API:
 
 ```powershell
 python quant-worker\research_import.py --symbol BTC
-python quant-worker\research_import.py --payload .\local-research\BTC-last30days.json
+python quant-worker\research_import.py --payload .\local-research\BTC-research.json
 ```
 
-The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `evidence`, `thesis`, `forecasts`, and `providerRuns`. It is designed for adapters around last30days, ai-berkshire, Kronos, and future market-data providers.
+The payload contract accepts `source`, `kind`, optional `symbol`, `insights`, `evidence`, `thesis`, `forecasts`, and `providerRuns`. It supports normalized output from configured research providers and the isolated Kronos shadow evaluator.
 
 ## Smart Insights Crypto Worker
 
