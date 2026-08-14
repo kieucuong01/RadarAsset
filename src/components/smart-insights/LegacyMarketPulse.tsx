@@ -20,10 +20,12 @@ import {
 import { useI18n } from "@/lib/i18n/context";
 import type {
   EnergyPulseModel,
+  KronosShadowModel,
   MacroEventRiskModel,
   MetricModel,
   RegimeModel,
 } from "@/lib/smart-insights-client";
+import { fetchParsed, kronosShadowSchema } from "@/lib/smart-insights-client";
 import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 const SAMPLE_MARKET_METRICS = {
@@ -53,6 +55,10 @@ export function LegacyMarketPulse({
   const [tickerSnapshot, setTickerSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));
   const [cryptoPulse, setCryptoPulse] = useState<CryptoMarketPulseModel | null>(null);
   const [cryptoPulseState, setCryptoPulseState] = useState<
+    "idle" | "loading" | "loaded" | "failed"
+  >("idle");
+  const [kronosShadow, setKronosShadow] = useState<KronosShadowModel | null>(null);
+  const [kronosShadowState, setKronosShadowState] = useState<
     "idle" | "loading" | "loaded" | "failed"
   >("idle");
 
@@ -89,6 +95,28 @@ export function LegacyMarketPulse({
       })
       .catch(() => {
         if (!controller.signal.aborted) setCryptoPulseState("failed");
+      });
+    return () => controller.abort();
+  }, [market]);
+
+  useEffect(() => {
+    if (market !== "crypto") return;
+    const controller = new AbortController();
+    setKronosShadow(null);
+    setKronosShadowState("loading");
+    fetchParsed(
+      "/api/smart-insights/forecast/BTC?model=kronos-small",
+      kronosShadowSchema,
+      controller.signal,
+    )
+      .then((payload) => {
+        if (!controller.signal.aborted) {
+          setKronosShadow(payload);
+          setKronosShadowState("loaded");
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setKronosShadowState("failed");
       });
     return () => controller.abort();
   }, [market]);
@@ -136,6 +164,8 @@ export function LegacyMarketPulse({
             metrics={cryptoMetrics}
             regime={regimes.find((regime) => regime.market === "crypto")}
             locale={locale}
+            kronosShadow={kronosShadow}
+            kronosShadowState={kronosShadowState}
           />
         </TabsContent>
         <TabsContent value="macro" className="mt-4">
