@@ -1,5 +1,7 @@
 # Smart Insights Crypto Quant Pulse Tabs Implementation Plan
 
+> **Superseded:** Do not execute this five-tab plan. The approved six-tab design with CoinGlass, BlockchainCenter, and CBBI acquisition is implemented by `docs/superpowers/plans/2026-08-14-smart-insights-crawled-crypto-pulse.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the long Crypto Quant Pulse column with five chart-first decision tabs while preserving the existing live data, source attribution, status semantics, and Smart Insights style.
