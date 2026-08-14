@@ -74,10 +74,10 @@ assert source.enabled is False
 
 - [ ] **Step 2: Run the focused tests and verify failure**
 
-Run:
+Run from `quant-worker` in the isolated worktree:
 
 ```powershell
-..\.venv\Scripts\python.exe -m pytest quant-worker\tests\test_smart_insights_crypto_collectors.py::test_bitinfocharts_applies_rank_and_balance_floor quant-worker\tests\test_smart_insights_foundation.py -q
+..\..\..\.venv\Scripts\python.exe -m pytest tests\test_smart_insights_crypto_collectors.py::test_bitinfocharts_applies_rank_and_balance_floor tests\test_smart_insights_foundation.py -q --basetemp=.pytest-tmp-btc-large-address
 ```
 
 Expected: FAIL because the balance floor, dimensions, new source, and metric definitions do not exist.
@@ -152,8 +152,10 @@ Also assert that unknown external value is counted only in coverage denominators
 
 - [ ] **Step 2: Run tests and verify failure**
 
+Run from `quant-worker` in the isolated worktree:
+
 ```powershell
-..\.venv\Scripts\python.exe -m pytest quant-worker\tests\test_smart_insights_large_address_collector.py -q
+..\..\..\.venv\Scripts\python.exe -m pytest tests\test_smart_insights_large_address_collector.py -q --basetemp=.pytest-tmp-btc-large-address
 ```
 
 Expected: FAIL because the registry and collector modules do not exist.
@@ -222,8 +224,10 @@ Add tests for 7D/30D endpoint absence, `max(10 BTC, 0.1%)`, dormant history elig
 
 - [ ] **Step 2: Run tests and verify failure**
 
+Run from `quant-worker` in the isolated worktree:
+
 ```powershell
-..\.venv\Scripts\python.exe -m pytest quant-worker\tests\test_smart_insights_large_address_metrics.py quant-worker\tests\test_smart_insights_crypto_pipeline_integration.py -q
+..\..\..\.venv\Scripts\python.exe -m pytest tests\test_smart_insights_large_address_metrics.py tests\test_smart_insights_crypto_pipeline_integration.py -q --basetemp=.pytest-tmp-btc-large-address
 ```
 
 Expected: FAIL because the metric calculator and second signal do not exist.
@@ -278,8 +282,10 @@ Assert that the latest accepted BitInfoCharts effective day becomes the watchlis
 
 - [ ] **Step 2: Run focused tests and verify failure**
 
+Run the Python command from `quant-worker` in the isolated worktree, then run the web command from the worktree root:
+
 ```powershell
-..\.venv\Scripts\python.exe -m pytest quant-worker\tests\test_smart_insights_foundation.py -q
+..\..\..\.venv\Scripts\python.exe -m pytest tests\test_smart_insights_foundation.py -q --basetemp=.pytest-tmp-btc-large-address
 npm test -- src/lib/backend/smart-insights-data-health.test.ts
 ```
 
@@ -473,8 +479,10 @@ git commit -m "feat: visualize BTC large-address activity"
 
 - [ ] **Step 1: Run the complete deterministic suites**
 
+Run the Python command from `quant-worker` in the isolated worktree:
+
 ```powershell
-..\.venv\Scripts\python.exe -m pytest quant-worker\tests -q
+..\..\..\.venv\Scripts\python.exe -m pytest tests -q --basetemp=.pytest-tmp-btc-large-address
 npm test
 npm run lint
 npm run build
@@ -492,9 +500,11 @@ Expected: existing migrations are applied. If the database is behind, apply the 
 
 - [ ] **Step 3: Run bounded live smokes while sources remain disabled**
 
+Run from `quant-worker` in the isolated worktree, using the existing ignored environment file from the repository root:
+
 ```powershell
-..\.venv\Scripts\python.exe quant-worker\collect_smart_insights.py daily --source bitinfocharts-top-addresses --live-smoke --env-file .env.local
-..\.venv\Scripts\python.exe quant-worker\collect_smart_insights.py daily --source mempool-btc-large-addresses --live-smoke --env-file .env.local
+..\..\..\.venv\Scripts\python.exe collect_smart_insights.py daily --source bitinfocharts-top-addresses --live-smoke --env-file ..\..\..\.env.local
+..\..\..\.venv\Scripts\python.exe collect_smart_insights.py daily --source mempool-btc-large-addresses --live-smoke --env-file ..\..\..\.env.local
 ```
 
 Expected success gate for each source: current effective period, non-empty validated observations, production parser, provenance, no write, and no raw provider body printed. If either source fails, leave only that source disabled and record the exact error in the runbook.
