@@ -21,13 +21,10 @@ import {
 } from "@/lib/crypto-market-pulse-client";
 import { useI18n } from "@/lib/i18n/context";
 import type { MetricModel, RegimeModel } from "@/lib/smart-insights-client";
-
-const SAMPLE_TICKERS = [
-  { symbol: "BTC", price: 100, changePercent: 1.2 },
-  { symbol: "ETH", price: 100, changePercent: -0.4 },
-  { symbol: "GOLD", price: 100, changePercent: 0.3 },
-  { symbol: "DXY", price: 100, changePercent: -0.2 },
-];
+import {
+  curatedTickerUrl,
+  resolveCuratedTickerSnapshot,
+} from "@/lib/ticker-presentation";
 
 const SAMPLE_MARKET_METRICS = {
   crypto: ["ETF Flow", "On-chain Activity", "Stablecoin Liquidity"],
@@ -47,11 +44,9 @@ export function LegacyMarketPulse({
   onMarketChange: (market: InsightMarket) => void;
 }) {
   const { locale, t } = useI18n();
-  const [tickers, setTickers] =
-    useState<Array<Pick<MarketTickerResponse, "symbol" | "price" | "changePercent">>>(
-      SAMPLE_TICKERS,
-    );
-  const [tickerStatus, setTickerStatus] = useState<"SYSTEM" | "SAMPLE">("SAMPLE");
+  const [tickerSnapshot, setTickerSnapshot] = useState(() =>
+    resolveCuratedTickerSnapshot([]),
+  );
   const [cryptoPulse, setCryptoPulse] = useState<CryptoMarketPulseModel | null>(null);
   const [cryptoPulseState, setCryptoPulseState] = useState<
     "idle" | "loading" | "loaded" | "failed"
@@ -59,7 +54,7 @@ export function LegacyMarketPulse({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/market/ticker", {
+    fetch(curatedTickerUrl(), {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     })
@@ -68,16 +63,10 @@ export function LegacyMarketPulse({
         return response.json() as Promise<MarketTickerResponse[]>;
       })
       .then((rows) => {
-        if (!controller.signal.aborted && rows.length) {
-          setTickers(rows.slice(0, 8));
-          setTickerStatus("SYSTEM");
-        }
+        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot(rows));
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setTickers(SAMPLE_TICKERS);
-          setTickerStatus("SAMPLE");
-        }
+        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot([]));
       });
     return () => controller.abort();
   }, []);
@@ -222,10 +211,17 @@ export function LegacyMarketPulse({
       <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h3 className="font-semibold">{t("overview.market.trendingAssets")}</h3>
-          <DataStatusBadge status={tickerStatus} />
+          <DataStatusBadge status={tickerSnapshot.status} detail={tickerSnapshot.detail} />
         </div>
         <div className="flex gap-3 overflow-x-auto px-1 pb-2">
-          {tickers.map((ticker) => (
+          {tickerSnapshot.rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {locale === "vi"
+                ? "Chưa có dữ liệu cho danh sách blue-chip đã chọn."
+                : "No verified data for the selected blue-chip universe."}
+            </p>
+          ) : null}
+          {tickerSnapshot.rows.map((ticker) => (
             <div
               key={ticker.symbol}
               className="min-w-[140px] shrink-0 rounded-xl border border-border bg-background/50 p-3"
