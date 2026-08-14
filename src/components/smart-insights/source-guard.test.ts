@@ -127,4 +127,28 @@ describe("Smart Insights source guard", () => {
     expect(backend).not.toContain("COINSHARES_SAMPLE_12_WEEKS");
     expect(route).not.toContain("COINSHARES_SAMPLE_12_WEEKS");
   });
+
+  it("keeps the BTC large-address panel chart-first, sourced, and sample-labelled", () => {
+    const source = readSmartInsightsSourceTree();
+    for (const token of [
+      "CryptoLargeAddressPanel",
+      "LARGE_ADDRESS_SAMPLE",
+      "Hành động ví lớn BTC",
+      "Dữ liệu mẫu",
+      "mempool.space",
+      "bitinfocharts.com/top-100-richest-bitcoin-addresses",
+      "ComposedChart",
+      "LineChart",
+      "Áp lực lên sàn",
+      "Độ rộng tích lũy",
+    ]) {
+      expect(source).toContain(token);
+    }
+
+    const backend = readFileSync(
+      join(process.cwd(), "src", "lib", "backend", "crypto-market-pulse.ts"),
+      "utf8",
+    );
+    expect(backend).not.toContain("LARGE_ADDRESS_SAMPLE");
+  });
 });

@@ -5,6 +5,7 @@ import { Activity, ExternalLink } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { CryptoEtfFlowPanel } from "@/components/smart-insights/CryptoEtfFlowPanel";
+import { CryptoLargeAddressPanel } from "@/components/smart-insights/CryptoLargeAddressPanel";
 import {
   CryptoFearGreedPanel,
   type CryptoPanelMode,
@@ -125,6 +126,12 @@ export function LegacyMarketPulse({
     requestMode === "system" && cryptoPulse?.fundFlows.status === "unavailable"
       ? "sample"
       : requestMode;
+  const largeAddressMode: CryptoPanelMode =
+    requestMode === "system" &&
+    (!cryptoPulse?.largeAddressActivity ||
+      cryptoPulse.largeAddressActivity.status === "unavailable")
+      ? "sample"
+      : requestMode;
 
   return (
     <section className="space-y-6" aria-labelledby="market-pulse-heading">
@@ -167,6 +174,11 @@ export function LegacyMarketPulse({
             <CryptoFundFlowPanel
               data={cryptoPulse?.fundFlows ?? null}
               mode={fundMode}
+              locale={locale}
+            />
+            <CryptoLargeAddressPanel
+              data={cryptoPulse?.largeAddressActivity ?? null}
+              mode={largeAddressMode}
               locale={locale}
             />
             <div className="grid min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
