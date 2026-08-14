@@ -7,6 +7,7 @@ import pytest
 from smart_insights.kronos.adapter import (
     KronosShadowAdapter,
     RuntimeUnavailableError,
+    _UpstreamPathPredictor,
     build_request,
     load_upstream_predictor,
 )
@@ -70,6 +71,30 @@ def test_adapter_produces_ordered_deterministic_quantiles() -> None:
     assert [point.days for point in result.points] == [1, 3, 7]
     assert all(point.lower <= point.median <= point.upper for point in result.points)
     assert result.seed == 20260814
+
+
+def test_upstream_paths_are_generated_in_one_batch() -> None:
+    import pandas as pd
+
+    class FakeBatchPredictor:
+        def __init__(self):
+            self.calls = 0
+
+        def predict_batch(self, **kwargs):
+            self.calls += 1
+            assert len(kwargs["df_list"]) == 3
+            return [
+                pd.DataFrame({"close": [100 + sample + day for day in range(7)]})
+                for sample in range(3)
+            ]
+
+    upstream = FakeBatchPredictor()
+    request = build_request(bars(80), as_of=bars(80)[-1].ts, sample_count=3)
+    paths = _UpstreamPathPredictor(upstream, "cpu").predict_close_paths(request)
+
+    assert upstream.calls == 1
+    assert len(paths) == 3
+    assert all(len(path) == 7 for path in paths)
 
 
 def test_runtime_fails_cleanly_when_optional_checkout_is_missing(tmp_path) -> None:

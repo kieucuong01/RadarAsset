@@ -184,23 +184,25 @@ class _UpstreamPathPredictor:
         y_timestamp = pd.Series(
             [request.as_of + timedelta(days=day) for day in range(1, max(request.horizons) + 1)]
         )
-        paths: list[list[float]] = []
-        for sample in range(request.sample_count):
-            torch.manual_seed(request.seed + sample)
-            if self._device.startswith("cuda"):
-                torch.cuda.manual_seed_all(request.seed + sample)
-            prediction = self._predictor.predict(
-                df=frame,
-                x_timestamp=x_timestamp,
-                y_timestamp=y_timestamp,
-                pred_len=max(request.horizons),
-                T=request.temperature,
-                top_p=request.top_p,
-                sample_count=1,
-                verbose=False,
-            )
-            paths.append([float(value) for value in prediction["close"].tolist()])
-        return paths
+        torch.manual_seed(request.seed)
+        if self._device.startswith("cuda"):
+            torch.cuda.manual_seed_all(request.seed)
+        predictions = self._predictor.predict_batch(
+            df_list=[frame] * request.sample_count,
+            x_timestamp_list=[x_timestamp] * request.sample_count,
+            y_timestamp_list=[y_timestamp] * request.sample_count,
+            pred_len=max(request.horizons),
+            T=request.temperature,
+            top_p=request.top_p,
+            sample_count=1,
+            verbose=False,
+        )
+        if len(predictions) != request.sample_count:
+            raise ValueError("Kronos batch returned an unexpected number of paths")
+        return [
+            [float(value) for value in prediction["close"].tolist()]
+            for prediction in predictions
+        ]
 
 
 def load_upstream_predictor(lock: RuntimeLock, device: str) -> KronosShadowAdapter:
