@@ -772,6 +772,58 @@ def test_bitinfocharts_first_snapshot_has_balance_but_no_change() -> None:
     )
 
 
+def test_bitinfocharts_excludes_balances_below_1000_btc() -> None:
+    below_floor = fixture_text("bitinfocharts.md").replace(
+        "Balance:50,000 BTC | 50,000 BTC",
+        "Balance:999 BTC | 999 BTC",
+    )
+    batch = BitInfoChartsCollector(
+        crawler=FakeCrawler(below_floor)
+    ).collect(NOW)
+
+    address_rows = [
+        row
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.address_balance_btc"
+    ]
+
+    assert "3M219KR5vEneNb47ewrPfWyb5jQ2DjxRP6" not in {
+        row.dimensions["address"] for row in address_rows
+    }
+
+
+def test_bitinfocharts_publishes_rank_for_accepted_addresses() -> None:
+    batch = BitInfoChartsCollector(
+        crawler=FakeCrawler(fixture_text("bitinfocharts.md"))
+    ).collect(NOW)
+
+    ranks = {
+        row.dimensions["address"]: row.dimensions["rank"]
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.address_balance_btc"
+    }
+
+    assert ranks == {
+        "bc1q0000000000000000000000000000000000001": "2",
+        "3M219KR5vEneNb47ewrPfWyb5jQ2DjxRP6": "4",
+    }
+
+
+def test_bitinfocharts_address_rows_share_a_deterministic_cohort_version() -> None:
+    batch = BitInfoChartsCollector(
+        crawler=FakeCrawler(fixture_text("bitinfocharts.md"))
+    ).collect(NOW)
+
+    versions = {
+        row.dimensions["cohort_version"]
+        for row in batch.observations
+        if row.metric_code == "crypto.large_address.address_balance_btc"
+    }
+
+    assert len(versions) == 1
+    assert len(versions.pop()) == 64
+
+
 def test_live_smoke_uses_production_parser_and_exposes_no_provider_body() -> None:
     collector = AlternativeFearGreedCollector(
         transport=FakeTransport(fixture_text("alternative-fng.json"))

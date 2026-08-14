@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+import hashlib
 import json
 import re
 from typing import Any
@@ -93,6 +94,23 @@ class BitInfoChartsCollector:
         effective_at = as_of.astimezone(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
+        cohort_version = hashlib.sha256(
+            json.dumps(
+                [
+                    {
+                        "address": row["address"],
+                        "balance": format(Decimal(row["balance"]), "f"),
+                        "category": row["category"],
+                        "excluded": row["excluded"],
+                        "label": row["label"],
+                        "rank": row["rank"],
+                    }
+                    for row in sorted(parsed, key=lambda item: int(item["rank"]))
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         current_balances = {
             row["address"]: row["balance"]
             for row in parsed
@@ -113,6 +131,7 @@ class BitInfoChartsCollector:
         coverage = Decimal(labelled_count) / Decimal(len(parsed))
         dimensions = {
             "cohort": "reviewed_non_exchange",
+            "cohort_version": cohort_version,
             "label_coverage": format(coverage.quantize(Decimal("0.000001")), "f"),
             "quality_tier": "heuristic",
         }
@@ -132,6 +151,7 @@ class BitInfoChartsCollector:
             address_dimensions = {
                 **dimensions,
                 "address": str(row["address"]),
+                "rank": str(row["rank"]),
                 "label_status": (
                     "labelled" if row["label"] is not None else "unknown"
                 ),
@@ -211,11 +231,14 @@ class BitInfoChartsCollector:
             label_match = _LABEL.search(address_cell)
             label = label_match.group(1).strip() if label_match else None
             category = _category(label)
+            balance = _btc(row["Balance"])
+            if balance < Decimal("1000"):
+                continue
             parsed.append(
                 {
                     "rank": rank,
                     "address": address,
-                    "balance": _btc(row["Balance"]),
+                    "balance": balance,
                     "label": label,
                     "category": category,
                     "excluded": category in _EXCLUSION_PATTERNS,

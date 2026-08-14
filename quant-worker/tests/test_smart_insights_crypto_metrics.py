@@ -19,10 +19,36 @@ from smart_insights.metrics.common import (
     simple_return,
     weighted_score,
 )
+from smart_insights.metrics.crypto import METRIC_DEFINITIONS_BY_CODE
 from smart_insights.signals import MetricSignalInput, detect_signals
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_large_address_metric_contract_is_registered() -> None:
+    expected = {
+        "crypto.large_address.confirmed_balance_btc": "BTC",
+        "crypto.large_address.net_accumulation_btc": "BTC",
+        "crypto.large_address.accumulation_breadth": "ratio",
+        "crypto.large_address.distribution_breadth": "ratio",
+        "crypto.large_address.to_exchange_btc": "BTC",
+        "crypto.large_address.from_exchange_btc": "BTC",
+        "crypto.large_address.exchange_flow_pressure_btc": "BTC",
+        "crypto.large_address.dormant_to_exchange_btc": "BTC",
+        "crypto.large_address.dormant_from_exchange_btc": "BTC",
+        "crypto.large_address.top10_concentration": "ratio",
+        "crypto.large_address.address_coverage": "ratio",
+        "crypto.large_address.transaction_coverage": "ratio",
+        "crypto.large_address.flow_label_coverage": "ratio",
+    }
+
+    assert {
+        code: METRIC_DEFINITIONS_BY_CODE[code].unit for code in expected
+    } == expected
+    assert {
+        METRIC_DEFINITIONS_BY_CODE[code].metadata["source"] for code in expected
+    } == {"mempool-btc-large-addresses"}
 
 
 def metric(

@@ -170,6 +170,7 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-eth-etf",
         "farside-sol-etf",
         "fred",
+        "mempool-btc-large-addresses",
         "mempool-space",
     )
     assert ENABLED_SOURCE_CODES == {
@@ -198,6 +199,10 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert source_for_code("bitinfocharts-top-addresses").quality_tier == Decimal(
         "0.50"
     )
+    large_addresses = source_for_code("mempool-btc-large-addresses")
+    assert large_addresses.collection_mode is CollectionMode.API
+    assert large_addresses.schedule == "daily"
+    assert large_addresses.enabled is False
     assert tuple(source.code for source in sources_for_schedule("daily")) == (
         "alternative-fng",
         "coinmetrics-community",
@@ -711,5 +716,10 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
     )
 
     assert exit_code == 0
-    assert len(outcomes) == 11
+    assert len(outcomes) == 12
+    assert any(
+        outcome.source_code == "mempool-btc-large-addresses"
+        and outcome.status == "dry_run"
+        for outcome in outcomes
+    )
     assert all(outcome.status == "dry_run" for outcome in outcomes)

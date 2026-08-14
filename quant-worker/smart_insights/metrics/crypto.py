@@ -200,6 +200,34 @@ _LARGE_ADDRESS_DEFINITIONS = tuple(
     )
 )
 
+_VERIFIED_LARGE_ADDRESS_DEFINITIONS = tuple(
+    _definition(
+        code,
+        name,
+        unit,
+        "daily",
+        0,
+        2_880,
+        source="mempool-btc-large-addresses",
+        evidence_only=True,
+    )
+    for code, name, unit in (
+        ("crypto.large_address.confirmed_balance_btc", "Confirmed large-address balance", "BTC"),
+        ("crypto.large_address.net_accumulation_btc", "Common-cohort net accumulation", "BTC"),
+        ("crypto.large_address.accumulation_breadth", "Large-address accumulation breadth", "ratio"),
+        ("crypto.large_address.distribution_breadth", "Large-address distribution breadth", "ratio"),
+        ("crypto.large_address.to_exchange_btc", "Large-address to exchange flow", "BTC"),
+        ("crypto.large_address.from_exchange_btc", "Exchange to large-address flow", "BTC"),
+        ("crypto.large_address.exchange_flow_pressure_btc", "Large-address exchange flow pressure", "BTC"),
+        ("crypto.large_address.dormant_to_exchange_btc", "Dormant large-address to exchange flow", "BTC"),
+        ("crypto.large_address.dormant_from_exchange_btc", "Exchange to dormant large-address flow", "BTC"),
+        ("crypto.large_address.top10_concentration", "Top 10 tracked-address concentration", "ratio"),
+        ("crypto.large_address.address_coverage", "Large-address balance coverage", "ratio"),
+        ("crypto.large_address.transaction_coverage", "Large-address transaction coverage", "ratio"),
+        ("crypto.large_address.flow_label_coverage", "Large-address flow label coverage", "ratio"),
+    )
+)
+
 _DERIVED_DEFINITIONS = (
     _definition("price.btc.momentum_20d", "BTC 20-day momentum", "return", "daily", 1, 2880, lookback=20),
     _definition("price.eth.momentum_20d", "ETH 20-day momentum", "return", "daily", 1, 2880, lookback=20),
@@ -219,6 +247,7 @@ CRYPTO_METRIC_DEFINITIONS = (
     + _MEMPOOL_DEFINITIONS
     + _DVOL_OHLC_DEFINITIONS
     + _LARGE_ADDRESS_DEFINITIONS
+    + _VERIFIED_LARGE_ADDRESS_DEFINITIONS
     + _DERIVED_DEFINITIONS
 )
 

@@ -175,6 +175,18 @@ SOURCE_ROWS = (
         "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html",
     ),
     (
+        "mempool-btc-large-addresses",
+        "mempool.space BTC Large Addresses",
+        Market.CRYPTO,
+        CollectionMode.API,
+        ("https://mempool.space/api/address/",),
+        "daily",
+        "mempool-btc-large-addresses-v1",
+        2_880,
+        "community_api",
+        "https://mempool.space/about",
+    ),
+    (
         "cryptocraft",
         "CryptoCraft Economic Calendar",
         Market.MACRO,
