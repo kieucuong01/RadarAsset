@@ -163,4 +163,21 @@ describe("Smart Insights source guard", () => {
     expect(source).not.toContain("SAMPLE_TICKERS");
     expect(source).not.toContain("rows.slice(0, 8)");
   });
+
+  it("renders sourced Crypto metric trends without inventing unavailable history", () => {
+    const source = readSmartInsightsSourceTree();
+
+    for (const token of [
+      "function CryptoMetricTrendPanel",
+      "ResponsiveContainer",
+      "LineChart",
+      "trendPoints",
+      "FreshnessBadge",
+      "sourceUrl",
+      "effectiveAt",
+      'status="UNAVAILABLE"',
+    ]) {
+      expect(source).toContain(token);
+    }
+  });
 });
