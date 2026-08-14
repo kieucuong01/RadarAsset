@@ -33,7 +33,7 @@ describe("Macro Quant Pulse tabs", () => {
   it("provides compact mobile evidence rows and does not fetch inside presentation panels", () => {
     const source = read("EventRiskPanel.tsx") + read("EnergyPulsePanel.tsx");
     expect(source).toContain("md:hidden");
-    expect(source).toMatch(/hidden[^\"]*md:block/);
+    expect(source).toMatch(/hidden[^"]*md:block/);
     expect(source).not.toContain("fetch(");
   });
 });
