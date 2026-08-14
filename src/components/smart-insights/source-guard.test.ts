@@ -44,4 +44,63 @@ describe("Smart Insights source guard", () => {
     ])
       expect(source).toContain(`function ${name}`);
   });
+
+  it("restores every legacy Smart Insights block around the quantitative cockpit", () => {
+    const source = readSmartInsightsSourceTree();
+    for (const name of [
+      "LegacyDailyHero",
+      "LegacyAIDigest",
+      "LegacyInvestorIntelligence",
+      "LegacyMarketPulse",
+      "LegacyWatchlist",
+      "LegacyExpertSignals",
+    ])
+      expect(source).toContain(`function ${name}`);
+
+    for (const market of ['value="crypto"', 'value="macro"', 'value="gold"'])
+      expect(source).toContain(market);
+  });
+
+  it("visibly labels the optional seed-backed block as sample data", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "LegacyExpertSignals.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain('status="SAMPLE"');
+    expect(source).toContain("SAMPLE_EXPERT_SIGNALS");
+  });
+
+  it("labels calendar and data-health seed fallbacks inside their own blocks", () => {
+    for (const [file, seedName] of [
+      ["EconomicCalendar.tsx", "SAMPLE_CALENDAR_EVENTS"],
+      ["DataHealthPanel.tsx", "SAMPLE_HEALTH_SOURCES"],
+    ]) {
+      const source = readFileSync(
+        join(process.cwd(), "src", "components", "smart-insights", file),
+        "utf8",
+      );
+      expect(source).toContain(seedName);
+      expect(source).toContain('status="SAMPLE"');
+    }
+  });
+
+  it("keeps quantitative charts, tables, and provenance in Crypto Market Pulse", () => {
+    const source = readSmartInsightsSourceTree();
+
+    for (const token of [
+      "CryptoFearGreedPanel",
+      "CryptoEtfFlowPanel",
+      "LineChart",
+      "BarChart",
+      "alternative.me/crypto/fear-and-greed-index",
+      "farside.co.uk",
+      "Dữ liệu mẫu",
+      "BTC",
+      "ETH",
+      "SOL",
+    ]) {
+      expect(source).toContain(token);
+    }
+  });
 });
