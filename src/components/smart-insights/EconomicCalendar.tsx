@@ -1,9 +1,32 @@
 import { CalendarClock, ExternalLink } from "lucide-react";
 
+import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CalendarModel } from "@/lib/smart-insights-client";
+
+const SAMPLE_CALENDAR_EVENTS: CalendarModel[] = [
+  {
+    id: "sample-calendar-event",
+    event: "Ví dụ: Sự kiện vĩ mô quan trọng",
+    country: "US",
+    currency: "USD",
+    impact: "high",
+    actual: null,
+    forecast: "Mẫu",
+    previous: "Mẫu",
+    eventDate: "Dữ liệu mẫu",
+    eventAt: null,
+    timeStatus: "sample",
+    surprise: null,
+    portfolioRelevance: "0",
+    sourceCode: "cryptocraft-sample",
+    sourceUrl: "https://www.cryptocraft.com/calendar",
+    observedAt: "sample",
+    licenseScope: "research_only",
+  },
+];
 
 function countdown(value: string | null): string {
   if (!value) return "Time pending";
@@ -23,14 +46,16 @@ export function EconomicCalendar({
   impact: "all" | "high" | "medium" | "low";
   onImpactChange: (impact: "all" | "high" | "medium" | "low") => void;
 }) {
+  const visibleEvents = events.length ? events : SAMPLE_CALENDAR_EVENTS;
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden rounded-2xl">
+      <CardHeader className="border-b border-border bg-muted/30">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <CalendarClock className="size-5 text-primary" />
               <CardTitle>CryptoCraft Economic Calendar</CardTitle>
+              {!events.length ? <DataStatusBadge status="SAMPLE" /> : null}
             </div>
             <CardDescription className="mt-2">
               Point-in-time revisions, actual/forecast/previous and source attribution.
@@ -46,8 +71,8 @@ export function EconomicCalendar({
           </Tabs>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {events.map((event) => (
+      <CardContent className="flex max-h-[420px] flex-col gap-2 overflow-y-auto p-5">
+        {visibleEvents.map((event) => (
           <article
             key={event.id}
             className="grid gap-3 rounded-lg border p-3 md:grid-cols-[8rem_1fr_auto] md:items-center"
@@ -80,11 +105,6 @@ export function EconomicCalendar({
             </div>
           </article>
         ))}
-        {events.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No accepted CryptoCraft events in this window.
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );

@@ -3,20 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
-import { CryptoPanel } from "@/components/smart-insights/CryptoPanel";
 import { DataHealthPanel } from "@/components/smart-insights/DataHealthPanel";
-import { DecisionBrief } from "@/components/smart-insights/DecisionBrief";
 import { EconomicCalendar } from "@/components/smart-insights/EconomicCalendar";
 import { EvidenceDrawer } from "@/components/smart-insights/EvidenceDrawer";
-import { GoldPanel } from "@/components/smart-insights/GoldPanel";
-import { MacroPanel } from "@/components/smart-insights/MacroPanel";
-import { MarketRegimeStrip } from "@/components/smart-insights/MarketRegimeStrip";
-import { PortfolioImpact } from "@/components/smart-insights/PortfolioImpact";
+import { LegacyAIDigest } from "@/components/smart-insights/LegacyAIDigest";
+import { LegacyDailyHero } from "@/components/smart-insights/LegacyDailyHero";
+import { LegacyExpertSignals } from "@/components/smart-insights/LegacyExpertSignals";
+import { LegacyInvestorIntelligence } from "@/components/smart-insights/LegacyInvestorIntelligence";
+import { LegacyMarketPulse } from "@/components/smart-insights/LegacyMarketPulse";
+import { LegacyWatchlist } from "@/components/smart-insights/LegacyWatchlist";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import { useI18n } from "@/lib/i18n/context";
 import {
@@ -147,67 +145,54 @@ export function SmartInsights() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <Skeleton className="h-64 w-full rounded-xl" />
-        <div className="grid gap-3 md:grid-cols-3">
-          <Skeleton className="h-36" />
-          <Skeleton className="h-36" />
-          <Skeleton className="h-36" />
+        <Skeleton className="h-96 w-full rounded-2xl" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-72" />
+          <Skeleton className="h-72" />
         </div>
       </main>
     );
   }
 
-  if (state === "error") {
-    return (
-      <main className="mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6 lg:px-8">
+  return (
+    <main className="mx-auto min-w-0 max-w-7xl space-y-10 px-4 py-8 sm:px-6">
+      <LegacyDailyHero briefing={briefing} regimes={regimes} />
+      {state === "error" ? (
         <Alert variant="destructive">
           <AlertCircle />
-          <AlertTitle>Smart Insights unavailable</AlertTitle>
+          <AlertTitle>Smart Insights live data is unavailable</AlertTitle>
           <AlertDescription>
-            The cockpit could not load accepted data. No sample values were substituted.
+            The original page layout remains available. Blocks using illustrative values are marked
+            as sample data.
           </AlertDescription>
           <Button
             variant="outline"
             className="mt-4"
             onClick={() => setRefresh((value) => value + 1)}
           >
-            <RefreshCw data-icon="inline-start" />
-            Retry
+            <RefreshCw data-icon="inline-start" /> Retry live data
           </Button>
         </Alert>
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-      <DecisionBrief briefing={briefing} onEvidence={setEvidenceId} />
-      <PortfolioImpact briefing={briefing} preferences={preferences} />
-      <MarketRegimeStrip regimes={regimes} onSelectMarket={setMarket} />
-      <Tabs value={market} onValueChange={(value) => setMarket(value as InsightMarket)}>
-        <Card>
-          <CardHeader>
-            <TabsList className="grid w-full grid-cols-3 sm:w-fit">
-              <TabsTrigger value="crypto">Crypto</TabsTrigger>
-              <TabsTrigger value="macro">Macro</TabsTrigger>
-              <TabsTrigger value="gold">Gold</TabsTrigger>
-            </TabsList>
-          </CardHeader>
-          <CardContent>
-            <TabsContent value="crypto">
-              <CryptoPanel metrics={market === "crypto" ? marketMetrics : []} />
-            </TabsContent>
-            <TabsContent value="macro">
-              <MacroPanel metrics={market === "macro" ? marketMetrics : []} />
-            </TabsContent>
-            <TabsContent value="gold">
-              <GoldPanel metrics={market === "gold" ? marketMetrics : []} />
-            </TabsContent>
-          </CardContent>
-        </Card>
-      </Tabs>
-      <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
+      ) : null}
+      <LegacyAIDigest briefing={briefing} preferences={preferences} onEvidence={setEvidenceId} />
+      <LegacyInvestorIntelligence />
+      <LegacyMarketPulse
+        market={market}
+        metrics={marketMetrics}
+        regimes={regimes}
+        onMarketChange={setMarket}
+      />
+      <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <LegacyWatchlist />
+        </div>
+        <div className="min-w-0">
+          <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
+        </div>
+      </section>
+      <LegacyExpertSignals />
       <DataHealthPanel sources={health?.sources ?? []} />
       <EvidenceDrawer
         evidence={evidence}
