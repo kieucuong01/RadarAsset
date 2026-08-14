@@ -92,6 +92,18 @@ def test_fingerprint_is_stable_and_sensitive() -> None:
     assert first != config_fingerprint({"asset": "BTC", "seed": 2})
 
 
+def test_btc_history_comes_from_the_active_validated_dataset() -> None:
+    connection = Connection()
+    PostgresKronosRepository(connection).load_btc_bars(
+        datetime(2026, 8, 14, tzinfo=timezone.utc)
+    )
+    sql = connection.cursor_value.calls[-1][0]
+    assert "dataset_bars" in sql
+    assert "version.is_active = TRUE" in sql
+    assert "version.quality_status" in sql
+    assert "source_metadata->>'mode' = 'live'" in sql
+
+
 def test_success_is_a_single_transaction_with_idempotent_forecast_upserts() -> None:
     connection = Connection()
     repo = PostgresKronosRepository(connection)

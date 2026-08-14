@@ -32,9 +32,17 @@ class PostgresKronosRepository:
                 """
                 SELECT bar.ts, bar.open, bar.high, bar.low, bar.close,
                        COALESCE(bar.volume, 0) AS volume
-                FROM market_bars AS bar
-                JOIN assets AS asset ON asset.id = bar.asset_id
-                WHERE asset.symbol = 'BTC' AND bar.timeframe = '1d' AND bar.ts <= %s
+                FROM dataset_bars AS bar
+                JOIN dataset_versions AS version ON version.id = bar.dataset_version_id
+                JOIN datasets AS dataset ON dataset.id = version.dataset_id
+                JOIN assets AS asset ON asset.id = dataset.asset_id
+                WHERE asset.symbol = 'BTC'
+                  AND dataset.timeframe = '1d'
+                  AND dataset.adjustment_policy = 'raw'
+                  AND version.is_active = TRUE
+                  AND version.quality_status IN ('passed', 'warning')
+                  AND version.source_metadata->>'mode' = 'live'
+                  AND bar.ts <= %s
                 ORDER BY bar.ts ASC
                 """,
                 (as_of,),
