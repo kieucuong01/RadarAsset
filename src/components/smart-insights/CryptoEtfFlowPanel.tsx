@@ -114,6 +114,9 @@ export function CryptoEtfFlowPanel({
         <div className="flex items-center gap-2">
           <DataStatusBadge status={mode === "sample" ? "SAMPLE" : "SYSTEM"} />
           {mode === "sample" ? <span className="text-xs text-chart-4">Dữ liệu mẫu</span> : null}
+          {mode === "system" && visible.status === "partial" ? (
+            <span className="text-xs text-chart-4">Dữ liệu một phần</span>
+          ) : null}
         </div>
       </div>
 

@@ -96,11 +96,35 @@ describe("Smart Insights source guard", () => {
       "alternative.me/crypto/fear-and-greed-index",
       "farside.co.uk",
       "Dữ liệu mẫu",
+      "Dữ liệu một phần",
       "BTC",
       "ETH",
       "SOL",
     ]) {
       expect(source).toContain(token);
     }
+  });
+
+  it("keeps CoinShares sample data UI-only and composes the dedicated Crypto request", () => {
+    const source = readSmartInsightsSourceTree();
+    for (const token of [
+      "CryptoFundFlowPanel",
+      "COINSHARES_SAMPLE_12_WEEKS",
+      "coinshares.com/corp/resources/market-activity",
+      "fetchCryptoMarketPulse",
+    ]) {
+      expect(source).toContain(token);
+    }
+
+    const backend = readFileSync(
+      join(process.cwd(), "src", "lib", "backend", "crypto-market-pulse.ts"),
+      "utf8",
+    );
+    const route = readFileSync(
+      join(process.cwd(), "src", "app", "api", "smart-insights", "crypto-market-pulse", "route.ts"),
+      "utf8",
+    );
+    expect(backend).not.toContain("COINSHARES_SAMPLE_12_WEEKS");
+    expect(route).not.toContain("COINSHARES_SAMPLE_12_WEEKS");
   });
 });
