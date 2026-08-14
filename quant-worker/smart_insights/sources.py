@@ -176,6 +176,57 @@ SOURCE_ROWS = (
         "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html",
     ),
     (
+        "coinglass-margin-borrow",
+        "CoinGlass Binance USDT Margin Borrow Rates",
+        Market.CRYPTO,
+        CollectionMode.SCRAPLING,
+        ("https://www.coinglass.com/pro/i/MarginFeeChart",),
+        "four-hourly",
+        "coinglass-margin-v1",
+        480,
+        "scrapling_table",
+        "https://www.coinglass.com/pro/i/MarginFeeChart",
+    ),
+    (
+        "coinglass-liquidation-maxpain",
+        "CoinGlass Liquidation Max Pain",
+        Market.CRYPTO,
+        CollectionMode.SCRAPLING,
+        ("https://www.coinglass.com/liquidation-maxpain",),
+        "four-hourly",
+        "coinglass-maxpain-v1",
+        480,
+        "scrapling_table",
+        "https://www.coinglass.com/liquidation-maxpain",
+    ),
+    (
+        "blockchaincenter-altcoin-season",
+        "BlockchainCenter Altcoin Season Index",
+        Market.CRYPTO,
+        CollectionMode.SCRAPLING,
+        ("https://www.blockchaincenter.net/altcoin-season-index/",),
+        "daily",
+        "blockchaincenter-altseason-v1",
+        2_880,
+        "scrapling_table",
+        "https://www.blockchaincenter.net/altcoin-season-index/",
+    ),
+    (
+        "cbbi-public",
+        "Colin Talks Crypto Bitcoin Bull Run Index",
+        Market.CRYPTO,
+        CollectionMode.SCRAPLING,
+        (
+            "https://colintalkscrypto.com/cbbi/",
+            "https://colintalkscrypto.com/cbbi/data/latest.json",
+        ),
+        "daily",
+        "cbbi-v1",
+        2_880,
+        "scrapling_table",
+        "https://colintalkscrypto.com/cbbi/",
+    ),
+    (
         "mempool-btc-large-addresses",
         "mempool.space BTC Large Addresses",
         Market.CRYPTO,
@@ -308,6 +359,12 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
     if source.code == "cryptocraft":
         return parsed.hostname == "www.cryptocraft.com" and parsed.path.startswith(
             "/calendar/"
+        )
+    if source.code == "cbbi-public":
+        return (
+            parsed.hostname == "colintalkscrypto.com"
+            and parsed.path in {"/cbbi/", "/cbbi/data/latest.json"}
+            and not parsed.query
         )
     if source.code == "coinshares-weekly":
         index_page = (

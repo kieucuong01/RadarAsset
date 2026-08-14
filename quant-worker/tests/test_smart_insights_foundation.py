@@ -46,6 +46,13 @@ def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
     assert "monthly" not in SCHEDULES
 
 
+def test_four_hourly_is_a_cli_and_wrapper_schedule() -> None:
+    assert "four-hourly" in SCHEDULES
+    assert collect_smart_insights._SOURCE_SCHEDULE["four-hourly"] == "four-hourly"
+    wrapper = Path("../scripts/run-smart-insights.ps1").read_text(encoding="utf-8")
+    assert '"four-hourly"' in wrapper
+
+
 def test_database_connection_accepts_prisma_public_schema_url() -> None:
     calls: list[tuple[str, dict[str, object]]] = []
     sentinel = object()
@@ -158,8 +165,12 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
     assert SOURCE_CODES == (
         "alternative-fng",
         "bitinfocharts-top-addresses",
+        "blockchaincenter-altcoin-season",
+        "cbbi-public",
         "cftc-disaggregated",
         "cftc-legacy",
+        "coinglass-liquidation-maxpain",
+        "coinglass-margin-borrow",
         "coinmetrics-community",
         "coinshares-weekly",
         "cryptocraft",
@@ -216,6 +227,46 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "farside-sol-etf",
         "mempool-space",
     )
+
+
+def test_cycle_and_coinglass_sources_are_registered_fail_closed() -> None:
+    expected = {
+        "coinglass-margin-borrow": ("four-hourly", 480),
+        "coinglass-liquidation-maxpain": ("four-hourly", 480),
+        "blockchaincenter-altcoin-season": ("daily", 2_880),
+        "cbbi-public": ("daily", 2_880),
+    }
+    for code, (schedule, sla) in expected.items():
+        source = source_for_code(code)
+        assert source.collection_mode is CollectionMode.SCRAPLING
+        assert source.license_scope is LicenseScope.RESEARCH_ONLY
+        assert source.schedule == schedule
+        assert source.freshness_sla_minutes == sla
+        assert source.enabled is False
+
+    assert source_for_code("coinglass-margin-borrow").urls == (
+        "https://www.coinglass.com/pro/i/MarginFeeChart",
+    )
+    assert source_for_code("coinglass-liquidation-maxpain").urls == (
+        "https://www.coinglass.com/liquidation-maxpain",
+    )
+    assert source_for_code("blockchaincenter-altcoin-season").urls == (
+        "https://www.blockchaincenter.net/altcoin-season-index/",
+    )
+    assert source_for_code("cbbi-public").urls == (
+        "https://colintalkscrypto.com/cbbi/",
+        "https://colintalkscrypto.com/cbbi/data/latest.json",
+    )
+
+    cbbi = source_for_code("cbbi-public")
+    assert is_source_url_allowed(cbbi, "https://colintalkscrypto.com/cbbi/")
+    assert is_source_url_allowed(
+        cbbi, "https://colintalkscrypto.com/cbbi/data/latest.json"
+    )
+    assert not is_source_url_allowed(
+        cbbi, "https://colintalkscrypto.com/cbbi/data/latest.json?cache=off"
+    )
+    assert not is_source_url_allowed(cbbi, "https://evil.invalid/cbbi/data/latest.json")
 
 
 def test_discovered_links_remain_inside_source_specific_paths() -> None:
@@ -724,7 +775,12 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
     )
 
     assert exit_code == 0
-    assert len(outcomes) == 12
+    assert len(outcomes) == 14
+    assert {
+        outcome.source_code
+        for outcome in outcomes
+        if outcome.source_code in {"blockchaincenter-altcoin-season", "cbbi-public"}
+    } == {"blockchaincenter-altcoin-season", "cbbi-public"}
     assert any(
         outcome.source_code == "mempool-btc-large-addresses"
         and outcome.status == "dry_run"

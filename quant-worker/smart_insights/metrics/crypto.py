@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from types import MappingProxyType
 
 
 METHODOLOGY_VERSION = "crypto-regime-v1"
@@ -44,6 +45,20 @@ CRYPTO_GROUP_COMPONENTS = {
     ),
     "sentiment": ("crypto.fear_greed.index",),
 }
+
+CBBI_COMPONENTS = MappingProxyType(
+    {
+        "PiCycle": "pi_cycle",
+        "RUPL": "rupl_nupl",
+        "RHODL": "rhodl",
+        "Puell": "puell",
+        "2YMA": "two_year_ma",
+        "Trolololo": "trolololo",
+        "MVRV": "mvrv",
+        "ReserveRisk": "reserve_risk",
+        "Woobull": "woobull",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +168,32 @@ _RAW_DEFINITIONS = (
     _definition("crypto.derivatives.open_interest", "Perpetual open interest", "native", "observed_daily", 0, 1440, source="deribit-public", evidence_only=True),
     _definition("crypto.coinshares.net_flow_usd", "Weekly digital asset fund flow", "USD", "weekly", 1, 10080, source="coinshares-weekly"),
     _definition("crypto.coinshares.aum_usd", "Digital asset fund AUM", "USD", "weekly", 0, 10080, source="coinshares-weekly", evidence_only=True),
+    _definition("crypto.derivatives.margin_borrow.annualized_rate", "Margin borrow annualized rate", "percent", "hourly", 0, 480, source="coinglass-margin-borrow", evidence_only=True),
+    _definition("crypto.derivatives.margin_borrow.daily_rate", "Margin borrow daily rate", "percent", "hourly", 0, 480, source="coinglass-margin-borrow", evidence_only=True),
+    _definition("crypto.derivatives.margin_borrow.hourly_rate", "Margin borrow hourly rate", "percent", "hourly", 0, 480, source="coinglass-margin-borrow", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.current_price_usd", "Liquidation max-pain current price", "USD", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.long_max_pain_price_usd", "Long liquidation max-pain price", "USD", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.short_max_pain_price_usd", "Short liquidation max-pain price", "USD", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.long_max_pain_level_usd", "Long liquidation max-pain level", "USD", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.short_max_pain_level_usd", "Short liquidation max-pain level", "USD", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.long_distance_ratio", "Long liquidation max-pain distance", "ratio", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.derivatives.liquidation.short_distance_ratio", "Short liquidation max-pain distance", "ratio", "observed_4h", 0, 480, source="coinglass-liquidation-maxpain", evidence_only=True),
+    _definition("crypto.cycle.altcoin_season.index", "Altcoin Season Index", "index", "daily", 0, 2880, source="blockchaincenter-altcoin-season", evidence_only=True),
+    _definition("crypto.cycle.cbbi.confidence", "CBBI Confidence", "percent", "daily", 0, 2880, source="cbbi-public", evidence_only=True),
+)
+
+_CBBI_COMPONENT_DEFINITIONS = tuple(
+    _definition(
+        f"crypto.cycle.cbbi.component.{slug}",
+        f"CBBI {provider_name}",
+        "percent",
+        "daily",
+        0,
+        2_880,
+        source="cbbi-public",
+        evidence_only=True,
+    )
+    for provider_name, slug in CBBI_COMPONENTS.items()
 )
 
 _MEMPOOL_DEFINITIONS = tuple(
@@ -246,6 +287,7 @@ _DERIVED_DEFINITIONS = (
 
 CRYPTO_METRIC_DEFINITIONS = (
     _RAW_DEFINITIONS
+    + _CBBI_COMPONENT_DEFINITIONS
     + _MEMPOOL_DEFINITIONS
     + _DVOL_OHLC_DEFINITIONS
     + _LARGE_ADDRESS_DEFINITIONS

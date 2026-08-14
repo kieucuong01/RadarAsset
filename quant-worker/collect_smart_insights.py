@@ -69,6 +69,7 @@ from smart_insights.validation import validate_observations
 
 SCHEDULES = (
     "daily",
+    "four-hourly",
     "weekly",
     "calendar-current",
     "calendar-next",
@@ -79,6 +80,7 @@ SCHEDULES = (
 )
 _SOURCE_SCHEDULE = {
     "daily": "daily",
+    "four-hourly": "four-hourly",
     "weekly": "weekly",
     "calendar-current": "calendar",
     "calendar-next": "calendar",
