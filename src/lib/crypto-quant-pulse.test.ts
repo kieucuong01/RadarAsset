@@ -150,6 +150,7 @@ describe("Crypto Quant Pulse chart model", () => {
 
     expect(observations.map((item) => item.kind)).toEqual(["sentiment", "etf", "onchain"]);
     expect(observations).toHaveLength(3);
+    expect(observations.find((item) => item.kind === "etf")?.unit).toBe("USD");
     expect(observations.every((item) => item.sourceCode && item.effectiveAt)).toBe(true);
     expect(observations.map((item) => item.label).join(" ")).not.toMatch(/mua|bán|buy|sell/i);
   });

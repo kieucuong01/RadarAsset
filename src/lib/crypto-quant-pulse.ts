@@ -145,7 +145,7 @@ export function buildCryptoOverviewObservations(
       kind: "etf",
       label: "ETF flow phiên gần nhất",
       value: latestEtf.total,
-      unit: "USD million",
+      unit: "USD",
       sourceCode: pulse.etfFlows.sourceCodes.join(", "),
       sourceUrl: "https://farside.co.uk",
       effectiveAt: latestEtf.effectiveAt,

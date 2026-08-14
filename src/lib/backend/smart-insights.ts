@@ -240,7 +240,7 @@ export async function loadMetrics(input: {
       ...(input.asset ? { asset: { symbol: input.asset } } : {}),
     },
     orderBy: [{ effectiveAt: "desc" }, { revision: "desc" }],
-    take: 500,
+    take: 5_000,
     include: {
       metricDefinition: true,
       provider: { select: { code: true } },
