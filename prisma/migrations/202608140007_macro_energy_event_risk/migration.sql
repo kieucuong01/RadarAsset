@@ -30,7 +30,7 @@ CREATE TABLE "global_event_observations" (
   "occurred_at" TIMESTAMPTZ(3) NOT NULL,
   "first_observed_at" TIMESTAMPTZ(3) NOT NULL,
   "last_observed_at" TIMESTAMPTZ(3) NOT NULL,
-  "normalized_severity" DECIMAL(8, 4) NOT NULL,
+  "normalized_severity" DECIMAL(8, 4),
   "provider_severity" DECIMAL(12, 4),
   "affected_count" INTEGER,
   "fatalities" INTEGER,
@@ -123,7 +123,7 @@ ALTER TABLE "global_event_cluster_members"
 
 ALTER TABLE "global_event_observations"
   ADD CONSTRAINT "global_event_observations_severity_check"
-  CHECK ("normalized_severity" BETWEEN 0 AND 100),
+  CHECK ("normalized_severity" IS NULL OR "normalized_severity" BETWEEN 0 AND 100),
   ADD CONSTRAINT "global_event_observations_coordinate_check"
   CHECK (("latitude" IS NULL AND "longitude" IS NULL) OR
     ("latitude" BETWEEN -90 AND 90 AND "longitude" BETWEEN -180 AND 180)),

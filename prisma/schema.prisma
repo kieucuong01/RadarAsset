@@ -753,7 +753,7 @@ model GlobalEventObservation {
   occurredAt         DateTime                  @map("occurred_at") @db.Timestamptz(3)
   firstObservedAt    DateTime                  @map("first_observed_at") @db.Timestamptz(3)
   lastObservedAt     DateTime                  @map("last_observed_at") @db.Timestamptz(3)
-  normalizedSeverity Decimal                   @map("normalized_severity") @db.Decimal(8, 4)
+  normalizedSeverity Decimal?                  @map("normalized_severity") @db.Decimal(8, 4)
   providerSeverity   Decimal?                  @map("provider_severity") @db.Decimal(12, 4)
   affectedCount      Int?                      @map("affected_count")
   fatalities         Int?
