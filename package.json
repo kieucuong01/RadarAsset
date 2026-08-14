@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:integration": "node scripts/run-integration-tests.mjs",
+    "test:e2e": "playwright test",
     "format": "prettier --write .",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
@@ -82,6 +83,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",

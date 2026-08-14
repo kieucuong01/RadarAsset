@@ -191,3 +191,69 @@ def test_heartbeat_progress_is_monotonic_and_exhausted_stale_run_times_out() -> 
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM organizations WHERE id = %s", (organization_id,))
             connection.commit()
+
+
+def test_cancel_after_claim_wins_before_completion_and_writes_no_artifact() -> None:
+    database_url = _test_database_url()
+    organization_id = str(uuid4())
+    run_id = str(uuid4())
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO organizations (id, name, slug, created_at) VALUES (%s, %s, %s, NOW())",
+                (organization_id, "Cancel race QA", f"cancel-race-{uuid4().hex}"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO quant_runs (
+                    id, organization_id, strategy_name, status, progress,
+                    parameters, dataset_version_ids, engine_version, deadline_at, created_at
+                ) VALUES (%s, %s, 'MA Crossover Backtest', 'queued', 0, '{}'::jsonb,
+                          '[]'::jsonb, 'cancel-race-v1', clock_timestamp() + INTERVAL '5 minutes',
+                          clock_timestamp())
+                """,
+                (run_id, organization_id),
+            )
+        connection.commit()
+
+    try:
+        with psycopg.connect(database_url, autocommit=False) as worker_connection:
+            repository = PostgresWorkerRepository(
+                worker_connection, worker_id="cancel-race-worker", lease_seconds=60
+            )
+            claimed = repository.claim_next_run()
+            assert claimed is not None and claimed.id == run_id
+            with psycopg.connect(database_url) as cancel_connection:
+                with cancel_connection.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE quant_runs SET status = 'cancel_requested', cancel_requested_at = NOW() WHERE id = %s",
+                        (run_id,),
+                    )
+                cancel_connection.commit()
+            assert repository.checkpoint_run(claimed, 50) == "cancelled"
+            assert not repository.complete_run(
+                claimed,
+                {"totalReturnPct": 1},
+                [{
+                    "kind": "manifest",
+                    "checksum": "b" * 64,
+                    "payload": {"runId": run_id},
+                    "rowCount": 1,
+                    "schemaVersion": 1,
+                }],
+            )
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status, progress FROM quant_runs WHERE id = %s", (run_id,)
+                )
+                assert cursor.fetchone() == ("cancelled", 100)
+                cursor.execute(
+                    "SELECT count(*) FROM quant_run_artifacts WHERE quant_run_id = %s", (run_id,)
+                )
+                assert cursor.fetchone() == (0,)
+    finally:
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM organizations WHERE id = %s", (organization_id,))
+            connection.commit()
