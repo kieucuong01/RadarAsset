@@ -45,10 +45,18 @@ describe("Smart Insights source guard", () => {
       expect(source).toContain(`function ${name}`);
   });
 
-  it("keeps the old shell while replacing the three overlapping intelligence blocks", () => {
+  it("keeps the active legacy shell while removing overlapping intelligence blocks", () => {
     const source = readSmartInsightsSourceTree();
-    for (const name of ["LegacyDailyHero", "LegacyMarketPulse", "LegacyWatchlist"])
+    for (const name of ["LegacyDailyHero", "LegacyMarketPulse"])
       expect(source).toContain(`function ${name}`);
+
+    for (const removed of [
+      "LegacyWatchlist",
+      "LegacyAIDigest",
+      "LegacyInvestorIntelligence",
+      "LegacyExpertSignals",
+    ])
+      expect(source).not.toContain(`function ${removed}`);
 
     const smartInsightsPage = readFileSync(
       join(process.cwd(), "src", "components", "SmartInsights.tsx"),
