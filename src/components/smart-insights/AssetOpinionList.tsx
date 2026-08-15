@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2, CircleMinus, TrendingDown, TrendingUp } from "lucide-react";
 
 import { FreshnessBadge } from "./FreshnessBadge";
+import { failedGateLabel, isTechnicalQuantOpinion } from "./asset-opinion-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,14 +52,22 @@ function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
     return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
   }
   if (opinion.explanationStatus === "quant_only") {
+    if (isTechnicalQuantOpinion(opinion)) {
+      return locale === "vi"
+        ? "Quant kỹ thuật · Tin cậy giới hạn"
+        : "Technical quant · Capped confidence";
+    }
     return locale === "vi"
       ? "Phân tích định lượng · Chỉ có quan điểm định lượng"
       : "Quant analysis · Quant view only";
   }
   if (opinion.explanationStatus === "insufficient_data") {
+    const reason = opinion.failedGates[0]
+      ? failedGateLabel(opinion.failedGates[0], locale)
+      : null;
     return locale === "vi"
-      ? "Chưa đủ dữ liệu · Chưa đủ bằng chứng"
-      : "Insufficient data · Insufficient evidence";
+      ? `Chưa đủ dữ liệu · Chưa đủ bằng chứng${reason ? `: ${reason}` : ""}`
+      : `Insufficient data · Insufficient evidence${reason ? `: ${reason}` : ""}`;
   }
   if (opinion.explanationStatus === "unavailable") {
     return locale === "vi" ? "Dữ liệu chưa khả dụng" : "Data unavailable";

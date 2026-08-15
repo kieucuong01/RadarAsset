@@ -22,7 +22,13 @@ import {
 } from "recharts";
 
 import { AssetOpinionCalculation } from "./AssetOpinionCalculation";
-import { metricLabel, pillarLabel } from "./asset-opinion-labels";
+import {
+  failedGateLabel,
+  isTechnicalQuantOpinion,
+  metricLabel,
+  pillarLabel,
+  technicalQuantLimitation,
+} from "./asset-opinion-labels";
 import { FreshnessBadge } from "./FreshnessBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,6 +115,9 @@ function analysisStatus(opinion: AssetOpinionModel, locale: Locale) {
     return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
   }
   if (opinion.explanationStatus === "quant_only") {
+    if (isTechnicalQuantOpinion(opinion)) {
+      return locale === "vi" ? "Quant kỹ thuật" : "Technical quant";
+    }
     return locale === "vi" ? "Phân tích định lượng" : "Quant analysis";
   }
   return locale === "vi" ? "Chưa đủ dữ liệu" : "Insufficient data";
@@ -266,6 +275,7 @@ export function AssetOpinionDetail({
   const insufficient =
     opinion.explanationStatus === "insufficient_data" ||
     opinion.explanationStatus === "unavailable";
+  const technicalLimitation = technicalQuantLimitation(opinion, locale);
   return (
     <Card className="min-w-0 border-primary/20 shadow-none" data-testid="asset-opinion-detail">
       <CardHeader className="gap-4">
@@ -310,17 +320,30 @@ export function AssetOpinionDetail({
             <div className="mt-3 text-sm leading-6 text-muted-foreground">
               {quantOnly ? (
                 <p>
-                  {locale === "vi"
-                    ? "Chỉ có quan điểm định lượng; phần diễn giải AI chưa vượt qua kiểm tra bằng chứng."
-                    : "Quant view only; the AI explanation did not pass evidence verification."}
+                  {technicalLimitation
+                    ? locale === "vi"
+                      ? "Quan điểm Quant kỹ thuật được tính từ xu hướng giá đã kiểm định."
+                      : "The technical-quant view is calculated from validated price trends."
+                    : locale === "vi"
+                      ? "Chỉ có quan điểm định lượng; phần diễn giải AI chưa vượt qua kiểm tra bằng chứng."
+                      : "Quant view only; the AI explanation did not pass evidence verification."}
                 </p>
               ) : null}
               {insufficient ? (
-                <p>
-                  {locale === "vi"
-                    ? "Chưa đủ bằng chứng để đưa ra quan điểm hoặc hành động."
-                    : "Insufficient evidence for a stance or action."}
-                </p>
+                <div>
+                  <p>
+                    {locale === "vi"
+                      ? "Chưa đủ bằng chứng để đưa ra quan điểm hoặc hành động."
+                      : "Insufficient evidence for a stance or action."}
+                  </p>
+                  {opinion.failedGates.length ? (
+                    <ul className="mt-2 grid gap-1">
+                      {opinion.failedGates.slice(0, 3).map((gate) => (
+                        <li key={gate}>• {failedGateLabel(gate, locale)}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
               ) : null}
               {!quantOnly && !insufficient ? <p>{opinion.thesis}</p> : null}
             </div>
@@ -379,6 +402,14 @@ export function AssetOpinionDetail({
         </div>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-6">
+        {technicalLimitation ? (
+          <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <AlertTriangle className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+              <p>{technicalLimitation}</p>
+            </div>
+          </section>
+        ) : null}
         <AssetOpinionCalculation opinion={opinion} locale={locale} onEvidence={onEvidence} />
         <Charts opinion={opinion} locale={locale} />
         {opinion.explanationStatus === "accepted" ? (

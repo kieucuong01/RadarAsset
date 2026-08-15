@@ -1,3 +1,5 @@
+import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+
 export type AssetOpinionLocale = "vi" | "en";
 
 const METRICS: Record<string, { vi: string; en: string }> = {
@@ -47,10 +49,69 @@ const PILLARS: Record<string, { vi: string; en: string }> = {
   foreign_flow: { vi: "Dòng tiền nước ngoài", en: "Foreign flow" },
 };
 
+const FAILED_GATES: Record<string, { vi: string; en: string }> = {
+  MINIMUM_60_DAILY_BARS: {
+    vi: "Thiếu tối thiểu 60 phiên giá ngày",
+    en: "Fewer than 60 daily price bars",
+  },
+  NUMERIC_FACTS_MINIMUM_3: {
+    vi: "Cần ít nhất 3 chỉ số định lượng đạt chuẩn",
+    en: "At least 3 qualified quant metrics are required",
+  },
+  SOURCE_FAMILIES_MINIMUM_1: {
+    vi: "Chưa có nguồn dữ liệu đạt chuẩn",
+    en: "No qualified data source is available",
+  },
+  SOURCE_FAMILIES_MINIMUM_2: {
+    vi: "Cần ít nhất 2 nhóm nguồn dữ liệu độc lập",
+    en: "At least 2 independent source families are required",
+  },
+  CRITICAL_INPUT_STALE: {
+    vi: "Dữ liệu quan trọng đã quá hạn cập nhật",
+    en: "A critical input is stale",
+  },
+  PILLAR_COVERAGE_MINIMUM_50: {
+    vi: "Độ phủ các trụ cột chưa đạt 50%",
+    en: "Pillar coverage is below 50%",
+  },
+  PILLAR_COVERAGE_MINIMUM_60: {
+    vi: "Độ phủ các trụ cột chưa đạt 60%",
+    en: "Pillar coverage is below 60%",
+  },
+  STORED_CONTRACT_INVALID: {
+    vi: "Bản phân tích lưu trữ không còn đúng định dạng",
+    en: "The stored analysis contract is invalid",
+  },
+};
+
 export function metricLabel(code: string, locale: AssetOpinionLocale) {
   return METRICS[code]?.[locale] ?? code.replaceAll(".", " · ");
 }
 
 export function pillarLabel(code: string, locale: AssetOpinionLocale) {
   return PILLARS[code]?.[locale] ?? code.replaceAll("_", " ");
+}
+
+export function failedGateLabel(code: string, locale: AssetOpinionLocale) {
+  return FAILED_GATES[code]?.[locale] ?? code.replaceAll("_", " ");
+}
+
+export function isTechnicalQuantOpinion(opinion: AssetOpinionModel) {
+  return (
+    opinion.quantScore !== null &&
+    opinion.decisionInputs.length >= 3 &&
+    opinion.decisionInputs.every((input) => input.metricCode.startsWith("market."))
+  );
+}
+
+export function technicalQuantLimitation(opinion: AssetOpinionModel, locale: AssetOpinionLocale) {
+  if (!isTechnicalQuantOpinion(opinion)) return null;
+  if (opinion.symbol === "XAU") {
+    return locale === "vi"
+      ? "Độ tin cậy được giới hạn vì chưa có dữ liệu vĩ mô/lợi suất và vị thế CFTC đạt chuẩn."
+      : "Confidence is capped because qualified macro/yield and CFTC positioning data are absent.";
+  }
+  return locale === "vi"
+    ? "Độ tin cậy được giới hạn vì chưa có dòng tiền độc lập ngoài dữ liệu giá và VNINDEX."
+    : "Confidence is capped because independent flow data beyond price and VNINDEX is absent.";
 }

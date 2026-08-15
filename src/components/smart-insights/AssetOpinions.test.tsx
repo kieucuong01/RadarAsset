@@ -171,9 +171,48 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Chưa đủ bằng chứng");
     expect(html).toContain("Phân tích định lượng");
     expect(html).toContain("Chưa đủ dữ liệu");
+    expect(html).toContain("Cần ít nhất 2 nhóm nguồn dữ liệu độc lập");
     expect(html).not.toContain("AI đã phân tích");
     expect(html).not.toContain("Dòng tiền 1.00 tiếp tục hỗ trợ");
     expect(html).not.toContain("Dữ liệu mẫu");
+  });
+
+  it("labels technical quant opinions and states their confidence limitation", () => {
+    const technicalInput = {
+      ...opinion().decisionInputs[0],
+      metricCode: "market.return_20d",
+      pillarCode: "trend",
+    };
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[
+          opinion({
+            symbol: "XAU",
+            assetName: "Gold",
+            explanationStatus: "quant_only",
+            decisionInputs: [
+              technicalInput,
+              { ...technicalInput, evidenceId: "e2", metricCode: "market.return_60d" },
+              { ...technicalInput, evidenceId: "e3", metricCode: "market.ma_50_position" },
+            ],
+            evidence: [
+              opinion().evidence[0],
+              { ...opinion().evidence[1], id: "e2", metricCode: "market.return_60d" },
+              { ...opinion().evidence[1], id: "e3", metricCode: "market.ma_50_position" },
+            ],
+            supportingEvidenceIds: ["e1"],
+            contradictingEvidenceIds: ["e2"],
+          }),
+        ]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Quant kỹ thuật");
+    expect(html).toContain("Độ tin cậy được giới hạn");
+    expect(html).toContain("vĩ mô/lợi suất và vị thế CFTC");
   });
 
   it("distinguishes a missing portfolio from a real zero-weight asset", () => {
