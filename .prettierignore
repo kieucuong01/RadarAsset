@@ -1,6 +1,14 @@
 node_modules
 .next
 .npm-cache
+.venv
+.worktrees
+.local-data
+.pytest-*
+graphify-out
+test-results
+playwright-report
+quant-worker/.runtime
 dist
 .output
 pnpm-lock.yaml
