@@ -80,6 +80,7 @@ Current verified and enabled sources:
 | `defillama-chains`            | Crypto/on-chain                           | Daily                       | API                                                               |
 | `deribit-public`              | Crypto/derivatives                        | Daily                       | API                                                               |
 | `cryptocraft`                 | Macro/calendar                            | Due-state calendar schedule | Scrapling                                                         |
+| `blockchaincenter-altcoin-season` | Crypto/altcoin market rotation        | Daily                       | Scrapling                                                         |
 | `farside-btc-etf`             | Crypto/Bitcoin ETF flows                  | Daily                       | Scrapling                                                         |
 | `farside-eth-etf`             | Crypto/Ethereum ETF flows                 | Daily                       | Scrapling                                                         |
 | `farside-sol-etf`             | Crypto/Solana ETF flows                   | Daily                       | Scrapling                                                         |
@@ -94,8 +95,11 @@ Implemented but disabled pending a successful deployment-environment smoke:
 | `cftc-legacy`, `cftc-disaggregated` | Weekly             | Provider returned `HTTP_ERROR` from the deployment network                                                                                                                                                                                       |
 | `coinglass-margin-borrow`           | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
 | `coinglass-liquidation-maxpain`     | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
-| `blockchaincenter-altcoin-season`   | Daily              | Fixture parser is implemented; pending live SSR schema verification and PostgreSQL publication                                                                                                                                                   |
 | `cbbi-public`                       | Daily              | Public page/JSON parser is implemented; pending live schema verification and PostgreSQL publication                                                                                                                                              |
+
+The 2026-08-15 bounded production-parser smoke fetched 3 BlockchainCenter observations and
+195/165/105 Farside BTC/ETH/SOL observations. Live smoke is write-free; enabled scheduled
+collection remains responsible for PostgreSQL publication and Data Health freshness.
 
 WGC is retired from the active registry, scheduler, Data Health, and Gold score. Historical WGC
 providers, runs, snapshots, observations, evidence, and derived snapshots remain in PostgreSQL for

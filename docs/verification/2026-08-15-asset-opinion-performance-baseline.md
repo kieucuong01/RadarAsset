@@ -159,3 +159,62 @@ The live refresh is recorded separately from the deterministic E2E fixture:
 - The latest BTC briefing used seven bounded decision inputs/evidence rows, not the historical
   observations returned by collectors. Gold and VNINDEX remain `insufficient_data` when required
   source families are unavailable.
+
+## Altcoin factor-opinion extension verification
+
+Implementation head before this verification-note commit: `e095c70` on
+`feat/altcoin-factor-opinions`.
+
+The extension resolves each asset through the catalog, removes stablecoins before the 25-asset
+limit, and keeps BTC's existing profile unchanged. Standard altcoins use asset trend, reusable BTC
+20/60-day trend, Altcoin Season, macro liquidity/rates, and broad sentiment. ETH and SOL additionally
+use only their own validated Farside `TOTAL`; CoinShares and BTC on-chain inputs remain BTC-only.
+The optional FRED M2 input is derived as a 4-week change and is excluded from the existing BTC macro
+regime calculation.
+
+### Regression and build evidence
+
+```text
+npm test -- --reporter=dot
+82 files passed; 436 tests passed
+
+quant-worker pytest --basetemp .pytest-tmp -q
+609 passed; 28 skipped
+
+npm run lint
+0 errors; 13 pre-existing Fast Refresh warnings
+
+npm run build
+production compile, TypeScript, page-data collection, and static generation passed
+
+E2E_PRODUCTION=1 npm run test:e2e -- e2e/smart-insights-asset-opinions.spec.ts
+2 tests passed: desktop and mobile
+```
+
+| Metric                               |                                Result |                            Budget | Status   |
+| ------------------------------------ | ------------------------------------: | --------------------------------: | -------- |
+| Assets                               |                                    25 |                        At most 25 | Pass     |
+| Decision inputs / evidence per asset |                         5 / 5 maximum |                   At most 12 / 12 | Pass     |
+| Supporting / contradicting evidence  |                         5 / 0 maximum |                     At most 5 / 3 | Pass     |
+| Briefing endpoint p50 / p95          |                            28 / 45 ms |                p95 at most 200 ms | Pass     |
+| Raw / gzip payload                   |                      70,097 / 5,609 B |                250,000 / 75,000 B | Pass     |
+| Desktop LCP / INP / CLS              |                   480 ms / 144 ms / 0 |           2,500 ms / 200 ms / 0.1 | Pass     |
+| Mobile LCP / INP / CLS               |                   412 ms / 104 ms / 0 |           2,500 ms / 200 ms / 0.1 | Pass     |
+| Initial JavaScript                   | 472,439 encoded B across 20 resources | Recorded; no valid baseline delta | Recorded |
+
+The authenticated benchmark issued one warm-up plus 20 measured briefing requests (`requestCount=21`).
+The E2E assertions select ETH, ADA, and SOL: ETH/SOL expose BTC trend, Altcoin rotation, and their ETF
+factor; ADA exposes Altcoin rotation without an ETF factor; USDT and USDC are absent.
+
+### Live-source boundary on 2026-08-15
+
+| Source                            | Result                          | Effective date | Records |
+| --------------------------------- | ------------------------------- | -------------- | ------: |
+| `blockchaincenter-altcoin-season` | Succeeded                       | 2026-08-15     |       3 |
+| `farside-btc-etf`                 | Succeeded                       | 2026-08-14     |     195 |
+| `farside-eth-etf`                 | Succeeded                       | 2026-08-14     |     165 |
+| `farside-sol-etf`                 | Succeeded                       | 2026-08-14     |     105 |
+| `fred`                            | Failed closed: `CONFIG_MISSING` | Not available  |       0 |
+
+The FRED/M2 code path is covered by deterministic repository and collector tests, but no live M2
+claim is made until `FRED_API_KEY` is configured and a bounded production-parser smoke succeeds.
