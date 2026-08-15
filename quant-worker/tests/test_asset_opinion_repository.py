@@ -350,3 +350,77 @@ def test_loader_scopes_global_etf_rows_to_requested_asset_dimension() -> None:
     assert dict(result.facts_for("ETH")[0].dimensions)["asset"] == "ETH"
     assert dict(result.facts_for("SOL")[0].dimensions)["asset"] == "SOL"
     assert all(row.metric_code != "crypto.etf.net_flow_usd" for row in result.facts_for("ADA"))
+
+
+def test_loader_derives_latest_m2_four_week_percent_change_from_real_history() -> None:
+    rows = []
+    for index in range(24):
+        effective_at = NOW - timedelta(weeks=23 - index)
+        row = fact_row(
+            None,
+            "macro.m2_busd",
+            effective_at=effective_at,
+            value=str(Decimal("20000") + Decimal("100") * index),
+        )
+        row.update(
+            id=f"m2-{index}",
+            unit="USD billion",
+            provider_code="fred",
+            source_url="https://fred.stlouisfed.org/series/M2SL",
+            signal_score=None,
+            signal_percentile=None,
+            raw_percentile=None,
+            raw_history_count=24,
+        )
+        rows.append(row)
+
+    result = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=rows),
+        (("ADA", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+
+    liquidity = next(
+        row for row in result.facts_for("ADA") if row.metric_code == "macro.m2_change_4w"
+    )
+    assert liquidity.value == Decimal("22300") / Decimal("21900") - Decimal("1")
+    assert liquidity.signed_score is not None
+    assert liquidity.normalization_method == "empirical_percentile_365d"
+    assert liquidity.underlying_ids == ("m2-19", "m2-23")
+    assert liquidity.source_code == "fred"
+
+
+def test_loader_keeps_short_or_stale_m2_history_out_of_decision_inputs() -> None:
+    short_rows = []
+    for index in range(8):
+        row = fact_row(
+            None,
+            "macro.m2_busd",
+            effective_at=NOW - timedelta(weeks=7 - index),
+            value=str(Decimal("20000") + index),
+        )
+        row.update(id=f"short-m2-{index}", provider_code="fred", signal_score=None)
+        short_rows.append(row)
+    short = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=short_rows),
+        (("ADA", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+    short_fact = next(row for row in short.facts_for("ADA") if row.metric_code == "macro.m2_change_4w")
+    assert short_fact.signed_score is None
+
+    stale_rows = [dict(row) for row in short_rows]
+    for stale_row in stale_rows:
+        stale_row["observed_at"] = NOW - timedelta(days=8)
+        stale_row["effective_at"] = stale_row["effective_at"] - timedelta(days=8)
+    stale = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=stale_rows),
+        (("ADA", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+    stale_fact = next(row for row in stale.facts_for("ADA") if row.metric_code == "macro.m2_change_4w")
+    assert stale_fact.fresh is False
+    assert stale_fact.signed_score is None

@@ -613,7 +613,14 @@ def build_batch_collectors(
         batches = tuple(
             collector.collect(
                 series,
-                (as_of - timedelta(days=overlap_days)).date(),
+                (
+                    as_of
+                    - timedelta(
+                        days=max(overlap_days, 196)
+                        if series.series_id == "M2SL"
+                        else overlap_days
+                    )
+                ).date(),
                 as_of.date(),
             )
             for series in FRED_SERIES.values()

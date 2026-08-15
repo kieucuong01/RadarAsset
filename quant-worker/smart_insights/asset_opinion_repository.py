@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -202,6 +202,7 @@ MACRO_DECISION_METRICS = frozenset(
         "macro.real_yield.10y_pct",
         "macro.usd_broad_index",
         "macro.fed_balance_sheet_change_4w",
+        "macro.m2_change_4w",
         "macro.reverse_repo_change_4w",
         "macro.tga_change_4w",
         "macro.growth_surprise",
@@ -317,6 +318,110 @@ def _raw_normalization_spec(metric_code: str) -> tuple[int, str] | None:
     if metric_code.startswith(("crypto.onchain.", "macro.")):
         return (20, "empirical_percentile_365d")
     return None
+
+
+def _percentile_rank(values: tuple[Decimal, ...], current: Decimal) -> Decimal:
+    if not values:
+        return Decimal("0")
+    return (
+        Decimal(sum(1 for value in values if value <= current)) / Decimal(len(values))
+    ).quantize(Decimal("0.0001"))
+
+
+def _m2_change_fact(
+    rows: tuple[dict[str, object], ...], *, as_of: datetime
+) -> QuantFact | None:
+    by_id: dict[str, dict[str, object]] = {}
+    for row in rows:
+        if row.get("asset_symbol") is not None or row.get("metric_code") != "macro.m2_busd":
+            continue
+        effective_at = _aware(row["effective_at"])
+        observed_at = _aware(row["observed_at"])
+        if effective_at > as_of or observed_at > as_of:
+            continue
+        row_id = str(row["id"])
+        current = by_id.get(row_id)
+        if current is None or (
+            effective_at,
+            observed_at,
+            row_id,
+        ) > (
+            _aware(current["effective_at"]),
+            _aware(current["observed_at"]),
+            str(current["id"]),
+        ):
+            by_id[row_id] = row
+    ordered = tuple(
+        sorted(
+            by_id.values(),
+            key=lambda row: (
+                _aware(row["effective_at"]),
+                _aware(row["observed_at"]),
+                str(row["id"]),
+            ),
+        )
+    )
+    changes: list[tuple[Decimal, dict[str, object], dict[str, object]]] = []
+    for index, current in enumerate(ordered):
+        cutoff = _aware(current["effective_at"]) - timedelta(days=28)
+        eligible = tuple(
+            row for row in ordered[:index] if _aware(row["effective_at"]) <= cutoff
+        )
+        if not eligible:
+            continue
+        previous = eligible[-1]
+        previous_value = Decimal(str(previous["value"]))
+        if previous_value <= 0:
+            continue
+        change = Decimal(str(current["value"])) / previous_value - Decimal("1")
+        changes.append((change, previous, current))
+    if not changes:
+        return None
+
+    value, previous, current = changes[-1]
+    effective_at = _aware(current["effective_at"])
+    observed_at = max(
+        _aware(previous["observed_at"]), _aware(current["observed_at"])
+    )
+    freshness_sla = Decimal(str(current["freshness_sla_minutes"]))
+    observed_age = Decimal(str((as_of - observed_at).total_seconds() / 60))
+    effective_age = Decimal(str((as_of - effective_at).total_seconds() / 60))
+    fresh = (
+        str(current["quality_status"]) in {"passed", "warning"}
+        and Decimal("0") <= observed_age <= freshness_sla
+        and Decimal("0") <= effective_age <= freshness_sla
+    )
+    percentile = (
+        _percentile_rank(tuple(row[0] for row in changes), value)
+        if len(changes) >= 20
+        else None
+    )
+    signed_score = (
+        _score((Decimal("2") * percentile - Decimal("1")) * Decimal("100"))
+        if fresh and percentile is not None
+        else None
+    )
+    return QuantFact(
+        id=f"derived:m2:4w:{effective_at.isoformat()}",
+        metric_code="macro.m2_change_4w",
+        value=value,
+        unit="PERCENT",
+        effective_at=effective_at,
+        observed_at=observed_at,
+        source_family=str(current["provider_code"]),
+        source_code=str(current["provider_code"]),
+        source_url=str(current["source_url"]),
+        signed_score=signed_score,
+        confidence=Decimal("100") if fresh else Decimal("0"),
+        fresh=fresh,
+        critical=False,
+        methodology_version="m2-liquidity-change-4w-v1",
+        underlying_ids=(str(previous["id"]), str(current["id"])),
+        dimensions=(("lookback", "4w"), ("series", "M2SL")),
+        percentile=percentile,
+        normalization_method="empirical_percentile_365d",
+        signal_market="macro" if signed_score is not None else None,
+    )
 
 
 def _fact_for_asset(
@@ -490,25 +595,24 @@ def load_asset_opinion_market_data(
         )
         for symbol in requested
     )
-    facts_output = tuple(
-        (
-            symbol,
-            latest_decision_facts(
-                tuple(
-                    fact
-                    for candidate_rows in grouped_fact_rows.values()
-                    if (
-                        fact := _fact_for_asset(
-                            candidate_rows,
-                            symbol=symbol,
-                            market=asset_markets[symbol],
-                            as_of=as_of,
-                        )
-                    )
-                    is not None
+    m2_fact = _m2_change_fact(raw_facts, as_of=as_of)
+    fact_rows_output: list[tuple[str, tuple[QuantFact, ...]]] = []
+    for symbol in canonical_assets:
+        facts = tuple(
+            fact
+            for candidate_rows in grouped_fact_rows.values()
+            if (
+                fact := _fact_for_asset(
+                    candidate_rows,
+                    symbol=symbol,
+                    market=asset_markets[symbol],
+                    as_of=as_of,
                 )
-            ),
+            )
+            is not None
         )
-        for symbol in canonical_assets
-    )
+        if asset_markets[symbol] == "crypto" and m2_fact is not None:
+            facts = (*facts, m2_fact)
+        fact_rows_output.append((symbol, latest_decision_facts(facts)))
+    facts_output = tuple(fact_rows_output)
     return AssetOpinionMarketData(bars_output, facts_output)

@@ -232,6 +232,24 @@ def test_altcoin_season_uses_centered_rotation_score(value: str, expected: str) 
     assert rotation.normalization_method == "altcoin_season_centered_v1"
 
 
+def test_altcoin_profile_accepts_m2_as_quantified_macro_liquidity() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=(
+            *alt_context_facts(),
+            fact("macro.m2_change_4w", "fred", score="55", value="0.02"),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert any(
+        row.metric_code == "macro.m2_change_4w" and row.pillar_code == "macro"
+        for row in opinion.decision_inputs
+    )
+
+
 def test_fact_sheet_ignores_future_and_uses_independent_sources() -> None:
     future = MarketBar("future", "BTC", NOW + timedelta(days=1), Decimal("999"), NOW + timedelta(days=1))
 

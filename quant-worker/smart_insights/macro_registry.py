@@ -61,6 +61,7 @@ FRED_SERIES = MappingProxyType(
         "PAYEMS": _series("PAYEMS", "macro.payroll_thousands", "Total Nonfarm Payrolls", "thousand", "monthly", 1),
         "UNRATE": _series("UNRATE", "macro.unemployment_pct", "Unemployment Rate", "%", "monthly", -1),
         "GDP": _series("GDP", "macro.gdp_busd", "US Gross Domestic Product", "USD billion", "quarterly", 1),
+        "M2SL": _series("M2SL", "macro.m2_busd", "US M2 Money Stock", "USD billion", "weekly", 1),
     }
 )
 

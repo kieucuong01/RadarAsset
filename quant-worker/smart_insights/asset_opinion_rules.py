@@ -80,6 +80,7 @@ CRYPTO_MACRO_RULES = {
     "macro.real_yield.10y_pct": InputRule("macro", Decimal("0.25")),
     "macro.usd_broad_index": InputRule("macro", Decimal("0.25")),
     "macro.fed_balance_sheet_change_4w": InputRule("macro", Decimal("0.20")),
+    "macro.m2_change_4w": InputRule("macro", Decimal("0.20")),
     "macro.reverse_repo_change_4w": InputRule("macro", Decimal("0.10")),
     "macro.tga_change_4w": InputRule("macro", Decimal("0.10")),
     "macro.growth_surprise": InputRule("macro", Decimal("0.05")),

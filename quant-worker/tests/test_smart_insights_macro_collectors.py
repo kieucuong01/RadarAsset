@@ -8,9 +8,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from collect_smart_insights import run_live_smoke
+import collect_smart_insights
+from collect_smart_insights import build_batch_collectors, run_live_smoke
+from smart_insights.collectors import CollectionBatch
 from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.fred import FredCollector
+from smart_insights.contracts import RawSnapshot
 from smart_insights.http import HttpResponse
 from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
 
@@ -43,10 +46,12 @@ class FakeTransport:
 def test_macro_registries_freeze_official_series_and_contracts() -> None:
     assert FRED_SERIES["DFII10"].metric_code == "macro.real_yield.10y_pct"
     assert FRED_SERIES["DFII10"].direction == -1
+    assert FRED_SERIES["M2SL"].metric_code == "macro.m2_busd"
+    assert FRED_SERIES["M2SL"].direction == 1
     assert set(FRED_SERIES) == {
         "DGS2", "DGS10", "DFII10", "DFF", "SOFR", "WALCL", "RRPONTSYD",
         "WTREGEN", "DTWEXBGS", "CPIAUCSL", "CPILFESL", "PCEPI", "PAYEMS",
-        "UNRATE", "GDP",
+        "UNRATE", "GDP", "M2SL",
     }
     assert CFTC_MARKETS["BTC"].contract_market_code == "133741"
     assert CFTC_MARKETS["USD_INDEX"].contract_market_code == "098662"
@@ -102,6 +107,41 @@ def test_fred_rejects_unknown_series_and_requires_key() -> None:
         },
     )
     assert missing.error_code == "CONFIG_MISSING"
+
+
+def test_fred_builder_backfills_enough_m2_history_without_expanding_other_series(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, date, date]] = []
+
+    class RecordingFredCollector:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def collect(self, series, start: date, end: date) -> CollectionBatch:
+            calls.append((series.series_id, start, end))
+            source = collect_smart_insights.source_for_code("fred")
+            return CollectionBatch(
+                source,
+                RawSnapshot(
+                    content=b"{}",
+                    content_type="application/json",
+                    source_url=source.urls[0],
+                    effective_at=None,
+                    published_at=None,
+                    observed_at=NOW,
+                ),
+                (),
+            )
+
+    monkeypatch.setattr(collect_smart_insights, "FredCollector", RecordingFredCollector)
+    monkeypatch.setenv("SMART_INSIGHTS_FRED_OVERLAP_DAYS", "14")
+
+    build_batch_collectors()["fred"](NOW)
+
+    ranges = {series_id: (end - start).days for series_id, start, end in calls}
+    assert ranges["M2SL"] >= 196
+    assert ranges["DGS10"] == 14
 
 
 @pytest.mark.parametrize(

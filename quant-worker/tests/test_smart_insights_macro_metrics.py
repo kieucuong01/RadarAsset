@@ -7,7 +7,9 @@ import pytest
 
 from smart_insights.macro_registry import classify_surprise_event
 from smart_insights.metrics.macro import (
+    COMPONENT_WEIGHTS,
     MACRO_GROUP_WEIGHTS,
+    METRIC_DEFINITIONS_BY_CODE,
     event_risk_score,
     market_event_risk,
     parse_release_number,
@@ -105,3 +107,11 @@ def test_surprise_registry_maps_only_approved_directional_events() -> None:
     assert inflation.series_key.endswith(":core-cpi-m-m")
     assert classify_surprise_event("US", "USD", "Fed Chair Speaks") is None
     assert sum(MACRO_GROUP_WEIGHTS.values(), Decimal("0")) == Decimal("1.00")
+
+
+def test_m2_change_is_registered_without_changing_macro_regime_components() -> None:
+    definition = METRIC_DEFINITIONS_BY_CODE["macro.m2_change_4w"]
+    assert definition.direction == 1
+    assert definition.unit == "%"
+    assert definition.frequency == "weekly"
+    assert "macro.m2_change_4w" not in COMPONENT_WEIGHTS

@@ -128,6 +128,7 @@ _CFTC_DEFINITIONS = tuple(
 
 _DERIVED_DEFINITIONS = (
     _definition("macro.fed_balance_sheet_change_4w", "Fed balance sheet 4-week change", "USD million", "weekly", 1, 10_080, lookback_days=28),
+    _definition("macro.m2_change_4w", "US M2 money stock 4-week change", "%", "weekly", 1, 10_080, lookback_days=28),
     _definition("macro.reverse_repo_change_4w", "Reverse repo 4-week change", "USD billion", "daily", -1, 4_320, lookback_days=28),
     _definition("macro.tga_change_4w", "Treasury General Account 4-week change", "USD billion", "weekly", -1, 10_080, lookback_days=28),
     _definition("macro.growth_surprise", "Growth release surprise", "z_score", "event", 1, 10_080, source="cryptocraft"),
