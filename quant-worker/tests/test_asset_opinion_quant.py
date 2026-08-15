@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from smart_insights.asset_opinion_contracts import AssetCandidate, MarketBar, QuantFact
 from smart_insights.asset_opinion_quant import build_btc_context_facts, build_quant_opinion
 from smart_insights.asset_opinion_rules import pillar_weights
@@ -199,6 +201,35 @@ def test_btc_context_uses_explainable_bounded_returns() -> None:
     assert all(row.normalization_method == "return_x400_bounded_v1" for row in context)
     assert all(row.source_family == "market_bars" for row in context)
     assert tuple(len(row.underlying_ids) for row in context) == (21, 61)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    (("25", "-50"), ("50", "0"), ("75", "50")),
+)
+def test_altcoin_season_uses_centered_rotation_score(value: str, expected: str) -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=(
+            fact(
+                "crypto.cycle.altcoin_season.index",
+                "blockchaincenter-altcoin-season",
+                score=None,
+                value=value,
+            ),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    rotation = next(
+        row
+        for row in opinion.decision_inputs
+        if row.metric_code == "crypto.cycle.altcoin_season.index"
+    )
+    assert rotation.normalized_score == Decimal(expected)
+    assert rotation.normalization_method == "altcoin_season_centered_v1"
 
 
 def test_fact_sheet_ignores_future_and_uses_independent_sources() -> None:

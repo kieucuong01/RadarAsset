@@ -69,6 +69,7 @@ def fact_row(
     methodology: str = "crypto-regime-v1",
     effective_at: datetime = NOW,
     dimensions: dict[str, str] | None = None,
+    value: str = "12.5",
 ) -> dict[str, object]:
     resolved_dimensions = dimensions or (
         {"asset": "BTC", "fund": "TOTAL"}
@@ -81,7 +82,7 @@ def fact_row(
         "id": f"fact-{symbol or 'global'}-{metric_code}",
         "asset_symbol": symbol,
         "metric_code": metric_code,
-        "value": Decimal("12.5"),
+        "value": Decimal(value),
         "unit": "USD million",
         "effective_at": effective_at,
         "observed_at": NOW,
@@ -296,3 +297,56 @@ def test_loader_excludes_noise_and_caps_latest_decision_facts() -> None:
         for row in result.facts_for("BTC")
     )
     assert len(result.facts_for("BTC")) == 12
+
+
+def test_loader_keeps_only_90_day_altcoin_season_horizon() -> None:
+    rows = []
+    for horizon, value in (("season_90d", "25"), ("month", "80"), ("year", "90")):
+        row = fact_row(
+            None,
+            "crypto.cycle.altcoin_season.index",
+            dimensions={"horizon": horizon},
+            value=value,
+        )
+        row["id"] = f"altseason-{horizon}"
+        rows.append(row)
+
+    result = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=rows),
+        (("ADA", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+
+    rotation = tuple(
+        row
+        for row in result.facts_for("ADA")
+        if row.metric_code == "crypto.cycle.altcoin_season.index"
+    )
+    assert len(rotation) == 1
+    assert dict(rotation[0].dimensions) == {"horizon": "season_90d"}
+    assert rotation[0].value == Decimal("25")
+
+
+def test_loader_scopes_global_etf_rows_to_requested_asset_dimension() -> None:
+    rows = []
+    for asset, value in (("ETH", "10"), ("SOL", "20")):
+        row = fact_row(
+            None,
+            "crypto.etf.net_flow_usd",
+            dimensions={"asset": asset, "fund": "TOTAL"},
+            value=value,
+        )
+        row["id"] = f"etf-{asset.lower()}"
+        rows.append(row)
+
+    result = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=rows),
+        (("ETH", "crypto"), ("SOL", "crypto"), ("ADA", "crypto")),
+        ("BTC",),
+        NOW,
+    )
+
+    assert dict(result.facts_for("ETH")[0].dimensions)["asset"] == "ETH"
+    assert dict(result.facts_for("SOL")[0].dimensions)["asset"] == "SOL"
+    assert all(row.metric_code != "crypto.etf.net_flow_usd" for row in result.facts_for("ADA"))

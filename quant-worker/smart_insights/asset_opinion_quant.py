@@ -381,6 +381,11 @@ def _relative_strength_fact(
 
 
 def _fact_score(fact: QuantFact) -> tuple[Decimal, str] | None:
+    if fact.metric_code == "crypto.cycle.altcoin_season.index":
+        return (
+            _bounded((fact.value - Decimal("50")) * Decimal("2")),
+            "altcoin_season_centered_v1",
+        )
     if fact.signed_score is not None:
         return fact.signed_score, fact.normalization_method
     if fact.metric_code == "crypto.fear_greed.index":

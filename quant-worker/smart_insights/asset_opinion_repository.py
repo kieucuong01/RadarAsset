@@ -193,6 +193,7 @@ CRYPTO_DECISION_METRICS = frozenset(
         "crypto.onchain.nvt",
         "crypto.network.hashrate_hs",
         "crypto.large_address.exchange_flow_pressure_btc",
+        "crypto.cycle.altcoin_season.index",
     }
 )
 
@@ -288,13 +289,18 @@ def _optional_decimal(value: object) -> Decimal | None:
 
 
 def _fact_dimensions_allowed(
-    metric_code: str, dimensions: tuple[tuple[str, str], ...]
+    metric_code: str, dimensions: tuple[tuple[str, str], ...], *, symbol: str
 ) -> bool:
     values = {key: value for key, value in dimensions}
     if metric_code == "crypto.etf.net_flow_usd":
-        return values.get("fund", "").upper() == "TOTAL"
+        return (
+            values.get("fund", "").upper() == "TOTAL"
+            and values.get("asset", "").upper() == symbol
+        )
     if metric_code == "crypto.coinshares.net_flow_usd":
         return values.get("asset", "total").casefold() in {"total", "bitcoin", "btc"}
+    if metric_code == "crypto.cycle.altcoin_season.index":
+        return values.get("horizon") == "season_90d"
     return True
 
 
@@ -330,7 +336,7 @@ def _fact_for_asset(
     if not fact_allowed_for_market(metric_code, market):
         return None
     dimensions = _dimensions(base.get("dimensions"))
-    if not _fact_dimensions_allowed(metric_code, dimensions):
+    if not _fact_dimensions_allowed(metric_code, dimensions, symbol=symbol):
         return None
 
     preferred_market = _preferred_signal_market(metric_code, market)
