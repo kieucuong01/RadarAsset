@@ -613,7 +613,9 @@ def build_batch_collectors(
 
         def start_for(series: FredSeriesDefinition) -> date:
             history_days = {
-                "daily": overlap_days,
+                # Percentile scoring needs at least 60 daily observations. Fetching
+                # one bounded year also makes a clean installation useful on day one.
+                "daily": max(overlap_days, 365),
                 "weekly": max(overlap_days, 196),
                 "monthly": max(overlap_days, 400),
                 "quarterly": max(overlap_days, 800),
@@ -653,7 +655,7 @@ def build_batch_collectors(
 
     def cftc_disaggregated(as_of: datetime) -> CollectionBatch:
         overlap_weeks = _bounded_environment_int(
-            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 8, minimum=1, maximum=520
+            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 52, minimum=26, maximum=520
         )
         collector = CftcCollector()
         batch = collector.collect(

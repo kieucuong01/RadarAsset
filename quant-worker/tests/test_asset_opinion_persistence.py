@@ -220,3 +220,5 @@ def test_personalization_preserves_watchlist_creation_order() -> None:
 
     assert "ORDER BY w.created_at, w.id" in source
     assert "ORDER BY a.symbol" not in source
+    assert source.count("UPPER(a.symbol) <> 'XMR'") == 2
+    assert source.count("a.market = 'vn_equity'") == 2

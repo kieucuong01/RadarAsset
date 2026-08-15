@@ -121,7 +121,7 @@ def test_fred_rejects_unknown_series() -> None:
             transport=FakeTransport("{}"), api_key="test", clock=lambda: NOW
         ).collect(unknown, date(2026, 8, 10), date(2026, 8, 13))
 
-def test_fred_builder_uses_frequency_aware_history_without_expanding_daily_series(
+def test_fred_builder_bootstraps_enough_frequency_aware_history_for_scoring(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, date, date]] = []
@@ -156,7 +156,7 @@ def test_fred_builder_uses_frequency_aware_history_without_expanding_daily_serie
     assert ranges["M2SL"] >= 196
     assert ranges["CPIAUCSL"] >= 400
     assert ranges["GDP"] >= 800
-    assert ranges["DGS10"] == 14
+    assert ranges["DGS10"] >= 365
     assert starts["CPIAUCSL"].day == 1
     assert starts["GDP"].day == 1
     assert starts["GDP"].month in {1, 4, 7, 10}
@@ -228,7 +228,7 @@ def test_cftc_disaggregated_falls_back_to_official_current_csv_on_api_denial() -
 
         def fetch(self, url: str, **_kwargs: object) -> HttpResponse:
             self.urls.append(url)
-            if len(self.urls) == 1:
+            if len(self.urls) <= 2:
                 raise SourceFetchError("HTTP_ERROR", status_code=403)
             return HttpResponse(
                 status=200,
@@ -248,7 +248,76 @@ def test_cftc_disaggregated_falls_back_to_official_current_csv_on_api_denial() -
         if row.metric_code == "gold.cftc.managed_money_net_oi"
     )
     assert ratio.value == Decimal("0.3000000000")
-    assert transport.urls[1] == "https://www.cftc.gov/dea/newcot/f_disagg.txt"
+    assert transport.urls[2] == "https://www.cftc.gov/dea/newcot/f_disagg.txt"
+    assert batch.snapshot.source_url == transport.urls[2]
+
+
+def test_cftc_disaggregated_prefers_official_year_archive_on_api_denial() -> None:
+    from io import BytesIO
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    rows: list[list[str]] = []
+    header = [f"field_{index}" for index in range(191)]
+    header[0] = "Market_and_Exchange_Names"
+    header[2] = "Report_Date_as_YYYY-MM-DD"
+    header[3] = "CFTC_Contract_Market_Code"
+    header[7] = "Open_Interest_All"
+    header[13] = "M_Money_Positions_Long_All"
+    header[14] = "M_Money_Positions_Short_All"
+    header[190] = "FutOnly_or_Combined"
+    for report_date, long_position, short_position in (
+        ("2026-07-28", "400", "100"),
+        ("2026-08-04", "450", "150"),
+        ("2026-08-11", "500", "200"),
+    ):
+        fields = [""] * 191
+        fields[0] = "GOLD - COMMODITY EXCHANGE INC."
+        fields[2] = report_date
+        fields[3] = "088691"
+        fields[7] = "1000"
+        fields[13] = long_position
+        fields[14] = short_position
+        fields[190] = "FutOnly"
+        rows.append(fields)
+    csv_output = StringIO()
+    writer = csv.writer(csv_output)
+    writer.writerow(header)
+    writer.writerows(rows)
+    archive_output = BytesIO()
+    with ZipFile(archive_output, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("f_year.txt", csv_output.getvalue())
+
+    class ApiDeniedThenArchive:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def fetch(self, url: str, **_kwargs: object) -> HttpResponse:
+            self.urls.append(url)
+            if len(self.urls) == 1:
+                raise SourceFetchError("HTTP_ERROR", status_code=403)
+            return HttpResponse(
+                status=200,
+                headers={"Content-Type": "application/zip"},
+                body=archive_output.getvalue(),
+                url=url,
+            )
+
+    transport = ApiDeniedThenArchive()
+    batch = CftcCollector(transport=transport, clock=lambda: NOW).collect(
+        CFTC_MARKETS["GOLD"], report_date_from=date(2026, 7, 1)
+    )
+
+    assert batch.error_code is None
+    assert len(
+        [
+            row
+            for row in batch.observations
+            if row.metric_code == "gold.cftc.managed_money_net_oi"
+        ]
+    ) == 3
+    assert transport.urls[1] == (
+        "https://www.cftc.gov/files/dea/history/fut_disagg_txt_2026.zip"
+    )
     assert batch.snapshot.source_url == transport.urls[1]
 
 

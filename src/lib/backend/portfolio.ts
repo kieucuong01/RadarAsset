@@ -17,7 +17,12 @@ function round(value: number, digits = 2) {
   return Math.round((value + Number.EPSILON) * scale) / scale;
 }
 
-export function isSupportedPortfolioAsset(input: { assetClass: string; market: string }) {
+export function isSupportedPortfolioAsset(input: {
+  symbol?: string;
+  assetClass: string;
+  market: string;
+}) {
+  if (input.symbol?.trim().toUpperCase() === "XMR") return false;
   if (input.market === "vn_equity") {
     return input.assetClass === "equity" || input.assetClass === "index";
   }

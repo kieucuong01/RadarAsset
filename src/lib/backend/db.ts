@@ -565,10 +565,13 @@ export async function loadAssets() {
   const assets = await prisma.asset.findMany({
     where: {
       market: { in: ["vn_equity", "crypto_spot", "metal_spot"] },
-      NOT: {
-        market: { not: "vn_equity" },
-        assetClass: { in: ["equity", "etf", "stock", "index"] },
-      },
+      NOT: [
+        {
+          market: { not: "vn_equity" },
+          assetClass: { in: ["equity", "etf", "stock", "index"] },
+        },
+        { symbol: "XMR" },
+      ],
     },
     orderBy: [{ assetClass: "asc" }, { symbol: "asc" }],
     select: {

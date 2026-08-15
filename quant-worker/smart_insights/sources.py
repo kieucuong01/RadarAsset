@@ -302,6 +302,7 @@ SOURCE_ROWS = (
         (
             "https://publicreporting.cftc.gov/resource/72hh-3qpy.json",
             "https://www.cftc.gov/dea/newcot/f_disagg.txt",
+            "https://www.cftc.gov/files/dea/history/",
         ),
         "weekly",
         "cftc-disaggregated-v1",
@@ -482,6 +483,13 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             is not None
         )
         return index_page or article or image
+    if source.code == "cftc-disaggregated":
+        return (
+            parsed.hostname == "www.cftc.gov"
+            and re.fullmatch(r"/files/dea/history/fut_disagg_txt_\d{4}\.zip", parsed.path)
+            is not None
+            and not parsed.query
+        )
     if source.code in {
         "gdelt-events",
         "gdacs-events",

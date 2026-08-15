@@ -90,10 +90,13 @@ export async function loadQuantAssetCatalog(
   const assets = await getPrisma().asset.findMany({
     where: {
       market: { in: [...SUPPORTED_MARKETS] },
-      NOT: {
-        market: { not: "vn_equity" },
-        assetClass: { in: [...FOREIGN_EQUITY_CLASSES] },
-      },
+      NOT: [
+        {
+          market: { not: "vn_equity" },
+          assetClass: { in: [...FOREIGN_EQUITY_CLASSES] },
+        },
+        { symbol: "XMR" },
+      ],
       ...(query.q
         ? {
             OR: [

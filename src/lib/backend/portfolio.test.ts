@@ -21,6 +21,9 @@ describe("portfolio backend domain", () => {
     expect(isSupportedPortfolioAsset({ assetClass: "equity", market: "vn_equity" })).toBe(true);
     expect(isSupportedPortfolioAsset({ assetClass: "index", market: "vn_equity" })).toBe(true);
     expect(isSupportedPortfolioAsset({ assetClass: "crypto", market: "crypto_spot" })).toBe(true);
+    expect(
+      isSupportedPortfolioAsset({ symbol: "XMR", assetClass: "crypto", market: "crypto_spot" }),
+    ).toBe(false);
     expect(isSupportedPortfolioAsset({ assetClass: "commodity", market: "metal_spot" })).toBe(true);
     expect(isSupportedPortfolioAsset({ assetClass: "equity", market: "other" })).toBe(false);
     expect(isSupportedPortfolioAsset({ assetClass: "etf", market: "us_equity" })).toBe(false);
