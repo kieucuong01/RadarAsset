@@ -47,11 +47,18 @@ function actionLabel(action: string, locale: Locale) {
 }
 
 function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
+  if (opinion.explanationStatus === "accepted") {
+    return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
+  }
   if (opinion.explanationStatus === "quant_only") {
-    return locale === "vi" ? "Chỉ có quan điểm định lượng" : "Quant view only";
+    return locale === "vi"
+      ? "Phân tích định lượng · Chỉ có quan điểm định lượng"
+      : "Quant analysis · Quant view only";
   }
   if (opinion.explanationStatus === "insufficient_data") {
-    return locale === "vi" ? "Chưa đủ bằng chứng" : "Insufficient evidence";
+    return locale === "vi"
+      ? "Chưa đủ dữ liệu · Chưa đủ bằng chứng"
+      : "Insufficient data · Insufficient evidence";
   }
   if (opinion.explanationStatus === "unavailable") {
     return locale === "vi" ? "Dữ liệu chưa khả dụng" : "Data unavailable";

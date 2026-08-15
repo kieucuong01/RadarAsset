@@ -13,14 +13,16 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
+  Cell,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
+import { AssetOpinionCalculation } from "./AssetOpinionCalculation";
+import { metricLabel, pillarLabel } from "./asset-opinion-labels";
 import { FreshnessBadge } from "./FreshnessBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,6 @@ import {
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
 
 type Locale = "vi" | "en";
-const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)"];
 const ACTIONS: Record<string, { vi: string; en: string }> = {
   HOLD: { vi: "Giữ và theo dõi", en: "Hold and monitor" },
   REVIEW_INCREASE: { vi: "Xem xét tăng tỷ trọng", en: "Review increasing exposure" },
@@ -46,8 +47,35 @@ const ACTIONS: Record<string, { vi: string; en: string }> = {
   NO_ACTION_INSUFFICIENT_DATA: { vi: "Chưa hành động", en: "No action yet" },
 };
 
+const INVALIDATION_LABELS: Record<string, { vi: string; en: string }> = {
+  ASSET_SCORE_BELOW_40: { vi: "Điểm tài sản giảm xuống dưới 40", en: "Asset score falls below 40" },
+  ASSET_SCORE_BELOW_15: { vi: "Điểm tài sản giảm xuống dưới 15", en: "Asset score falls below 15" },
+  ASSET_SCORE_ABOVE_NEGATIVE_15: {
+    vi: "Điểm tài sản phục hồi lên trên -15",
+    en: "Asset score recovers above -15",
+  },
+  ASSET_SCORE_ABOVE_NEGATIVE_40: {
+    vi: "Điểm tài sản phục hồi lên trên -40",
+    en: "Asset score recovers above -40",
+  },
+  ASSET_SCORE_OUTSIDE_NEGATIVE_15_TO_15: {
+    vi: "Điểm tài sản thoát vùng trung tính -15 đến 15",
+    en: "Asset score leaves the neutral -15 to 15 range",
+  },
+};
+
 function actionLabel(action: string, locale: Locale) {
   return ACTIONS[action]?.[locale] ?? action.replaceAll("_", " ");
+}
+
+function analysisStatus(opinion: AssetOpinionModel, locale: Locale) {
+  if (opinion.explanationStatus === "accepted") {
+    return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
+  }
+  if (opinion.explanationStatus === "quant_only") {
+    return locale === "vi" ? "Phân tích định lượng" : "Quant analysis";
+  }
+  return locale === "vi" ? "Chưa đủ dữ liệu" : "Insufficient data";
 }
 
 function dateLabel(value: string, locale: Locale) {
@@ -65,18 +93,6 @@ function percentLabel(value: string | null, locale: Locale, multiplier = 1) {
         maximumFractionDigits: 1,
       }).format(parsed)}%`
     : "—";
-}
-
-function chartRows(opinion: AssetOpinionModel) {
-  const rows = new Map<string, Record<string, string | number>>();
-  for (const pillar of opinion.pillars) {
-    for (const point of pillar.series) {
-      const row = rows.get(point.ts) ?? { ts: point.ts };
-      row[pillar.code] = point.value;
-      rows.set(point.ts, row);
-    }
-  }
-  return [...rows.values()].sort((left, right) => String(left.ts).localeCompare(String(right.ts)));
 }
 
 function Scenario({
@@ -104,61 +120,62 @@ function Scenario({
 }
 
 function Charts({ opinion, locale }: { opinion: AssetOpinionModel; locale: Locale }) {
-  const trendPillars = opinion.pillars.filter((pillar) => pillar.series.length >= 2);
-  const rows = chartRows(opinion);
   const pillarBars = opinion.pillars.map((pillar) => ({
-    code: pillar.code,
+    code: pillarLabel(pillar.code, locale),
     score: Number(pillar.score ?? 0),
   }));
+  const contributionBars = opinion.decisionInputs.slice(0, 8).map((input) => ({
+    code: metricLabel(input.metricCode, locale),
+    contribution: Number(input.contribution),
+  }));
+  const maxContribution = Math.max(
+    5,
+    ...contributionBars.map((row) => Math.ceil(Math.abs(row.contribution))),
+  );
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
       <section className="min-w-0 rounded-xl border bg-background/60 p-4">
-        <h4 className="font-semibold">{locale === "vi" ? "Xu hướng trụ cột" : "Pillar trends"}</h4>
+        <h4 className="font-semibold">
+          {locale === "vi" ? "Dữ liệu đóng góp vào kết luận" : "Decision contributions"}
+        </h4>
         <p className="mt-1 text-xs text-muted-foreground">
           {locale === "vi"
-            ? "Điểm chuẩn hóa theo thời gian; cao hơn là tích cực hơn."
-            : "Normalized scores over time; higher is more constructive."}
+            ? "Thanh xanh ủng hộ; thanh đỏ phản biện. Chỉ gồm dữ liệu thật sự được dùng."
+            : "Green supports; red contradicts. Only decision inputs are included."}
         </p>
-        {trendPillars.length ? (
+        {contributionBars.length ? (
           <div
-            className="mt-4 h-64 min-w-0"
+            className="mt-4 h-72 min-w-0"
             role="img"
-            aria-label={`${opinion.symbol} pillar trend chart`}
+            aria-label={`${opinion.symbol} decision contribution chart`}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rows} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.24} />
-                <XAxis
-                  dataKey="ts"
-                  tickFormatter={(value) => dateLabel(String(value), locale)}
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={24}
-                  fontSize={11}
-                />
-                <YAxis domain={[-100, 100]} width={44} fontSize={11} />
-                <Tooltip labelFormatter={(value) => dateLabel(String(value), locale)} />
-                {trendPillars.map((pillar, index) => (
-                  <Line
-                    key={pillar.code}
-                    type="monotone"
-                    dataKey={pillar.code}
-                    stroke={COLORS[index % COLORS.length]}
-                    strokeWidth={2.25}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                    isAnimationActive={false}
-                    connectNulls={false}
-                  />
-                ))}
-              </LineChart>
+              <BarChart
+                data={contributionBars}
+                layout="vertical"
+                margin={{ top: 8, right: 20, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" opacity={0.24} horizontal={false} />
+                <XAxis type="number" domain={[-maxContribution, maxContribution]} fontSize={11} />
+                <YAxis type="category" dataKey="code" width={138} fontSize={11} />
+                <Tooltip />
+                <ReferenceLine x={0} stroke="var(--border)" />
+                <Bar dataKey="contribution" radius={4} isAnimationActive={false}>
+                  {contributionBars.map((row) => (
+                    <Cell
+                      key={row.code}
+                      fill={row.contribution >= 0 ? "var(--bull)" : "var(--bear)"}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">
             {locale === "vi"
-              ? "Chưa đủ ít nhất hai điểm để vẽ xu hướng."
-              : "At least two points are required for a trend chart."}
+              ? "Chưa có dữ liệu đạt chuẩn để tính đóng góp."
+              : "No qualified contribution data."}
           </p>
         )}
       </section>
@@ -223,6 +240,9 @@ export function AssetOpinionDetail({
                 {opinion.symbol} · {opinion.assetName}
               </CardTitle>
               <Badge variant="outline">{opinion.stance.replaceAll("_", " ")}</Badge>
+              <Badge variant={opinion.explanationStatus === "accepted" ? "default" : "secondary"}>
+                {analysisStatus(opinion, locale)}
+              </Badge>
               <FreshnessBadge state={opinion.freshness} />
             </div>
             <CardDescription className="mt-2">
@@ -246,7 +266,9 @@ export function AssetOpinionDetail({
             <div className="flex items-center gap-2 text-primary">
               <Sparkles aria-hidden="true" />
               <h3 id="general-quant-opinion" className="font-semibold text-foreground">
-                {locale === "vi" ? "Quan điểm định lượng chung" : "General quant view"}
+                {locale === "vi"
+                  ? "Kết luận · Quan điểm định lượng chung"
+                  : "Conclusion · General quant view"}
               </h3>
             </div>
             <div className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -321,6 +343,7 @@ export function AssetOpinionDetail({
         </div>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-6">
+        <AssetOpinionCalculation opinion={opinion} locale={locale} onEvidence={onEvidence} />
         <Charts opinion={opinion} locale={locale} />
         {opinion.explanationStatus === "accepted" ? (
           <div className="grid gap-4 lg:grid-cols-3">
@@ -341,14 +364,19 @@ export function AssetOpinionDetail({
             />
           </div>
         ) : null}
-        {opinion.explanationStatus === "accepted" && opinion.invalidationConditions.length ? (
+        {opinion.invalidationConditions.length || opinion.quantInvalidationConditions.length ? (
           <section className="rounded-xl border border-bear/20 bg-bear/5 p-4">
             <div className="flex items-center gap-2 font-semibold text-bear">
               <ShieldAlert aria-hidden="true" />{" "}
-              {locale === "vi" ? "Điều kiện làm luận điểm mất hiệu lực" : "Invalidation conditions"}
+              {locale === "vi" ? "Điều kiện đổi quan điểm" : "Conditions that change the view"}
             </div>
             <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
-              {opinion.invalidationConditions.map((condition) => (
+              {[
+                ...opinion.invalidationConditions,
+                ...opinion.quantInvalidationConditions.map(
+                  (condition) => INVALIDATION_LABELS[condition]?.[locale] ?? condition,
+                ),
+              ].map((condition) => (
                 <li key={condition} className="flex gap-2">
                   <AlertTriangle className="mt-0.5 shrink-0 text-bear" aria-hidden="true" />
                   {condition}

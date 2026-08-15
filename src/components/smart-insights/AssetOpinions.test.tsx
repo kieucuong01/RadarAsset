@@ -23,6 +23,8 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
         score: "45.00",
         weight: "0.40",
         confidence: "80.00",
+        availableInputWeight: "1.00",
+        contribution: "18.00",
         factIds: ["e1"],
         series: [
           { ts: "2026-08-14T00:00:00Z", value: 40 },
@@ -35,6 +37,43 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
     baseCase: "Theo dõi xác nhận dòng tiền 1.00.",
     bearCase: "Dòng tiền 1.00 đảo chiều.",
     invalidationConditions: ["Dòng tiền 1.00 không còn hiệu lực."],
+    quantInvalidationConditions: ["ASSET_SCORE_BELOW_15"],
+    formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
+    totalContribution: "26.00",
+    decisionInputs: [
+      {
+        evidenceId: "e1",
+        metricCode: "crypto.etf.net_flow_usd",
+        pillarCode: "fund_flow",
+        rawValue: "1.00",
+        unit: "USD_MILLION",
+        normalizedScore: "60.00",
+        inputWeight: "0.75",
+        weightedScore: "45.00",
+        pillarWeight: "0.30",
+        contribution: "13.50",
+        normalizationMethod: "empirical_percentile",
+        percentile: "0.80",
+        lookback: "90D",
+      },
+      {
+        evidenceId: "e2",
+        metricCode: "macro.real_yield.10y_pct",
+        pillarCode: "macro",
+        rawValue: "2.10",
+        unit: "PERCENT",
+        normalizedScore: "-40.00",
+        inputWeight: "0.25",
+        weightedScore: "-10.00",
+        pillarWeight: "0.15",
+        contribution: "-1.50",
+        normalizationMethod: "empirical_percentile",
+        percentile: "0.90",
+        lookback: null,
+      },
+    ],
+    supportingEvidenceIds: ["e1"],
+    contradictingEvidenceIds: ["e2"],
     evidence: [
       {
         id: "e1",
@@ -48,6 +87,21 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
         effectiveAt: "2026-08-15T00:00:00Z",
         observedAt: "2026-08-15T00:00:00Z",
         freshness: "fresh",
+        usedInDecision: true,
+      },
+      {
+        id: "e2",
+        metricCode: "macro.real_yield.10y_pct",
+        displayValue: "2.10%",
+        delta: null,
+        percentile: "0.90",
+        impact: "contradicting",
+        sourceCode: "fred",
+        sourceUrl: "https://example.test/fred",
+        effectiveAt: "2026-08-15T00:00:00Z",
+        observedAt: "2026-08-15T00:00:00Z",
+        freshness: "fresh",
+        usedInDecision: true,
       },
     ],
     dataCoverage: "0.80",
@@ -77,6 +131,13 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Tỷ trọng hiện tại");
     expect(html).toContain("Khẩu vị rủi ro");
     expect(html).toContain("Nguồn &amp; độ mới");
+    expect(html).toContain("AI đã phân tích");
+    expect(html).toContain("Vì các số liệu này");
+    expect(html).toContain("Yếu tố phản biện");
+    expect(html).toContain("Điều kiện đổi quan điểm");
+    expect(html).toContain("Cách tính chi tiết");
+    expect(html).toContain("Điểm chuẩn hóa");
+    expect(html).toContain("Đóng góp");
     expect(html).toContain("1.00");
     expect(html).not.toContain("animationDuration");
   });
@@ -108,6 +169,9 @@ describe("AssetOpinions", () => {
     );
     expect(html).toContain("Chỉ có quan điểm định lượng");
     expect(html).toContain("Chưa đủ bằng chứng");
+    expect(html).toContain("Phân tích định lượng");
+    expect(html).toContain("Chưa đủ dữ liệu");
+    expect(html).not.toContain("AI đã phân tích");
     expect(html).not.toContain("Dòng tiền 1.00 tiếp tục hỗ trợ");
     expect(html).not.toContain("Dữ liệu mẫu");
   });
