@@ -38,3 +38,13 @@ FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCA
 ALTER TABLE "smart_insight_refresh_requests"
 ADD CONSTRAINT "smart_insight_refresh_requests_user_id_fkey"
 FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+INSERT INTO "smart_insight_refresh_requests" (
+    "id", "organization_id", "user_id", "status", "reason",
+    "request_version", "requested_at", "available_at", "created_at", "updated_at"
+)
+SELECT
+    membership."id", membership."organization_id", membership."user_id", 'queued', 'activation',
+    1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM "memberships" AS membership
+ON CONFLICT ("organization_id", "user_id") DO NOTHING;
