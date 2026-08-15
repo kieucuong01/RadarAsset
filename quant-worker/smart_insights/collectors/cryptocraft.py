@@ -42,6 +42,7 @@ _COUNTRY_CURRENCY = {
     "SZ": "CHF",
     "UK": "GBP",
     "US": "USD",
+    "WW": "ALL",
 }
 
 

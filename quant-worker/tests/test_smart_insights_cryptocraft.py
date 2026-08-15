@@ -92,6 +92,23 @@ def test_all_day_tentative_blank_actual_and_duplicate_names_are_preserved() -> N
     assert tentative.event_date == date(2026, 8, 14)
 
 
+def test_worldwide_multi_day_event_uses_all_currency_context() -> None:
+    markdown = """Calendar Time Zone: Asia/Bangkok (GMT +7)
+| Date | Time | Country | Impact | Event | Actual | Forecast | Previous |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Thu Aug 27 | Day 1 | WW | Medium | Jackson Hole Symposium | | | |
+"""
+
+    batch = CryptoCraftCollector(crawler=FakeCrawler(markdown)).collect_week(
+        "next", observed_at=NOW
+    )
+
+    assert batch.error_code is None
+    assert batch.events[0].country == "WW"
+    assert batch.events[0].currency == "ALL"
+    assert batch.events[0].time_status == "all_day"
+
+
 def test_timezone_database_handles_daylight_saving_not_fixed_offset() -> None:
     batch = CryptoCraftCollector(
         crawler=FakeCrawler(fixture_text("cryptocraft-next.md"))
