@@ -806,10 +806,7 @@ class VnstockAdapter:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
         provider_start = start
         if is_index:
-            try:
-                free_history_start = end.replace(year=end.year - 8)
-            except ValueError:
-                free_history_start = end.replace(year=end.year - 8, day=28)
+            free_history_start = end - timedelta(days=8 * 365)
             provider_start = max(start, free_history_start)
 
         records: Any = None

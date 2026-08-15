@@ -545,7 +545,7 @@ def test_vnstock_caps_vnindex_history_to_the_free_eight_year_window() -> None:
         now=utc(2026, 8, 12),
     )
 
-    assert market.instrument.calls[0]["start"] == "2018-08-12"
+    assert market.instrument.calls[0]["start"] == "2018-08-14"
 
 
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
