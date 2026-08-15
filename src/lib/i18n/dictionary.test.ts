@@ -42,6 +42,20 @@ describe("i18n dictionary", () => {
     expect(translate("en", "backtestResults.tradeList.title")).toBe("Trade List");
   });
 
+  it("localizes the evidence-backed asset opinion cockpit", () => {
+    expect(translate("vi", "overview.assetOpinions.title")).toBe("Quan điểm AI theo tài sản");
+    expect(translate("en", "overview.assetOpinions.title")).toBe("AI asset opinions");
+    expect(translate("vi", "overview.assetOpinions.states.quantOnly")).toBe(
+      "Chỉ có quan điểm định lượng",
+    );
+    expect(translate("en", "overview.assetOpinions.states.insufficient")).toBe(
+      "Insufficient evidence",
+    );
+    expect(translate("vi", "overview.assetOpinions.actions.reviewReduceRisk")).toBe(
+      "Xem xét giảm rủi ro",
+    );
+  });
+
   it("keeps Vietnamese copy as valid UTF-8, not mojibake", () => {
     const text = translate("vi", "quant.hero.description");
 

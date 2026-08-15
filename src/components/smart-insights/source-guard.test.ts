@@ -45,30 +45,30 @@ describe("Smart Insights source guard", () => {
       expect(source).toContain(`function ${name}`);
   });
 
-  it("restores every legacy Smart Insights block around the quantitative cockpit", () => {
+  it("keeps the old shell while replacing the three overlapping intelligence blocks", () => {
     const source = readSmartInsightsSourceTree();
-    for (const name of [
-      "LegacyDailyHero",
-      "LegacyAIDigest",
-      "LegacyInvestorIntelligence",
-      "LegacyMarketPulse",
-      "LegacyWatchlist",
-      "LegacyExpertSignals",
-    ])
+    for (const name of ["LegacyDailyHero", "LegacyMarketPulse", "LegacyWatchlist"])
       expect(source).toContain(`function ${name}`);
+
+    const smartInsightsPage = readFileSync(
+      join(process.cwd(), "src", "components", "SmartInsights.tsx"),
+      "utf8",
+    );
+    expect(smartInsightsPage).toContain("<AssetOpinions");
+    for (const removed of ["LegacyAIDigest", "LegacyInvestorIntelligence", "LegacyExpertSignals"])
+      expect(smartInsightsPage).not.toContain(removed);
+    for (const endpoint of ["/api/research/runs", "/intelligence", "/api/insights"])
+      expect(smartInsightsPage).not.toContain(endpoint);
+
+    const assetOpinions = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", "AssetOpinions.tsx"),
+      "utf8",
+    );
+    expect(assetOpinions).not.toContain("fetch(");
+    expect(assetOpinions).not.toMatch(/SAMPLE_|Dữ liệu mẫu/);
 
     for (const market of ['value="crypto"', 'value="macro"', 'value="gold"'])
       expect(source).toContain(market);
-  });
-
-  it("visibly labels the optional seed-backed block as sample data", () => {
-    const source = readFileSync(
-      join(process.cwd(), "src", "components", "smart-insights", "LegacyExpertSignals.tsx"),
-      "utf8",
-    );
-
-    expect(source).toContain('status="SAMPLE"');
-    expect(source).toContain("SAMPLE_EXPERT_SIGNALS");
   });
 
   it("labels calendar and data-health seed fallbacks inside their own blocks", () => {

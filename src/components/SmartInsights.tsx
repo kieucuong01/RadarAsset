@@ -6,10 +6,8 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import { DataHealthPanel } from "@/components/smart-insights/DataHealthPanel";
 import { EconomicCalendar } from "@/components/smart-insights/EconomicCalendar";
 import { EvidenceDrawer } from "@/components/smart-insights/EvidenceDrawer";
-import { LegacyAIDigest } from "@/components/smart-insights/LegacyAIDigest";
+import { AssetOpinions } from "@/components/smart-insights/AssetOpinions";
 import { LegacyDailyHero } from "@/components/smart-insights/LegacyDailyHero";
-import { LegacyExpertSignals } from "@/components/smart-insights/LegacyExpertSignals";
-import { LegacyInvestorIntelligence } from "@/components/smart-insights/LegacyInvestorIntelligence";
 import { LegacyMarketPulse } from "@/components/smart-insights/LegacyMarketPulse";
 import { LegacyWatchlist } from "@/components/smart-insights/LegacyWatchlist";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -213,8 +211,11 @@ export function SmartInsights() {
           </Button>
         </Alert>
       ) : null}
-      <LegacyAIDigest briefing={briefing} preferences={preferences} onEvidence={setEvidenceId} />
-      <LegacyInvestorIntelligence />
+      <AssetOpinions
+        opinions={briefing?.assetOpinions ?? []}
+        locale={locale}
+        onEvidence={setEvidenceId}
+      />
       <LegacyMarketPulse
         market={market}
         metrics={marketMetrics}
@@ -232,7 +233,6 @@ export function SmartInsights() {
           <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
         </div>
       </section>
-      <LegacyExpertSignals />
       <DataHealthPanel sources={health?.sources ?? []} />
       <EvidenceDrawer
         evidence={evidence}
