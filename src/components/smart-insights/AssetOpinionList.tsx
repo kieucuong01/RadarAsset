@@ -62,9 +62,7 @@ function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
       : "Quant analysis · Quant view only";
   }
   if (opinion.explanationStatus === "insufficient_data") {
-    const reason = opinion.failedGates[0]
-      ? failedGateLabel(opinion.failedGates[0], locale)
-      : null;
+    const reason = opinion.failedGates[0] ? failedGateLabel(opinion.failedGates[0], locale) : null;
     return locale === "vi"
       ? `Chưa đủ dữ liệu · Chưa đủ bằng chứng${reason ? `: ${reason}` : ""}`
       : `Insufficient data · Insufficient evidence${reason ? `: ${reason}` : ""}`;
