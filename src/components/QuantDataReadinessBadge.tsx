@@ -5,7 +5,7 @@ import { DatabaseZap } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
-  getQuantDataReadiness,
+  getCachedQuantDataReadiness,
   quantDataReadinessSummary,
   type QuantDataReadiness,
 } from "@/lib/backtest/data-readiness-client";
@@ -33,19 +33,23 @@ export function QuantDataReadinessBadge({ className }: { className?: string }) {
   const { t } = useI18n();
 
   useEffect(() => {
-    const controller = new AbortController();
+    let mounted = true;
     setLoading(true);
     setFailed(false);
-    void getQuantDataReadiness((input, init) =>
-      fetch(input, { ...init, signal: controller.signal }),
-    )
-      .then(setReadiness)
+    void getCachedQuantDataReadiness()
+      .then((value) => {
+        if (mounted) setReadiness(value);
+      })
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setFailed(true);
+        if (mounted) setFailed(true);
       })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const content = useMemo(() => {

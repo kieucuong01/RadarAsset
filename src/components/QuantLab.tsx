@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { startTransition, useCallback, useState } from "react";
 import { Activity, BookOpen, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
+import { toast } from "sonner";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { QuantDataReadinessBadge } from "@/components/QuantDataReadinessBadge";
@@ -40,12 +41,31 @@ const FactorLab = dynamic(
   () => import("@/components/FactorLab").then((module) => module.FactorLab),
   { ssr: false, loading: () => <WorkbenchSkeleton /> },
 );
+const TAB_LABEL_KEYS: Record<QuantLabTab, Parameters<ReturnType<typeof useI18n>["t"]>[0]> = {
+  optimizer: "quant.tabs.optimizer",
+  strategies: "quant.tabs.strategies",
+  backtest: "quant.tabs.backtest",
+  factors: "quant.tabs.factors",
+  predict: "quant.tabs.predict",
+};
 
 export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] }) {
   const [tab, setTab] = useState<QuantLabTab>(() => initialQuantLabTab(initialSymbols));
   const [strategyPreset, setStrategyPreset] = useState<BacktestStrategyPreset | null>(null);
   const [strategySymbols, setStrategySymbols] = useState<string[]>([]);
   const { t } = useI18n();
+  const changeTab = useCallback(
+    (value: string) => {
+      const nextTab = normalizeQuantLabTab(value);
+      if (nextTab === tab) return;
+      toast.loading(t("quant.toasts.tabLoading", { tab: t(TAB_LABEL_KEYS[nextTab]) }), {
+        id: "quant-tab-loading",
+        duration: 900,
+      });
+      startTransition(() => setTab(nextTab));
+    },
+    [t, tab],
+  );
 
   return (
     <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">
@@ -71,7 +91,7 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
 
       {tab === "predict" ? null : <MarketDataHealthPanel />}
 
-      <Tabs value={tab} onValueChange={(value) => setTab(normalizeQuantLabTab(value))}>
+      <Tabs value={tab} onValueChange={changeTab}>
         <div className="mb-6 overflow-x-auto pb-1">
           <TabsList className="min-w-max">
             <TabsTrigger value="optimizer">
@@ -105,7 +125,7 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
             onUsePreset={({ preset, symbols }) => {
               setStrategyPreset(preset);
               setStrategySymbols(symbols);
-              setTab("backtest");
+              changeTab("backtest");
             }}
           />
         </TabsContent>

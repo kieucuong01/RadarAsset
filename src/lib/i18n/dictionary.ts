@@ -36,6 +36,12 @@ export const dictionaries = {
         system: "Dữ liệu và tác vụ được xử lý qua API/worker của hệ thống.",
         predictionUnavailable: "AI Prediction chưa được nối vào provider production.",
       },
+      toasts: {
+        dataLoading: "Đang tải dữ liệu Quant…",
+        dataLoaded: "Dữ liệu Quant đã sẵn sàng.",
+        dataError: "Không thể tải dữ liệu Quant.",
+        tabLoading: "Đang mở {tab}…",
+      },
       dataReadiness: {
         loading: "Đang kiểm tra dữ liệu",
         loadingDetail: "Đang đọc coverage dataset và hàng đợi ingestion.",
@@ -262,6 +268,11 @@ export const dictionaries = {
         loadingBody: "Đang tải danh mục, giá đánh dấu và risk metrics từ PostgreSQL local.",
         backendUnavailable: "Portfolio backend không khả dụng",
         usingSnapshot: "Đang dùng snapshot gần nhất",
+      },
+      toasts: {
+        loading: "Đang tải danh mục…",
+        loaded: "Danh mục đã sẵn sàng.",
+        error: "Không thể tải danh mục.",
       },
       balance: {
         total: "Tổng tài sản",
@@ -977,6 +988,12 @@ export const dictionaries = {
         system: "Data and jobs are processed through the platform API and workers.",
         predictionUnavailable: "AI Prediction is not connected to a production provider yet.",
       },
+      toasts: {
+        dataLoading: "Loading Quant data…",
+        dataLoaded: "Quant data is ready.",
+        dataError: "Could not load Quant data.",
+        tabLoading: "Opening {tab}…",
+      },
       dataReadiness: {
         loading: "Checking data",
         loadingDetail: "Reading dataset coverage and ingestion queue.",
@@ -1201,6 +1218,11 @@ export const dictionaries = {
         loadingBody: "Loading portfolio, marks and risk metrics from local PostgreSQL.",
         backendUnavailable: "Portfolio backend unavailable",
         usingSnapshot: "Using last loaded snapshot",
+      },
+      toasts: {
+        loading: "Loading portfolio…",
+        loaded: "Portfolio is ready.",
+        error: "Could not load portfolio.",
       },
       balance: {
         total: "Total Balance",

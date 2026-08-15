@@ -1,6 +1,9 @@
 import { z } from "zod";
 
+import { cachedRequest, clearCachedRequest } from "@/lib/client/request-cache";
+
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+const QUANT_DATA_READINESS_CACHE_KEY = "quant:data-readiness";
 
 const marketSchema = z.enum(["vn_equity", "crypto_spot", "metal_spot"]);
 const timeframeSchema = z.enum(["1d", "1h"]);
@@ -75,6 +78,14 @@ export async function getQuantDataReadiness(fetcher: Fetcher = fetch): Promise<Q
   const response = await fetcher("/api/quant/data-readiness", { cache: "no-store" });
   if (!response.ok) throw new Error("Quant data readiness is unavailable.");
   return parseQuantDataReadiness(await response.json());
+}
+
+export function getCachedQuantDataReadiness(fetcher: Fetcher = fetch): Promise<QuantDataReadiness> {
+  return cachedRequest(QUANT_DATA_READINESS_CACHE_KEY, () => getQuantDataReadiness(fetcher));
+}
+
+export function clearCachedQuantDataReadiness() {
+  clearCachedRequest(QUANT_DATA_READINESS_CACHE_KEY);
 }
 
 export function quantDataReadinessSummary(readiness: QuantDataReadiness) {

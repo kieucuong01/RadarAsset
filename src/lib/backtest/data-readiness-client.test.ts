@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  clearCachedQuantDataReadiness,
+  getCachedQuantDataReadiness,
   getQuantDataReadiness,
   parseQuantDataReadiness,
   quantDataOperationsHealth,
@@ -60,6 +62,27 @@ describe("Quant data readiness client", () => {
 
     await expect(getQuantDataReadiness(fetcher)).resolves.toEqual(validReadiness);
     expect(fetcher).toHaveBeenCalledWith("/api/quant/data-readiness", { cache: "no-store" });
+  });
+
+  it("deduplicates cached readiness requests", async () => {
+    clearCachedQuantDataReadiness();
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(validReadiness), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const [first, second] = await Promise.all([
+      getCachedQuantDataReadiness(fetcher),
+      getCachedQuantDataReadiness(fetcher),
+    ]);
+
+    expect(first).toEqual(validReadiness);
+    expect(second).toEqual(validReadiness);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    clearCachedQuantDataReadiness();
   });
 
   it("summarizes active coverage and ingestion backlog for the Quant header", () => {
