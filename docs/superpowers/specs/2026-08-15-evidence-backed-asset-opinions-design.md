@@ -212,6 +212,7 @@ assetOpinions[] = {
   pillars[],
   thesis,
   bullCase,
+  baseCase,
   bearCase,
   invalidationConditions[],
   evidence[],
