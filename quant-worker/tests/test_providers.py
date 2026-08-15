@@ -522,6 +522,32 @@ def test_vnstock_routes_vnindex_through_the_index_market() -> None:
     assert rows[0].source == "vnstock-kbs-index"
 
 
+def test_vnstock_caps_vnindex_history_to_the_free_eight_year_window() -> None:
+    market = FakeMarket(
+        [
+            {
+                "time": "2026-08-10T00:00:00",
+                "open": 1_600,
+                "high": 1_610,
+                "low": 1_590,
+                "close": 1_605,
+                "volume": 1_000_000,
+            }
+        ]
+    )
+
+    VnstockAdapter(market_factory=lambda: market).fetch(
+        symbol="VNINDEX",
+        asset="VNINDEX",
+        timeframe="1d",
+        start=utc(2010, 1, 1),
+        end=utc(2026, 8, 12),
+        now=utc(2026, 8, 12),
+    )
+
+    assert market.instrument.calls[0]["start"] == "2018-08-12"
+
+
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
     adapter = VnstockAdapter(
         listing_factory=lambda: FakeListing(

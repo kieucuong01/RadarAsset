@@ -804,6 +804,13 @@ class VnstockAdapter:
             )
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
+        provider_start = start
+        if is_index:
+            try:
+                free_history_start = end.replace(year=end.year - 8)
+            except ValueError:
+                free_history_start = end.replace(year=end.year - 8, day=28)
+            provider_start = max(start, free_history_start)
 
         records: Any = None
         last_error: Exception | None = None
@@ -817,7 +824,7 @@ class VnstockAdapter:
                 else:
                     instrument = market.equity(symbol, source="VCI")
                 request = {
-                    "start": start.date().isoformat(),
+                    "start": provider_start.date().isoformat(),
                     "end": end.date().isoformat(),
                     "interval": timeframe,
                     "count": self.max_rows,
