@@ -188,6 +188,12 @@ function assetOpinionFallback(raw: unknown): AssetOpinionReadModel {
     baseCase: null,
     bearCase: null,
     invalidationConditions: [],
+    quantInvalidationConditions: [],
+    formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
+    totalContribution: "0",
+    decisionInputs: [],
+    supportingEvidenceIds: [],
+    contradictingEvidenceIds: [],
     evidence: [],
     dataCoverage: "0",
     freshness: "unavailable",
@@ -250,7 +256,14 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
   if (!raw || typeof raw !== "object" || Array.isArray(raw))
     throw new Error("Invalid asset opinion.");
   const row = raw as Record<string, unknown>;
-  if (!Array.isArray(row.pillars) || !Array.isArray(row.evidence)) {
+  if (
+    !Array.isArray(row.pillars) ||
+    !Array.isArray(row.evidence) ||
+    !Array.isArray(row.decisionInputs) ||
+    !Array.isArray(row.supportingEvidenceIds) ||
+    !Array.isArray(row.contradictingEvidenceIds) ||
+    !Array.isArray(row.quantInvalidationConditions)
+  ) {
     throw new Error("Invalid asset opinion collections.");
   }
   const pillars = row.pillars.map((rawPillar) => {
@@ -266,6 +279,11 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
       score: nullableDecimalString(pillar.score, "pillar.score"),
       weight: decimalString(pillar.weight, "pillar.weight"),
       confidence: decimalString(pillar.confidence, "pillar.confidence"),
+      availableInputWeight: decimalString(
+        pillar.availableInputWeight,
+        "pillar.availableInputWeight",
+      ),
+      contribution: decimalString(pillar.contribution, "pillar.contribution"),
       factIds: pillar.factIds.filter((value): value is string => typeof value === "string"),
       series: pillar.series.map((rawPoint) => {
         if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
@@ -287,6 +305,9 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
     if (impact !== "supporting" && impact !== "contradicting" && impact !== "neutral") {
       throw new Error("Invalid evidence impact.");
     }
+    if (evidence.usedInDecision !== true) {
+      throw new Error("Invalid usedInDecision.");
+    }
     return {
       id: requiredString(evidence, "id"),
       metricCode: requiredString(evidence, "metricCode"),
@@ -299,6 +320,28 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
       effectiveAt: timestampString(evidence.effectiveAt, "effectiveAt"),
       observedAt: timestampString(evidence.observedAt, "observedAt"),
       freshness: assetFreshness(evidence.freshness),
+      usedInDecision: true,
+    };
+  });
+  const decisionInputs = row.decisionInputs.map((rawInput) => {
+    if (!rawInput || typeof rawInput !== "object" || Array.isArray(rawInput)) {
+      throw new Error("Invalid decision input.");
+    }
+    const input = rawInput as Record<string, unknown>;
+    return {
+      evidenceId: requiredString(input, "evidenceId"),
+      metricCode: requiredString(input, "metricCode"),
+      pillarCode: requiredString(input, "pillarCode"),
+      rawValue: decimalString(input.rawValue, "input.rawValue"),
+      unit: requiredString(input, "unit"),
+      normalizedScore: decimalString(input.normalizedScore, "input.normalizedScore"),
+      inputWeight: decimalString(input.inputWeight, "input.inputWeight"),
+      weightedScore: decimalString(input.weightedScore, "input.weightedScore"),
+      pillarWeight: decimalString(input.pillarWeight, "input.pillarWeight"),
+      contribution: decimalString(input.contribution, "input.contribution"),
+      normalizationMethod: requiredString(input, "normalizationMethod"),
+      percentile: nullableDecimalString(input.percentile, "input.percentile"),
+      lookback: nullableString(input.lookback),
     };
   });
   const explanationStatus = row.explanationStatus;
@@ -333,6 +376,18 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
     invalidationConditions: Array.isArray(row.invalidationConditions)
       ? row.invalidationConditions.filter((value): value is string => typeof value === "string")
       : [],
+    quantInvalidationConditions: row.quantInvalidationConditions.filter(
+      (value): value is string => typeof value === "string",
+    ),
+    formula: requiredString(row, "formula"),
+    totalContribution: decimalString(row.totalContribution, "totalContribution"),
+    decisionInputs,
+    supportingEvidenceIds: row.supportingEvidenceIds.filter(
+      (value): value is string => typeof value === "string",
+    ),
+    contradictingEvidenceIds: row.contradictingEvidenceIds.filter(
+      (value): value is string => typeof value === "string",
+    ),
     evidence,
     dataCoverage: decimalString(row.dataCoverage, "dataCoverage"),
     freshness: assetFreshness(row.freshness),
@@ -341,6 +396,18 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
       ? row.failedGates.filter((value): value is string => typeof value === "string")
       : [],
   };
+  const evidenceIds = new Set(parsed.evidence.map((item) => item.id));
+  if (
+    parsed.decisionInputs.length > 12 ||
+    parsed.evidence.length > 12 ||
+    parsed.supportingEvidenceIds.length > 5 ||
+    parsed.contradictingEvidenceIds.length > 3 ||
+    parsed.decisionInputs.some((item) => !evidenceIds.has(item.evidenceId)) ||
+    parsed.supportingEvidenceIds.some((id) => !evidenceIds.has(id)) ||
+    parsed.contradictingEvidenceIds.some((id) => !evidenceIds.has(id))
+  ) {
+    throw new Error("Invalid bounded decision evidence.");
+  }
   if (
     parsed.explanationStatus === "accepted" &&
     (parsed.freshness !== "fresh" ||

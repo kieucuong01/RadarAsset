@@ -146,6 +146,20 @@ def test_persistence_writes_existing_models_and_exactly_one_asset() -> None:
     assert snapshot["evidence"][0]["sourceCode"] == "farside"
     assert snapshot["riskTolerance"] == "moderate"
     assert snapshot["unrealizedReturn"] is None
+    assert snapshot["formula"] == (
+        "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage"
+    )
+    assert len(snapshot["decisionInputs"]) <= 12
+    assert len(snapshot["evidence"]) == len(snapshot["decisionInputs"])
+    assert len(snapshot["supportingEvidenceIds"]) <= 5
+    assert len(snapshot["contradictingEvidenceIds"]) <= 3
+    assert all(row["usedInDecision"] is True for row in snapshot["evidence"])
+    assert all(
+        row["evidenceId"] in {evidence["id"] for evidence in snapshot["evidence"]}
+        for row in snapshot["decisionInputs"]
+    )
+    assert snapshot["pillars"][0]["availableInputWeight"] is not None
+    assert snapshot["pillars"][0]["contribution"] is not None
     assert "kronos" not in str(snapshot).casefold()
 
 

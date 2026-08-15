@@ -16,6 +16,31 @@ const base = {
   sourceRunId: "run-a",
 };
 
+const calculation = {
+  formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
+  totalContribution: "49",
+  quantInvalidationConditions: ["ASSET_SCORE_BELOW_15"],
+  decisionInputs: [
+    {
+      evidenceId: "e-a",
+      metricCode: "crypto.etf.net_flow_usd",
+      pillarCode: "fund_flow",
+      rawValue: "120",
+      unit: "USD_MILLION",
+      normalizedScore: "70",
+      inputWeight: "0.75",
+      weightedScore: "52.5",
+      pillarWeight: "0.3",
+      contribution: "15.75",
+      normalizationMethod: "empirical_percentile",
+      percentile: "0.85",
+      lookback: "90D",
+    },
+  ],
+  supportingEvidenceIds: ["e-a"],
+  contradictingEvidenceIds: [],
+};
+
 describe("Smart Insights briefing contract", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -34,12 +59,15 @@ describe("Smart Insights briefing contract", () => {
           unrealizedReturn: "0.12",
           riskTolerance: "moderate",
           personalizedAction: "HOLD",
+          ...calculation,
           pillars: [
             {
               code: "trend",
               score: "70",
               weight: "0.35",
               confidence: "80",
+              availableInputWeight: "1",
+              contribution: "24.5",
               factIds: ["fact-a"],
               series: [{ ts: "2026-08-14T00:00:00Z", value: 65 }],
             },
@@ -62,6 +90,7 @@ describe("Smart Insights briefing contract", () => {
               effectiveAt: "2026-08-14T00:00:00Z",
               observedAt: "2026-08-15T00:00:00Z",
               freshness: "fresh",
+              usedInDecision: true,
             },
           ],
           dataCoverage: "0.8",
@@ -91,6 +120,9 @@ describe("Smart Insights briefing contract", () => {
       unrealizedReturn: null,
       riskTolerance: "moderate",
       personalizedAction: "BUY_NOW",
+      ...calculation,
+      decisionInputs: [],
+      supportingEvidenceIds: [],
       pillars: [],
       thesis: null,
       bullCase: null,
@@ -128,6 +160,7 @@ describe("Smart Insights briefing contract", () => {
           unrealizedReturn: null,
           riskTolerance: "moderate",
           personalizedAction: "HOLD",
+          ...calculation,
           pillars: [],
           thesis: "Thesis",
           bullCase: "Bull",
@@ -147,6 +180,7 @@ describe("Smart Insights briefing contract", () => {
               effectiveAt: "2026-08-14T00:00:00Z",
               observedAt: "2026-08-15T00:00:00Z",
               freshness: "fresh",
+              usedInDecision: true,
             },
           ],
           dataCoverage: "0.8",

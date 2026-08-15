@@ -72,6 +72,8 @@ const assetOpinionSchema = z
           score: decimal.nullable(),
           weight: decimal,
           confidence: decimal,
+          availableInputWeight: decimal,
+          contribution: decimal,
           factIds: z.array(z.string().min(1)),
           series: z.array(z.object({ ts: timestamp, value: z.number().finite() }).strict()),
         })
@@ -82,23 +84,52 @@ const assetOpinionSchema = z
     baseCase: z.string().min(1).nullable(),
     bearCase: z.string().min(1).nullable(),
     invalidationConditions: z.array(z.string().min(1)),
-    evidence: z.array(
-      z
-        .object({
-          id: z.string().min(1),
-          metricCode: z.string().min(1),
-          displayValue: z.string(),
-          delta: decimal.nullable(),
-          percentile: decimal.nullable(),
-          impact: z.enum(["supporting", "contradicting", "neutral"]),
-          sourceCode: z.string().min(1),
-          sourceUrl: z.string().url(),
-          effectiveAt: timestamp,
-          observedAt: timestamp,
-          freshness,
-        })
-        .strict(),
-    ),
+    quantInvalidationConditions: z.array(z.string().min(1)),
+    formula: z.string().min(1),
+    totalContribution: decimal,
+    decisionInputs: z
+      .array(
+        z
+          .object({
+            evidenceId: z.string().min(1),
+            metricCode: z.string().min(1),
+            pillarCode: z.string().min(1),
+            rawValue: decimal,
+            unit: z.string().min(1),
+            normalizedScore: decimal,
+            inputWeight: decimal,
+            weightedScore: decimal,
+            pillarWeight: decimal,
+            contribution: decimal,
+            normalizationMethod: z.string().min(1),
+            percentile: decimal.nullable(),
+            lookback: z.string().min(1).nullable(),
+          })
+          .strict(),
+      )
+      .max(12),
+    supportingEvidenceIds: z.array(z.string().min(1)).max(5),
+    contradictingEvidenceIds: z.array(z.string().min(1)).max(3),
+    evidence: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            metricCode: z.string().min(1),
+            displayValue: z.string(),
+            delta: decimal.nullable(),
+            percentile: decimal.nullable(),
+            impact: z.enum(["supporting", "contradicting", "neutral"]),
+            sourceCode: z.string().min(1),
+            sourceUrl: z.string().url(),
+            effectiveAt: timestamp,
+            observedAt: timestamp,
+            freshness,
+            usedInDecision: z.literal(true),
+          })
+          .strict(),
+      )
+      .max(12),
     dataCoverage: decimal,
     freshness,
     explanationStatus: z.enum(["accepted", "quant_only", "insufficient_data", "unavailable"]),
@@ -106,6 +137,19 @@ const assetOpinionSchema = z
   })
   .strict()
   .superRefine((opinion, context) => {
+    const evidenceIds = new Set(opinion.evidence.map((item) => item.id));
+    const missingEvidenceReference = [
+      ...opinion.decisionInputs.map((item) => item.evidenceId),
+      ...opinion.supportingEvidenceIds,
+      ...opinion.contradictingEvidenceIds,
+    ].find((id) => !evidenceIds.has(id));
+    if (missingEvidenceReference) {
+      context.addIssue({
+        code: "custom",
+        path: ["decisionInputs"],
+        message: "Decision calculations must reference bounded evidence.",
+      });
+    }
     if (opinion.explanationStatus === "accepted") {
       if (opinion.freshness !== "fresh") {
         context.addIssue({

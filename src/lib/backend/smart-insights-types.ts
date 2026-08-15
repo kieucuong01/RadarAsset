@@ -47,8 +47,26 @@ export type AssetOpinionPillarReadModel = {
   score: string | null;
   weight: string;
   confidence: string;
+  availableInputWeight: string;
+  contribution: string;
   factIds: string[];
   series: Array<{ ts: string; value: number }>;
+};
+
+export type AssetOpinionDecisionInputReadModel = {
+  evidenceId: string;
+  metricCode: string;
+  pillarCode: string;
+  rawValue: string;
+  unit: string;
+  normalizedScore: string;
+  inputWeight: string;
+  weightedScore: string;
+  pillarWeight: string;
+  contribution: string;
+  normalizationMethod: string;
+  percentile: string | null;
+  lookback: string | null;
 };
 
 export type AssetOpinionEvidenceReadModel = {
@@ -63,6 +81,7 @@ export type AssetOpinionEvidenceReadModel = {
   effectiveAt: string;
   observedAt: string;
   freshness: FreshnessState;
+  usedInDecision: true;
 };
 
 export type AssetOpinionReadModel = {
@@ -82,6 +101,12 @@ export type AssetOpinionReadModel = {
   baseCase: string | null;
   bearCase: string | null;
   invalidationConditions: string[];
+  quantInvalidationConditions: string[];
+  formula: string;
+  totalContribution: string;
+  decisionInputs: AssetOpinionDecisionInputReadModel[];
+  supportingEvidenceIds: string[];
+  contradictingEvidenceIds: string[];
   evidence: AssetOpinionEvidenceReadModel[];
   dataCoverage: string;
   freshness: FreshnessState;

@@ -175,29 +175,16 @@ def _persist_asset_opinion(
         ).encode("utf-8")
     ).hexdigest()
     signal_inputs = {
-        "schemaVersion": "asset-opinion-v1",
+        "schemaVersion": "asset-opinion-v2",
         "symbol": opinion.symbol,
         "assetName": opinion.quant.asset.name,
         "portfolioWeightPct": opinion.quant.asset.portfolio_weight * Decimal("100"),
         "unrealizedReturn": opinion.quant.unrealized_return,
         "pillars": [asdict(row) for row in opinion.quant.pillars],
         "gate": asdict(opinion.quant.gate),
-        "facts": [
-            {
-                "id": row.id,
-                "metricCode": row.metric_code,
-                "value": row.value,
-                "unit": row.unit,
-                "effectiveAt": row.effective_at,
-                "observedAt": row.observed_at,
-                "sourceCode": row.source_code,
-                "sourceUrl": row.source_url,
-                "fresh": row.fresh,
-                "contradicting": row.contradicting,
-                "methodologyVersion": row.methodology_version,
-            }
-            for row in opinion.quant.facts
-        ],
+        "decisionInputs": [asdict(row) for row in opinion.quant.decision_inputs],
+        "formula": opinion.quant.formula,
+        "totalContribution": opinion.quant.total_contribution,
         "freshness": opinion.quant.freshness,
         "rejectionCode": opinion.rejection_code,
     }
@@ -290,20 +277,39 @@ def _persist_asset_opinion(
                 (insight_id, list(evidence_ids.values())),
             )
 
-    support_set = set(opinion.evidence_bundle.supporting_evidence_ids)
-    contradict_set = set(opinion.evidence_bundle.contradicting_evidence_ids)
+    bundle_by_fact_id = {
+        fact.metric_observation_id: fact for fact in opinion.evidence_bundle.evidence
+    }
+    database_id_by_fact_id = {
+        fact_id: evidence_ids[fact.evidence_id]
+        for fact_id, fact in bundle_by_fact_id.items()
+        if fact.evidence_id in evidence_ids
+    }
+    supporting_evidence_ids = [
+        database_id_by_fact_id[fact_id]
+        for fact_id in opinion.quant.supporting_fact_ids
+        if fact_id in database_id_by_fact_id
+    ][:5]
+    contradicting_evidence_ids = [
+        database_id_by_fact_id[fact_id]
+        for fact_id in opinion.quant.contradicting_fact_ids
+        if fact_id in database_id_by_fact_id
+    ][:3]
+    support_set = set(supporting_evidence_ids)
+    contradict_set = set(contradicting_evidence_ids)
     evidence = []
     for fact in opinion.evidence_bundle.evidence:
+        database_evidence_id = evidence_ids[fact.evidence_id]
         impact = (
             "supporting"
-            if fact.evidence_id in support_set
+            if database_evidence_id in support_set
             else "contradicting"
-            if fact.evidence_id in contradict_set
+            if database_evidence_id in contradict_set
             else "neutral"
         )
         evidence.append(
             {
-                "id": evidence_ids[fact.evidence_id],
+                "id": database_evidence_id,
                 "metricCode": fact.metric_code,
                 "displayValue": fact.display_value,
                 "delta": None,
@@ -314,8 +320,28 @@ def _persist_asset_opinion(
                 "effectiveAt": fact.effective_end,
                 "observedAt": fact.observed_at,
                 "freshness": "stale" if "STALE" in fact.warnings else "fresh",
+                "usedInDecision": True,
             }
         )
+    decision_inputs = [
+        {
+            "evidenceId": database_id_by_fact_id[row.fact_id],
+            "metricCode": row.metric_code,
+            "pillarCode": row.pillar_code,
+            "rawValue": row.raw_value,
+            "unit": row.unit,
+            "normalizedScore": row.normalized_score,
+            "inputWeight": row.input_weight,
+            "weightedScore": row.weighted_score,
+            "pillarWeight": row.pillar_weight,
+            "contribution": row.contribution,
+            "normalizationMethod": row.normalization_method,
+            "percentile": row.percentile,
+            "lookback": row.lookback,
+        }
+        for row in opinion.quant.decision_inputs
+        if row.fact_id in database_id_by_fact_id
+    ][:12]
     ai = opinion.ai_output
     return {
         "symbol": opinion.symbol,
@@ -334,6 +360,8 @@ def _persist_asset_opinion(
                 "score": pillar.score,
                 "weight": pillar.configured_weight,
                 "confidence": pillar.confidence,
+                "availableInputWeight": pillar.available_input_weight,
+                "contribution": pillar.contribution,
                 "factIds": list(pillar.fact_ids),
                 "series": [
                     {"ts": timestamp, "value": float(value)}
@@ -347,6 +375,12 @@ def _persist_asset_opinion(
         "baseCase": ai.base_case if ai else None,
         "bearCase": ai.bear_case if ai else None,
         "invalidationConditions": list(ai.invalidation_conditions) if ai else [],
+        "quantInvalidationConditions": list(opinion.quant.invalidation_conditions),
+        "formula": opinion.quant.formula,
+        "totalContribution": opinion.quant.total_contribution,
+        "decisionInputs": decision_inputs,
+        "supportingEvidenceIds": supporting_evidence_ids,
+        "contradictingEvidenceIds": contradicting_evidence_ids,
         "evidence": evidence,
         "dataCoverage": opinion.quant.data_coverage,
         "freshness": opinion.quant.freshness,
