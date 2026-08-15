@@ -190,6 +190,60 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Tỷ trọng hiện tại");
   });
 
+  it("labels altcoin factors and data-backed change conditions in Vietnamese", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[
+          opinion({
+            symbol: "ETH",
+            assetName: "Ethereum",
+            pillars: [
+              { ...opinion().pillars[0], code: "btc_trend" },
+              { ...opinion().pillars[0], code: "altcoin_rotation" },
+              { ...opinion().pillars[0], code: "etf_flow" },
+              { ...opinion().pillars[0], code: "macro" },
+            ],
+            decisionInputs: [
+              {
+                ...opinion().decisionInputs[0],
+                metricCode: "crypto.btc.return_20d",
+                pillarCode: "btc_trend",
+              },
+              {
+                ...opinion().decisionInputs[0],
+                evidenceId: "rotation",
+                metricCode: "crypto.cycle.altcoin_season.index",
+                pillarCode: "altcoin_rotation",
+              },
+              {
+                ...opinion().decisionInputs[0],
+                evidenceId: "m2",
+                metricCode: "macro.m2_change_4w",
+                pillarCode: "macro",
+              },
+            ],
+            quantInvalidationConditions: [
+              "BTC_TREND_TURNS_NEGATIVE",
+              "ALTCOIN_SEASON_BELOW_75",
+              "ETH_ETF_FLOW_TURNS_NEGATIVE",
+            ],
+          }),
+        ]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Xu hướng BTC");
+    expect(html).toContain("Luân chuyển Altcoin");
+    expect(html).toContain("Dòng tiền ETF");
+    expect(html).toContain("Cung tiền M2 4 tuần");
+    expect(html).toContain("Xu hướng BTC chuyển sang âm");
+    expect(html).toContain("Altcoin Season giảm xuống dưới 75");
+    expect(html).toContain("Dòng tiền ETF ETH chuyển sang âm");
+  });
+
   it("renders a useful empty state without fetching", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions

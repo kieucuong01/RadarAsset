@@ -6,6 +6,12 @@ const METRICS: Record<string, { vi: string; en: string }> = {
   "market.ma_50_position": { vi: "Vị trí so với MA50", en: "Position vs MA50" },
   "market.ma_200_position": { vi: "Vị trí so với MA200", en: "Position vs MA200" },
   "market.current_drawdown": { vi: "Mức giảm từ đỉnh", en: "Current drawdown" },
+  "crypto.btc.return_20d": { vi: "Xu hướng BTC 20 ngày", en: "BTC 20-day trend" },
+  "crypto.btc.return_60d": { vi: "Xu hướng BTC 60 ngày", en: "BTC 60-day trend" },
+  "crypto.cycle.altcoin_season.index": {
+    vi: "Chỉ số Altcoin Season",
+    en: "Altcoin Season Index",
+  },
   "crypto.etf.net_flow_usd": { vi: "Dòng tiền ETF", en: "ETF net flow" },
   "crypto.coinshares.net_flow_usd": { vi: "Dòng tiền quỹ CoinShares", en: "CoinShares flow" },
   "crypto.fear_greed.index": { vi: "Sợ hãi & Tham lam", en: "Fear & Greed" },
@@ -23,6 +29,7 @@ const METRICS: Record<string, { vi: string; en: string }> = {
   },
   "macro.reverse_repo_change_4w": { vi: "Reverse repo 4 tuần", en: "Reverse repo 4W" },
   "macro.tga_change_4w": { vi: "TGA 4 tuần", en: "TGA 4W" },
+  "macro.m2_change_4w": { vi: "Cung tiền M2 4 tuần", en: "M2 money supply 4W" },
   "gold.cftc.managed_money_net_oi": { vi: "Vị thế quỹ CFTC", en: "CFTC fund positioning" },
 };
 
@@ -31,6 +38,10 @@ const PILLARS: Record<string, { vi: string; en: string }> = {
   fund_flow: { vi: "Dòng tiền", en: "Fund flow" },
   macro: { vi: "Vĩ mô", en: "Macro" },
   sentiment_onchain: { vi: "Tâm lý & on-chain", en: "Sentiment & on-chain" },
+  btc_trend: { vi: "Xu hướng BTC", en: "BTC trend" },
+  altcoin_rotation: { vi: "Luân chuyển Altcoin", en: "Altcoin rotation" },
+  etf_flow: { vi: "Dòng tiền ETF", en: "ETF flow" },
+  broad_sentiment: { vi: "Tâm lý thị trường", en: "Broad sentiment" },
   positioning: { vi: "Vị thế thị trường", en: "Positioning" },
   relative_liquidity: { vi: "Sức mạnh & thanh khoản", en: "Relative strength & liquidity" },
   foreign_flow: { vi: "Dòng tiền nước ngoài", en: "Foreign flow" },

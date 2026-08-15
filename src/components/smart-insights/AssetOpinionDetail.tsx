@@ -62,6 +62,42 @@ const INVALIDATION_LABELS: Record<string, { vi: string; en: string }> = {
     vi: "Điểm tài sản thoát vùng trung tính -15 đến 15",
     en: "Asset score leaves the neutral -15 to 15 range",
   },
+  BTC_TREND_TURNS_NEGATIVE: {
+    vi: "Xu hướng BTC chuyển sang âm",
+    en: "BTC trend turns negative",
+  },
+  BTC_TREND_TURNS_POSITIVE: {
+    vi: "Xu hướng BTC chuyển sang dương",
+    en: "BTC trend turns positive",
+  },
+  ALTCOIN_SEASON_BELOW_75: {
+    vi: "Altcoin Season giảm xuống dưới 75",
+    en: "Altcoin Season falls below 75",
+  },
+  ALTCOIN_SEASON_ABOVE_75: {
+    vi: "Altcoin Season tăng lên trên 75",
+    en: "Altcoin Season rises above 75",
+  },
+  ALTCOIN_SEASON_ABOVE_25: {
+    vi: "Altcoin Season phục hồi lên trên 25",
+    en: "Altcoin Season recovers above 25",
+  },
+  ETH_ETF_FLOW_TURNS_NEGATIVE: {
+    vi: "Dòng tiền ETF ETH chuyển sang âm",
+    en: "ETH ETF flow turns negative",
+  },
+  ETH_ETF_FLOW_TURNS_POSITIVE: {
+    vi: "Dòng tiền ETF ETH chuyển sang dương",
+    en: "ETH ETF flow turns positive",
+  },
+  SOL_ETF_FLOW_TURNS_NEGATIVE: {
+    vi: "Dòng tiền ETF SOL chuyển sang âm",
+    en: "SOL ETF flow turns negative",
+  },
+  SOL_ETF_FLOW_TURNS_POSITIVE: {
+    vi: "Dòng tiền ETF SOL chuyển sang dương",
+    en: "SOL ETF flow turns positive",
+  },
 };
 
 function actionLabel(action: string, locale: Locale) {

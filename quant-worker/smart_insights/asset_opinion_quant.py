@@ -527,18 +527,67 @@ def _stance(score: Decimal) -> str:
     return "POSITIVE"
 
 
-def _invalidation_conditions(stance: str) -> tuple[str, ...]:
+def _invalidation_conditions(
+    stance: str,
+    symbol: str,
+    decision_inputs: tuple[DecisionInput, ...],
+) -> tuple[str, ...]:
+    conditions: list[str] = []
     if stance == "POSITIVE":
-        return ("ASSET_SCORE_BELOW_40",)
-    if stance == "CONSTRUCTIVE":
-        return ("ASSET_SCORE_BELOW_15",)
-    if stance == "CAUTIOUS":
-        return ("ASSET_SCORE_ABOVE_NEGATIVE_15",)
-    if stance == "NEGATIVE":
-        return ("ASSET_SCORE_ABOVE_NEGATIVE_40",)
-    if stance == "NEUTRAL":
-        return ("ASSET_SCORE_OUTSIDE_NEGATIVE_15_TO_15",)
-    return ()
+        conditions.append("ASSET_SCORE_BELOW_40")
+    elif stance == "CONSTRUCTIVE":
+        conditions.append("ASSET_SCORE_BELOW_15")
+    elif stance == "CAUTIOUS":
+        conditions.append("ASSET_SCORE_ABOVE_NEGATIVE_15")
+    elif stance == "NEGATIVE":
+        conditions.append("ASSET_SCORE_ABOVE_NEGATIVE_40")
+    elif stance == "NEUTRAL":
+        conditions.append("ASSET_SCORE_OUTSIDE_NEGATIVE_15_TO_15")
+
+    btc_trend = tuple(
+        row for row in decision_inputs if row.metric_code.startswith("crypto.btc.return_")
+    )
+    if btc_trend:
+        average = sum(
+            (row.normalized_score for row in btc_trend), Decimal("0")
+        ) / Decimal(len(btc_trend))
+        conditions.append(
+            "BTC_TREND_TURNS_NEGATIVE"
+            if average >= 0
+            else "BTC_TREND_TURNS_POSITIVE"
+        )
+
+    rotation = next(
+        (
+            row
+            for row in decision_inputs
+            if row.metric_code == "crypto.cycle.altcoin_season.index"
+        ),
+        None,
+    )
+    if rotation is not None:
+        if rotation.raw_value >= Decimal("75"):
+            conditions.append("ALTCOIN_SEASON_BELOW_75")
+        elif rotation.raw_value <= Decimal("25"):
+            conditions.append("ALTCOIN_SEASON_ABOVE_25")
+        else:
+            conditions.append("ALTCOIN_SEASON_ABOVE_75")
+
+    normalized_symbol = canonical_symbol(symbol)
+    if normalized_symbol in {"ETH", "SOL"}:
+        etf = next(
+            (
+                row
+                for row in decision_inputs
+                if row.metric_code == "crypto.etf.net_flow_usd"
+            ),
+            None,
+        )
+        if etf is not None:
+            direction = "NEGATIVE" if etf.normalized_score >= 0 else "POSITIVE"
+            conditions.append(f"{normalized_symbol}_ETF_FLOW_TURNS_{direction}")
+
+    return tuple(dict.fromkeys(conditions))
 
 
 def build_quant_opinion(
@@ -667,5 +716,7 @@ def build_quant_opinion(
         total_contribution=total_contribution,
         supporting_fact_ids=supporting_fact_ids,
         contradicting_fact_ids=contradicting_fact_ids,
-        invalidation_conditions=_invalidation_conditions(stance),
+        invalidation_conditions=_invalidation_conditions(
+            stance, asset.symbol, decision_inputs
+        ),
     )

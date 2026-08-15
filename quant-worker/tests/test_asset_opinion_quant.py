@@ -250,6 +250,54 @@ def test_altcoin_profile_accepts_m2_as_quantified_macro_liquidity() -> None:
     )
 
 
+def test_altcoin_invalidations_reference_only_available_decision_inputs() -> None:
+    eth = build_quant_opinion(
+        asset=candidate("ETH", market="crypto"),
+        bars=bars(90, symbol="ETH"),
+        specialized=(
+            fact("crypto.btc.return_20d", "market_bars", score="30"),
+            fact("crypto.btc.return_60d", "market_bars", score="20"),
+            fact(
+                "crypto.cycle.altcoin_season.index",
+                "blockchaincenter",
+                score=None,
+                value="80",
+            ),
+            fact("crypto.etf.net_flow_usd", "farside", score="40"),
+            fact(
+                "crypto.fear_greed.index",
+                "alternative-fng",
+                score=None,
+                value="60",
+            ),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    ada = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=tuple(
+            row
+            for row in eth.facts
+            if row.metric_code
+            in {
+                "crypto.btc.return_20d",
+                "crypto.btc.return_60d",
+                "crypto.cycle.altcoin_season.index",
+                "crypto.fear_greed.index",
+            }
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert "BTC_TREND_TURNS_NEGATIVE" in eth.invalidation_conditions
+    assert "ALTCOIN_SEASON_BELOW_75" in eth.invalidation_conditions
+    assert "ETH_ETF_FLOW_TURNS_NEGATIVE" in eth.invalidation_conditions
+    assert all("ETF_FLOW" not in code for code in ada.invalidation_conditions)
+
+
 def test_fact_sheet_ignores_future_and_uses_independent_sources() -> None:
     future = MarketBar("future", "BTC", NOW + timedelta(days=1), Decimal("999"), NOW + timedelta(days=1))
 
