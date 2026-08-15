@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
 import { config as loadEnvFile } from "dotenv";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 
 import { assertBudgets, benchmark } from "../scripts/benchmark-smart-insights.mjs";
@@ -14,6 +15,7 @@ const symbols = [
   "XAU",
   "VNINDEX",
   "ETH",
+  "SOL",
   "BNB",
   "XRP",
   "LTC",
@@ -34,17 +36,130 @@ const symbols = [
   "CTG",
   "VHM",
   "SAB",
-  "PLX",
 ] as const;
 
 function market(symbol: string) {
-  if (["BTC", "ETH", "BNB", "XRP", "LTC", "ADA", "LINK"].includes(symbol)) return "crypto";
+  if (["BTC", "ETH", "SOL", "BNB", "XRP", "LTC", "ADA", "LINK"].includes(symbol)) return "crypto";
   if (symbol === "XAU") return "gold";
   return "equity";
 }
 
 function name(symbol: string) {
-  return { BTC: "Bitcoin", XAU: "Gold Spot", VNINDEX: "VN-Index" }[symbol] ?? symbol;
+  return (
+    {
+      BTC: "Bitcoin",
+      ETH: "Ethereum",
+      SOL: "Solana",
+      ADA: "Cardano",
+      XAU: "Gold Spot",
+      VNINDEX: "VN-Index",
+    }[symbol] ?? symbol
+  );
+}
+
+function factorDefinitions(symbol: string, index: number) {
+  const score = 55 + (index % 20);
+  if (["ETH", "SOL"].includes(symbol)) {
+    return [
+      [
+        "market.return_20d",
+        "trend",
+        index + 1,
+        "PERCENT",
+        score,
+        0.25,
+        "return_x400_bounded_v1",
+        "20D",
+      ],
+      [
+        "crypto.btc.return_20d",
+        "btc_trend",
+        8.2,
+        "PERCENT",
+        32,
+        0.2,
+        "return_x400_bounded_v1",
+        "20D",
+      ],
+      [
+        "crypto.cycle.altcoin_season.index",
+        "altcoin_rotation",
+        78,
+        "INDEX",
+        56,
+        0.15,
+        "altcoin_season_centered_v1",
+        "90D",
+      ],
+      [
+        "crypto.etf.net_flow_usd",
+        "etf_flow",
+        symbol === "ETH" ? 184 : 47,
+        "USD_MILLIONS",
+        42,
+        0.25,
+        "empirical_percentile_90d",
+        "1D",
+      ],
+      [
+        "crypto.fear_greed.index",
+        "broad_sentiment",
+        61,
+        "INDEX",
+        22,
+        0.05,
+        "centered_index_v1",
+        "1D",
+      ],
+    ] as const;
+  }
+  if (market(symbol) === "crypto" && symbol !== "BTC") {
+    return [
+      [
+        "market.return_20d",
+        "trend",
+        index + 1,
+        "PERCENT",
+        score,
+        0.3,
+        "return_x400_bounded_v1",
+        "20D",
+      ],
+      [
+        "crypto.btc.return_20d",
+        "btc_trend",
+        8.2,
+        "PERCENT",
+        32,
+        0.25,
+        "return_x400_bounded_v1",
+        "20D",
+      ],
+      [
+        "crypto.cycle.altcoin_season.index",
+        "altcoin_rotation",
+        78,
+        "INDEX",
+        56,
+        0.2,
+        "altcoin_season_centered_v1",
+        "90D",
+      ],
+      [
+        "crypto.fear_greed.index",
+        "broad_sentiment",
+        61,
+        "INDEX",
+        22,
+        0.1,
+        "centered_index_v1",
+        "1D",
+      ],
+    ] as const;
+  }
+  return [
+    ["market.return_20d", "trend", index + 1, "PERCENT", score, 0.8, "empirical_percentile", "20D"],
+  ] as const;
 }
 
 async function seedBriefing(email: string) {
@@ -109,6 +224,7 @@ async function seedBriefing(email: string) {
     const assetOpinions: Array<Record<string, unknown>> = [];
 
     for (const [index, symbol] of symbols.entries()) {
+      const factors = factorDefinitions(symbol, index);
       const asset = await prisma.asset.upsert({
         where: { symbol },
         create: {
@@ -161,6 +277,11 @@ async function seedBriefing(email: string) {
         where: { id: evidence.id },
         data: { insightId: insight.id },
       });
+      const evidenceIds = factors.map((_, factorIndex) =>
+        factorIndex === 0 ? evidence.id : randomUUID(),
+      );
+      const coverage = factors.reduce((total, factor) => total + factor[5], 0);
+      const totalContribution = factors.reduce((total, factor) => total + factor[4] * factor[5], 0);
       await prisma.signalSnapshot.create({
         data: {
           market: market(symbol) === "equity" ? "macro" : market(symbol),
@@ -171,44 +292,40 @@ async function seedBriefing(email: string) {
           score: 55 + (index % 20),
           label: "CONSTRUCTIVE",
           dataConfidence: 76,
-          coverage: 0.8,
+          coverage,
           inputs: {
             schemaVersion: "asset-opinion-v2",
             assetName: name(symbol),
             portfolioWeightPct: index < 8 ? String(18 - index) : "0",
             freshness: "fresh",
             gate: { failed_gates: [] },
-            pillars: [
-              {
-                code: "trend",
-                score: String(55 + (index % 20)),
-                configured_weight: "0.8",
-                confidence: "80",
-                available_input_weight: "1",
-                contribution: String((55 + (index % 20)) * 0.8),
-                fact_ids: [evidence.id],
-                series: [[asOf.toISOString(), String(55 + (index % 20))]],
-              },
-            ],
-            decisionInputs: [
-              {
-                fact_id: evidence.id,
-                metric_code: "market.return_20d",
-                pillar_code: "trend",
-                raw_value: String(index + 1),
-                unit: "PERCENT",
-                normalized_score: String(55 + (index % 20)),
-                input_weight: "1",
-                weighted_score: String(55 + (index % 20)),
-                pillar_weight: "0.8",
-                contribution: String((55 + (index % 20)) * 0.8),
-                normalization_method: "empirical_percentile",
-                percentile: "0.8",
-                lookback: "20D",
-              },
-            ],
+            pillars: factors.map((factor, factorIndex) => ({
+              code: factor[1],
+              score: String(factor[4]),
+              configured_weight: String(factor[5]),
+              confidence: "80",
+              available_input_weight: "1",
+              contribution: String(factor[4] * factor[5]),
+              fact_ids: [evidenceIds[factorIndex]],
+              series: [[asOf.toISOString(), String(factor[4])]],
+            })),
+            decisionInputs: factors.map((factor, factorIndex) => ({
+              fact_id: evidenceIds[factorIndex],
+              metric_code: factor[0],
+              pillar_code: factor[1],
+              raw_value: String(factor[2]),
+              unit: factor[3],
+              normalized_score: String(factor[4]),
+              input_weight: "1",
+              weighted_score: String(factor[4]),
+              pillar_weight: String(factor[5]),
+              contribution: String(factor[4] * factor[5]),
+              normalization_method: factor[6],
+              percentile: "0.8",
+              lookback: factor[7],
+            })),
             formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
-            totalContribution: String((55 + (index % 20)) * 0.8),
+            totalContribution: String(totalContribution),
           },
           status: "active",
           idempotencyKey: `e2e:${organizationId}:${user.id}:${symbol}`,
@@ -225,18 +342,16 @@ async function seedBriefing(email: string) {
         unrealizedReturn: index < 8 ? String((index + 1) / 100) : null,
         riskTolerance: "moderate",
         personalizedAction: index === 0 ? "REVIEW_INCREASE" : "HOLD",
-        pillars: [
-          {
-            code: "trend",
-            score: String(55 + (index % 20)),
-            weight: "0.8",
-            confidence: "80",
-            availableInputWeight: "1",
-            contribution: String((55 + (index % 20)) * 0.8),
-            factIds: [evidence.id],
-            series: [{ ts: asOf.toISOString(), value: 55 + (index % 20) }],
-          },
-        ],
+        pillars: factors.map((factor, factorIndex) => ({
+          code: factor[1],
+          score: String(factor[4]),
+          weight: String(factor[5]),
+          confidence: "80",
+          availableInputWeight: "1",
+          contribution: String(factor[4] * factor[5]),
+          factIds: [evidenceIds[factorIndex]],
+          series: [{ ts: asOf.toISOString(), value: factor[4] }],
+        })),
         thesis: `${symbol}: xu hướng 20 ngày đạt ${(index + 1).toFixed(2)}%.`,
         bullCase: `Kịch bản tích cực được hỗ trợ bởi mức ${(index + 1).toFixed(2)}%.`,
         baseCase: `Kịch bản cơ sở giữ nguyên khi xu hướng 20 ngày còn ${(index + 1).toFixed(2)}%.`,
@@ -244,43 +359,39 @@ async function seedBriefing(email: string) {
         invalidationConditions: [`Xu hướng 20 ngày không còn mức ${(index + 1).toFixed(2)}%.`],
         quantInvalidationConditions: ["ASSET_SCORE_BELOW_15"],
         formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
-        totalContribution: String((55 + (index % 20)) * 0.8),
-        decisionInputs: [
-          {
-            evidenceId: evidence.id,
-            metricCode: "market.return_20d",
-            pillarCode: "trend",
-            rawValue: String(index + 1),
-            unit: "PERCENT",
-            normalizedScore: String(55 + (index % 20)),
-            inputWeight: "1",
-            weightedScore: String(55 + (index % 20)),
-            pillarWeight: "0.8",
-            contribution: String((55 + (index % 20)) * 0.8),
-            normalizationMethod: "empirical_percentile",
-            percentile: "0.8",
-            lookback: "20D",
-          },
-        ],
-        supportingEvidenceIds: [evidence.id],
+        totalContribution: String(totalContribution),
+        decisionInputs: factors.map((factor, factorIndex) => ({
+          evidenceId: evidenceIds[factorIndex],
+          metricCode: factor[0],
+          pillarCode: factor[1],
+          rawValue: String(factor[2]),
+          unit: factor[3],
+          normalizedScore: String(factor[4]),
+          inputWeight: "1",
+          weightedScore: String(factor[4]),
+          pillarWeight: String(factor[5]),
+          contribution: String(factor[4] * factor[5]),
+          normalizationMethod: factor[6],
+          percentile: "0.8",
+          lookback: factor[7],
+        })),
+        supportingEvidenceIds: evidenceIds,
         contradictingEvidenceIds: [],
-        evidence: [
-          {
-            id: evidence.id,
-            metricCode: "trend.return_20d",
-            displayValue: `${(index + 1).toFixed(2)}%`,
-            delta: null,
-            percentile: null,
-            impact: "supporting",
-            sourceCode: symbol === "BTC" ? "farside" : "e2e-quant",
-            sourceUrl: "https://example.test/quant-source",
-            effectiveAt: asOf.toISOString(),
-            observedAt: asOf.toISOString(),
-            freshness: "fresh",
-            usedInDecision: true,
-          },
-        ],
-        dataCoverage: "0.8",
+        evidence: factors.map((factor, factorIndex) => ({
+          id: evidenceIds[factorIndex],
+          metricCode: factor[0],
+          displayValue: `${factor[2]} ${factor[3]}`,
+          delta: null,
+          percentile: null,
+          impact: "supporting",
+          sourceCode: factor[1] === "etf_flow" ? "farside" : "e2e-quant",
+          sourceUrl: "https://example.test/quant-source",
+          effectiveAt: asOf.toISOString(),
+          observedAt: asOf.toISOString(),
+          freshness: "fresh",
+          usedInDecision: true,
+        })),
+        dataCoverage: String(coverage),
         freshness: "fresh",
         explanationStatus: "accepted",
         failedGates: [],
@@ -366,6 +477,8 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   await expect(page.getByText("Research run", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Investor Intelligence", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Tài sản nổi bật", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /USDT/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /USDC/ })).toHaveCount(0);
   await expect(page.getByTestId("asset-opinion-detail")).toHaveCount(1);
 
   await page.getByRole("button", { name: /BTC Bitcoin/ }).click();
@@ -383,6 +496,21 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   await expect(
     page.getByTestId("asset-opinion-detail").locator("th", { hasText: "Điểm chuẩn hóa" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: /ETH Ethereum/ }).click();
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("ETH · Ethereum");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Xu hướng BTC");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Luân chuyển Altcoin");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Dòng tiền ETF");
+
+  await page.getByRole("button", { name: /ADA Cardano/ }).click();
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("ADA · Cardano");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Luân chuyển Altcoin");
+  await expect(page.getByTestId("asset-opinion-detail")).not.toContainText("Dòng tiền ETF");
+
+  await page.getByRole("button", { name: /SOL Solana/ }).click();
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("SOL · Solana");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Dòng tiền ETF");
+
   await page.getByRole("button", { name: /XAU Gold Spot/ }).click();
   await expect(page.getByTestId("asset-opinion-detail")).toContainText("XAU · Gold Spot");
 
