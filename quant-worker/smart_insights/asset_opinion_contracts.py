@@ -192,3 +192,36 @@ class AssetOpinionMarketData:
 
     def facts_for(self, symbol: str) -> tuple[QuantFact, ...]:
         return next((rows for key, rows in self.facts if key == symbol), ())
+
+
+@dataclass(frozen=True, slots=True)
+class AssetOpinionAiOutput:
+    thesis: str
+    bull_case: str
+    base_case: str
+    bear_case: str
+    invalidation_conditions: tuple[str, ...]
+    supporting_evidence_ids: tuple[str, ...]
+    contradicting_evidence_ids: tuple[str, ...]
+    affected_assets: tuple[str, ...]
+    time_horizon: str
+    personalized_action: str
+    confidence: int
+
+    @property
+    def prose(self) -> str:
+        return "\n".join(
+            (
+                self.thesis,
+                self.bull_case,
+                self.base_case,
+                self.bear_case,
+                *self.invalidation_conditions,
+            )
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AssetOpinionGroundingAccepted:
+    output: AssetOpinionAiOutput
+    bundle_fingerprint: str

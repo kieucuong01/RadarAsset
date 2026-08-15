@@ -8,12 +8,21 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from smart_insights.evidence import EvidenceBundle
+from smart_insights.asset_opinion_contracts import AssetOpinionAiOutput
 
 
 ALLOWED_HORIZONS = ("INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3")
 ALLOWED_CHECKS = (
     "MONITOR", "REVIEW_ALLOCATION", "CHECK_DRAWDOWN_OR_STOP_POLICY",
     "REDUCE_EVENT_RISK_FOR_REVIEW", "WAIT_FOR_CONFIRMATION",
+    "NO_ACTION_INSUFFICIENT_DATA",
+)
+
+ALLOWED_ASSET_ACTIONS = (
+    "HOLD",
+    "REVIEW_INCREASE",
+    "REVIEW_REDUCE_RISK",
+    "WAIT_CONFIRMATION",
     "NO_ACTION_INSUFFICIENT_DATA",
 )
 
@@ -47,6 +56,65 @@ when confidence is above 60. Return prose in {locale}; do not translate evidence
 enums, or formatted numbers. Choose one allowed suggested-check template. Never create an order, exact
 trade size, guaranteed forecast, or price target. If the evidence is insufficient, choose
 NO_ACTION_INSUFFICIENT_DATA and lower confidence. Return only the required structured output."""
+
+ASSET_OPINION_OUTPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "thesis",
+        "bull_case",
+        "base_case",
+        "bear_case",
+        "invalidation_conditions",
+        "supporting_evidence_ids",
+        "contradicting_evidence_ids",
+        "affected_assets",
+        "time_horizon",
+        "personalized_action",
+        "confidence",
+    ],
+    "properties": {
+        "thesis": {"type": "string", "maxLength": 700},
+        "bull_case": {"type": "string", "maxLength": 700},
+        "base_case": {"type": "string", "maxLength": 700},
+        "bear_case": {"type": "string", "maxLength": 700},
+        "invalidation_conditions": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 280},
+            "maxItems": 3,
+        },
+        "supporting_evidence_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 12,
+        },
+        "contradicting_evidence_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 12,
+        },
+        "affected_assets": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 1,
+        },
+        "time_horizon": {"type": "string", "enum": list(ALLOWED_HORIZONS)},
+        "personalized_action": {
+            "type": "string",
+            "enum": list(ALLOWED_ASSET_ACTIONS),
+        },
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+}
+
+ASSET_OPINION_SYSTEM_PROMPT_V1 = """You explain a deterministic quantitative asset opinion for a personal investor.
+Use only the supplied evidence bundle. Do not browse, calculate a new market number, or use outside
+knowledge. Copy every displayed number exactly, preserving its unit, asset, and effective period.
+Do not change deterministic_action. Include every supplied contradiction when confidence exceeds 60.
+Return prose in {locale}; keep asset codes, evidence IDs, units, enums, and numbers unchanged. Never
+create an order, exact position size, guaranteed forecast, or price target. Return only the strict
+structured output."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +196,45 @@ def parse_output(payload: object) -> StructuredInsightOutput | AiSchemaError:
     )
 
 
+def parse_asset_opinion_output(payload: object) -> AssetOpinionAiOutput | AiSchemaError:
+    required = set(ASSET_OPINION_OUTPUT_SCHEMA["required"])
+    if not isinstance(payload, dict) or set(payload) != required:
+        return AiSchemaError("AI_SCHEMA_INVALID")
+    prose = tuple(payload.get(key) for key in ("thesis", "bull_case", "base_case", "bear_case"))
+    invalidations = _strings(payload.get("invalidation_conditions"), maximum=3, max_length=280)
+    supporting = _strings(payload.get("supporting_evidence_ids"), maximum=12)
+    contradicting = _strings(payload.get("contradicting_evidence_ids"), maximum=12)
+    assets = _strings(payload.get("affected_assets"), maximum=1)
+    confidence = payload.get("confidence")
+    if (
+        any(not isinstance(value, str) or len(value) > 700 for value in prose)
+        or invalidations is None
+        or supporting is None
+        or contradicting is None
+        or assets is None
+        or len(assets) != 1
+        or payload.get("time_horizon") not in ALLOWED_HORIZONS
+        or payload.get("personalized_action") not in ALLOWED_ASSET_ACTIONS
+        or isinstance(confidence, bool)
+        or not isinstance(confidence, int)
+        or not 0 <= confidence <= 100
+    ):
+        return AiSchemaError("AI_SCHEMA_INVALID")
+    return AssetOpinionAiOutput(
+        thesis=str(prose[0]),
+        bull_case=str(prose[1]),
+        base_case=str(prose[2]),
+        bear_case=str(prose[3]),
+        invalidation_conditions=invalidations,
+        supporting_evidence_ids=supporting,
+        contradicting_evidence_ids=contradicting,
+        affected_assets=assets,
+        time_horizon=str(payload["time_horizon"]),
+        personalized_action=str(payload["personalized_action"]),
+        confidence=confidence,
+    )
+
+
 def _extract(response: dict[str, Any]) -> object | None:
     texts = [
         content.get("text")
@@ -173,6 +280,88 @@ def synthesize(
         if status == 200:
             extracted = _extract(response)
             return parse_output(extracted) if extracted is not None else AiSchemaError("AI_RESPONSE_INVALID")
+        if status != 429 and status < 500:
+            break
+        if attempt == 0:
+            time.sleep(0.05)
+    return AiUnavailable("AI_PROVIDER_UNAVAILABLE")
+
+
+def synthesize_asset_opinion(
+    bundle: EvidenceBundle,
+    *,
+    deterministic_action: str,
+    locale: str,
+    model: str | None,
+    api_key: str | None,
+    transport: JsonTransport | None = None,
+    timeout_seconds: int = 30,
+    endpoint: str = "https://api.openai.com/v1/responses",
+) -> AssetOpinionAiOutput | AiUnavailable | AiSchemaError:
+    if not model or not api_key:
+        return AiUnavailable("AI_NOT_CONFIGURED")
+    if (
+        locale not in {"vi", "en"}
+        or deterministic_action not in ALLOWED_ASSET_ACTIONS
+        or not 1 <= timeout_seconds <= 60
+    ):
+        return AiUnavailable("AI_CONFIGURATION_INVALID")
+    user_payload = json.dumps(
+        {
+            "bundle": json.loads(bundle.to_json()),
+            "deterministic_action": deterministic_action,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    body = {
+        "model": model,
+        "input": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": ASSET_OPINION_SYSTEM_PROMPT_V1.format(locale=locale),
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": user_payload}],
+            },
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "asset_opinion",
+                "strict": True,
+                "schema": ASSET_OPINION_OUTPUT_SCHEMA,
+            }
+        },
+        "store": False,
+    }
+    client = transport or UrllibJsonTransport()
+    for attempt in range(2):
+        try:
+            status, response = client.post_json(
+                endpoint,
+                body,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout_seconds=timeout_seconds,
+            )
+        except (OSError, TimeoutError, URLError):
+            status, response = 599, {}
+        if status == 200:
+            extracted = _extract(response)
+            return (
+                parse_asset_opinion_output(extracted)
+                if extracted is not None
+                else AiSchemaError("AI_RESPONSE_INVALID")
+            )
         if status != 429 and status < 500:
             break
         if attempt == 0:
