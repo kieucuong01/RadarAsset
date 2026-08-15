@@ -66,7 +66,7 @@ missing baseline remains visible rather than being backfilled with an estimate.
 
 ## Final verification
 
-Final branch: `feat/asset-opinion-design`
+Final branch: `feat/asset-opinion-80-20`
 
 Measurement mode:
 
@@ -86,19 +86,22 @@ Result: 2 tests passed (desktop and mobile).
 | Metric | Baseline | Final | Budget | Result |
 |---|---:|---:|---:|---|
 | Briefing assets | Not captured | 25 | At most 25 | Pass |
-| Briefing endpoint p50 | Not captured | 17 ms | Informational | Recorded |
-| Briefing endpoint p95 | Not captured | 37 ms | At most 200 ms | Pass |
-| Briefing response bytes | Not captured | 77,808 B | At most 250,000 B | Pass |
-| Briefing gzip bytes | Not captured | 4,169 B | At most 75,000 B | Pass |
+| Briefing endpoint p50 | Not captured | 18 ms | Informational | Recorded |
+| Briefing endpoint p95 | Not captured | 35 ms | At most 200 ms | Pass |
+| Briefing response bytes | Not captured | 47,489 B | At most 250,000 B | Pass |
+| Briefing gzip bytes | Not captured | 4,064 B | At most 75,000 B | Pass |
+| Decision inputs per opinion | Not captured | 1 in deterministic E2E fixture; hard cap 12 | At most 12 | Pass |
+| Evidence per opinion | Not captured | 1 in deterministic E2E fixture; hard cap 12 | At most 12 | Pass |
+| Supporting / contradicting evidence | Not captured | 1 / 0 in deterministic E2E fixture | At most 5 / 3 | Pass |
 | Briefing read query shape | 1 Prisma query with nested legacy items | 1 Prisma query; opinions embedded in `market_summary` | Constant | Pass |
 | Additional opinion evidence query | Not applicable | 0 | 0 | Pass |
-| Desktop LCP | Not captured | 524 ms | At most 2,500 ms | Pass |
-| Desktop INP | Not captured | 64 ms | At most 200 ms | Pass |
+| Desktop LCP | Not captured | 540 ms | At most 2,500 ms | Pass |
+| Desktop INP | Not captured | 72 ms | At most 200 ms | Pass |
 | Desktop CLS | Not captured | 0 | At most 0.1 | Pass |
-| Mobile LCP | Not captured | 348 ms | At most 2,500 ms | Pass |
-| Mobile INP | Not captured | 40 ms | At most 200 ms | Pass |
+| Mobile LCP | Not captured | 388 ms | At most 2,500 ms | Pass |
+| Mobile INP | Not captured | 48 ms | At most 200 ms | Pass |
 | Mobile CLS | Not captured | 0 | At most 0.1 | Pass |
-| Initial page JavaScript | Not captured | 472,426 encoded B across 20 resources | Delta at most 30 KB | Delta unavailable |
+| Initial page JavaScript | Not captured | 472,050 encoded B across 20 resources | Delta at most 30 KB | Delta unavailable |
 
 The initial-JavaScript delta cannot be calculated because Task 1 did not capture a baseline build.
 The final total is recorded without relabeling it as a feature delta. Runtime budgets are enforced in
@@ -109,6 +112,15 @@ compilation and Fast Refresh distort those values.
 
 - The desktop renders the table and one selected detail region; mobile renders stacked cards.
 - BTC and XAU selection updates the same detail region and only the selected asset renders charts.
+- Every decision input exposes raw value, normalization method, normalized score, input weight,
+  pillar weight, contribution, source, and effective timestamp behind a progressive-disclosure row.
+- The rendered conclusion is followed by at most five supporting facts, at most three contradicting
+  facts, and deterministic conditions that would change the view.
+- Only the newest observation per metric survives repository selection. Both observed and effective
+  age must satisfy the source SLA, so a recently backfilled historical row cannot be marked fresh.
+- Farside uses a rolling 90-day empirical percentile, CoinShares and gold positioning use a rolling
+  52-week percentile, and on-chain/macro use a rolling 365-day percentile when enough history exists.
+- Fear & Greed keeps its bounded centered score/pipeline score rather than being duplicated by label.
 - No horizontal overflow is present at the tested desktop or 390 x 844 mobile viewport.
 - The page does not request legacy research-run, intelligence, or generic-insights endpoints.
 - `Research run`, `Investor Intelligence`, and `Tài sản nổi bật` are absent from the rendered page.
@@ -123,11 +135,27 @@ npm run lint
 0 errors; 13 Fast Refresh warnings in files outside the feature diff
 
 npm test
-80 files passed; 418 tests passed
+82 files passed; 435 tests passed
 
-focused quant-worker pytest
-40 tests passed
+quant-worker pytest --basetemp .pytest-tmp
+588 passed; 28 skipped
 
 production next build
 compiled, type-checked, and generated all pages successfully
+
+production Playwright E2E
+2 tests passed (desktop and mobile)
 ```
+
+## Live-source boundary check
+
+The live refresh is recorded separately from the deterministic E2E fixture:
+
+- Alternative.me succeeded with 3,113 Fear & Greed observations.
+- Farside BTC, ETH, and SOL succeeded with 195, 165, and 105 rows respectively.
+- CoinShares failed closed with `MISSING_PERIOD`; the OCR result was not enabled or substituted.
+- FRED remained disabled because its API key is not configured.
+- CFTC disaggregated remained disabled after an upstream HTTP error.
+- The latest BTC briefing used seven bounded decision inputs/evidence rows, not the historical
+  observations returned by collectors. Gold and VNINDEX remain `insufficient_data` when required
+  source families are unavailable.

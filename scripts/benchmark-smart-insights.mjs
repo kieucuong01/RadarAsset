@@ -36,6 +36,18 @@ export function assertBudgets(result) {
   if (Number.isFinite(result.assetCount) && result.assetCount > 25) {
     failures.push(`asset count ${result.assetCount} > 25`);
   }
+  if (Number.isFinite(result.maxDecisionInputs) && result.maxDecisionInputs > 12) {
+    failures.push(`decision inputs ${result.maxDecisionInputs} > 12`);
+  }
+  if (Number.isFinite(result.maxEvidence) && result.maxEvidence > 12) {
+    failures.push(`evidence ${result.maxEvidence} > 12`);
+  }
+  if (Number.isFinite(result.maxSupporting) && result.maxSupporting > 5) {
+    failures.push(`supporting ${result.maxSupporting} > 5`);
+  }
+  if (Number.isFinite(result.maxContradicting) && result.maxContradicting > 3) {
+    failures.push(`contradicting ${result.maxContradicting} > 3`);
+  }
   if (failures.length > 0) throw new Error(failures.join(", "));
 }
 
@@ -64,12 +76,22 @@ export async function benchmark({ url, cookie, iterations = 20, fetchImpl = fetc
   }
 
   const parsed = JSON.parse(body);
-  const assetCount = Array.isArray(parsed?.assetOpinions) ? parsed.assetOpinions.length : 0;
+  const opinions = Array.isArray(parsed?.assetOpinions) ? parsed.assetOpinions : [];
+  const assetCount = opinions.length;
+  const maximumLength = (key) =>
+    Math.max(
+      0,
+      ...opinions.map((opinion) => (Array.isArray(opinion?.[key]) ? opinion[key].length : 0)),
+    );
 
   return {
     iterations,
     requestCount: iterations + 1,
     assetCount,
+    maxDecisionInputs: maximumLength("decisionInputs"),
+    maxEvidence: maximumLength("evidence"),
+    maxSupporting: maximumLength("supportingEvidenceIds"),
+    maxContradicting: maximumLength("contradictingEvidenceIds"),
     p50Ms: Math.round(percentile(samples, 0.5)),
     p95Ms: Math.round(percentile(samples, 0.95)),
     bytes: Buffer.byteLength(body),

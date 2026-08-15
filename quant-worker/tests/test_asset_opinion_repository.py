@@ -96,6 +96,8 @@ def fact_row(
         "signal_market": "crypto" if metric_code.startswith("crypto.") else "macro",
         "signal_percentile": Decimal("0.675"),
         "signal_configured_weight": Decimal("0.25"),
+        "raw_percentile": None,
+        "raw_history_count": 0,
         "dimensions": resolved_dimensions,
         "critical": False,
     }
@@ -124,6 +126,8 @@ def test_batch_loader_uses_two_queries_for_one_or_twenty_five_assets() -> None:
     assert "signal_scores AS" in many.queries[1]
     assert "PARTITION BY source_observation_id" in many.queries[1]
     assert "LEFT JOIN LATERAL" not in many.queries[1]
+    assert "metric_rank <= 100" in many.queries[1]
+    assert "LIMIT 1000" in many.queries[1]
 
 
 def test_batch_loader_groups_bars_and_global_facts_without_future_or_kronos() -> None:
@@ -172,7 +176,7 @@ def test_batch_loader_deduplicates_same_symbol_and_trading_date() -> None:
     assert tuple(row.id for row in result.bars_for("BTC")) == ("bar-BTC-2",)
 
 
-def test_loader_scopes_global_facts_by_market_and_keeps_latest_metric_dimension() -> None:
+def test_loader_scopes_global_facts_by_market_and_keeps_latest_metric() -> None:
     older = fact_row(
         None,
         "crypto.fear_greed.index",
@@ -183,7 +187,7 @@ def test_loader_scopes_global_facts_by_market_and_keeps_latest_metric_dimension(
     latest = fact_row(
         None,
         "crypto.fear_greed.index",
-        dimensions={"classification": "fear"},
+        dimensions={"classification": "greed"},
     )
     latest["id"] = "fear-greed-latest"
     macro = fact_row(None, "macro.real_yield.10y_pct")
@@ -218,6 +222,45 @@ def test_loader_scopes_global_facts_by_market_and_keeps_latest_metric_dimension(
     assert "macro.real_yield.10y_pct" not in {
         row.metric_code for row in result.facts_for("VNINDEX")
     }
+
+
+def test_loader_marks_backfilled_old_effective_data_stale() -> None:
+    historical = fact_row(
+        None,
+        "crypto.fear_greed.index",
+        effective_at=NOW - timedelta(days=30),
+        dimensions={"classification": "fear"},
+    )
+    historical["observed_at"] = NOW
+
+    result = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=[historical]),
+        (("BTC", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+
+    assert result.facts_for("BTC")[0].fresh is False
+
+
+def test_loader_normalizes_unscored_farside_from_90_day_percentile() -> None:
+    etf = fact_row("BTC", "crypto.etf.net_flow_usd")
+    etf["signal_score"] = None
+    etf["signal_percentile"] = None
+    etf["raw_percentile"] = Decimal("0.8")
+    etf["raw_history_count"] = 15
+
+    result = load_asset_opinion_market_data(
+        CountingConnection(fact_rows=[etf]),
+        (("BTC", "crypto"),),
+        ("BTC",),
+        NOW,
+    )
+
+    fact = result.facts_for("BTC")[0]
+    assert fact.signed_score == Decimal("60.0")
+    assert fact.percentile == Decimal("0.8")
+    assert fact.normalization_method == "empirical_percentile_90d"
 
 
 def test_loader_excludes_noise_and_caps_latest_decision_facts() -> None:

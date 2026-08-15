@@ -14,7 +14,17 @@ test("percentile rejects empty or invalid samples", () => {
 });
 
 test("briefing budget accepts the exact boundary", () => {
-  expect(() => assertBudgets({ p95Ms: 200, bytes: 250_000, gzipBytes: 75_000 })).not.toThrow();
+  expect(() =>
+    assertBudgets({
+      p95Ms: 200,
+      bytes: 250_000,
+      gzipBytes: 75_000,
+      maxDecisionInputs: 12,
+      maxEvidence: 12,
+      maxSupporting: 5,
+      maxContradicting: 3,
+    }),
+  ).not.toThrow();
 });
 
 test("briefing budget reports every exceeded limit", () => {
@@ -26,7 +36,13 @@ test("briefing budget reports every exceeded limit", () => {
 test("benchmark warms once, reports asset count, and excludes the warm-up", async () => {
   let calls = 0;
   const body = JSON.stringify({
-    assetOpinions: Array.from({ length: 25 }, (_, index) => ({ index })),
+    assetOpinions: Array.from({ length: 25 }, (_, index) => ({
+      index,
+      decisionInputs: Array.from({ length: 12 }),
+      evidence: Array.from({ length: 12 }),
+      supportingEvidenceIds: Array.from({ length: 5 }),
+      contradictingEvidenceIds: Array.from({ length: 3 }),
+    })),
   });
   const result = await benchmark({
     url: "http://local.test/api/smart-insights/briefing",
@@ -40,7 +56,25 @@ test("benchmark warms once, reports asset count, and excludes the warm-up", asyn
   expect(calls).toBe(4);
   expect(result.iterations).toBe(3);
   expect(result.assetCount).toBe(25);
+  expect(result.maxDecisionInputs).toBe(12);
+  expect(result.maxEvidence).toBe(12);
+  expect(result.maxSupporting).toBe(5);
+  expect(result.maxContradicting).toBe(3);
   expect(result.requestCount).toBe(4);
+});
+
+test("briefing budget rejects unbounded decision evidence", () => {
+  expect(() =>
+    assertBudgets({
+      p95Ms: 1,
+      bytes: 1,
+      gzipBytes: 1,
+      maxDecisionInputs: 13,
+      maxEvidence: 2_000,
+      maxSupporting: 6,
+      maxContradicting: 4,
+    }),
+  ).toThrow(/decision inputs 13 > 12.*evidence 2000 > 12.*supporting 6 > 5.*contradicting 4 > 3/);
 });
 
 test("briefing budget rejects a universe over 25 assets", () => {

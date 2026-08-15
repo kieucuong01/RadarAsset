@@ -89,8 +89,37 @@ WITH ranked AS (
   WHERE (asset.symbol = ANY(%s) OR observation.asset_id IS NULL)
     AND observation.effective_at <= %s
     AND observation.observed_at <= %s
+    AND observation.effective_at >= %s - CASE
+      WHEN metric.code = 'crypto.etf.net_flow_usd' THEN INTERVAL '90 days'
+      WHEN metric.code = 'crypto.coinshares.net_flow_usd' THEN INTERVAL '364 days'
+      ELSE INTERVAL '365 days'
+    END
     AND observation.quality_status IN ('passed', 'warning')
     AND snapshot.status = 'validated'
+    AND (
+      metric.code <> 'crypto.etf.net_flow_usd'
+      OR observation.dimensions ->> 'fund' = 'TOTAL'
+    )
+    AND (
+      metric.code <> 'crypto.coinshares.net_flow_usd'
+      OR LOWER(COALESCE(observation.dimensions ->> 'asset', 'total'))
+         IN ('total', 'bitcoin', 'btc')
+    )
+), current_observations AS (
+  SELECT ranked.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY asset_symbol, metric_code
+           ORDER BY effective_at DESC, observed_at DESC, id
+         ) AS metric_rank
+       , PERCENT_RANK() OVER (
+           PARTITION BY asset_symbol, metric_code
+           ORDER BY value
+         ) AS raw_percentile
+       , COUNT(*) OVER (
+           PARTITION BY asset_symbol, metric_code
+         ) AS raw_history_count
+  FROM ranked
+  WHERE revision_rank = 1
 ), signal_scores AS (
   SELECT source_observation_id,
          signal.market AS signal_market,
@@ -118,26 +147,26 @@ WITH ranked AS (
   ) source_observation_id
   WHERE signal.effective_at <= %s
 ), scored AS (
-  SELECT ranked.*,
+  SELECT current_observations.*,
          signal_scores.signal_market,
          signal_scores.signal_metric_code,
          signal_scores.signal_score,
          signal_scores.signal_percentile,
          signal_scores.signal_configured_weight
-  FROM ranked
+  FROM current_observations
   LEFT JOIN signal_scores
-    ON signal_scores.source_observation_id = ranked.id::text
+    ON signal_scores.source_observation_id = current_observations.id::text
    AND signal_scores.score_rank = 1
-  WHERE ranked.revision_rank = 1
+  WHERE current_observations.metric_rank <= 100
 )
 SELECT id, asset_symbol, metric_code, value, unit, direction,
        methodology_version, freshness_sla_minutes, effective_at, observed_at,
        quality_status, dimensions, provider_code, source_url, critical,
        signal_market, signal_metric_code, signal_score, signal_percentile,
-       signal_configured_weight
+       signal_configured_weight, raw_percentile, raw_history_count
 FROM scored
-ORDER BY asset_symbol NULLS FIRST, metric_code, effective_at, id
-LIMIT 2000
+ORDER BY asset_symbol NULLS FIRST, metric_code, effective_at DESC, id
+LIMIT 1000
 """
 
 
@@ -213,9 +242,9 @@ def _dimensions(value: object) -> tuple[tuple[str, str], ...]:
 def latest_decision_facts(
     rows: tuple[QuantFact, ...], *, limit: int = 12
 ) -> tuple[QuantFact, ...]:
-    latest: dict[tuple[str, tuple[tuple[str, str], ...]], QuantFact] = {}
+    latest: dict[str, QuantFact] = {}
     for row in rows:
-        key = (row.metric_code, row.dimensions)
+        key = row.metric_code
         current = latest.get(key)
         if current is None or (row.effective_at, row.observed_at, row.id) > (
             current.effective_at,
@@ -269,6 +298,21 @@ def _fact_dimensions_allowed(
     return True
 
 
+def _raw_normalization_spec(metric_code: str) -> tuple[int, str] | None:
+    if metric_code == "crypto.fear_greed.index":
+        return None
+    if metric_code == "crypto.etf.net_flow_usd":
+        return (10, "empirical_percentile_90d")
+    if metric_code in {
+        "crypto.coinshares.net_flow_usd",
+        "gold.cftc.managed_money_net_oi",
+    }:
+        return (10, "empirical_percentile_52w")
+    if metric_code.startswith(("crypto.onchain.", "macro.")):
+        return (20, "empirical_percentile_365d")
+    return None
+
+
 def _fact_for_asset(
     candidate_rows: list[dict[str, object]],
     *,
@@ -304,10 +348,13 @@ def _fact_for_asset(
     )
     effective_at = _aware(base["effective_at"])
     observed_at = _aware(base["observed_at"])
-    age_minutes = Decimal(str((as_of - observed_at).total_seconds() / 60))
+    observed_age_minutes = Decimal(str((as_of - observed_at).total_seconds() / 60))
+    effective_age_minutes = Decimal(str((as_of - effective_at).total_seconds() / 60))
+    freshness_sla = Decimal(str(base["freshness_sla_minutes"]))
     fresh = (
         str(base["quality_status"]) in {"passed", "warning"}
-        and Decimal("0") <= age_minutes <= Decimal(str(base["freshness_sla_minutes"]))
+        and Decimal("0") <= observed_age_minutes <= freshness_sla
+        and Decimal("0") <= effective_age_minutes <= freshness_sla
     )
     percentile = _optional_decimal(
         score_row.get("signal_percentile") if score_row is not None else None
@@ -315,6 +362,29 @@ def _fact_for_asset(
     input_weight = _optional_decimal(
         score_row.get("signal_configured_weight") if score_row is not None else None
     )
+    signed_score = _score(
+        score_row.get("signal_score") if score_row is not None else None
+    )
+    normalization_method = (
+        "empirical_percentile" if percentile is not None else "source_signal"
+    )
+    raw_spec = _raw_normalization_spec(metric_code)
+    raw_percentile = _optional_decimal(base.get("raw_percentile"))
+    raw_history_count = int(base.get("raw_history_count") or 0)
+    if (
+        signed_score is None
+        and fresh
+        and raw_spec is not None
+        and raw_percentile is not None
+        and raw_history_count >= raw_spec[0]
+    ):
+        percentile = raw_percentile
+        signed_score = _score(
+            (Decimal("2") * raw_percentile - Decimal("1"))
+            * Decimal("100")
+            * Decimal(str(base["direction"]))
+        )
+        normalization_method = raw_spec[1]
     return QuantFact(
         id=str(base["id"]),
         metric_code=metric_code,
@@ -325,7 +395,7 @@ def _fact_for_asset(
         source_family=str(base["provider_code"]),
         source_code=str(base["provider_code"]),
         source_url=str(base["source_url"]),
-        signed_score=_score(score_row.get("signal_score") if score_row is not None else None),
+        signed_score=signed_score,
         confidence=Decimal("100") if fresh else Decimal("0"),
         fresh=fresh,
         critical=bool(base.get("critical", False)),
@@ -333,15 +403,13 @@ def _fact_for_asset(
         dimensions=dimensions,
         percentile=percentile,
         source_input_weight=input_weight,
-        normalization_method=(
-            "empirical_percentile" if percentile is not None else "source_signal"
-        ),
+        normalization_method=normalization_method,
         signal_metric_code=(
             str(score_row.get("signal_metric_code"))
             if score_row is not None and score_row.get("signal_metric_code")
             else None
         ),
-        signal_market=preferred_market if score_row is not None else None,
+        signal_market=preferred_market if signed_score is not None else None,
     )
 
 
@@ -371,7 +439,9 @@ def load_asset_opinion_market_data(
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(BAR_QUERY, (list(requested), as_of, as_of, as_of))
         raw_bars = tuple(cursor.fetchall())
-        cursor.execute(FACT_QUERY, (list(canonical_assets), as_of, as_of, as_of))
+        cursor.execute(
+            FACT_QUERY, (list(canonical_assets), as_of, as_of, as_of, as_of)
+        )
         raw_facts = tuple(cursor.fetchall())
 
     bars_by_symbol: dict[str, dict[datetime, MarketBar]] = defaultdict(dict)

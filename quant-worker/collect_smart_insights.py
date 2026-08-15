@@ -957,7 +957,7 @@ def main(
                     if args.all_memberships:
                         with connection.cursor(row_factory=dict_row) as cursor:
                             cursor.execute(
-                                "SELECT organization_id, user_id FROM memberships ORDER BY organization_id, user_id"
+                                "SELECT organization_id, user_id FROM organization_memberships ORDER BY organization_id, user_id"
                             )
                             memberships = [
                                 (str(row["organization_id"]), str(row["user_id"]))
@@ -966,7 +966,7 @@ def main(
                     elif args.organization_id and args.user_id:
                         with connection.cursor(row_factory=dict_row) as cursor:
                             cursor.execute(
-                                "SELECT 1 FROM memberships WHERE organization_id = %s AND user_id = %s",
+                                "SELECT 1 FROM organization_memberships WHERE organization_id = %s AND user_id = %s",
                                 (args.organization_id, args.user_id),
                             )
                             if cursor.fetchone() is None:

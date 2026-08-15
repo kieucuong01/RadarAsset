@@ -173,7 +173,7 @@ async function seedBriefing(email: string) {
           dataConfidence: 76,
           coverage: 0.8,
           inputs: {
-            schemaVersion: "asset-opinion-v1",
+            schemaVersion: "asset-opinion-v2",
             assetName: name(symbol),
             portfolioWeightPct: index < 8 ? String(18 - index) : "0",
             freshness: "fresh",
@@ -181,27 +181,34 @@ async function seedBriefing(email: string) {
             pillars: [
               {
                 code: "trend",
-                score: "65",
-                configured_weight: "0.4",
+                score: String(55 + (index % 20)),
+                configured_weight: "0.8",
                 confidence: "80",
+                available_input_weight: "1",
+                contribution: String((55 + (index % 20)) * 0.8),
                 fact_ids: [evidence.id],
-                series: Array.from({ length: 20 }, (_, day) => [
-                  new Date(asOf.getTime() - (19 - day) * 86_400_000).toISOString(),
-                  String(35 + day + (index % 5)),
-                ]),
-              },
-              {
-                code: "risk",
-                score: "40",
-                configured_weight: "0.3",
-                confidence: "72",
-                fact_ids: [evidence.id],
-                series: Array.from({ length: 20 }, (_, day) => [
-                  new Date(asOf.getTime() - (19 - day) * 86_400_000).toISOString(),
-                  String(20 + day / 2),
-                ]),
+                series: [[asOf.toISOString(), String(55 + (index % 20))]],
               },
             ],
+            decisionInputs: [
+              {
+                fact_id: evidence.id,
+                metric_code: "market.return_20d",
+                pillar_code: "trend",
+                raw_value: String(index + 1),
+                unit: "PERCENT",
+                normalized_score: String(55 + (index % 20)),
+                input_weight: "1",
+                weighted_score: String(55 + (index % 20)),
+                pillar_weight: "0.8",
+                contribution: String((55 + (index % 20)) * 0.8),
+                normalization_method: "empirical_percentile",
+                percentile: "0.8",
+                lookback: "20D",
+              },
+            ],
+            formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
+            totalContribution: String((55 + (index % 20)) * 0.8),
           },
           status: "active",
           idempotencyKey: `e2e:${organizationId}:${user.id}:${symbol}`,
@@ -221,25 +228,13 @@ async function seedBriefing(email: string) {
         pillars: [
           {
             code: "trend",
-            score: "65",
-            weight: "0.4",
+            score: String(55 + (index % 20)),
+            weight: "0.8",
             confidence: "80",
+            availableInputWeight: "1",
+            contribution: String((55 + (index % 20)) * 0.8),
             factIds: [evidence.id],
-            series: Array.from({ length: 20 }, (_, day) => ({
-              ts: new Date(asOf.getTime() - (19 - day) * 86_400_000).toISOString(),
-              value: 35 + day + (index % 5),
-            })),
-          },
-          {
-            code: "risk",
-            score: "40",
-            weight: "0.3",
-            confidence: "72",
-            factIds: [evidence.id],
-            series: Array.from({ length: 20 }, (_, day) => ({
-              ts: new Date(asOf.getTime() - (19 - day) * 86_400_000).toISOString(),
-              value: 20 + day / 2,
-            })),
+            series: [{ ts: asOf.toISOString(), value: 55 + (index % 20) }],
           },
         ],
         thesis: `${symbol}: xu hướng 20 ngày đạt ${(index + 1).toFixed(2)}%.`,
@@ -247,6 +242,28 @@ async function seedBriefing(email: string) {
         baseCase: `Kịch bản cơ sở giữ nguyên khi xu hướng 20 ngày còn ${(index + 1).toFixed(2)}%.`,
         bearCase: `Kịch bản tiêu cực nếu mức ${(index + 1).toFixed(2)}% đảo chiều.`,
         invalidationConditions: [`Xu hướng 20 ngày không còn mức ${(index + 1).toFixed(2)}%.`],
+        quantInvalidationConditions: ["ASSET_SCORE_BELOW_15"],
+        formula: "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage",
+        totalContribution: String((55 + (index % 20)) * 0.8),
+        decisionInputs: [
+          {
+            evidenceId: evidence.id,
+            metricCode: "market.return_20d",
+            pillarCode: "trend",
+            rawValue: String(index + 1),
+            unit: "PERCENT",
+            normalizedScore: String(55 + (index % 20)),
+            inputWeight: "1",
+            weightedScore: String(55 + (index % 20)),
+            pillarWeight: "0.8",
+            contribution: String((55 + (index % 20)) * 0.8),
+            normalizationMethod: "empirical_percentile",
+            percentile: "0.8",
+            lookback: "20D",
+          },
+        ],
+        supportingEvidenceIds: [evidence.id],
+        contradictingEvidenceIds: [],
         evidence: [
           {
             id: evidence.id,
@@ -260,6 +277,7 @@ async function seedBriefing(email: string) {
             effectiveAt: asOf.toISOString(),
             observedAt: asOf.toISOString(),
             freshness: "fresh",
+            usedInDecision: true,
           },
         ],
         dataCoverage: "0.8",
@@ -325,7 +343,9 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
     }
   });
 
-  await page.goto("/sign-up");
+  // Wait for the client bundle before submitting. Clicking the SSR form before
+  // hydration falls back to a GET navigation and never calls Better Auth.
+  await page.goto("/sign-up", { waitUntil: "networkidle" });
   await page.getByLabel("Name").fill("Smart Insights E2E");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("Smart-Insights!2026");
@@ -350,9 +370,19 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
 
   await page.getByRole("button", { name: /BTC Bitcoin/ }).click();
   await expect(page.getByTestId("asset-opinion-detail")).toContainText("BTC · Bitcoin");
-  await expect(page.getByRole("heading", { name: "Quan điểm định lượng chung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Quan điểm định lượng chung/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Quan điểm theo danh mục" })).toBeVisible();
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("AI đã phân tích");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Vì các số liệu này");
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Yếu tố phản biện");
   await expect(page.getByTestId("asset-opinion-detail")).toContainText("Khẩu vị rủi ro");
+  await page.getByTestId("asset-opinion-detail").locator("summary").click();
+  await expect(page.getByTestId("asset-opinion-detail")).toContainText(
+    "Điểm tài sản = Σ(điểm trụ cột × trọng số) ÷ độ phủ dữ liệu",
+  );
+  await expect(
+    page.getByTestId("asset-opinion-detail").locator("th", { hasText: "Điểm chuẩn hóa" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: /XAU Gold Spot/ }).click();
   await expect(page.getByTestId("asset-opinion-detail")).toContainText("XAU · Gold Spot");
 
@@ -407,6 +437,10 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
       iterations: 20,
     });
     expect(result.assetCount).toBe(25);
+    expect(result.maxDecisionInputs).toBeLessThanOrEqual(12);
+    expect(result.maxEvidence).toBeLessThanOrEqual(12);
+    expect(result.maxSupporting).toBeLessThanOrEqual(5);
+    expect(result.maxContradicting).toBeLessThanOrEqual(3);
     assertBudgets(result);
     console.log(`SMART_INSIGHTS_BENCHMARK ${JSON.stringify({ ...result, vitals, initialJs })}`);
     await testInfo.attach("smart-insights-benchmark.json", {
