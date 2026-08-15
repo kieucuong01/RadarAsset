@@ -7,7 +7,7 @@ import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { AssetIntelligenceResponse, ResearchRunResponse } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
 
-const ASSETS = ["BTC", "ETH", "SPY", "QQQ", "GOLD", "VN30"];
+const ASSETS = ["BTC", "ETH", "XAU", "VNINDEX", "VN30", "FPT"];
 
 const SAMPLE_INTELLIGENCE = {
   vi: {

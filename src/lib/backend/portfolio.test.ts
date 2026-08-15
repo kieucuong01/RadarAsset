@@ -5,6 +5,7 @@ import {
   buildPortfolioResponse,
   buildTradeAwarePerformance,
   calculateRiskMetrics,
+  isSupportedPortfolioAsset,
   replayPortfolioLedger,
 } from "./portfolio";
 import type {
@@ -16,6 +17,15 @@ import type {
 } from "./types";
 
 describe("portfolio backend domain", () => {
+  it("supports Vietnamese equities, crypto and gold but rejects foreign equities", () => {
+    expect(isSupportedPortfolioAsset({ assetClass: "equity", market: "vn_equity" })).toBe(true);
+    expect(isSupportedPortfolioAsset({ assetClass: "index", market: "vn_equity" })).toBe(true);
+    expect(isSupportedPortfolioAsset({ assetClass: "crypto", market: "crypto_spot" })).toBe(true);
+    expect(isSupportedPortfolioAsset({ assetClass: "commodity", market: "metal_spot" })).toBe(true);
+    expect(isSupportedPortfolioAsset({ assetClass: "equity", market: "other" })).toBe(false);
+    expect(isSupportedPortfolioAsset({ assetClass: "etf", market: "us_equity" })).toBe(false);
+  });
+
   const positions: PortfolioPositionInput[] = [
     {
       assetId: "asset-btc",
@@ -27,10 +37,10 @@ describe("portfolio backend domain", () => {
       latestPrice: 67420,
     },
     {
-      assetId: "asset-spy",
-      symbol: "SPY",
-      name: "S&P 500 ETF",
-      assetClass: "etf",
+      assetId: "asset-vnindex",
+      symbol: "VNINDEX",
+      name: "VN-Index",
+      assetClass: "index",
       quantity: 45,
       averageCost: 510.2,
       latestPrice: 528.1,
@@ -132,7 +142,7 @@ describe("portfolio backend domain", () => {
   it("applies new buy positions with fee included in cost basis", () => {
     const tx: PortfolioTransactionInput = {
       type: "buy",
-      assetId: "asset-nvda",
+      assetId: "asset-fpt",
       quantity: 2,
       price: 100,
       fee: 4,
@@ -147,17 +157,17 @@ describe("portfolio backend domain", () => {
 
   it("applies sell transactions without changing average cost while position remains open", () => {
     const current: PortfolioPositionInput = {
-      assetId: "asset-spy",
-      symbol: "SPY",
-      name: "S&P 500 ETF",
-      assetClass: "etf",
+      assetId: "asset-fpt",
+      symbol: "FPT",
+      name: "FPT Corporation",
+      assetClass: "equity",
       quantity: 45,
       averageCost: 510.2,
       latestPrice: 528.1,
     };
     const tx: PortfolioTransactionInput = {
       type: "sell",
-      assetId: "asset-spy",
+      assetId: "asset-fpt",
       quantity: 5,
       price: 530,
       fee: 1,
@@ -389,10 +399,10 @@ describe("portfolio backend domain", () => {
         latestPrice: 121,
       },
       {
-        assetId: "asset-spy",
-        symbol: "SPY",
-        name: "S&P 500 ETF",
-        assetClass: "etf",
+        assetId: "asset-vnindex",
+        symbol: "VNINDEX",
+        name: "VN-Index",
+        assetClass: "index",
         latestPrice: 102.01,
       },
     ];
@@ -400,9 +410,9 @@ describe("portfolio backend domain", () => {
       { assetId: "asset-btc", ts: "2026-01-01T00:00:00.000Z", close: 100 },
       { assetId: "asset-btc", ts: "2026-01-02T00:00:00.000Z", close: 110 },
       { assetId: "asset-btc", ts: "2026-01-03T00:00:00.000Z", close: 121 },
-      { assetId: "asset-spy", ts: "2026-01-01T00:00:00.000Z", close: 100 },
-      { assetId: "asset-spy", ts: "2026-01-02T00:00:00.000Z", close: 101 },
-      { assetId: "asset-spy", ts: "2026-01-03T00:00:00.000Z", close: 102.01 },
+      { assetId: "asset-vnindex", ts: "2026-01-01T00:00:00.000Z", close: 100 },
+      { assetId: "asset-vnindex", ts: "2026-01-02T00:00:00.000Z", close: 101 },
+      { assetId: "asset-vnindex", ts: "2026-01-03T00:00:00.000Z", close: 102.01 },
     ];
     const transaction = (
       overrides: Partial<PortfolioLedgerTransaction>,
@@ -434,7 +444,7 @@ describe("portfolio backend domain", () => {
           }),
         ],
         bars,
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -460,7 +470,7 @@ describe("portfolio backend domain", () => {
           }),
         ],
         bars,
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -482,7 +492,7 @@ describe("portfolio backend domain", () => {
           }),
         ],
         bars,
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -511,7 +521,7 @@ describe("portfolio backend domain", () => {
                 ? "2026-01-06T00:00:00.000Z"
                 : bar.ts,
         })),
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -540,7 +550,7 @@ describe("portfolio backend domain", () => {
           }),
         ],
         bars,
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -552,9 +562,9 @@ describe("portfolio backend domain", () => {
         assets,
         transactions: [transaction({})],
         bars: bars.filter(
-          (bar) => bar.assetId !== "asset-spy" || bar.ts !== "2026-01-01T00:00:00.000Z",
+          (bar) => bar.assetId !== "asset-vnindex" || bar.ts !== "2026-01-01T00:00:00.000Z",
         ),
-        benchmarkAssetId: "asset-spy",
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 
@@ -565,8 +575,8 @@ describe("portfolio backend domain", () => {
       const points = buildTradeAwarePerformance({
         assets,
         transactions: [transaction({})],
-        bars: bars.filter((bar) => bar.assetId === "asset-spy"),
-        benchmarkAssetId: "asset-spy",
+        bars: bars.filter((bar) => bar.assetId === "asset-vnindex"),
+        benchmarkAssetId: "asset-vnindex",
         limit: 30,
       });
 

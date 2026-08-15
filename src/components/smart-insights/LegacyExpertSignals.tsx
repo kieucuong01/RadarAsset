@@ -39,7 +39,7 @@ const SAMPLE_EXPERT_SIGNALS: Signal[] = [
   {
     id: "sample-gold",
     source: "Gold Research",
-    asset: "GOLD",
+    asset: "XAU",
     sentiment: "neutral",
     title: "Ví dụ: vàng chờ xác nhận xu hướng",
     summary: "Nội dung mẫu để giữ nguyên chức năng lọc và bố cục Expert Signals cũ.",

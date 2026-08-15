@@ -107,7 +107,9 @@ export async function POST(request: Request) {
       error instanceof z.ZodError
         ? 400
         : error instanceof PortfolioInputError
-          ? 404
+          ? error.code === "ASSET_UNSUPPORTED"
+            ? 400
+            : 404
           : error instanceof PortfolioDomainError
             ? 409
             : 503;

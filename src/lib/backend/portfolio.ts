@@ -17,6 +17,17 @@ function round(value: number, digits = 2) {
   return Math.round((value + Number.EPSILON) * scale) / scale;
 }
 
+export function isSupportedPortfolioAsset(input: { assetClass: string; market: string }) {
+  if (input.market === "vn_equity") {
+    return input.assetClass === "equity" || input.assetClass === "index";
+  }
+  if (input.market === "crypto_spot") return input.assetClass === "crypto";
+  if (input.market === "metal_spot") {
+    return input.assetClass === "commodity" || input.assetClass === "metal";
+  }
+  return false;
+}
+
 function categoryFor(
   assetClass: PortfolioPositionInput["assetClass"],
 ): PortfolioHoldingResponse["category"] {
@@ -137,7 +148,7 @@ export class PortfolioDomainError extends Error {
 export class PortfolioInputError extends Error {
   constructor(
     message: string,
-    readonly code: "ASSET_NOT_FOUND",
+    readonly code: "ASSET_NOT_FOUND" | "ASSET_UNSUPPORTED",
   ) {
     super(message);
     this.name = "PortfolioInputError";
@@ -488,7 +499,7 @@ export function calculateRiskMetrics(input: {
   return [
     {
       key: "beta",
-      label: "Beta (vs SPY)",
+      label: "Beta (vs VNINDEX)",
       value: beta.toFixed(2),
       rawValue: round(beta, 4),
       sub: beta > 1.1 ? "Slightly aggressive" : beta < 0.8 ? "Defensive tilt" : "Market-like",
