@@ -45,6 +45,20 @@ class AssetCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class AssetIdentity:
+    symbol: str
+    name: str
+    market: str
+    asset_class: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.symbol, "symbol")
+        _require_text(self.name, "name")
+        _require_text(self.market, "market")
+        _require_text(self.asset_class, "asset_class")
+
+
+@dataclass(frozen=True, slots=True)
 class UniverseResult:
     assets: tuple[AssetCandidate, ...]
     excluded_representatives: tuple[str, ...]

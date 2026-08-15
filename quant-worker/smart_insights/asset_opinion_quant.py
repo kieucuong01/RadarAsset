@@ -8,6 +8,7 @@ from statistics import pstdev
 
 from .asset_opinion_contracts import (
     AssetCandidate,
+    AssetIdentity,
     DataGateResult,
     DecisionInput,
     MarketBar,
@@ -47,12 +48,36 @@ BENCHMARK_BY_MARKET = {
     "stock_vn": "VNINDEX",
 }
 
+STABLECOIN_SYMBOLS = frozenset({"USDT", "USDC", "DAI", "FDUSD", "TUSD"})
+
 
 def canonical_symbol(symbol: str) -> str:
     normalized = symbol.strip().upper()
     if not normalized:
         raise ValueError("Asset symbol is required.")
     return ALIASES.get(normalized, normalized)
+
+
+def canonical_opinion_market(
+    identity: AssetIdentity | None,
+    *,
+    symbol: str,
+    signal_market: str | None,
+) -> str:
+    normalized = canonical_symbol(symbol)
+    if identity is not None:
+        if identity.market == "crypto_spot" or identity.asset_class.casefold() == "crypto":
+            return "crypto"
+        if identity.market == "vn_equity":
+            return "stock_vn"
+        if identity.market == "metal_spot" or normalized == "XAU":
+            return "gold"
+        if identity.market in {"equity", "index", "global_equity"}:
+            return "equity"
+    representative = REPRESENTATIVE_MARKETS.get(normalized)
+    if representative is not None:
+        return representative
+    return signal_market if signal_market in {"crypto", "gold", "equity", "stock_vn"} else "other"
 
 
 def _canonical_candidate(candidate: AssetCandidate) -> AssetCandidate:
@@ -93,6 +118,8 @@ def build_asset_universe(
     seen: set[str] = set()
     for raw in (*ordered_portfolio, *ordered_watchlist, *representative_rows):
         candidate = _canonical_candidate(raw)
+        if candidate.symbol in STABLECOIN_SYMBOLS:
+            continue
         if candidate.symbol in seen:
             continue
         seen.add(candidate.symbol)

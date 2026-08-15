@@ -16,11 +16,12 @@ from smart_insights.evidence import EvidenceBundle, EvidenceObservation, SignalE
 from smart_insights.grounding import GroundingAccepted, verify
 from smart_insights.asset_opinion_contracts import (
     AssetCandidate,
+    AssetIdentity,
     AssetOpinionDraft,
     AssetOpinionMarketData,
 )
 from smart_insights.asset_opinion_pipeline import AssetOpinionBatch, build_asset_opinion_drafts
-from smart_insights.asset_opinion_quant import build_asset_universe
+from smart_insights.asset_opinion_quant import build_asset_universe, canonical_opinion_market
 from smart_insights.asset_opinion_repository import (
     load_asset_opinion_market_data as load_asset_opinion_market_data_batch,
 )
@@ -119,7 +120,12 @@ class BriefingRepository(Protocol):
 
     def load_personalization(
         self, organization_id: str, user_id: str, *, as_of: datetime
-    ) -> tuple[tuple[PortfolioPosition, ...], tuple[str, ...], UserInsightPreference]: ...
+    ) -> tuple[
+        tuple[PortfolioPosition, ...],
+        tuple[str, ...],
+        UserInsightPreference,
+        tuple[AssetIdentity, ...],
+    ]: ...
 
     def load_asset_opinion_market_data(
         self,
@@ -481,12 +487,17 @@ class PostgresBriefingRepository:
 
     def load_personalization(
         self, organization_id: str, user_id: str, *, as_of: datetime
-    ) -> tuple[tuple[PortfolioPosition, ...], tuple[str, ...], UserInsightPreference]:
+    ) -> tuple[
+        tuple[PortfolioPosition, ...],
+        tuple[str, ...],
+        UserInsightPreference,
+        tuple[AssetIdentity, ...],
+    ]:
         del as_of
         with self.connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
                 """
-                SELECT a.symbol,
+                SELECT a.symbol, a.name, a.market, a.asset_class,
                        SUM(ABS(pp.quantity * pp.average_cost)) AS value,
                        SUM(pp.quantity) AS quantity,
                        CASE
@@ -497,10 +508,20 @@ class PostgresBriefingRepository:
                 JOIN portfolios p ON p.id = pp.portfolio_id
                 JOIN assets a ON a.id = pp.asset_id
                 WHERE p.organization_id = %s AND p.user_id = %s
-                GROUP BY a.symbol
+                GROUP BY a.symbol, a.name, a.market, a.asset_class
                 """,
                 (organization_id, user_id),
             )
+            position_rows = tuple(cursor.fetchall())
+            identities_by_symbol = {
+                str(row["symbol"]).upper(): AssetIdentity(
+                    symbol=str(row["symbol"]),
+                    name=str(row["name"]),
+                    market=str(row["market"]),
+                    asset_class=str(row["asset_class"]),
+                )
+                for row in position_rows
+            }
             raw_positions = tuple(
                 (
                     str(row["symbol"]),
@@ -512,7 +533,7 @@ class PostgresBriefingRepository:
                         else None
                     ),
                 )
-                for row in cursor.fetchall()
+                for row in position_rows
             )
             total = sum((row[1] for row in raw_positions), Decimal("0"))
             positions = tuple(
@@ -521,12 +542,25 @@ class PostgresBriefingRepository:
                 if total > 0
             )
             cursor.execute(
-                """SELECT a.symbol FROM watchlist_items w JOIN assets a ON a.id = w.asset_id
+                """SELECT a.symbol, a.name, a.market, a.asset_class
+                   FROM watchlist_items w JOIN assets a ON a.id = w.asset_id
                    WHERE w.organization_id = %s AND w.user_id = %s
                    ORDER BY w.created_at, w.id""",
                 (organization_id, user_id),
             )
-            watchlist = tuple(str(row["symbol"]) for row in cursor.fetchall())
+            watchlist_rows = tuple(cursor.fetchall())
+            watchlist = tuple(str(row["symbol"]) for row in watchlist_rows)
+            for identity_row in watchlist_rows:
+                symbol = str(identity_row["symbol"])
+                identities_by_symbol.setdefault(
+                    symbol.upper(),
+                    AssetIdentity(
+                        symbol=symbol,
+                        name=str(identity_row["name"]),
+                        market=str(identity_row["market"]),
+                        asset_class=str(identity_row["asset_class"]),
+                    ),
+                )
             cursor.execute(
                 """SELECT markets, assets, locale, base_currency, investment_horizon,
                           risk_tolerance, alert_preferences
@@ -546,7 +580,7 @@ class PostgresBriefingRepository:
                 risk_tolerance=str(row["risk_tolerance"]),
                 high_impact_alerts=bool(alerts.get("highImpact", True)),
             )
-        return positions, watchlist, preferences
+        return positions, watchlist, preferences, tuple(identities_by_symbol.values())
 
     def load_asset_opinion_market_data(
         self,
@@ -730,7 +764,7 @@ def generate_briefing(
     asset_synthesizer: AssetSynthesizer | None = None,
 ) -> BriefingRecord:
     signals = repository.load_briefing_signals(organization_id, user_id, as_of=as_of)
-    portfolio, watchlist, preferences = repository.load_personalization(
+    portfolio, watchlist, preferences, identities = repository.load_personalization(
         organization_id, user_id, as_of=as_of
     )
     selection = rank_candidates(
@@ -786,20 +820,24 @@ def generate_briefing(
         for signal in signals
         for asset in signal.candidate.affected_assets
     }
+    identity_by_symbol = {row.symbol.upper(): row for row in identities}
 
     def asset_market(symbol: str) -> str:
         normalized = symbol.upper()
-        return market_by_symbol.get(
-            normalized,
-            {"BTC": "crypto", "XAU": "gold", "VNINDEX": "equity"}.get(
-                normalized, "other"
-            ),
+        return canonical_opinion_market(
+            identity_by_symbol.get(normalized),
+            symbol=normalized,
+            signal_market=market_by_symbol.get(normalized),
         )
+
+    def asset_name(symbol: str) -> str:
+        identity = identity_by_symbol.get(symbol.upper())
+        return identity.name if identity is not None else symbol
 
     portfolio_candidates = tuple(
         AssetCandidate(
             symbol=row.asset,
-            name=row.asset,
+            name=asset_name(row.asset),
             market=asset_market(row.asset),
             portfolio_weight=row.weight,
             watchlist_rank=0,
@@ -811,7 +849,7 @@ def generate_briefing(
     watchlist_candidates = tuple(
         AssetCandidate(
             symbol=symbol,
-            name=symbol,
+            name=asset_name(symbol),
             market=asset_market(symbol),
             portfolio_weight=Decimal("0"),
             watchlist_rank=index,

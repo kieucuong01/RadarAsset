@@ -4,8 +4,17 @@ from decimal import Decimal
 
 import pytest
 
-from smart_insights.asset_opinion_contracts import AssetCandidate, MarketBar, QuantFact
-from smart_insights.asset_opinion_quant import build_asset_universe, canonical_symbol
+from smart_insights.asset_opinion_contracts import (
+    AssetCandidate,
+    AssetIdentity,
+    MarketBar,
+    QuantFact,
+)
+from smart_insights.asset_opinion_quant import (
+    build_asset_universe,
+    canonical_opinion_market,
+    canonical_symbol,
+)
 
 
 def candidate(
@@ -89,6 +98,38 @@ def test_universe_rejects_an_unbounded_or_empty_limit() -> None:
         build_asset_universe((), (), (), limit=0)
     with pytest.raises(ValueError, match="between 1 and 25"):
         build_asset_universe((), (), (), limit=26)
+
+
+def test_catalog_market_wins_over_missing_or_incorrect_signal_market() -> None:
+    assert canonical_opinion_market(
+        AssetIdentity("ETH", "Ethereum", "crypto_spot", "crypto"),
+        symbol="ETH",
+        signal_market=None,
+    ) == "crypto"
+    assert canonical_opinion_market(
+        AssetIdentity("SOL", "Solana", "crypto_spot", "crypto"),
+        symbol="SOL",
+        signal_market="macro",
+    ) == "crypto"
+    assert canonical_opinion_market(
+        AssetIdentity("XAU", "Gold Spot", "metal_spot", "commodity"),
+        symbol="XAU",
+        signal_market=None,
+    ) == "gold"
+
+
+def test_universe_excludes_stablecoins_before_applying_limit() -> None:
+    result = build_asset_universe(
+        (candidate("USDT", weight="0.60"), candidate("ETH", weight="0.40")),
+        (
+            candidate("USDC", watchlist_rank=1),
+            candidate("ADA", watchlist_rank=2),
+        ),
+        ("BTC",),
+        limit=3,
+    )
+
+    assert tuple(row.symbol for row in result.assets) == ("ETH", "ADA", "BTC")
 
 
 def test_contracts_are_frozen_and_reject_invalid_market_data() -> None:

@@ -8,10 +8,14 @@ from smart_insights.briefing_pipeline import (
     generate_briefing,
     replay_briefing,
 )
-from smart_insights.asset_opinion_contracts import AssetOpinionMarketData
+from smart_insights.asset_opinion_contracts import AssetIdentity, AssetOpinionMarketData
 from smart_insights.evidence import EvidenceObservation
 from smart_insights.openai_responses import AiUnavailable
-from smart_insights.personalization import CandidateSignal, UserInsightPreference
+from smart_insights.personalization import (
+    CandidateSignal,
+    PortfolioPosition,
+    UserInsightPreference,
+)
 
 
 NOW = datetime(2026, 8, 13, 1, tzinfo=timezone.utc)
@@ -21,6 +25,7 @@ class FakeRepository:
     def __init__(self, value: Decimal = Decimal("125.4")) -> None:
         self.value = value
         self.records = []
+        self.loaded_assets = ()
 
     def load_briefing_signals(self, organization_id: str, user_id: str, *, as_of: datetime):
         observation = EvidenceObservation(
@@ -31,9 +36,15 @@ class FakeRepository:
         return (BriefingSignal(signal, (observation,), (), ()),)
 
     def load_personalization(self, organization_id: str, user_id: str, *, as_of: datetime):
-        return (), (), UserInsightPreference(markets=("gold",), assets=("XAU",))
+        return (
+            (),
+            (),
+            UserInsightPreference(markets=("gold",), assets=("XAU",)),
+            (AssetIdentity("XAU", "Gold Spot", "metal_spot", "commodity"),),
+        )
 
     def load_asset_opinion_market_data(self, symbols, benchmark_symbols, *, as_of: datetime):
+        self.loaded_assets = symbols
         return AssetOpinionMarketData(
             bars=tuple((symbol, ()) for symbol in (*symbols, *benchmark_symbols)),
             facts=tuple((symbol, ()) for symbol in symbols),
@@ -89,3 +100,27 @@ def test_portfolio_snapshot_preserves_state_and_positions() -> None:
         "portfolioState": "missing",
         "positions": [],
     }
+
+
+def test_briefing_uses_catalog_market_when_eth_has_no_signal() -> None:
+    class CatalogRepository(FakeRepository):
+        def load_personalization(self, organization_id: str, user_id: str, *, as_of: datetime):
+            return (
+                (PortfolioPosition("ETH", Decimal("1")),),
+                (),
+                UserInsightPreference(markets=("crypto",), assets=("ETH",)),
+                (AssetIdentity("ETH", "Ethereum", "crypto_spot", "crypto"),),
+            )
+
+    repository = CatalogRepository()
+    generate_briefing(
+        repository,
+        organization_id="org",
+        user_id="user",
+        local_date=date(2026, 8, 13),
+        timezone_name="Asia/Bangkok",
+        as_of=NOW,
+        synthesizer=failing_ai,
+    )
+
+    assert ("ETH", "crypto") in repository.loaded_assets
