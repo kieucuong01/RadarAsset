@@ -79,24 +79,25 @@ class FarsideEtfCollector:
                     if not isinstance(markdown, str) or not markdown.strip():
                         raise
                     table = parse_markdown_table(
-                        markdown, required_headers=("Date", "Total")
+                        markdown, required_headers=("Date",)
                     )
             else:
                 assert isinstance(markdown, str)
                 table = parse_markdown_table(
-                    markdown, required_headers=("Date", "Total")
+                    markdown, required_headers=("Date",)
                 )
         except ValueError as error:
             return CollectionBatch(self.source, snapshot, (), str(error))
 
         date_header = next(header for header in table.headers if header.casefold() == "date")
         total_header = next(
-            header for header in table.headers if header.casefold() == "total"
+            (header for header in table.headers if header.casefold() == "total"),
+            None,
         )
         fund_headers = tuple(
             header
             for header in table.headers
-            if header not in {date_header, total_header}
+            if header != date_header and header != total_header
         )
         if not fund_headers:
             return CollectionBatch(self.source, snapshot, (), "SCHEMA_DRIFT")
@@ -114,7 +115,11 @@ class FarsideEtfCollector:
                 fund_values = {
                     fund: _millions_usd(row[fund]) for fund in fund_headers
                 }
-                total = _millions_usd(row[total_header])
+                reported_total = (
+                    _millions_usd(row[total_header])
+                    if total_header is not None
+                    else None
+                )
             except (KeyError, ValueError) as error:
                 return CollectionBatch(self.source, snapshot, (), str(error))
             if effective_at >= cutoff:
@@ -123,10 +128,14 @@ class FarsideEtfCollector:
                 return CollectionBatch(self.source, snapshot, (), "DUPLICATE_PERIOD")
             seen_dates.add(effective_at)
             reconciled = sum(fund_values.values(), Decimal("0"))
-            if abs(reconciled - total) > _RECONCILIATION_TOLERANCE:
+            if (
+                reported_total is not None
+                and abs(reconciled - reported_total) > _RECONCILIATION_TOLERANCE
+            ):
                 error_code = "RECONCILIATION_FAILED"
                 rejected.append(effective_at)
                 continue
+            total = reconciled if reported_total is None else reported_total
             for fund, value in fund_values.items():
                 observations.append(
                     ObservationInput(

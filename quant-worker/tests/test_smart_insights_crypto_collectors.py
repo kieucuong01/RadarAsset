@@ -579,6 +579,34 @@ def test_farside_supports_btc_eth_sol_and_quarantines_bad_total() -> None:
     assert all(row.effective_at != rejected_date for row in broken.observations)
 
 
+def test_farside_sol_builds_total_from_validated_fund_rows() -> None:
+    markdown = """| Date | BSOL | VSOL | FSOL |
+| --- | ---: | ---: | ---: |
+| 12 Aug 2026 | 30.0 | 10.0 | 4.2 |
+"""
+
+    batch = FarsideEtfCollector("SOL", crawler=FakeCrawler(markdown)).collect(NOW)
+
+    total = next(
+        row for row in batch.observations if row.dimensions["fund"] == "TOTAL"
+    )
+    assert batch.error_code is None
+    assert total.value == Decimal("44200000")
+    assert total.dimensions == {"asset": "SOL", "fund": "TOTAL"}
+
+
+def test_farside_rejects_date_only_table_without_fund_rows() -> None:
+    markdown = """| Date |
+| --- |
+| 12 Aug 2026 |
+"""
+
+    batch = FarsideEtfCollector("SOL", crawler=FakeCrawler(markdown)).collect(NOW)
+
+    assert batch.error_code == "SCHEMA_DRIFT"
+    assert batch.observations == ()
+
+
 def test_coinmetrics_collects_only_closed_daily_metrics() -> None:
     transport = FakeTransport(fixture_text("coinmetrics.json"))
     batch = CoinMetricsCollector(transport=transport).collect(NOW)
