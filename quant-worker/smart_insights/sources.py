@@ -296,7 +296,10 @@ SOURCE_ROWS = (
         "CFTC Disaggregated Commitments of Traders",
         Market.GOLD,
         CollectionMode.API,
-        ("https://publicreporting.cftc.gov/resource/72hh-3qpy.json",),
+        (
+            "https://publicreporting.cftc.gov/resource/72hh-3qpy.json",
+            "https://www.cftc.gov/dea/newcot/f_disagg.txt",
+        ),
         "weekly",
         "cftc-disaggregated-v1",
         14_400,

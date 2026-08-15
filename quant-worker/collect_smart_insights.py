@@ -70,7 +70,7 @@ from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
 from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
 from smart_insights.macro_pipeline import run_global_event_risk_pipeline, run_macro_pipeline
-from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
+from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES, FredSeriesDefinition
 from smart_insights.metrics.macro import MACRO_METRIC_DEFINITIONS
 from smart_insights.repository import PostgresInsightRepository
 from smart_insights.scheduling import due_calendar_jobs
@@ -610,17 +610,26 @@ def build_batch_collectors(
             "SMART_INSIGHTS_FRED_OVERLAP_DAYS", 14, minimum=1, maximum=365
         )
         collector = FredCollector(api_key=os.getenv("FRED_API_KEY"))
+
+        def start_for(series: FredSeriesDefinition) -> date:
+            history_days = {
+                "daily": overlap_days,
+                "weekly": max(overlap_days, 196),
+                "monthly": max(overlap_days, 400),
+                "quarterly": max(overlap_days, 800),
+            }[series.frequency]
+            start = (as_of - timedelta(days=history_days)).date()
+            if series.frequency == "monthly":
+                return start.replace(day=1)
+            if series.frequency == "quarterly":
+                quarter_month = ((start.month - 1) // 3) * 3 + 1
+                return start.replace(month=quarter_month, day=1)
+            return start
+
         batches = tuple(
             collector.collect(
                 series,
-                (
-                    as_of
-                    - timedelta(
-                        days=max(overlap_days, 196)
-                        if series.series_id == "M2SL"
-                        else overlap_days
-                    )
-                ).date(),
+                start_for(series),
                 as_of.date(),
             )
             for series in FRED_SERIES.values()

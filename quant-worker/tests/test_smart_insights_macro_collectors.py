@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import csv
+from io import StringIO
 import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -14,7 +16,7 @@ from smart_insights.collectors import CollectionBatch
 from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.fred import FredCollector
 from smart_insights.contracts import RawSnapshot
-from smart_insights.http import HttpResponse
+from smart_insights.http import HttpResponse, SourceFetchError
 from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
 
 
@@ -89,8 +91,8 @@ def test_fred_uses_official_csv_when_api_key_is_not_configured() -> None:
     transport = FakeTransport(
         "observation_date,DGS10\n"
         "2026-08-10,4.25\n"
-        "2026-08-11,.\n"
-        "2026-08-12,4.30\n"
+        "2026-08-11,\n"
+        "2026-08-12,.\n"
         "2026-08-13,4.32\n"
     )
 
@@ -100,7 +102,7 @@ def test_fred_uses_official_csv_when_api_key_is_not_configured() -> None:
 
     assert batch.error_code is None
     assert [row.value for row in batch.observations] == [
-        Decimal("4.25"), Decimal("4.30"), Decimal("4.32")
+        Decimal("4.25"), Decimal("4.32")
     ]
     assert transport.calls[0][0] == (
         "https://fred.stlouisfed.org/graph/fredgraph.csv?"
@@ -119,7 +121,7 @@ def test_fred_rejects_unknown_series() -> None:
             transport=FakeTransport("{}"), api_key="test", clock=lambda: NOW
         ).collect(unknown, date(2026, 8, 10), date(2026, 8, 13))
 
-def test_fred_builder_backfills_enough_m2_history_without_expanding_other_series(
+def test_fred_builder_uses_frequency_aware_history_without_expanding_daily_series(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, date, date]] = []
@@ -150,8 +152,14 @@ def test_fred_builder_backfills_enough_m2_history_without_expanding_other_series
     build_batch_collectors()["fred"](NOW)
 
     ranges = {series_id: (end - start).days for series_id, start, end in calls}
+    starts = {series_id: start for series_id, start, _end in calls}
     assert ranges["M2SL"] >= 196
+    assert ranges["CPIAUCSL"] >= 400
+    assert ranges["GDP"] >= 800
     assert ranges["DGS10"] == 14
+    assert starts["CPIAUCSL"].day == 1
+    assert starts["GDP"].day == 1
+    assert starts["GDP"].month in {1, 4, 7, 10}
 
 
 @pytest.mark.parametrize(
@@ -200,6 +208,48 @@ def test_cftc_disaggregated_collects_gold_managed_money() -> None:
     assert ratio.value == Decimal("0.24")
     query = parse_qs(urlsplit(transport.calls[0][0]).query)
     assert "m_money_positions_long_all" in query["$select"][0]
+
+
+def test_cftc_disaggregated_falls_back_to_official_current_csv_on_api_denial() -> None:
+    fields = [""] * 191
+    fields[0] = "GOLD - COMMODITY EXCHANGE INC."
+    fields[2] = "2026-08-11"
+    fields[3] = "088691"
+    fields[7] = "1000"
+    fields[13] = "400"
+    fields[14] = "100"
+    fields[190] = "FutOnly"
+    output = StringIO()
+    csv.writer(output).writerow(fields)
+
+    class ApiDeniedThenCsv:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def fetch(self, url: str, **_kwargs: object) -> HttpResponse:
+            self.urls.append(url)
+            if len(self.urls) == 1:
+                raise SourceFetchError("HTTP_ERROR", status_code=403)
+            return HttpResponse(
+                status=200,
+                headers={"Content-Type": "text/plain"},
+                body=output.getvalue().encode("utf-8"),
+                url=url,
+            )
+
+    transport = ApiDeniedThenCsv()
+    batch = CftcCollector(transport=transport, clock=lambda: NOW).collect(
+        CFTC_MARKETS["GOLD"], report_date_from=date(2026, 7, 1)
+    )
+
+    assert batch.error_code is None
+    ratio = next(
+        row for row in batch.observations
+        if row.metric_code == "gold.cftc.managed_money_net_oi"
+    )
+    assert ratio.value == Decimal("0.3000000000")
+    assert transport.urls[1] == "https://www.cftc.gov/dea/newcot/f_disagg.txt"
+    assert batch.snapshot.source_url == transport.urls[1]
 
 
 def test_cftc_rejects_combined_rows_to_prevent_double_counting() -> None:

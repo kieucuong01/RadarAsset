@@ -108,9 +108,11 @@ class FakeOpener:
     def __init__(self, *outcomes: FakeResponse | Exception) -> None:
         self.outcomes = list(outcomes)
         self.attempts = 0
+        self.requests: list[object] = []
 
-    def open(self, _request: object, *, timeout: float) -> FakeResponse:
+    def open(self, request: object, *, timeout: float) -> FakeResponse:
         assert timeout > 0
+        self.requests.append(request)
         self.attempts += 1
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
@@ -487,6 +489,17 @@ def test_http_transport_rejects_redirects_and_oversized_bodies() -> None:
             "https://example.test/source", timeout_seconds=1, max_bytes=4
         )
     assert size_error.value.code == "RESPONSE_TOO_LARGE"
+
+
+def test_http_transport_identifies_bounded_public_source_requests() -> None:
+    opener = FakeOpener(FakeResponse(b"{}"))
+
+    UrllibTransport(opener=opener).fetch(
+        "https://example.test/source", timeout_seconds=1, max_bytes=100
+    )
+
+    request = opener.requests[0]
+    assert request.get_header("User-agent") == "RadarAsset/1.0"
 
 
 def test_http_transport_retries_rate_limit_and_caps_retry_after() -> None:

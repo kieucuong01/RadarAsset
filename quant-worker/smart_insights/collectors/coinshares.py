@@ -24,6 +24,7 @@ from . import CollectionBatch
 
 _IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
 _RECONCILIATION_TOLERANCE = Decimal("100000")
+_TRACKED_ASSETS = frozenset({"Bitcoin", "Ethereum", "Solana", "XRP"})
 
 
 def _token_payload(token: OcrToken) -> dict[str, object]:
@@ -78,6 +79,7 @@ class CoinSharesCollector:
                 kind: reconstruct_coinshares_table(
                     token_sets[kind],
                     dimension="asset" if kind == "asset" else "region",
+                    include_labels=_TRACKED_ASSETS if kind == "asset" else None,
                 )
                 for kind in ("asset", "region")
             }
@@ -108,6 +110,8 @@ class CoinSharesCollector:
         if asset.effective_at != region.effective_at:
             raise ValueError("RECONCILIATION_FAILED")
         if (
+            asset.global_aum_usd is not None
+            and
             abs(asset.global_flow_usd - region.global_flow_usd)
             > _RECONCILIATION_TOLERANCE
         ):

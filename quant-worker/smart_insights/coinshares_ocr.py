@@ -16,7 +16,7 @@ _MILLION = Decimal("1000000")
 _RECONCILIATION_TOLERANCE = Decimal("100000")
 _NUMBER = re.compile(r"^\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?$")
 _PERIOD = re.compile(
-    r"data\s+available\s+as\s+(?:at|of)\s+close\s+"
+    r"data\s+available\s+as\s+(?:at|of)(?:\s+close)?\s+"
     r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})",
     re.IGNORECASE,
 )
@@ -249,6 +249,7 @@ def reconstruct_coinshares_table(
     *,
     dimension: str,
     minimum_confidence: Decimal = Decimal("0.90"),
+    include_labels: frozenset[str] | None = None,
 ) -> CoinSharesTable:
     if dimension not in {"asset", "region"}:
         raise ValueError("OCR_LAYOUT_DRIFT")
@@ -289,6 +290,11 @@ def reconstruct_coinshares_table(
     rows: list[CoinSharesRow] = []
     seen: set[str] = set()
     used_confidences: list[Decimal] = []
+    normalized_labels = (
+        frozenset(label.casefold() for label in include_labels)
+        if include_labels is not None
+        else None
+    )
     for group in grouped:
         if min(_center_y(token) for token in group) <= header_y:
             continue
@@ -301,10 +307,14 @@ def reconstruct_coinshares_table(
             assigned[key].append(token)
         if not any(assigned[key] for key in {"label", "week", "aum"}):
             continue
-        if not assigned["label"] or len(assigned["week"]) != 1 or len(assigned["aum"]) != 1:
+        if not assigned["label"]:
             raise ValueError("OCR_LAYOUT_DRIFT")
         label = " ".join(token.text.strip() for token in assigned["label"]).strip()
         normalized = label.casefold()
+        if normalized_labels is not None and normalized not in normalized_labels:
+            continue
+        if len(assigned["week"]) != 1 or len(assigned["aum"]) != 1:
+            raise ValueError("OCR_LAYOUT_DRIFT")
         if not label or normalized in seen:
             raise ValueError("DUPLICATE_SERIES")
         used = (*assigned["label"], assigned["week"][0], assigned["aum"][0])

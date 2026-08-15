@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from io import StringIO
 import json
 from typing import Any
 from urllib.parse import urlencode
@@ -89,16 +91,28 @@ class CftcCollector:
             }
         )
         request_url = f"{source.urls[0]}?{query}"
-        response = self._transport.fetch(
-            request_url, timeout_seconds=30, max_bytes=10_000_000
-        )
+        source_url = source.urls[0]
+        csv_fallback = False
+        try:
+            response = self._transport.fetch(
+                request_url, timeout_seconds=30, max_bytes=10_000_000
+            )
+        except SourceFetchError:
+            if source.code != "cftc-disaggregated" or len(source.urls) < 2:
+                raise
+            source_url = source.urls[1]
+            response = self._transport.fetch(
+                source_url, timeout_seconds=30, max_bytes=10_000_000
+            )
+            csv_fallback = True
         if response.status != 200 or response.url != request_url:
-            raise SourceFetchError("INVALID_RESPONSE")
+            if not csv_fallback or response.url != source_url:
+                raise SourceFetchError("INVALID_RESPONSE")
         observed_at = self._clock()
         snapshot = RawSnapshot(
             content=response.body,
-            content_type="application/json",
-            source_url=source.urls[0],
+            content_type="text/csv" if csv_fallback else "application/json",
+            source_url=source_url,
             effective_at=None,
             published_at=None,
             observed_at=observed_at,
@@ -110,10 +124,31 @@ class CftcCollector:
                 "parser_version": source.parser_version,
             },
         )
-        try:
-            rows = json.loads(response.body)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return CollectionBatch(source, snapshot, (), "INVALID_RESPONSE")
+        if csv_fallback:
+            try:
+                records = tuple(csv.reader(StringIO(response.body.decode("utf-8-sig"))))
+            except (UnicodeDecodeError, csv.Error):
+                return CollectionBatch(source, snapshot, (), "INVALID_RESPONSE")
+            if any(len(record) != 191 for record in records):
+                return CollectionBatch(source, snapshot, (), "SCHEMA_DRIFT")
+            rows = [
+                {
+                    "market_and_exchange_names": record[0],
+                    "report_date_as_yyyy_mm_dd": record[2],
+                    "cftc_contract_market_code": record[3],
+                    "open_interest_all": record[7],
+                    "m_money_positions_long_all": record[13],
+                    "m_money_positions_short_all": record[14],
+                    "futonly_or_combined": record[190],
+                }
+                for record in records
+                if record[3] == market.contract_market_code
+            ]
+        else:
+            try:
+                rows = json.loads(response.body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return CollectionBatch(source, snapshot, (), "INVALID_RESPONSE")
         if not isinstance(rows, list):
             return CollectionBatch(source, snapshot, (), "SCHEMA_DRIFT")
         if len(rows) > 5_000:

@@ -120,7 +120,7 @@ class FredCollector:
             seen_dates.add(effective_date)
             if not start <= effective_date <= end:
                 return CollectionBatch(self.source, snapshot, (), "OUT_OF_RANGE")
-            if raw_value == ".":
+            if raw_value in {"", "."}:
                 continue
             try:
                 value = Decimal(raw_value)
