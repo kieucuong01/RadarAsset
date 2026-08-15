@@ -13,6 +13,8 @@
     "start": "next start",
     "lint": "eslint src scripts e2e *.config.*",
     "test": "vitest run",
+    "test:python": "node scripts/run-python-tests.mjs -q",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:python",
     "test:integration": "node scripts/run-integration-tests.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.{js,mjs,ts}\" \"e2e/**/*.{ts,tsx}\" \"*.{js,mjs,ts}\" package.json README.md",

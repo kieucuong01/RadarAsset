@@ -41,6 +41,7 @@ from smart_insights.validation import ObservationValidationError, validate_obser
 
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
@@ -50,7 +51,9 @@ def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
 def test_four_hourly_is_a_cli_and_wrapper_schedule() -> None:
     assert "four-hourly" in SCHEDULES
     assert collect_smart_insights._SOURCE_SCHEDULE["four-hourly"] == "four-hourly"
-    wrapper = Path("../scripts/run-smart-insights.ps1").read_text(encoding="utf-8")
+    wrapper = (REPO_ROOT / "scripts" / "run-smart-insights.ps1").read_text(
+        encoding="utf-8"
+    )
     assert '"four-hourly"' in wrapper
     assert '"--cbbi-backfill"' in wrapper
 
