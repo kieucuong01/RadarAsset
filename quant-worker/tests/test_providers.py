@@ -522,7 +522,7 @@ def test_vnstock_routes_vnindex_through_the_index_market() -> None:
     assert rows[0].source == "vnstock-kbs-index"
 
 
-def test_vnstock_caps_vnindex_history_to_the_free_eight_year_window() -> None:
+def test_vnstock_caps_vnindex_history_to_the_verified_hose_calendar() -> None:
     market = FakeMarket(
         [
             {
@@ -545,7 +545,7 @@ def test_vnstock_caps_vnindex_history_to_the_free_eight_year_window() -> None:
         now=utc(2026, 8, 12),
     )
 
-    assert market.instrument.calls[0]["start"] == "2018-08-14"
+    assert market.instrument.calls[0]["start"] == "2024-01-01"
 
 
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:

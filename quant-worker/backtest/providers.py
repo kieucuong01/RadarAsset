@@ -15,6 +15,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
 from .catalog import DEFAULT_CRYPTO_UNIVERSE, FEEDS
+from .market_calendar import HOSE_VERIFIED_FROM
 from .models import Bar
 from .quality import normalize_bars
 
@@ -807,7 +808,10 @@ class VnstockAdapter:
         provider_start = start
         if is_index:
             free_history_start = end - timedelta(days=8 * 365)
-            provider_start = max(start, free_history_start)
+            verified_history_start = datetime.combine(
+                HOSE_VERIFIED_FROM, datetime.min.time(), tzinfo=timezone.utc
+            )
+            provider_start = max(start, free_history_start, verified_history_start)
 
         records: Any = None
         last_error: Exception | None = None
