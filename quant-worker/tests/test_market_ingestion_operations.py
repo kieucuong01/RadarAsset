@@ -116,7 +116,13 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
     sources = wrapper.index('run-smart-insights.ps1')
     briefing = wrapper.index('"briefing"')
     assert market < sources < briefing
-    assert '"daily"' in wrapper
+    assert '$taskAssets = @(' in wrapper
+    assert '"VNINDEX"' in wrapper
+    assert '"FPT"' in wrapper
+    assert '"BTC"' in wrapper
+    assert '"XAU"' in wrapper
+    assert '"--asset"' in wrapper
+    assert '"--timeframe" "1d"' in wrapper
     assert '"--env-file"' in wrapper
     assert 'run-market-ingestion.ps1' not in wrapper
     assert '-AllMemberships' in wrapper
