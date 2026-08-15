@@ -153,6 +153,7 @@ class FakeMarket:
     ) -> None:
         self.instrument = FakeInstrument(records, error)
         self.equity_calls: list[tuple[str, str]] = []
+        self.index_calls: list[str] = []
         self.commodity_calls: list[str] = []
 
     def equity(self, symbol: str, *, source: str) -> FakeInstrument:
@@ -161,6 +162,10 @@ class FakeMarket:
 
     def commodity(self, symbol: str) -> FakeInstrument:
         self.commodity_calls.append(symbol)
+        return self.instrument
+
+    def index(self, symbol: str) -> FakeInstrument:
+        self.index_calls.append(symbol)
         return self.instrument
 
 
@@ -488,6 +493,35 @@ def test_vnstock_routes_fpt_through_vci() -> None:
     assert market.instrument.calls[0]["count"] == 100_000
 
 
+def test_vnstock_routes_vnindex_through_the_index_market() -> None:
+    market = FakeMarket(
+        [
+            {
+                "time": "2026-08-10T00:00:00",
+                "open": 1_600,
+                "high": 1_610,
+                "low": 1_590,
+                "close": 1_605,
+                "volume": 1_000_000,
+            }
+        ]
+    )
+
+    rows = VnstockAdapter(market_factory=lambda: market).fetch(
+        symbol="VNINDEX",
+        asset="VNINDEX",
+        timeframe="1d",
+        start=utc(2026, 8, 10),
+        end=utc(2026, 8, 12),
+        now=utc(2026, 8, 12),
+    )
+
+    assert market.index_calls == ["VNINDEX"]
+    assert market.equity_calls == []
+    assert market.instrument.calls[0]["source"] == "KBS"
+    assert rows[0].source == "vnstock-kbs-index"
+
+
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
     adapter = VnstockAdapter(
         listing_factory=lambda: FakeListing(
@@ -720,6 +754,15 @@ def test_feed_catalog_includes_liquid_vietnam_equities() -> None:
     assert expected_symbols <= {
         item.canonical_symbol for item in VnstockAdapter().list_instruments()
     }
+
+
+def test_feed_catalog_includes_vnindex_as_a_daily_benchmark() -> None:
+    feed = FEEDS["VNINDEX"]
+
+    assert feed.market == "vn_equity"
+    assert feed.provider_code == "vnstock-kbs-free"
+    assert feed.provider_symbol == "VNINDEX"
+    assert feed.maximum_leverage == Decimal("1")
 
 
 def test_binance_lists_only_trading_usdt_spot_instruments() -> None:

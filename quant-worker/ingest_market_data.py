@@ -53,8 +53,7 @@ def read_bounded_environment_integer(
 
 
 def supports_scheduled_timeframe(asset: str, timeframe: str) -> bool:
-    del asset, timeframe
-    return True
+    return not (asset == "VNINDEX" and timeframe == "1h")
 
 
 def load_database_url(env_file: Path) -> str:
@@ -141,7 +140,7 @@ def provider_for_code(provider_code: str, max_pages: int, max_rows: int) -> Any:
             BinanceSpotAdapter(max_pages=max_pages, max_rows=max_rows),
             CcxtSpotAdapter(max_pages=max_pages, max_rows=max_rows),
         )
-    if provider_code in {"vnstock-vci-free", "msn-via-vnstock"}:
+    if provider_code in {"vnstock-vci-free", "vnstock-kbs-free", "msn-via-vnstock"}:
         return VnstockAdapter(max_rows=max_rows)
     if provider_code == "dukascopy-public":
         return DukascopyXauAdapter(max_rows=max_rows)

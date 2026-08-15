@@ -43,6 +43,26 @@ def vn_equity_feed(symbol: str, name: str, venue: str = "HOSE") -> AssetFeed:
     )
 
 
+def vn_index_feed(symbol: str, name: str) -> AssetFeed:
+    return AssetFeed(
+        symbol=symbol,
+        market="vn_equity",
+        canonical_key=f"VN:INDEX:{symbol}",
+        asset_name=name,
+        currency="VND",
+        venue="HOSE",
+        timezone_name="Asia/Ho_Chi_Minh",
+        maximum_leverage=Decimal("1"),
+        provider_code="vnstock-kbs-free",
+        provider_name="Vnstock KBS Free",
+        provider_symbol=symbol,
+        terms_url="https://vnstocks.com/docs/vnstock",
+        client_provider="vnstock",
+        upstream_provider="kbs",
+        naive_timezone="Asia/Ho_Chi_Minh",
+    )
+
+
 DEFAULT_CRYPTO_UNIVERSE = (
     "BTC",
     "ETH",
@@ -81,6 +101,7 @@ def crypto_feed(symbol: str, name: str | None = None) -> AssetFeed:
 
 
 FEEDS = {
+    "VNINDEX": vn_index_feed("VNINDEX", "VN-Index"),
     "FPT": vn_equity_feed("FPT", "FPT Corporation"),
     "VCB": vn_equity_feed(
         "VCB", "Joint Stock Commercial Bank for Foreign Trade of Vietnam"

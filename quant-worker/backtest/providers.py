@@ -723,7 +723,7 @@ class VnstockAdapter:
                 currency=feed.currency,
             )
             for feed in sorted(FEEDS.values(), key=lambda item: item.symbol)
-            if feed.provider_code == "vnstock-vci-free"
+            if feed.provider_code in {"vnstock-vci-free", "vnstock-kbs-free"}
         ]
         if not dynamic_hose:
             return fallback_feeds
@@ -791,10 +791,16 @@ class VnstockAdapter:
         if timeframe not in INTERVALS:
             raise ValueError("Unsupported Vnstock timeframe.")
         is_metal = asset == "XAU" and symbol == "XAUUSD"
+        is_index = asset == "VNINDEX" and symbol == "VNINDEX"
         if is_metal and timeframe == "1h":
             raise ProviderUnavailableError(
                 "unsupported_timeframe",
                 "The free XAU/USD provider does not supply hourly candles.",
+            )
+        if is_index and timeframe != "1d":
+            raise ProviderUnavailableError(
+                "unsupported_timeframe",
+                "The VNINDEX benchmark feed is daily only.",
             )
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
@@ -804,17 +810,21 @@ class VnstockAdapter:
         for attempt in range(3):
             try:
                 market = self.market_factory()
-                instrument = (
-                    market.commodity(symbol)
-                    if is_metal
-                    else market.equity(symbol, source="VCI")
-                )
-                frame = instrument.ohlcv(
-                    start=start.date().isoformat(),
-                    end=end.date().isoformat(),
-                    interval=timeframe,
-                    count=self.max_rows,
-                )
+                if is_metal:
+                    instrument = market.commodity(symbol)
+                elif is_index:
+                    instrument = market.index(symbol)
+                else:
+                    instrument = market.equity(symbol, source="VCI")
+                request = {
+                    "start": start.date().isoformat(),
+                    "end": end.date().isoformat(),
+                    "interval": timeframe,
+                    "count": self.max_rows,
+                }
+                if is_index:
+                    request["source"] = "KBS"
+                frame = instrument.ohlcv(**request)
                 records = frame.to_dict("records")
                 break
             except ProviderUnavailableError:
@@ -873,7 +883,13 @@ class VnstockAdapter:
             )
 
         feed = FEEDS.get(asset)
-        source = "msn-via-vnstock" if is_metal else "vnstock-vci-free"
+        source = (
+            "msn-via-vnstock"
+            if is_metal
+            else "vnstock-kbs-index"
+            if is_index
+            else "vnstock-vci-free"
+        )
         naive_timezone = feed.naive_timezone if feed is not None else "Asia/Ho_Chi_Minh"
         try:
             normalized = self.parse_records(
