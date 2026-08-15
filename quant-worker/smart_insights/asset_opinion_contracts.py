@@ -141,6 +141,52 @@ class DataGateResult:
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionInput:
+    fact_id: str
+    metric_code: str
+    pillar_code: str
+    raw_value: Decimal
+    unit: str
+    normalized_score: Decimal
+    input_weight: Decimal
+    weighted_score: Decimal
+    pillar_weight: Decimal
+    contribution: Decimal
+    normalization_method: str
+    percentile: Decimal | None = None
+    lookback: str | None = None
+
+    def __post_init__(self) -> None:
+        for value, field_name in (
+            (self.fact_id, "fact_id"),
+            (self.metric_code, "metric_code"),
+            (self.pillar_code, "pillar_code"),
+            (self.unit, "unit"),
+            (self.normalization_method, "normalization_method"),
+        ):
+            _require_text(value, field_name)
+        for value, field_name in (
+            (self.raw_value, "raw_value"),
+            (self.normalized_score, "normalized_score"),
+            (self.input_weight, "input_weight"),
+            (self.weighted_score, "weighted_score"),
+            (self.pillar_weight, "pillar_weight"),
+            (self.contribution, "contribution"),
+        ):
+            _require_finite(value, field_name)
+        if not Decimal("-100") <= self.normalized_score <= Decimal("100"):
+            raise ValueError("normalized_score must be between -100 and 100.")
+        if not Decimal("0") <= self.input_weight <= Decimal("1"):
+            raise ValueError("input_weight must be between 0 and 1.")
+        if not Decimal("0") <= self.pillar_weight <= Decimal("1"):
+            raise ValueError("pillar_weight must be between 0 and 1.")
+        if self.percentile is not None:
+            _require_finite(self.percentile, "percentile")
+            if not Decimal("0") <= self.percentile <= Decimal("1"):
+                raise ValueError("percentile must be between 0 and 1.")
+
+
+@dataclass(frozen=True, slots=True)
 class PillarScore:
     code: str
     score: Decimal
@@ -148,6 +194,8 @@ class PillarScore:
     confidence: Decimal
     fact_ids: tuple[str, ...]
     series: tuple[tuple[str, Decimal], ...] = ()
+    available_input_weight: Decimal = Decimal("1")
+    contribution: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         _require_text(self.code, "code")
@@ -155,6 +203,7 @@ class PillarScore:
             (self.score, "score", Decimal("-100"), Decimal("100")),
             (self.configured_weight, "configured_weight", Decimal("0"), Decimal("1")),
             (self.confidence, "confidence", Decimal("0"), Decimal("100")),
+            (self.available_input_weight, "available_input_weight", Decimal("0"), Decimal("1")),
         ):
             _require_finite(value, field_name)
             if not minimum <= value <= maximum:
@@ -176,6 +225,12 @@ class QuantAssetOpinion:
     freshness: str
     methodology_version: str
     unrealized_return: Decimal | None = None
+    decision_inputs: tuple[DecisionInput, ...] = ()
+    total_contribution: Decimal = Decimal("0")
+    formula: str = "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage"
+    supporting_fact_ids: tuple[str, ...] = ()
+    contradicting_fact_ids: tuple[str, ...] = ()
+    invalidation_conditions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for value, field_name in (
@@ -196,6 +251,15 @@ class QuantAssetOpinion:
             raise ValueError("confidence must be between 0 and 100.")
         if not Decimal("0") <= self.data_coverage <= Decimal("1"):
             raise ValueError("data_coverage must be between 0 and 1.")
+        _require_finite(self.total_contribution, "total_contribution")
+        _require_text(self.formula, "formula")
+        if len(self.decision_inputs) > 12:
+            raise ValueError("decision_inputs must contain at most 12 rows.")
+        decision_ids = {row.fact_id for row in self.decision_inputs}
+        if not set(self.supporting_fact_ids) <= decision_ids:
+            raise ValueError("supporting_fact_ids must reference decision inputs.")
+        if not set(self.contradicting_fact_ids) <= decision_ids:
+            raise ValueError("contradicting_fact_ids must reference decision inputs.")
 
 
 @dataclass(frozen=True, slots=True)

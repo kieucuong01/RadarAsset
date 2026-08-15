@@ -51,7 +51,8 @@ def fact(
     metric: str,
     source: str,
     *,
-    score: str = "40",
+    score: str | None = "40",
+    value: str = "1",
     fresh: bool = True,
     critical: bool = False,
     contradicting: bool = False,
@@ -59,14 +60,14 @@ def fact(
     return QuantFact(
         id=f"fact-{metric}-{source}",
         metric_code=metric,
-        value=Decimal("1"),
+        value=Decimal(value),
         unit="RATIO",
         effective_at=NOW,
         observed_at=NOW,
         source_family=source,
         source_code=source,
         source_url=f"https://example.test/{source}",
-        signed_score=Decimal(score),
+        signed_score=Decimal(score) if score is not None else None,
         confidence=Decimal("80"),
         fresh=fresh,
         critical=critical,
@@ -171,8 +172,8 @@ def test_contradiction_waits_for_confirmation_before_increasing() -> None:
         specialized=(
             fact("crypto.etf.net_flow_usd", "farside", score="70"),
             fact(
-                "crypto.derivatives.funding_rate",
-                "deribit",
+                "macro.real_yield.10y_pct",
+                "fred",
                 score="-60",
                 contradicting=True,
             ),
@@ -239,3 +240,121 @@ def test_kronos_facts_never_enter_the_opinion() -> None:
 
     assert all("kronos" not in row.metric_code.casefold() for row in opinion.facts)
     assert "SOURCE_FAMILIES_MINIMUM_2" in opinion.gate.failed_gates
+
+
+def test_btc_80_20_ledger_exposes_exact_weighted_contributions() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("BTC"),
+        bars=bars(220),
+        specialized=(
+            fact("crypto.etf.net_flow_usd", "farside", score="80"),
+            fact(
+                "crypto.coinshares.net_flow_usd",
+                "coinshares-weekly",
+                score="40",
+            ),
+            fact("crypto.fear_greed.index", "alternative-fng", score="20"),
+            fact(
+                "macro.regime.score",
+                "fred",
+                score="-20",
+                contradicting=True,
+            ),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert {row.code: row.configured_weight for row in opinion.pillars} == {
+        "trend": Decimal("0.40"),
+        "fund_flow": Decimal("0.30"),
+        "macro": Decimal("0.15"),
+        "sentiment_onchain": Decimal("0.15"),
+    }
+    fund_flow = next(row for row in opinion.pillars if row.code == "fund_flow")
+    assert fund_flow.score == Decimal("70")
+    assert len(opinion.decision_inputs) <= 12
+    assert sum(
+        (row.contribution for row in opinion.pillars), Decimal("0")
+    ) == opinion.total_contribution
+    assert (
+        opinion.formula
+        == "asset_score = Σ(pillar_score × pillar_weight) ÷ data_coverage"
+    )
+    assert opinion.contradicting_fact_ids
+
+
+def test_fear_greed_has_a_direct_explainable_score_without_signal_snapshot() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("BTC"),
+        bars=bars(220),
+        specialized=(
+            fact(
+                "crypto.fear_greed.index",
+                "alternative-fng",
+                score=None,
+                value="75",
+            ),
+            fact("crypto.etf.net_flow_usd", "farside", score="30"),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    fear = next(
+        row
+        for row in opinion.decision_inputs
+        if row.metric_code == "crypto.fear_greed.index"
+    )
+    assert fear.normalized_score == Decimal("50")
+    assert fear.normalization_method == "fear_greed_centered_v1"
+
+
+def test_xau_uses_trend_macro_and_optional_positioning_weights() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("XAU", market="gold"),
+        bars=bars(220, symbol="XAU"),
+        specialized=(
+            fact("macro.real_yield.10y_pct", "fred", score="-40"),
+            fact("macro.usd_broad_index", "fred-usd", score="-20"),
+            fact("gold.cftc.managed_money_net_oi", "cftc", score="30"),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert {row.code: row.configured_weight for row in opinion.pillars} == {
+        "trend": Decimal("0.55"),
+        "macro": Decimal("0.30"),
+        "positioning": Decimal("0.15"),
+    }
+    assert opinion.data_coverage == Decimal("1.00")
+
+
+def test_highlight_selection_is_bounded_and_uses_contribution_order() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("BTC"),
+        bars=bars(220),
+        specialized=(
+            fact("crypto.etf.net_flow_usd", "farside", score="90"),
+            fact("crypto.coinshares.net_flow_usd", "coinshares", score="60"),
+            fact("crypto.fear_greed.index", "alternative-fng", score="40"),
+            fact("crypto.onchain.active_addresses", "coinmetrics", score="30"),
+            fact("crypto.onchain.adjusted_transfer_usd", "coinmetrics-2", score="20"),
+            fact("crypto.onchain.nvt", "coinmetrics-3", score="-30"),
+            fact("macro.real_yield.10y_pct", "fred", score="-50"),
+            fact("macro.usd_broad_index", "fred-usd", score="-40"),
+        ),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert 1 <= len(opinion.supporting_fact_ids) <= 5
+    assert 1 <= len(opinion.contradicting_fact_ids) <= 3
+    contributions = {
+        row.fact_id: abs(row.contribution) for row in opinion.decision_inputs
+    }
+    assert list(opinion.supporting_fact_ids) == sorted(
+        opinion.supporting_fact_ids,
+        key=lambda fact_id: (-contributions[fact_id], fact_id),
+    )

@@ -9,12 +9,14 @@ from statistics import pstdev
 from .asset_opinion_contracts import (
     AssetCandidate,
     DataGateResult,
+    DecisionInput,
     MarketBar,
     PillarScore,
     QuantAssetOpinion,
     QuantFact,
     UniverseResult,
 )
+from .asset_opinion_rules import InputRule, input_rule, pillar_weights
 
 
 ALIASES = {
@@ -28,35 +30,6 @@ REPRESENTATIVE_MARKETS = {
     "BTC": "crypto",
     "XAU": "gold",
     "VNINDEX": "equity",
-}
-
-PILLAR_WEIGHTS = {
-    "trend": Decimal("0.40"),
-    "flow_liquidity": Decimal("0.20"),
-    "macro": Decimal("0.15"),
-    "relative_value": Decimal("0.10"),
-    "sentiment_onchain": Decimal("0.15"),
-}
-
-PILLAR_PREFIXES = {
-    "flow_liquidity": (
-        "crypto.etf.",
-        "crypto.coinshares.",
-        "crypto.stablecoin.",
-        "crypto.defi.",
-        "gold.cftc.",
-        "equity.liquidity.",
-        "equity.foreign_flow.",
-    ),
-    "macro": ("macro.",),
-    "relative_value": ("equity.valuation.", "gold.relative_value."),
-    "sentiment_onchain": (
-        "crypto.fear_greed.",
-        "crypto.derivatives.",
-        "crypto.onchain.",
-        "crypto.network.",
-        "crypto.large_address.",
-    ),
 }
 
 CONCENTRATION_LIMITS = {
@@ -351,36 +324,119 @@ def _relative_strength_fact(
     )
 
 
-def _pillar_for(fact: QuantFact) -> str | None:
-    if fact.source_family == "market_bars" and fact.metric_code.startswith("market."):
-        return "trend"
-    for pillar, prefixes in PILLAR_PREFIXES.items():
-        if fact.metric_code.startswith(prefixes):
-            return pillar
+def _fact_score(fact: QuantFact) -> tuple[Decimal, str] | None:
+    if fact.signed_score is not None:
+        return fact.signed_score, fact.normalization_method
+    if fact.metric_code == "crypto.fear_greed.index":
+        score = _bounded((fact.value - Decimal("50")) * Decimal("2"))
+        return score, "fear_greed_centered_v1"
     return None
 
 
-def _pillars(facts: tuple[QuantFact, ...]) -> tuple[PillarScore, ...]:
-    output: list[PillarScore] = []
-    for code, configured_weight in PILLAR_WEIGHTS.items():
-        rows = tuple(
-            row
-            for row in facts
-            if row.fresh and row.signed_score is not None and _pillar_for(row) == code
+def _lookback(metric_code: str) -> str | None:
+    if metric_code == "crypto.etf.net_flow_usd":
+        return "90D"
+    if metric_code == "crypto.coinshares.net_flow_usd":
+        return "52W"
+    return None
+
+
+def _decision_ledger(
+    market: str, facts: tuple[QuantFact, ...]
+) -> tuple[tuple[PillarScore, ...], tuple[DecisionInput, ...]]:
+    configured_weights = pillar_weights(market)
+    candidates: list[tuple[QuantFact, InputRule, Decimal, str]] = []
+    for fact in facts:
+        if not fact.fresh:
+            continue
+        rule = input_rule(market, fact.metric_code)
+        scored = _fact_score(fact)
+        if rule is None or scored is None:
+            continue
+        candidates.append((fact, rule, scored[0], scored[1]))
+
+    detailed_macro_exists = any(
+        fact.metric_code.startswith("macro.")
+        and fact.metric_code != "macro.regime.score"
+        for fact, _rule, _score_value, _method in candidates
+    )
+    if detailed_macro_exists:
+        candidates = [
+            row for row in candidates if row[0].metric_code != "macro.regime.score"
+        ]
+
+    candidates.sort(
+        key=lambda row: (
+            -configured_weights.get(row[1].pillar_code, Decimal("0")),
+            -row[1].input_weight,
+            -abs(row[2]),
+            row[0].metric_code,
+            row[0].id,
         )
+    )
+    candidates = candidates[:12]
+
+    pillars: list[PillarScore] = []
+    decision_inputs: list[DecisionInput] = []
+    for pillar_code, configured_weight in configured_weights.items():
+        rows = tuple(row for row in candidates if row[1].pillar_code == pillar_code)
         if not rows:
             continue
-        output.append(
+        available_weight = sum((row[1].input_weight for row in rows), Decimal("0"))
+        if available_weight <= 0:
+            continue
+        pillar_score = (
+            sum((score * rule.input_weight for _fact, rule, score, _method in rows), Decimal("0"))
+            / available_weight
+        ).quantize(Decimal("0.01"))
+        pillar_contribution = (pillar_score * configured_weight).quantize(
+            Decimal("0.0001")
+        )
+        pillars.append(
             PillarScore(
-                code=code,
-                score=_average(tuple(row.signed_score for row in rows if row.signed_score is not None)),
+                code=pillar_code,
+                score=pillar_score,
                 configured_weight=configured_weight,
-                confidence=_average(tuple(row.confidence for row in rows)),
-                fact_ids=tuple(row.id for row in rows),
-                series=tuple((row.effective_at.isoformat(), row.signed_score or Decimal("0")) for row in rows),
+                confidence=(
+                    sum(
+                        (fact.confidence * rule.input_weight for fact, rule, _score, _method in rows),
+                        Decimal("0"),
+                    )
+                    / available_weight
+                ).quantize(Decimal("0.01")),
+                fact_ids=tuple(fact.id for fact, _rule, _score, _method in rows),
+                series=tuple(
+                    (fact.effective_at.isoformat(), score)
+                    for fact, _rule, score, _method in rows
+                ),
+                available_input_weight=available_weight,
+                contribution=pillar_contribution,
             )
         )
-    return tuple(output)
+        for fact, rule, score, method in rows:
+            weighted_score = (score * rule.input_weight).quantize(Decimal("0.0001"))
+            contribution = (
+                weighted_score / available_weight * configured_weight
+            ).quantize(Decimal("0.0001"))
+            decision_inputs.append(
+                DecisionInput(
+                    fact_id=fact.id,
+                    metric_code=fact.metric_code,
+                    pillar_code=pillar_code,
+                    raw_value=fact.value,
+                    unit=fact.unit,
+                    normalized_score=score,
+                    input_weight=rule.input_weight,
+                    weighted_score=weighted_score,
+                    pillar_weight=configured_weight,
+                    contribution=contribution,
+                    normalization_method=method,
+                    percentile=fact.percentile,
+                    lookback=_lookback(fact.metric_code),
+                )
+            )
+    decision_inputs.sort(key=lambda row: (-abs(row.contribution), row.fact_id))
+    return tuple(pillars), tuple(decision_inputs)
 
 
 def _stance(score: Decimal) -> str:
@@ -393,6 +449,20 @@ def _stance(score: Decimal) -> str:
     if score < Decimal("40"):
         return "CONSTRUCTIVE"
     return "POSITIVE"
+
+
+def _invalidation_conditions(stance: str) -> tuple[str, ...]:
+    if stance == "POSITIVE":
+        return ("ASSET_SCORE_BELOW_40",)
+    if stance == "CONSTRUCTIVE":
+        return ("ASSET_SCORE_BELOW_15",)
+    if stance == "CAUTIOUS":
+        return ("ASSET_SCORE_ABOVE_NEGATIVE_15",)
+    if stance == "NEGATIVE":
+        return ("ASSET_SCORE_ABOVE_NEGATIVE_40",)
+    if stance == "NEUTRAL":
+        return ("ASSET_SCORE_OUTSIDE_NEGATIVE_15_TO_15",)
+    return ()
 
 
 def build_quant_opinion(
@@ -421,13 +491,22 @@ def build_quant_opinion(
         and "kronos" not in row.methodology_version.casefold()
     )
     facts = tuple(sorted((*common, *permitted_specialized), key=lambda row: (row.metric_code, row.id)))
-    pillars = _pillars(facts)
+    pillars, decision_inputs = _decision_ledger(asset.market, facts)
     coverage = sum((row.configured_weight for row in pillars), Decimal("0"))
-    source_families = tuple(sorted({row.source_family for row in facts if row.fresh}))
+    decision_fact_ids = {row.fact_id for row in decision_inputs}
+    source_families = tuple(
+        sorted(
+            {
+                row.source_family
+                for row in facts
+                if row.fresh and row.id in decision_fact_ids
+            }
+        )
+    )
     failed: list[str] = []
     if len(closed_bars) < 60:
         failed.append("MINIMUM_60_DAILY_BARS")
-    if len(facts) < 3:
+    if len(decision_inputs) < 3:
         failed.append("NUMERIC_FACTS_MINIMUM_3")
     if len(source_families) < 2:
         failed.append("SOURCE_FAMILIES_MINIMUM_2")
@@ -435,21 +514,43 @@ def build_quant_opinion(
         failed.append("CRITICAL_INPUT_STALE")
     if coverage < Decimal("0.60"):
         failed.append("PILLAR_COVERAGE_MINIMUM_60")
-    gate = DataGateResult(not failed, tuple(failed), source_families, len(facts))
+    gate = DataGateResult(
+        not failed, tuple(failed), source_families, len(decision_inputs)
+    )
 
     quant_score: Decimal | None = None
     confidence = Decimal("0")
     stance = "INSUFFICIENT_DATA"
+    total_contribution = sum(
+        (row.contribution for row in pillars), Decimal("0")
+    ).quantize(Decimal("0.0001"))
     if gate.passed:
-        quant_score = (
-            sum((row.score * row.configured_weight for row in pillars), Decimal("0")) / coverage
-        ).quantize(Decimal("0.01"))
+        quant_score = (total_contribution / coverage).quantize(Decimal("0.01"))
         confidence = sum(
             (row.confidence * row.configured_weight for row in pillars), Decimal("0")
         ).quantize(Decimal("0.01"))
         stance = _stance(quant_score)
 
-    has_contradiction = any(row.fresh and row.contradicting for row in facts)
+    facts_by_id = {row.id: row for row in facts}
+    positive_direction = quant_score is None or quant_score >= 0
+    contradicting_rows = tuple(
+        row
+        for row in decision_inputs
+        if facts_by_id[row.fact_id].contradicting
+        or (row.contribution < 0 if positive_direction else row.contribution > 0)
+    )
+    contradicting_fact_ids = tuple(row.fact_id for row in contradicting_rows[:3])
+    all_contradicting_fact_ids = {row.fact_id for row in contradicting_rows}
+    supporting_rows = tuple(
+        row
+        for row in decision_inputs
+        if row.fact_id not in all_contradicting_fact_ids
+        and (row.contribution > 0 if positive_direction else row.contribution < 0)
+    )
+    supporting_fact_ids = tuple(row.fact_id for row in supporting_rows[:5])
+    has_contradiction = any(
+        row.fresh and row.contradicting and row.id in decision_fact_ids for row in facts
+    )
     if not gate.passed:
         action = "NO_ACTION_INSUFFICIENT_DATA"
     elif abs(asset.portfolio_weight) > CONCENTRATION_LIMITS[risk_tolerance]:
@@ -486,4 +587,9 @@ def build_quant_opinion(
         freshness=freshness,
         methodology_version=METHODOLOGY_VERSION,
         unrealized_return=unrealized_return,
+        decision_inputs=decision_inputs,
+        total_contribution=total_contribution,
+        supporting_fact_ids=supporting_fact_ids,
+        contradicting_fact_ids=contradicting_fact_ids,
+        invalidation_conditions=_invalidation_conditions(stance),
     )

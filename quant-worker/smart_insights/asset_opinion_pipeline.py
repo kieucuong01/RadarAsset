@@ -75,6 +75,7 @@ def _evidence_bundle(
     as_of: datetime,
 ):
     signal_key = f"asset-opinion:{quant.asset.symbol}:{as_of.date().isoformat()}"
+    decision_ids = {row.fact_id for row in quant.decision_inputs}
     observations = tuple(
         EvidenceObservation(
             id=fact.id,
@@ -92,6 +93,7 @@ def _evidence_bundle(
             decimals=2,
         )
         for fact in quant.facts
+        if fact.id in decision_ids
     )
     signal = SignalEvidenceInput(
         signal_id=signal_key,
@@ -105,9 +107,7 @@ def _evidence_bundle(
         tenant_id=organization_id,
         as_of=as_of,
     )
-    contradictions = {
-        fact.id for fact in quant.facts if fact.contradicting
-    }
+    contradictions = set(quant.contradicting_fact_ids)
     contradicting_ids = tuple(
         row.evidence_id
         for row in provisional.evidence
@@ -116,7 +116,8 @@ def _evidence_bundle(
     supporting_ids = tuple(
         row.evidence_id
         for row in provisional.evidence
-        if row.metric_observation_id not in contradictions
+        if row.metric_observation_id in decision_ids
+        and row.metric_observation_id not in contradictions
     )
     return build_bundle(
         signal=signal,
