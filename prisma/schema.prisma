@@ -27,6 +27,7 @@ model AppUser {
   marketIngestionRequests MarketIngestionRequest[]
   insightPreferences      UserInsightPreference[]
   dailyBriefings          DailyBriefing[]
+  smartInsightRefreshes   SmartInsightRefreshRequest[]
 
   @@map("app_users")
 }
@@ -105,6 +106,7 @@ model Organization {
   marketIngestionRequests  MarketIngestionRequest[]
   insightPreferences       UserInsightPreference[]
   dailyBriefings           DailyBriefing[]
+  smartInsightRefreshes    SmartInsightRefreshRequest[]
 
   @@map("organizations")
 }
@@ -991,6 +993,33 @@ model DailyBriefingItem {
   @@index([signalSnapshotId])
   @@index([aiInsightId])
   @@map("daily_briefing_items")
+}
+
+model SmartInsightRefreshRequest {
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  status            String       @default("queued")
+  reason            String
+  requestVersion    Int          @default(1) @map("request_version")
+  processingVersion Int?         @map("processing_version")
+  requestedAt       DateTime     @default(now()) @map("requested_at") @db.Timestamptz(3)
+  availableAt       DateTime     @default(now()) @map("available_at") @db.Timestamptz(3)
+  startedAt         DateTime?    @map("started_at") @db.Timestamptz(3)
+  finishedAt        DateTime?    @map("finished_at") @db.Timestamptz(3)
+  workerId          String?      @map("worker_id")
+  attemptCount      Int          @default(0) @map("attempt_count")
+  errorCode         String?      @map("error_code")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, status])
+  @@index([userId, status])
+  @@index([status, availableAt])
+  @@map("smart_insight_refresh_requests")
 }
 
 model ProviderInstrument {

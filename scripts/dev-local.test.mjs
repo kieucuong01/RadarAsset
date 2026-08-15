@@ -40,6 +40,16 @@ test("starts Next.js on the fixed local port and the continuous quant worker", (
         "5",
       ],
     },
+    {
+      name: "smart-insights-refresh-worker",
+      command: "C:\\Python\\python.exe",
+      args: [
+        "C:\\repo\\quant-worker\\process_smart_insight_refreshes.py",
+        "--watch",
+        "--poll-seconds",
+        "5",
+      ],
+    },
   ]);
 });
 

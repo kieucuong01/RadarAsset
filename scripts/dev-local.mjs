@@ -70,6 +70,16 @@ export function childSpecs(repoRoot, pythonExecutable) {
         "5",
       ],
     },
+    {
+      name: "smart-insights-refresh-worker",
+      command: pythonExecutable,
+      args: [
+        path.join(repoRoot, "quant-worker", "process_smart_insight_refreshes.py"),
+        "--watch",
+        "--poll-seconds",
+        "5",
+      ],
+    },
   ];
 }
 
