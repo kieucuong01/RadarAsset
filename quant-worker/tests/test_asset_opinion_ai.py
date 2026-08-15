@@ -81,9 +81,19 @@ def bundle(*, contradiction: bool = False) -> EvidenceBundle:
 
 
 class FakeTransport:
-    def __init__(self, payload: dict[str, object]) -> None:
+    def __init__(
+        self,
+        payload: dict[str, object] | None,
+        *,
+        finish_reason: str = "stop",
+        statuses: tuple[int, ...] = (200,),
+    ) -> None:
         self.payload = payload
+        self.finish_reason = finish_reason
+        self.statuses = list(statuses)
         self.last_json: dict[str, object] | None = None
+        self.last_url: str | None = None
+        self.calls = 0
 
     def post_json(
         self,
@@ -93,14 +103,19 @@ class FakeTransport:
         headers: dict[str, str],
         timeout_seconds: int,
     ) -> tuple[int, dict[str, object]]:
+        self.calls += 1
+        self.last_url = url
         self.last_json = body
+        status = self.statuses.pop(0) if self.statuses else 200
+        if status != 200:
+            return status, {}
         return 200, {
-            "output": [
+            "choices": [
                 {
-                    "type": "message",
-                    "content": [
-                        {"type": "output_text", "text": json.dumps(self.payload)}
-                    ],
+                    "finish_reason": self.finish_reason,
+                    "message": {
+                        "content": json.dumps(self.payload) if self.payload is not None else ""
+                    },
                 }
             ]
         }
@@ -130,7 +145,7 @@ def test_asset_opinion_parser_rejects_extra_fields_and_unknown_action() -> None:
     )
 
 
-def test_asset_opinion_request_is_strict_unstored_and_evidence_only() -> None:
+def test_asset_opinion_request_uses_deepseek_json_output_and_evidence_only() -> None:
     transport = FakeTransport(valid_payload())
 
     result = synthesize_asset_opinion(
@@ -144,12 +159,53 @@ def test_asset_opinion_request_is_strict_unstored_and_evidence_only() -> None:
 
     assert isinstance(result, AssetOpinionAiOutput)
     assert transport.last_json is not None
-    assert transport.last_json["store"] is False
-    assert transport.last_json["text"]["format"]["strict"] is True  # type: ignore[index]
-    user_text = transport.last_json["input"][1]["content"][0]["text"]  # type: ignore[index]
+    assert transport.last_url == "https://api.deepseek.com/chat/completions"
+    assert transport.last_json["response_format"] == {"type": "json_object"}
+    assert transport.last_json["stream"] is False
+    assert transport.last_json["thinking"] == {"type": "disabled"}
+    assert "store" not in transport.last_json
+    user_text = transport.last_json["messages"][1]["content"]  # type: ignore[index]
     assert '"deterministic_action":"HOLD"' in user_text
     assert '"fingerprint":"fingerprint"' in user_text
     assert "tools" not in transport.last_json
+
+
+def test_asset_opinion_rejects_empty_or_truncated_deepseek_content() -> None:
+    empty = synthesize_asset_opinion(
+        bundle(),
+        deterministic_action="HOLD",
+        locale="vi",
+        model="deepseek-v4-flash",
+        api_key="test-key",
+        transport=FakeTransport(None),
+    )
+    truncated = synthesize_asset_opinion(
+        bundle(),
+        deterministic_action="HOLD",
+        locale="vi",
+        model="deepseek-v4-flash",
+        api_key="test-key",
+        transport=FakeTransport(valid_payload(), finish_reason="length"),
+    )
+
+    assert empty == AiSchemaError("AI_RESPONSE_INVALID")
+    assert truncated == AiSchemaError("AI_RESPONSE_INVALID")
+
+
+def test_asset_opinion_retries_one_rate_limit_response() -> None:
+    transport = FakeTransport(valid_payload(), statuses=(429, 200))
+
+    result = synthesize_asset_opinion(
+        bundle(),
+        deterministic_action="HOLD",
+        locale="vi",
+        model="deepseek-v4-flash",
+        api_key="test-key",
+        transport=transport,
+    )
+
+    assert isinstance(result, AssetOpinionAiOutput)
+    assert transport.calls == 2
 
 
 def test_asset_opinion_missing_configuration_is_typed_unavailable() -> None:

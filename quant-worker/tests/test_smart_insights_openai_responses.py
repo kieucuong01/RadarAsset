@@ -22,20 +22,25 @@ class FakeTransport:
             "time_horizon": "WEEKS_1_4", "risk_scenarios": [],
             "suggested_check_template": "MONITOR", "confidence": 60,
         }
-        return 200, {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(output)}]}]}
+        return 200, {
+            "choices": [
+                {"finish_reason": "stop", "message": {"content": json.dumps(output)}}
+            ]
+        }
 
 
-def test_responses_request_is_strict_and_does_not_store() -> None:
+def test_general_insight_uses_deepseek_json_output_without_tools() -> None:
     transport = FakeTransport()
     result = synthesize(bundle(), locale="vi", transport=transport, model="configured-model", api_key="test")
     assert isinstance(result, StructuredInsightOutput)
     body = transport.last_json
     assert body["model"] == "configured-model"
-    assert body["store"] is False
-    assert body["text"]["format"]["type"] == "json_schema"
-    assert body["text"]["format"]["strict"] is True
+    assert body["response_format"] == {"type": "json_object"}
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["stream"] is False
+    assert "store" not in body
     assert "tools" not in body
-    assert body["input"][1]["content"][0]["text"] == bundle().to_json()
+    assert body["messages"][1]["content"] == bundle().to_json()
 
 
 def test_missing_configuration_returns_typed_unavailable() -> None:

@@ -236,37 +236,57 @@ def parse_asset_opinion_output(payload: object) -> AssetOpinionAiOutput | AiSche
 
 
 def _extract(response: dict[str, Any]) -> object | None:
-    texts = [
-        content.get("text")
-        for item in response.get("output", []) if isinstance(item, dict)
-        for content in item.get("content", []) if isinstance(content, dict) and content.get("type") == "output_text"
-    ]
-    if len(texts) != 1 or not isinstance(texts[0], str) or len(texts[0]) > 20_000:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1:
+        return None
+    choice = choices[0]
+    if not isinstance(choice, dict) or choice.get("finish_reason") != "stop":
+        return None
+    message = choice.get("message")
+    text = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(text, str) or not text.strip() or len(text) > 20_000:
         return None
     try:
-        return json.loads(texts[0])
+        return json.loads(text)
     except json.JSONDecodeError:
         return None
+
+
+def _deepseek_body(
+    *, model: str, system_prompt: str, user_payload: str, schema: dict[str, Any]
+) -> dict[str, Any]:
+    schema_text = json.dumps(schema, sort_keys=True, separators=(",", ":"))
+    return {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": f"{system_prompt}\nReturn one JSON object matching this JSON Schema: {schema_text}",
+            },
+            {"role": "user", "content": user_payload},
+        ],
+        "response_format": {"type": "json_object"},
+        "stream": False,
+        "max_tokens": 1800,
+        "thinking": {"type": "disabled"},
+    }
 
 
 def synthesize(
     bundle: EvidenceBundle, *, locale: str, model: str | None, api_key: str | None,
     transport: JsonTransport | None = None, timeout_seconds: int = 30,
-    endpoint: str = "https://api.openai.com/v1/responses",
+    endpoint: str = "https://api.deepseek.com/chat/completions",
 ) -> StructuredInsightOutput | AiUnavailable | AiSchemaError:
     if not model or not api_key:
         return AiUnavailable("AI_NOT_CONFIGURED")
     if locale not in {"vi", "en"} or not 1 <= timeout_seconds <= 60:
         return AiUnavailable("AI_CONFIGURATION_INVALID")
-    body = {
-        "model": model,
-        "input": [
-            {"role": "system", "content": [{"type": "input_text", "text": SYSTEM_PROMPT_V1.format(locale=locale)}]},
-            {"role": "user", "content": [{"type": "input_text", "text": bundle.to_json()}]},
-        ],
-        "text": {"format": {"type": "json_schema", "name": "smart_insight", "strict": True, "schema": OUTPUT_SCHEMA}},
-        "store": False,
-    }
+    body = _deepseek_body(
+        model=model,
+        system_prompt=SYSTEM_PROMPT_V1.format(locale=locale),
+        user_payload=bundle.to_json(),
+        schema=OUTPUT_SCHEMA,
+    )
     client = transport or UrllibJsonTransport()
     for attempt in range(2):
         try:
@@ -296,7 +316,7 @@ def synthesize_asset_opinion(
     api_key: str | None,
     transport: JsonTransport | None = None,
     timeout_seconds: int = 30,
-    endpoint: str = "https://api.openai.com/v1/responses",
+    endpoint: str = "https://api.deepseek.com/chat/completions",
 ) -> AssetOpinionAiOutput | AiUnavailable | AiSchemaError:
     if not model or not api_key:
         return AiUnavailable("AI_NOT_CONFIGURED")
@@ -314,33 +334,12 @@ def synthesize_asset_opinion(
         sort_keys=True,
         separators=(",", ":"),
     )
-    body = {
-        "model": model,
-        "input": [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": ASSET_OPINION_SYSTEM_PROMPT_V1.format(locale=locale),
-                    }
-                ],
-            },
-            {
-                "role": "user",
-                "content": [{"type": "input_text", "text": user_payload}],
-            },
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "asset_opinion",
-                "strict": True,
-                "schema": ASSET_OPINION_OUTPUT_SCHEMA,
-            }
-        },
-        "store": False,
-    }
+    body = _deepseek_body(
+        model=model,
+        system_prompt=ASSET_OPINION_SYSTEM_PROMPT_V1.format(locale=locale),
+        user_payload=user_payload,
+        schema=ASSET_OPINION_OUTPUT_SCHEMA,
+    )
     client = transport or UrllibJsonTransport()
     for attempt in range(2):
         try:

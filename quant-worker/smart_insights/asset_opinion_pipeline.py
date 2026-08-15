@@ -188,9 +188,13 @@ def build_asset_opinion_drafts(
                 bundle,
                 deterministic_action=quant.personalized_action,
                 locale=inputs.preferences.locale,
-                model=os.getenv("SMART_INSIGHTS_AI_MODEL"),
-                api_key=os.getenv("OPENAI_API_KEY"),
-                timeout_seconds=int(os.getenv("SMART_INSIGHTS_AI_TIMEOUT_SECONDS", "30")),
+                model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+                api_key=os.getenv("DEEPSEEK_API_KEY"),
+                timeout_seconds=int(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+                endpoint=(
+                    os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+                    + "/chat/completions"
+                ),
             )
             verified = (
                 verify_asset_opinion(generated, bundle, quant.personalized_action)

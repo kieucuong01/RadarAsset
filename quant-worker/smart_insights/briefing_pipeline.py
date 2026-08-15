@@ -575,7 +575,7 @@ class PostgresBriefingRepository:
                                'decision-cockpit-v1',%s,%s::jsonb,%s,%s::jsonb,%s::jsonb,NOW())""",
                     (briefing_id, draft.organization_id, draft.user_id, run_id, draft.local_date,
                      draft.as_of, draft.timezone, revision, draft.fingerprint,
-                     os.getenv("SMART_INSIGHTS_AI_MODEL"), draft.status,
+                     os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"), draft.status,
                      _canonical({"portfolioState": draft.portfolio_state}), draft.data_confidence,
                      _canonical(_portfolio_snapshot(draft.portfolio_state, draft.portfolio)),
                      _canonical(asdict(draft.preferences))),
@@ -729,9 +729,13 @@ def generate_briefing(
         generated = synthesizer(
             bundle,
             locale=preferences.locale,
-            model=os.getenv("SMART_INSIGHTS_AI_MODEL"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout_seconds=int(os.getenv("SMART_INSIGHTS_AI_TIMEOUT_SECONDS", "30")),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            api_key=os.getenv("DEEPSEEK_API_KEY"),
+            timeout_seconds=int(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+            endpoint=(
+                os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+                + "/chat/completions"
+            ),
         )
         accepted = verify(generated, bundle) if isinstance(generated, StructuredInsightOutput) else generated
         if isinstance(accepted, GroundingAccepted):
