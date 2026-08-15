@@ -73,6 +73,7 @@ WITH ranked AS (
          observation.effective_at,
          observation.observed_at,
          observation.quality_status,
+         observation.dimensions,
          provider.code AS provider_code,
          snapshot.source_url,
          COALESCE((metric.metadata ->> 'critical')::boolean, false) AS critical,
@@ -92,9 +93,13 @@ WITH ranked AS (
     AND snapshot.status = 'validated'
 ), signal_scores AS (
   SELECT source_observation_id,
+         signal.market AS signal_market,
+         input ->> 'metricCode' AS signal_metric_code,
          (input ->> 'score')::numeric AS signal_score,
+         NULLIF(input ->> 'percentile', '')::numeric AS signal_percentile,
+         NULLIF(input ->> 'configuredWeight', '')::numeric AS signal_configured_weight,
          ROW_NUMBER() OVER (
-           PARTITION BY source_observation_id
+           PARTITION BY source_observation_id, signal.market
            ORDER BY signal.effective_at DESC, signal.created_at DESC
          ) AS score_rank
   FROM signal_snapshots signal
@@ -114,7 +119,11 @@ WITH ranked AS (
   WHERE signal.effective_at <= %s
 ), scored AS (
   SELECT ranked.*,
-         signal_scores.signal_score
+         signal_scores.signal_market,
+         signal_scores.signal_metric_code,
+         signal_scores.signal_score,
+         signal_scores.signal_percentile,
+         signal_scores.signal_configured_weight
   FROM ranked
   LEFT JOIN signal_scores
     ON signal_scores.source_observation_id = ranked.id::text
@@ -123,7 +132,9 @@ WITH ranked AS (
 )
 SELECT id, asset_symbol, metric_code, value, unit, direction,
        methodology_version, freshness_sla_minutes, effective_at, observed_at,
-       quality_status, provider_code, source_url, critical, signal_score
+       quality_status, dimensions, provider_code, source_url, critical,
+       signal_market, signal_metric_code, signal_score, signal_percentile,
+       signal_configured_weight
 FROM scored
 ORDER BY asset_symbol NULLS FIRST, metric_code, effective_at, id
 LIMIT 2000
@@ -143,6 +154,87 @@ UNIT_MAP = {
     "days": "DAYS",
 }
 
+CRYPTO_DECISION_METRICS = frozenset(
+    {
+        "crypto.etf.net_flow_usd",
+        "crypto.coinshares.net_flow_usd",
+        "crypto.fear_greed.index",
+        "crypto.onchain.adjusted_transfer_usd",
+        "crypto.onchain.active_addresses",
+        "crypto.onchain.nvt",
+        "crypto.network.hashrate_hs",
+        "crypto.large_address.exchange_flow_pressure_btc",
+    }
+)
+
+MACRO_DECISION_METRICS = frozenset(
+    {
+        "macro.real_yield.10y_pct",
+        "macro.usd_broad_index",
+        "macro.fed_balance_sheet_change_4w",
+        "macro.reverse_repo_change_4w",
+        "macro.tga_change_4w",
+        "macro.growth_surprise",
+        "macro.inflation_surprise",
+        "macro.regime.score",
+        "macro.event_risk",
+    }
+)
+
+GOLD_DECISION_METRICS = frozenset({"gold.cftc.managed_money_net_oi", "gold.regime.score"})
+
+
+def fact_allowed_for_market(metric_code: str, market: str) -> bool:
+    if metric_code in MACRO_DECISION_METRICS:
+        return market in {"crypto", "gold"}
+    if metric_code in CRYPTO_DECISION_METRICS:
+        return market == "crypto"
+    if metric_code in GOLD_DECISION_METRICS:
+        return market == "gold"
+    if metric_code.startswith(("equity.liquidity.", "equity.foreign_flow.", "equity.valuation.")):
+        return market in {"equity", "stock_vn"}
+    return False
+
+
+def _preferred_signal_market(metric_code: str, market: str) -> str:
+    if market == "gold":
+        return "gold"
+    if metric_code.startswith("macro."):
+        return "macro"
+    return market
+
+
+def _dimensions(value: object) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, dict):
+        return ()
+    return tuple(sorted((str(key), str(item)) for key, item in value.items()))
+
+
+def latest_decision_facts(
+    rows: tuple[QuantFact, ...], *, limit: int = 12
+) -> tuple[QuantFact, ...]:
+    latest: dict[tuple[str, tuple[tuple[str, str], ...]], QuantFact] = {}
+    for row in rows:
+        key = (row.metric_code, row.dimensions)
+        current = latest.get(key)
+        if current is None or (row.effective_at, row.observed_at, row.id) > (
+            current.effective_at,
+            current.observed_at,
+            current.id,
+        ):
+            latest[key] = row
+    ordered = sorted(
+        latest.values(),
+        key=lambda row: (
+            row.signed_score is None,
+            not row.fresh,
+            -(abs(row.signed_score) if row.signed_score is not None else Decimal("0")),
+            row.metric_code,
+            row.dimensions,
+        ),
+    )
+    return tuple(ordered[:limit])
+
 
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
@@ -160,15 +252,112 @@ def _unit(value: object) -> str:
     return UNIT_MAP.get(normalized, "RATIO")
 
 
+def _optional_decimal(value: object) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    return Decimal(str(value))
+
+
+def _fact_dimensions_allowed(
+    metric_code: str, dimensions: tuple[tuple[str, str], ...]
+) -> bool:
+    values = {key: value for key, value in dimensions}
+    if metric_code == "crypto.etf.net_flow_usd":
+        return values.get("fund", "").upper() == "TOTAL"
+    if metric_code == "crypto.coinshares.net_flow_usd":
+        return values.get("asset", "total").casefold() in {"total", "bitcoin", "btc"}
+    return True
+
+
+def _fact_for_asset(
+    candidate_rows: list[dict[str, object]],
+    *,
+    symbol: str,
+    market: str,
+    as_of: datetime,
+) -> QuantFact | None:
+    if not candidate_rows:
+        return None
+    base = candidate_rows[0]
+    direct_symbol = base.get("asset_symbol")
+    if direct_symbol is not None and canonical_symbol(str(direct_symbol)) != symbol:
+        return None
+    metric_code = str(base["metric_code"])
+    if not fact_allowed_for_market(metric_code, market):
+        return None
+    dimensions = _dimensions(base.get("dimensions"))
+    if not _fact_dimensions_allowed(metric_code, dimensions):
+        return None
+
+    preferred_market = _preferred_signal_market(metric_code, market)
+    scored = tuple(
+        row for row in candidate_rows if str(row.get("signal_market") or "") == preferred_market
+    )
+    score_row = max(
+        scored,
+        key=lambda row: (
+            row.get("signal_score") is not None,
+            _aware(row["effective_at"]),
+            str(row["id"]),
+        ),
+        default=None,
+    )
+    effective_at = _aware(base["effective_at"])
+    observed_at = _aware(base["observed_at"])
+    age_minutes = Decimal(str((as_of - observed_at).total_seconds() / 60))
+    fresh = (
+        str(base["quality_status"]) in {"passed", "warning"}
+        and Decimal("0") <= age_minutes <= Decimal(str(base["freshness_sla_minutes"]))
+    )
+    percentile = _optional_decimal(
+        score_row.get("signal_percentile") if score_row is not None else None
+    )
+    input_weight = _optional_decimal(
+        score_row.get("signal_configured_weight") if score_row is not None else None
+    )
+    return QuantFact(
+        id=str(base["id"]),
+        metric_code=metric_code,
+        value=Decimal(str(base["value"])),
+        unit=_unit(base["unit"]),
+        effective_at=effective_at,
+        observed_at=observed_at,
+        source_family=str(base["provider_code"]),
+        source_code=str(base["provider_code"]),
+        source_url=str(base["source_url"]),
+        signed_score=_score(score_row.get("signal_score") if score_row is not None else None),
+        confidence=Decimal("100") if fresh else Decimal("0"),
+        fresh=fresh,
+        critical=bool(base.get("critical", False)),
+        methodology_version=str(base["methodology_version"]),
+        dimensions=dimensions,
+        percentile=percentile,
+        source_input_weight=input_weight,
+        normalization_method=(
+            "empirical_percentile" if percentile is not None else "source_signal"
+        ),
+        signal_metric_code=(
+            str(score_row.get("signal_metric_code"))
+            if score_row is not None and score_row.get("signal_metric_code")
+            else None
+        ),
+        signal_market=preferred_market if score_row is not None else None,
+    )
+
+
 def load_asset_opinion_market_data(
     connection: Any,
-    symbols: tuple[str, ...],
+    assets: tuple[tuple[str, str], ...],
     benchmark_symbols: tuple[str, ...],
     as_of: datetime,
 ) -> AssetOpinionMarketData:
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must be timezone-aware.")
-    canonical_assets = tuple(dict.fromkeys(canonical_symbol(value) for value in symbols))
+    canonical_pairs = tuple(
+        dict.fromkeys((canonical_symbol(symbol), market) for symbol, market in assets)
+    )
+    canonical_assets = tuple(symbol for symbol, _market in canonical_pairs)
+    asset_markets = dict(canonical_pairs)
     if len(canonical_assets) > 25:
         raise ValueError("Asset opinion loader accepts at most 25 opinion assets.")
     requested = tuple(
@@ -206,8 +395,7 @@ def load_asset_opinion_market_data(
         ):
             bars_by_symbol[symbol][ts] = candidate
 
-    direct_facts: dict[str, list[QuantFact]] = defaultdict(list)
-    global_facts: list[QuantFact] = []
+    grouped_fact_rows: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in raw_facts:
         metric_code = str(row["metric_code"])
         methodology = str(row["methodology_version"])
@@ -217,32 +405,7 @@ def load_asset_opinion_market_data(
         observed_at = _aware(row["observed_at"])
         if effective_at > as_of or observed_at > as_of:
             continue
-        age_minutes = Decimal(str((as_of - observed_at).total_seconds() / 60))
-        fresh = (
-            str(row["quality_status"]) in {"passed", "warning"}
-            and Decimal("0") <= age_minutes <= Decimal(str(row["freshness_sla_minutes"]))
-        )
-        fact = QuantFact(
-            id=str(row["id"]),
-            metric_code=metric_code,
-            value=Decimal(str(row["value"])),
-            unit=_unit(row["unit"]),
-            effective_at=effective_at,
-            observed_at=observed_at,
-            source_family=str(row["provider_code"]),
-            source_code=str(row["provider_code"]),
-            source_url=str(row["source_url"]),
-            signed_score=_score(row.get("signal_score")),
-            confidence=Decimal("100") if fresh else Decimal("0"),
-            fresh=fresh,
-            critical=bool(row.get("critical", False)),
-            methodology_version=methodology,
-        )
-        symbol = row.get("asset_symbol")
-        if symbol is None:
-            global_facts.append(fact)
-        else:
-            direct_facts[canonical_symbol(str(symbol))].append(fact)
+        grouped_fact_rows[str(row["id"])].append(row)
 
     bars_output = tuple(
         (
@@ -254,10 +417,19 @@ def load_asset_opinion_market_data(
     facts_output = tuple(
         (
             symbol,
-            tuple(
-                sorted(
-                    (*direct_facts.get(symbol, ()), *global_facts),
-                    key=lambda row: (row.metric_code, row.effective_at, row.id),
+            latest_decision_facts(
+                tuple(
+                    fact
+                    for candidate_rows in grouped_fact_rows.values()
+                    if (
+                        fact := _fact_for_asset(
+                            candidate_rows,
+                            symbol=symbol,
+                            market=asset_markets[symbol],
+                            as_of=as_of,
+                        )
+                    )
+                    is not None
                 )
             ),
         )

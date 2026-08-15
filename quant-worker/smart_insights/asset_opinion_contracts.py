@@ -86,6 +86,12 @@ class QuantFact:
     methodology_version: str
     underlying_ids: tuple[str, ...] = ()
     contradicting: bool = False
+    dimensions: tuple[tuple[str, str], ...] = ()
+    percentile: Decimal | None = None
+    source_input_weight: Decimal | None = None
+    normalization_method: str = "source_signal"
+    signal_metric_code: str | None = None
+    signal_market: str | None = None
 
     def __post_init__(self) -> None:
         for value, field_name in (
@@ -106,6 +112,16 @@ class QuantFact:
             _require_finite(self.signed_score, "signed_score")
             if not Decimal("-100") <= self.signed_score <= Decimal("100"):
                 raise ValueError("signed_score must be between -100 and 100.")
+        if self.percentile is not None:
+            _require_finite(self.percentile, "percentile")
+            if not Decimal("0") <= self.percentile <= Decimal("1"):
+                raise ValueError("percentile must be between 0 and 1.")
+        if self.source_input_weight is not None:
+            _require_finite(self.source_input_weight, "source_input_weight")
+            if not Decimal("0") <= self.source_input_weight <= Decimal("1"):
+                raise ValueError("source_input_weight must be between 0 and 1.")
+        if tuple(sorted(self.dimensions)) != self.dimensions:
+            raise ValueError("dimensions must be sorted.")
         if not Decimal("0") <= self.confidence <= Decimal("100"):
             raise ValueError("confidence must be between 0 and 100.")
 

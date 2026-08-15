@@ -123,7 +123,7 @@ class BriefingRepository(Protocol):
 
     def load_asset_opinion_market_data(
         self,
-        symbols: tuple[str, ...],
+        assets: tuple[tuple[str, str], ...],
         benchmark_symbols: tuple[str, ...],
         *,
         as_of: datetime,
@@ -516,14 +516,14 @@ class PostgresBriefingRepository:
 
     def load_asset_opinion_market_data(
         self,
-        symbols: tuple[str, ...],
+        assets: tuple[tuple[str, str], ...],
         benchmark_symbols: tuple[str, ...],
         *,
         as_of: datetime,
     ) -> AssetOpinionMarketData:
         return load_asset_opinion_market_data_batch(
             self.connection,
-            symbols,
+            assets,
             benchmark_symbols,
             as_of,
         )
@@ -799,7 +799,7 @@ def generate_briefing(
         )
     )
     market_data = repository.load_asset_opinion_market_data(
-        tuple(row.symbol for row in universe.assets),
+        tuple((row.symbol, row.market) for row in universe.assets),
         benchmark_symbols,
         as_of=as_of,
     )
