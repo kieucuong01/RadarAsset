@@ -153,3 +153,35 @@ def test_one_ai_failure_degrades_only_that_asset_to_quant_only() -> None:
     assert drafts[1].explanation_status == "quant_only"
     assert drafts[1].ai_output is None
     assert drafts[1].rejection_code == "AI_PROCESSING_FAILED"
+
+
+def test_altcoins_reuse_the_same_btc_context_facts_from_batch_bars() -> None:
+    assets = (candidate("ETH", "crypto"), candidate("ADA", "crypto"))
+    inputs = AssetOpinionBatch(
+        universe=UniverseResult(assets, ()),
+        market_data=AssetOpinionMarketData(
+            bars=(
+                ("ETH", bars("ETH", 90)),
+                ("ADA", bars("ADA", 90)),
+                ("BTC", bars("BTC", 90)),
+            ),
+            facts=(("ETH", ()), ("ADA", ())),
+        ),
+        preferences=UserInsightPreference(locale="vi", risk_tolerance="moderate"),
+        as_of=NOW,
+        organization_id="organization",
+    )
+    received: dict[str, tuple[str, ...]] = {}
+
+    def capture_context(**kwargs):
+        received[kwargs["asset"].symbol] = tuple(
+            row.id
+            for row in kwargs["specialized"]
+            if row.metric_code.startswith("crypto.btc.return_")
+        )
+        return build_quant_opinion(**kwargs)
+
+    build_asset_opinion_drafts(inputs, build_quant=capture_context)
+
+    assert len(received["ETH"]) == 2
+    assert received["ETH"] == received["ADA"]

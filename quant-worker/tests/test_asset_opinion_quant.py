@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from smart_insights.asset_opinion_contracts import AssetCandidate, MarketBar, QuantFact
-from smart_insights.asset_opinion_quant import build_quant_opinion
+from smart_insights.asset_opinion_quant import build_btc_context_facts, build_quant_opinion
 from smart_insights.asset_opinion_rules import pillar_weights
 
 
@@ -181,6 +181,24 @@ def test_altcoin_ledger_keeps_only_two_strongest_macro_inputs() -> None:
     }
     assert macro_codes == {"macro.real_yield.10y_pct", "macro.usd_broad_index"}
     assert len(opinion.decision_inputs) <= 12
+
+
+def test_btc_context_uses_explainable_bounded_returns() -> None:
+    context = build_btc_context_facts(bars(90, symbol="BTC"), as_of=NOW)
+
+    assert tuple(row.metric_code for row in context) == (
+        "crypto.btc.return_20d",
+        "crypto.btc.return_60d",
+    )
+    assert all(row.signed_score is not None for row in context)
+    assert all(
+        Decimal("-100") <= row.signed_score <= Decimal("100")
+        for row in context
+        if row.signed_score is not None
+    )
+    assert all(row.normalization_method == "return_x400_bounded_v1" for row in context)
+    assert all(row.source_family == "market_bars" for row in context)
+    assert tuple(len(row.underlying_ids) for row in context) == (21, 61)
 
 
 def test_fact_sheet_ignores_future_and_uses_independent_sources() -> None:

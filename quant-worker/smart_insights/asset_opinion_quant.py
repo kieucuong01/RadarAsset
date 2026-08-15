@@ -307,6 +307,35 @@ def _common_facts(
     return closed, tuple(facts)
 
 
+def build_btc_context_facts(
+    bars: tuple[MarketBar, ...], *, as_of: datetime
+) -> tuple[QuantFact, ...]:
+    benchmark = AssetCandidate(
+        symbol="BTC",
+        name="Bitcoin",
+        market="crypto",
+        portfolio_weight=Decimal("0"),
+        watchlist_rank=0,
+    )
+    _closed, common = _common_facts(benchmark, bars, as_of=as_of)
+    by_code = {row.metric_code: row for row in common}
+    output: list[QuantFact] = []
+    for days in (20, 60):
+        source = by_code.get(f"market.return_{days}d")
+        if source is None:
+            continue
+        metric_code = f"crypto.btc.return_{days}d"
+        output.append(
+            replace(
+                source,
+                id=f"derived:BTC:{metric_code}:{source.effective_at.isoformat()}",
+                metric_code=metric_code,
+                normalization_method="return_x400_bounded_v1",
+            )
+        )
+    return tuple(output)
+
+
 def _relative_strength_fact(
     asset: AssetCandidate,
     asset_bars: tuple[MarketBar, ...],

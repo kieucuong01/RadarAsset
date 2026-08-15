@@ -16,7 +16,11 @@ from .asset_opinion_contracts import (
     QuantAssetOpinion,
     UniverseResult,
 )
-from .asset_opinion_quant import METHODOLOGY_VERSION, build_quant_opinion
+from .asset_opinion_quant import (
+    METHODOLOGY_VERSION,
+    build_btc_context_facts,
+    build_quant_opinion,
+)
 from .evidence import EvidenceObservation, SignalEvidenceInput, build_bundle
 from .grounding import GroundingRejected, verify_asset_opinion
 from .openai_responses import (
@@ -136,13 +140,19 @@ def build_asset_opinion_drafts(
     build_quant: QuantBuilder = build_quant_opinion,
 ) -> tuple[AssetOpinionDraft, ...]:
     drafts: list[AssetOpinionDraft] = []
+    btc_context = build_btc_context_facts(
+        inputs.market_data.bars_for("BTC"), as_of=inputs.as_of
+    )
     for asset in inputs.universe.assets:
         signal_key = f"asset-opinion:{asset.symbol}:{inputs.as_of.date().isoformat()}"
+        specialized = inputs.market_data.facts_for(asset.symbol)
+        if asset.market == "crypto" and asset.symbol != "BTC":
+            specialized = (*specialized, *btc_context)
         try:
             quant = build_quant(
                 asset=asset,
                 bars=inputs.market_data.bars_for(asset.symbol),
-                specialized=inputs.market_data.facts_for(asset.symbol),
+                specialized=specialized,
                 as_of=inputs.as_of,
                 risk_tolerance=inputs.preferences.risk_tolerance,
             )
