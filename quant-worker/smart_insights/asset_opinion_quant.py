@@ -39,7 +39,7 @@ CONCENTRATION_LIMITS = {
     "aggressive": Decimal("0.35"),
 }
 
-METHODOLOGY_VERSION = "asset-opinion-v2"
+METHODOLOGY_VERSION = "asset-opinion-v3"
 
 BENCHMARK_BY_MARKET = {
     "crypto": "BTC",
@@ -49,6 +49,12 @@ BENCHMARK_BY_MARKET = {
 }
 
 STABLECOIN_SYMBOLS = frozenset({"USDT", "USDC", "DAI", "FDUSD", "TUSD"})
+
+TECHNICAL_QUANT_POLICIES = {
+    "gold": (1, Decimal("0.50"), Decimal("65")),
+    "equity": (1, Decimal("0.50"), Decimal("70")),
+    "stock_vn": (1, Decimal("0.50"), Decimal("70")),
+}
 
 
 def canonical_symbol(symbol: str) -> str:
@@ -628,17 +634,25 @@ def build_quant_opinion(
             }
         )
     )
+    minimum_source_families, minimum_coverage, technical_confidence_cap = (
+        TECHNICAL_QUANT_POLICIES.get(
+            asset.market,
+            (2, Decimal("0.60"), Decimal("100")),
+        )
+    )
     failed: list[str] = []
     if len(closed_bars) < 60:
         failed.append("MINIMUM_60_DAILY_BARS")
     if len(decision_inputs) < 3:
         failed.append("NUMERIC_FACTS_MINIMUM_3")
-    if len(source_families) < 2:
-        failed.append("SOURCE_FAMILIES_MINIMUM_2")
+    if len(source_families) < minimum_source_families:
+        failed.append(f"SOURCE_FAMILIES_MINIMUM_{minimum_source_families}")
     if any(row.critical and not row.fresh for row in facts):
         failed.append("CRITICAL_INPUT_STALE")
-    if coverage < Decimal("0.60"):
-        failed.append("PILLAR_COVERAGE_MINIMUM_60")
+    if coverage < minimum_coverage:
+        failed.append(
+            f"PILLAR_COVERAGE_MINIMUM_{int(minimum_coverage * Decimal('100'))}"
+        )
     gate = DataGateResult(
         not failed, tuple(failed), source_families, len(decision_inputs)
     )
@@ -654,6 +668,8 @@ def build_quant_opinion(
         confidence = sum(
             (row.confidence * row.configured_weight for row in pillars), Decimal("0")
         ).quantize(Decimal("0.01"))
+        if len(source_families) == 1:
+            confidence = min(confidence, technical_confidence_cap)
         stance = _stance(quant_score)
 
     facts_by_id = {row.id: row for row in facts}

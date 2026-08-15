@@ -443,6 +443,59 @@ def test_equity_fact_sheet_includes_relative_strength_to_vnindex() -> None:
     assert any(identifier.startswith("VNINDEX-bar-") for identifier in relative.underlying_ids)
 
 
+def test_equity_and_gold_publish_capped_technical_quant_opinions_from_fresh_bars() -> None:
+    combined_equity_bars = (
+        *bars(220, symbol="FPT", start="100", step="2"),
+        *bars(220, symbol="VNINDEX", start="100", step="1"),
+    )
+    fpt = build_quant_opinion(
+        asset=candidate("FPT", market="stock_vn"),
+        bars=combined_equity_bars,
+        specialized=(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    vnindex = build_quant_opinion(
+        asset=candidate("VNINDEX", market="equity"),
+        bars=combined_equity_bars,
+        specialized=(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    xau = build_quant_opinion(
+        asset=candidate("XAU", market="gold"),
+        bars=bars(220, symbol="XAU"),
+        specialized=(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert fpt.gate.passed is True
+    assert fpt.data_coverage == Decimal("0.80")
+    assert fpt.confidence == Decimal("70")
+    assert {row.code for row in fpt.pillars} == {"trend", "relative_liquidity"}
+    assert vnindex.gate.passed is True
+    assert vnindex.data_coverage == Decimal("0.50")
+    assert vnindex.confidence == Decimal("50.00")
+    assert xau.gate.passed is True
+    assert xau.data_coverage == Decimal("0.55")
+    assert xau.confidence == Decimal("55.00")
+
+
+def test_crypto_does_not_relax_to_a_single_source_technical_opinion() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("BTC", market="crypto"),
+        bars=bars(220, symbol="BTC"),
+        specialized=(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert opinion.gate.passed is False
+    assert "SOURCE_FAMILIES_MINIMUM_2" in opinion.gate.failed_gates
+    assert "PILLAR_COVERAGE_MINIMUM_60" in opinion.gate.failed_gates
+
+
 def test_kronos_facts_never_enter_the_opinion() -> None:
     opinion = build_quant_opinion(
         asset=candidate("BTC"),
