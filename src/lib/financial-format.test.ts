@@ -57,5 +57,6 @@ describe("financial formatting", () => {
     for (const value of [null, undefined, "", "12x", Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(formatNumber(value)).toBe("—");
     }
+    expect(formatPercent(12, { multiplier: Number.POSITIVE_INFINITY })).toBe("—");
   });
 });

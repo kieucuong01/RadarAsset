@@ -88,11 +88,13 @@ export function formatPercent(
 ): string {
   const parsed = numeric(value);
   if (parsed == null) return MISSING;
-  const number = formatNumber(parsed * (options.multiplier ?? 1), {
+  const multiplier = options.multiplier ?? 1;
+  if (!Number.isFinite(multiplier)) return MISSING;
+  const number = formatNumber(parsed * multiplier, {
     maximumFractionDigits: 2,
     signDisplay: options.sign ? "exceptZero" : "auto",
   });
-  return `${number}%`;
+  return number === MISSING ? MISSING : `${number}%`;
 }
 
 export function formatScore(value: NumericInput): string {
