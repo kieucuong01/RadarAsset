@@ -64,6 +64,11 @@ FACT_QUERY = """
 WITH ranked AS (
   SELECT observation.id,
          asset.symbol AS asset_symbol,
+         COALESCE(
+           asset.symbol,
+           UPPER(NULLIF(observation.dimensions ->> 'asset', '')),
+           'GLOBAL'
+         ) AS fact_scope,
          metric.code AS metric_code,
          observation.value,
          metric.unit,
@@ -87,6 +92,12 @@ WITH ranked AS (
   JOIN insight_raw_snapshots snapshot ON snapshot.id = observation.raw_snapshot_id
   LEFT JOIN assets asset ON asset.id = observation.asset_id
   WHERE (asset.symbol = ANY(%s) OR observation.asset_id IS NULL)
+    AND (
+      metric.code = ANY(%s)
+      OR metric.code LIKE 'equity.liquidity.%'
+      OR metric.code LIKE 'equity.foreign_flow.%'
+      OR metric.code LIKE 'equity.valuation.%'
+    )
     AND observation.effective_at <= %s
     AND observation.observed_at <= %s
     AND observation.effective_at >= %s - CASE
@@ -108,15 +119,15 @@ WITH ranked AS (
 ), current_observations AS (
   SELECT ranked.*,
          ROW_NUMBER() OVER (
-           PARTITION BY asset_symbol, metric_code
+           PARTITION BY fact_scope, metric_code
            ORDER BY effective_at DESC, observed_at DESC, id
          ) AS metric_rank
        , PERCENT_RANK() OVER (
-           PARTITION BY asset_symbol, metric_code
+           PARTITION BY fact_scope, metric_code
            ORDER BY value
          ) AS raw_percentile
        , COUNT(*) OVER (
-           PARTITION BY asset_symbol, metric_code
+           PARTITION BY fact_scope, metric_code
          ) AS raw_history_count
   FROM ranked
   WHERE revision_rank = 1
@@ -166,7 +177,6 @@ SELECT id, asset_symbol, metric_code, value, unit, direction,
        signal_configured_weight, raw_percentile, raw_history_count
 FROM scored
 ORDER BY asset_symbol NULLS FIRST, metric_code, effective_at DESC, id
-LIMIT 1000
 """
 
 
@@ -213,6 +223,15 @@ MACRO_DECISION_METRICS = frozenset(
 )
 
 GOLD_DECISION_METRICS = frozenset({"gold.cftc.managed_money_net_oi", "gold.regime.score"})
+
+DECISION_QUERY_METRICS = tuple(
+    sorted(
+        CRYPTO_DECISION_METRICS
+        | MACRO_DECISION_METRICS
+        | GOLD_DECISION_METRICS
+        | {"macro.m2_busd"}
+    )
+)
 
 
 def fact_allowed_for_market(metric_code: str, market: str) -> bool:
@@ -551,7 +570,15 @@ def load_asset_opinion_market_data(
         cursor.execute(BAR_QUERY, (list(requested), as_of, as_of, as_of))
         raw_bars = tuple(cursor.fetchall())
         cursor.execute(
-            FACT_QUERY, (list(canonical_assets), as_of, as_of, as_of, as_of)
+            FACT_QUERY,
+            (
+                list(canonical_assets),
+                list(DECISION_QUERY_METRICS),
+                as_of,
+                as_of,
+                as_of,
+                as_of,
+            ),
         )
         raw_facts = tuple(cursor.fetchall())
 
