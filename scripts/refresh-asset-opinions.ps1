@@ -7,10 +7,11 @@ $PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
-$taskMarketIngestion = Join-Path $PSScriptRoot "run-market-ingestion.ps1"
+$taskMarketIngestion = Join-Path $taskRepositoryRoot "quant-worker\ingest_market_data.py"
+$taskEnvFile = Join-Path $taskRepositoryRoot ".env.local"
 $taskSmartInsights = Join-Path $PSScriptRoot "run-smart-insights.ps1"
 
-& $taskMarketIngestion -Command "daily" -PythonExecutable $PythonExecutable -DrainRequests
+& $PythonExecutable $taskMarketIngestion "daily" "--env-file" $taskEnvFile
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $taskSmartInsights -Schedule "daily" -PythonExecutable $PythonExecutable

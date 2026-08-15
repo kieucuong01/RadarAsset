@@ -166,10 +166,12 @@ panel displayed `bitinfocharts-top-addresses` as `validated` and `FRESH`. The se
 
 The repository provides commands but does not create OS scheduled tasks.
 
-For the daily asset-opinion path, use the composed fail-closed runner. It drains
-the daily market-data queue (including VNINDEX, FPT and XAU), runs enabled Smart
-Insights daily collectors and derived pipelines, then regenerates every member
-briefing only when both data stages succeed:
+For the daily asset-opinion path, use the composed fail-closed runner. It refreshes
+only the code-owned `FEEDS` allow-list (including VNINDEX, FPT, the curated crypto
+universe and XAU), runs enabled Smart Insights daily collectors and derived
+pipelines, then regenerates every member briefing only when both data stages
+succeed. It intentionally does not expand to every dynamically discovered HOSE
+instrument:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/refresh-asset-opinions.ps1

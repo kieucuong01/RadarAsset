@@ -112,12 +112,13 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
         encoding="utf-8"
     )
 
-    market = wrapper.index('run-market-ingestion.ps1')
+    market = wrapper.index('ingest_market_data.py')
     sources = wrapper.index('run-smart-insights.ps1')
     briefing = wrapper.index('"briefing"')
     assert market < sources < briefing
     assert '"daily"' in wrapper
-    assert '-DrainRequests' in wrapper
+    assert '"--env-file"' in wrapper
+    assert 'run-market-ingestion.ps1' not in wrapper
     assert '-AllMemberships' in wrapper
     assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 3
 
