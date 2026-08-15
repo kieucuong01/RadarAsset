@@ -23,16 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPercent, formatPrice, formatRatio } from "@/lib/financial-format";
 import type { KronosShadowModel } from "@/lib/smart-insights-client";
 
 type LoadState = "idle" | "loading" | "loaded" | "failed";
 
 function currency(value: number, locale: "vi" | "en") {
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatPrice(value, { locale, currency: "USD" });
 }
 
 function date(value: string, locale: "vi" | "en") {
@@ -269,10 +266,10 @@ export function KronosShadowPanel({
               locale === "vi" ? "Tiến độ OOS" : "OOS progress",
               `${data.completedOos} / ${data.minimumOos}`,
             ],
-            ["Kronos MASE", kronos ? kronos.mase.toFixed(3) : "—"],
+            ["Kronos MASE", kronos ? formatRatio(kronos.mase) : "—"],
             [
               locale === "vi" ? "Đúng hướng" : "Direction accuracy",
-              kronos ? `${(kronos.directionalAccuracy * 100).toFixed(1)}%` : "—",
+              kronos ? formatPercent(kronos.directionalAccuracy, { multiplier: 100 }) : "—",
             ],
           ].map(([label, value]) => (
             <article key={label} className="rounded-xl border bg-background/50 p-4">
@@ -335,17 +332,19 @@ export function KronosShadowPanel({
                   <TableCell className="font-mono tabular-nums">
                     {currency(metric.mae, locale)}
                   </TableCell>
-                  <TableCell className="font-mono tabular-nums">{metric.mase.toFixed(3)}</TableCell>
                   <TableCell className="font-mono tabular-nums">
-                    {(metric.directionalAccuracy * 100).toFixed(1)}%
+                    {formatRatio(metric.mase)}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
-                    {metric.spearmanIc.toFixed(3)}
+                    {formatPercent(metric.directionalAccuracy, { multiplier: 100 })}
+                  </TableCell>
+                  <TableCell className="font-mono tabular-nums">
+                    {formatRatio(metric.spearmanIc)}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
                     {metric.intervalCoverage == null
                       ? "—"
-                      : `${(metric.intervalCoverage * 100).toFixed(1)}%`}
+                      : formatPercent(metric.intervalCoverage, { multiplier: 100 })}
                   </TableCell>
                 </TableRow>
               ))}

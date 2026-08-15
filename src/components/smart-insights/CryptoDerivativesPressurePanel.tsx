@@ -14,6 +14,7 @@ import {
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatPercent, formatPrice } from "@/lib/financial-format";
 import type { CryptoPanelMode } from "./CryptoFearGreedPanel";
 
 const MARGIN_URL = "https://www.coinglass.com/pro/i/MarginFeeChart";
@@ -29,22 +30,15 @@ function dateLabel(value: string, locale: "vi" | "en") {
 }
 
 function rate(value: number | null): string {
-  return value == null ? "—" : `${value.toLocaleString(undefined, { maximumFractionDigits: 6 })}%`;
+  return formatPercent(value);
 }
 
 function usd(value: number | null): string {
-  return value == null
-    ? "—"
-    : new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 2,
-      }).format(value);
+  return formatPrice(value, { locale: "en", currency: "USD" });
 }
 
 function distance(value: number): string {
-  const percentage = value * 100;
-  return `${percentage >= 0 ? "+" : ""}${percentage.toFixed(2)}%`;
+  return formatPercent(value, { multiplier: 100, sign: true });
 }
 
 export function CryptoDerivativesPressurePanel({

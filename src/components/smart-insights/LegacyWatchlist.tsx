@@ -7,6 +7,7 @@ import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { WatchlistAddDialog } from "@/components/WatchlistAddDialog";
 import { Button } from "@/components/ui/button";
 import type { WatchlistItemResponse } from "@/lib/backend/types";
+import { formatPercent, formatPrice } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 import { loadFavoriteAssets } from "@/lib/watchlist-client";
 
@@ -126,7 +127,7 @@ export function LegacyWatchlist() {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right font-medium tabular-nums">
-                    {item.price.toLocaleString()}
+                    {formatPrice(item.price, { locale })}
                   </td>
                   <td
                     className={
@@ -135,11 +136,10 @@ export function LegacyWatchlist() {
                         : "px-3 py-3 text-right font-semibold tabular-nums text-bear"
                     }
                   >
-                    {item.chg >= 0 ? "+" : ""}
-                    {item.chg.toFixed(2)}%
+                    {formatPercent(item.chg, { sign: true })}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">
-                    {item.alert.toLocaleString()}
+                    {formatPrice(item.alert, { locale })}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button

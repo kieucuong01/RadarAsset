@@ -14,6 +14,7 @@ import {
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { CryptoMetricSeries } from "@/lib/crypto-quant-pulse";
 import { mergeSeriesPoints } from "@/lib/crypto-quant-pulse";
+import { formatMetricValue, formatNumber, formatPercent } from "@/lib/financial-format";
 import { FreshnessBadge } from "./FreshnessBadge";
 
 const SERIES_COLORS = [
@@ -41,15 +42,19 @@ function metricLabel(series: CryptoMetricSeries) {
 
 function formatMetric(value: number, unit: string, locale: "vi" | "en") {
   if (unit === "return" || unit === "ratio_change") {
-    return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-      style: "percent",
-      maximumFractionDigits: 2,
-    }).format(value);
+    return formatPercent(value, { multiplier: 100 });
   }
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    notation: Math.abs(value) >= 1_000_000 ? "compact" : "standard",
-    maximumFractionDigits: 2,
-  }).format(value);
+  if (unit === "index") return formatMetricValue(value, { locale, unit: "INDEX" });
+  if (unit === "percent" || unit === "rate") return formatPercent(value);
+  return formatMetricValue(value, { locale, unit });
+}
+
+function formatAxis(value: number, unit: string) {
+  if (unit === "return" || unit === "ratio_change") {
+    return formatPercent(value, { multiplier: 100 });
+  }
+  if (unit === "percent" || unit === "rate") return formatPercent(value);
+  return formatNumber(value, { maximumFractionDigits: 2 });
 }
 
 function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: "vi" | "en" }) {
@@ -73,7 +78,7 @@ function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: 
           <YAxis
             fontSize={11}
             width={56}
-            tickFormatter={(value) => formatMetric(value, series[0].unit, locale)}
+            tickFormatter={(value) => formatAxis(value, series[0].unit)}
           />
           <Tooltip
             labelFormatter={(value) => dateLabel(String(value), locale)}
@@ -170,8 +175,7 @@ export function CryptoMetricTrendPanel({
               <FreshnessBadge state={item.latest.freshness} />
             </div>
             <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
-              {formatMetric(item.latest.value, item.unit, locale)}{" "}
-              <span className="text-xs font-normal text-muted-foreground">{item.unit}</span>
+              {formatMetric(item.latest.value, item.unit, locale)}
             </p>
             <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <time dateTime={item.latest.effectiveAt}>

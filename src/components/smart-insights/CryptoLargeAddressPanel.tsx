@@ -16,6 +16,7 @@ import {
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 import type { CryptoPanelMode } from "./CryptoFearGreedPanel";
 
@@ -143,14 +144,8 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
-function formatBtc(value: number | null, digits = 0) {
-  return value === null
-    ? "—"
-    : `${value > 0 ? "+" : ""}${value.toLocaleString("en-US", { maximumFractionDigits: digits })} BTC`;
-}
-
-function formatPercent(value: number | null) {
-  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+function formatBtc(value: number | null, locale: "vi" | "en") {
+  return formatMetricValue(value, { locale, unit: "BTC" });
 }
 
 function stateLabel(state: LargeAddressActivity["state"], locale: "vi" | "en") {
@@ -232,7 +227,7 @@ export function CryptoLargeAddressPanel({
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label={locale === "vi" ? "Điểm hành động" : "Action score"}
-          value={visible.score === null ? "—" : visible.score.toFixed(1)}
+          value={formatScore(visible.score)}
           note={stateLabel(visible.state, locale)}
           tone={
             visible.score === null
@@ -246,19 +241,19 @@ export function CryptoLargeAddressPanel({
         />
         <SummaryCard
           label={locale === "vi" ? "Tích lũy ròng 1D" : "1D net accumulation"}
-          value={formatBtc(latestHorizon.netAccumulationBtc)}
+          value={formatBtc(latestHorizon.netAccumulationBtc, locale)}
           note={`${latestHorizon.accumulatingCount ?? "—"} ví tăng · ${latestHorizon.distributingCount ?? "—"} ví giảm`}
           tone={(latestHorizon.netAccumulationBtc ?? 0) > 0 ? "bull" : "bear"}
         />
         <SummaryCard
           label={locale === "vi" ? "Áp lực lên sàn" : "Exchange pressure"}
-          value={formatBtc(latestFlow?.pressureBtc ?? null)}
+          value={formatBtc(latestFlow?.pressureBtc ?? null, locale)}
           note={locale === "vi" ? "Nạp sàn − rút sàn" : "To exchange − from exchange"}
           tone={(latestFlow?.pressureBtc ?? 0) > 0 ? "bear" : "bull"}
         />
         <SummaryCard
           label={locale === "vi" ? "Độ tin cậy" : "Confidence"}
-          value={visible.confidence === null ? "—" : `${visible.confidence.toFixed(0)}%`}
+          value={formatPercent(visible.confidence)}
           note={
             visible.calibrationStatus === "calibrated"
               ? "btc-large-address-action-v1"
@@ -288,13 +283,13 @@ export function CryptoLargeAddressPanel({
                   minTickGap={24}
                 />
                 <YAxis
-                  tickFormatter={(value: number) => `${Math.round(value)} BTC`}
+                  tickFormatter={(value: number) => formatBtc(value, locale)}
                   fontSize={11}
                   width={62}
                 />
                 <Tooltip
                   labelFormatter={(value) => dateLabel(String(value), locale)}
-                  formatter={(value, name) => [formatBtc(Number(value)), String(name)]}
+                  formatter={(value, name) => [formatBtc(Number(value), locale), String(name)]}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
                 <Bar dataKey="toExchangeBtc" name="Nạp sàn" fill="#ef4444" fillOpacity={0.62} />
@@ -332,13 +327,13 @@ export function CryptoLargeAddressPanel({
                 />
                 <YAxis
                   domain={[0, 1]}
-                  tickFormatter={(value: number) => `${Math.round(value * 100)}%`}
+                  tickFormatter={(value: number) => formatPercent(value, { multiplier: 100 })}
                   fontSize={11}
                 />
                 <Tooltip
                   labelFormatter={(value) => dateLabel(String(value), locale)}
                   formatter={(value, name) => [
-                    `${(Number(value) * 100).toFixed(1)}%`,
+                    formatPercent(Number(value), { multiplier: 100 }),
                     String(name),
                   ]}
                 />
@@ -386,13 +381,13 @@ export function CryptoLargeAddressPanel({
                       (row.netAccumulationBtc ?? 0) > 0 ? "text-bull" : "text-bear",
                     )}
                   >
-                    {formatBtc(row.netAccumulationBtc)}
+                    {formatBtc(row.netAccumulationBtc, locale)}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">
-                    {formatPercent(row.accumulationBreadth)}
+                    {formatPercent(row.accumulationBreadth, { multiplier: 100 })}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">
-                    {formatPercent(row.distributionBreadth)}
+                    {formatPercent(row.distributionBreadth, { multiplier: 100 })}
                   </td>
                 </tr>
               ))}
@@ -428,7 +423,7 @@ export function CryptoLargeAddressPanel({
                       {row.direction === "incoming" ? "Nhận" : "Gửi"}
                     </td>
                     <td className="px-4 py-2 font-semibold tabular-nums">
-                      {formatBtc(row.valueBtc)}
+                      {formatBtc(row.valueBtc, locale)}
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">{row.counterparty}</td>
                     <td className="px-4 py-2">

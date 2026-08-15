@@ -5,6 +5,7 @@ import { Activity, ShieldAlert, Sparkles, TrendingUp } from "lucide-react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { AssetIntelligenceResponse, ResearchRunResponse } from "@/lib/backend/types";
+import { formatCount, formatPercent, formatPrice, formatScore } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 const ASSETS = ["BTC", "ETH", "XAU", "VNINDEX", "VN30", "FPT"];
@@ -102,7 +103,7 @@ export function LegacyInvestorIntelligence() {
               ))}
             </select>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
-              {stance.toUpperCase()} / {score ?? "—"}
+              {stance.toUpperCase()} / {formatScore(score)}
             </span>
           </div>
         </div>
@@ -165,7 +166,7 @@ export function LegacyInvestorIntelligence() {
                 {(["bull", "bear", "neutral"] as const).map((key) => (
                   <div key={key} className="rounded-lg bg-muted/50 p-2">
                     <div className="text-xl font-bold tabular-nums">
-                      {intelligence?.sentimentBreakdown[key] ?? 0}
+                      {formatCount(intelligence?.sentimentBreakdown[key])}
                     </div>
                     <div className="text-[10px] uppercase text-muted-foreground">{key}</div>
                   </div>
@@ -181,7 +182,7 @@ export function LegacyInvestorIntelligence() {
                   <div className="flex justify-between gap-3">
                     <dt className="text-muted-foreground">{forecast.horizon}</dt>
                     <dd className="font-bold tabular-nums">
-                      {forecast.targetPrice.toLocaleString()}
+                      {formatPrice(forecast.targetPrice, { locale })}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -193,12 +194,12 @@ export function LegacyInvestorIntelligence() {
                           : "font-bold text-bear"
                       }
                     >
-                      {forecast.expectedReturnPct.toFixed(2)}%
+                      {formatPercent(forecast.expectedReturnPct)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-muted-foreground">Confidence</dt>
-                    <dd className="font-bold">{forecast.confidence}%</dd>
+                    <dd className="font-bold">{formatPercent(forecast.confidence)}</dd>
                   </div>
                 </dl>
               ) : (
