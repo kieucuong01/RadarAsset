@@ -13,26 +13,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 
 import { metricLabel, pillarLabel } from "./asset-opinion-labels";
 
 type Locale = "vi" | "en";
 
-function scoreLabel(value: string, locale: Locale) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return "—";
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    maximumFractionDigits: 2,
-    signDisplay: "exceptZero",
-  }).format(parsed);
-}
-
 function HighlightGroup({
   title,
   ids,
   opinion,
   locale,
+  inputByEvidenceId,
   kind,
   onEvidence,
 }: {
@@ -40,14 +33,14 @@ function HighlightGroup({
   ids: string[];
   opinion: AssetOpinionModel;
   locale: Locale;
+  inputByEvidenceId: Map<string, AssetOpinionModel["decisionInputs"][number]>;
   kind: "support" | "contradiction";
   onEvidence: (id: string) => void;
 }) {
   const evidenceById = new Map(opinion.evidence.map((row) => [row.id, row]));
-  const inputById = new Map(opinion.decisionInputs.map((row) => [row.evidenceId, row]));
   const rows = ids.flatMap((id) => {
     const evidence = evidenceById.get(id);
-    const input = inputById.get(id);
+    const input = inputByEvidenceId.get(id);
     return evidence && input ? [{ evidence, input }] : [];
   });
   const Icon = kind === "support" ? ArrowUpRight : ArrowDownRight;
@@ -73,7 +66,7 @@ function HighlightGroup({
                     {metricLabel(input.metricCode, locale)}
                   </p>
                   <p className="mt-1 font-mono text-base font-semibold tabular-nums">
-                    {evidence.displayValue}
+                    {formatMetricValue(input.rawValue, { locale, unit: input.unit })}
                   </p>
                 </div>
                 <span
@@ -81,16 +74,16 @@ function HighlightGroup({
                     "flex shrink-0 items-center gap-1 font-mono text-sm font-semibold tabular-nums",
                     kind === "support" ? "text-bull" : "text-bear",
                   )}
-                  aria-label={`${locale === "vi" ? "Đóng góp" : "Contribution"} ${scoreLabel(input.contribution, locale)}`}
+                  aria-label={`${locale === "vi" ? "Đóng góp" : "Contribution"} ${formatScore(input.contribution)}`}
                 >
                   <Icon className="size-4" aria-hidden="true" />
-                  {scoreLabel(input.contribution, locale)}
+                  {formatScore(input.contribution)}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
                   {locale === "vi" ? "Điểm chuẩn hóa" : "Normalized"}:{" "}
-                  {scoreLabel(input.normalizedScore, locale)}
+                  {formatScore(input.normalizedScore)}
                 </span>
                 <Button
                   variant="ghost"
@@ -129,6 +122,12 @@ export function AssetOpinionCalculation({
   locale: Locale;
   onEvidence: (id: string) => void;
 }) {
+  const inputByEvidenceId = new Map(
+    opinion.decisionInputs
+      .filter((input) => input.evidenceId)
+      .map((input) => [input.evidenceId, input]),
+  );
+
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 lg:grid-cols-2">
@@ -137,6 +136,7 @@ export function AssetOpinionCalculation({
           ids={opinion.supportingEvidenceIds}
           opinion={opinion}
           locale={locale}
+          inputByEvidenceId={inputByEvidenceId}
           kind="support"
           onEvidence={onEvidence}
         />
@@ -145,6 +145,7 @@ export function AssetOpinionCalculation({
           ids={opinion.contradictingEvidenceIds}
           opinion={opinion}
           locale={locale}
+          inputByEvidenceId={inputByEvidenceId}
           kind="contradiction"
           onEvidence={onEvidence}
         />
@@ -166,9 +167,9 @@ export function AssetOpinionCalculation({
                 : "Asset score = Σ(pillar score × weight) ÷ data coverage"}
             </p>
             <p className="mt-1 font-mono text-xs text-muted-foreground">
-              Σ contribution = {scoreLabel(opinion.totalContribution, locale)} · coverage ={" "}
-              {Math.round(Number(opinion.dataCoverage) * 100)}% · score ={" "}
-              {opinion.quantScore ?? "—"}
+              Σ contribution = {formatScore(opinion.totalContribution)} · coverage ={" "}
+              {formatPercent(Number(opinion.dataCoverage) * 100)} · score ={" "}
+              {formatScore(opinion.quantScore)}
             </p>
           </div>
           <div className="mt-4 overflow-x-auto">
@@ -196,16 +197,16 @@ export function AssetOpinionCalculation({
                       </p>
                     </TableCell>
                     <TableCell className="font-mono tabular-nums">
-                      {input.rawValue} {input.unit}
+                      {formatMetricValue(input.rawValue, { locale, unit: input.unit })}
                     </TableCell>
                     <TableCell className="font-mono tabular-nums">
-                      {scoreLabel(input.normalizedScore, locale)}
+                      {formatScore(input.normalizedScore)}
                     </TableCell>
                     <TableCell className="font-mono tabular-nums">
-                      {scoreLabel(String(Number(input.inputWeight) * 100), locale)}%
+                      {formatPercent(Number(input.inputWeight) * 100)}
                     </TableCell>
                     <TableCell className="font-mono tabular-nums">
-                      {scoreLabel(String(Number(input.pillarWeight) * 100), locale)}%
+                      {formatPercent(Number(input.pillarWeight) * 100)}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -213,7 +214,7 @@ export function AssetOpinionCalculation({
                         Number(input.contribution) >= 0 ? "text-bull" : "text-bear",
                       )}
                     >
-                      {scoreLabel(input.contribution, locale)}
+                      {formatScore(input.contribution)}
                     </TableCell>
                   </TableRow>
                 ))}

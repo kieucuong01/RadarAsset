@@ -274,6 +274,7 @@ export function SmartInsights() {
       <EvidenceDrawer
         evidence={evidence}
         open={evidenceId !== null}
+        locale={locale}
         onClose={() => setEvidenceId(null)}
       />
     </main>

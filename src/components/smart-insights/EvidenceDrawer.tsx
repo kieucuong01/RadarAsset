@@ -10,13 +10,17 @@ import {
 } from "@/components/ui/sheet";
 import type { EvidenceModel } from "@/lib/smart-insights-client";
 
+import { formatEvidenceDisplayValue } from "./evidence-display-value";
+
 export function EvidenceDrawer({
   evidence,
   open,
+  locale,
   onClose,
 }: {
   evidence: EvidenceModel | null;
   open: boolean;
+  locale: "vi" | "en";
   onClose: () => void;
 }) {
   return (
@@ -40,7 +44,9 @@ export function EvidenceDrawer({
           <div className="mt-6 flex flex-col gap-5">
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs text-muted-foreground">{evidence.metricCode}</p>
-              <p className="mt-2 font-mono text-3xl font-semibold">{evidence.displayValue}</p>
+              <p className="mt-2 font-mono text-3xl font-semibold">
+                {formatEvidenceDisplayValue(evidence, locale)}
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge variant="outline">{evidence.asset ?? "Global"}</Badge>
                 <Badge variant="outline">{evidence.sourceCode}</Badge>

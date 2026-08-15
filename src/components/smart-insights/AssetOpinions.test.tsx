@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+import type { AssetOpinionModel, EvidenceModel } from "@/lib/smart-insights-client";
 
 import { AssetOpinions } from "./AssetOpinions";
+import { formatEvidenceDisplayValue } from "./evidence-display-value";
 
 function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel {
   return {
@@ -140,6 +141,78 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Đóng góp");
     expect(html).toContain("1.00");
     expect(html).not.toContain("animationDuration");
+  });
+
+  it("formats decision evidence from raw values and preserves unmatched provider values", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[
+          opinion({
+            quantScore: "-16.7700",
+            portfolioWeightPct: "39.2",
+            decisionInputs: [
+              {
+                ...opinion().decisionInputs[0],
+                rawValue: "120.250000",
+                contribution: "-16.7700",
+              },
+            ],
+            supportingEvidenceIds: ["e1"],
+            contradictingEvidenceIds: [],
+            evidence: [
+              {
+                ...opinion().evidence[0],
+                displayValue: "120.250000",
+              },
+              {
+                ...opinion().evidence[0],
+                id: "provider-only",
+                displayValue: "$95.4m",
+                impact: "neutral",
+                sourceCode: "provider",
+              },
+            ],
+          }),
+        ]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("−16.77");
+    expect(html).toContain("39.2%");
+    expect(html).toContain("120.25 triệu USD");
+    expect(html).not.toContain("120.250000");
+    expect(html).toContain("$95.4m");
+  });
+
+  it("formats evidence drawer raw values and preserves provider display values without metadata", () => {
+    const evidence: EvidenceModel = {
+      id: "drawer-raw",
+      metricCode: "crypto.etf.net_flow_usd",
+      asset: "BTC",
+      rawValue: "120.250000",
+      displayValue: "120.250000",
+      unit: "USD_MILLION",
+      effectiveStart: "2026-08-15T00:00:00Z",
+      effectiveEnd: "2026-08-15T00:00:00Z",
+      observedAt: "2026-08-15T00:00:00Z",
+      sourceCode: "farside",
+      sourceUrl: null,
+      methodologyVersion: "v1",
+      warnings: [],
+      formula: null,
+      history: [],
+    };
+    expect(formatEvidenceDisplayValue(evidence, "en")).toBe("120.25 USD million");
+    expect(formatEvidenceDisplayValue(evidence, "en")).not.toBe("120.250000");
+    expect(
+      formatEvidenceDisplayValue(
+        { ...evidence, rawValue: "", unit: "", displayValue: "$95.4m" },
+        "en",
+      ),
+    ).toBe("$95.4m");
   });
 
   it("shows explicit quant-only and insufficient states without sample prose", () => {
