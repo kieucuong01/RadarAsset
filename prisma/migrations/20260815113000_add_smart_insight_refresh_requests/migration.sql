@@ -46,5 +46,5 @@ INSERT INTO "smart_insight_refresh_requests" (
 SELECT
     membership."id", membership."organization_id", membership."user_id", 'queued', 'activation',
     1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-FROM "memberships" AS membership
+FROM "organization_memberships" AS membership
 ON CONFLICT ("organization_id", "user_id") DO NOTHING;

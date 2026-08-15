@@ -63,7 +63,7 @@ class EmptySignalConnection:
         return EmptySignalCursor(self)
 
 
-def draft(asset_market: str = "crypto"):
+def draft(asset_market: str = "crypto", bar_count: int = 80):
     asset = AssetCandidate("BTC", "Bitcoin", asset_market, Decimal("0.18"), 0)
     bars = tuple(
         MarketBar(
@@ -73,7 +73,7 @@ def draft(asset_market: str = "crypto"):
             Decimal(100 + index),
             NOW - timedelta(days=79 - index),
         )
-        for index in range(80)
+        for index in range(bar_count)
     )
     fact = QuantFact(
         "etf-flow",
@@ -177,6 +177,28 @@ def test_persistence_maps_non_smart_insights_markets_to_macro() -> None:
     )
     assert isinstance(signal_insert, tuple)
     assert signal_insert[1] == "macro"
+
+
+def test_insufficient_opinion_uses_allowed_unavailable_snapshot_status() -> None:
+    cursor = FakeCursor()
+
+    _persist_asset_opinion(
+        cursor,
+        opinion=draft(bar_count=1),
+        organization_id="organization",
+        user_id="user",
+        run_id="33333333-3333-3333-3333-333333333333",
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    signal_insert = next(
+        parameters
+        for query, parameters in cursor.calls
+        if "INSERT INTO signal_snapshots" in query
+    )
+    assert isinstance(signal_insert, tuple)
+    assert signal_insert[10] == "unavailable"
 
 
 def test_personalization_preserves_watchlist_creation_order() -> None:

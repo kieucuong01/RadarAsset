@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from inspect import getsource
 from typing import Any
 
 from smart_insights.refresh_worker import (
     QueuedBriefingRefresh,
     process_next_briefing_refresh,
 )
+from smart_insights.refresh_repository import PostgresBriefingRefreshRepository
 
 
 NOW = datetime(2026, 8, 15, 4, 30, tzinfo=timezone.utc)
@@ -103,3 +105,10 @@ def test_worker_is_idle_without_pending_request() -> None:
     assert process_next_briefing_refresh(repository, generate=lambda **_kwargs: None) == {
         "status": "idle"
     }
+
+
+def test_repository_reclaims_a_stale_running_request_after_worker_exit() -> None:
+    source = getsource(PostgresBriefingRefreshRepository.claim_next_request)
+
+    assert "status = 'running'" in source
+    assert "started_at <= NOW() - make_interval" in source

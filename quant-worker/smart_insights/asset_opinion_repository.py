@@ -90,19 +90,35 @@ WITH ranked AS (
     AND observation.observed_at <= %s
     AND observation.quality_status IN ('passed', 'warning')
     AND snapshot.status = 'validated'
+), signal_scores AS (
+  SELECT source_observation_id,
+         (input ->> 'score')::numeric AS signal_score,
+         ROW_NUMBER() OVER (
+           PARTITION BY source_observation_id
+           ORDER BY signal.effective_at DESC, signal.created_at DESC
+         ) AS score_rank
+  FROM signal_snapshots signal
+  CROSS JOIN jsonb_array_elements(
+    CASE
+      WHEN jsonb_typeof(signal.inputs) = 'array' THEN signal.inputs
+      ELSE '[]'::jsonb
+    END
+  ) input
+  CROSS JOIN jsonb_array_elements_text(
+    CASE
+      WHEN jsonb_typeof(input -> 'sourceObservationIds') = 'array'
+        THEN input -> 'sourceObservationIds'
+      ELSE '[]'::jsonb
+    END
+  ) source_observation_id
+  WHERE signal.effective_at <= %s
 ), scored AS (
   SELECT ranked.*,
-         matched.signal_score
+         signal_scores.signal_score
   FROM ranked
-  LEFT JOIN LATERAL (
-    SELECT (input ->> 'score')::numeric AS signal_score
-    FROM signal_snapshots signal
-    CROSS JOIN LATERAL jsonb_array_elements(signal.inputs) input
-    WHERE signal.effective_at <= %s
-      AND input -> 'sourceObservationIds' ? ranked.id::text
-    ORDER BY signal.effective_at DESC, signal.created_at DESC
-    LIMIT 1
-  ) matched ON true
+  LEFT JOIN signal_scores
+    ON signal_scores.source_observation_id = ranked.id::text
+   AND signal_scores.score_rank = 1
   WHERE ranked.revision_rank = 1
 )
 SELECT id, asset_symbol, metric_code, value, unit, direction,

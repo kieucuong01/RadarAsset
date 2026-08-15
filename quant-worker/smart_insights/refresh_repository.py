@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 
 
 MAX_ATTEMPTS = 3
+STALE_RUNNING_SECONDS = 300
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,8 +32,13 @@ class PostgresBriefingRefreshRepository:
                     WITH candidate AS (
                       SELECT id
                       FROM smart_insight_refresh_requests
-                      WHERE status = 'queued'
-                        AND available_at <= NOW()
+                      WHERE (
+                          (status = 'queued' AND available_at <= NOW())
+                          OR (
+                            status = 'running'
+                            AND started_at <= NOW() - make_interval(secs => %s)
+                          )
+                        )
                         AND attempt_count < %s
                       ORDER BY requested_at ASC
                       FOR UPDATE SKIP LOCKED
@@ -52,7 +58,7 @@ class PostgresBriefingRefreshRepository:
                     RETURNING request.id, request.organization_id, request.user_id,
                               request.processing_version, request.attempt_count
                     """,
-                    (MAX_ATTEMPTS, self.worker_id),
+                    (STALE_RUNNING_SECONDS, MAX_ATTEMPTS, self.worker_id),
                 )
                 row = cursor.fetchone()
         if row is None:

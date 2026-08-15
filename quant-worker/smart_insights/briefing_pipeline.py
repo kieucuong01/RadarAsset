@@ -201,13 +201,7 @@ def _persist_asset_opinion(
         "freshness": opinion.quant.freshness,
         "rejectionCode": opinion.rejection_code,
     }
-    signal_status = (
-        "active"
-        if opinion.quant.gate.passed
-        else "unavailable"
-        if opinion.explanation_status == "unavailable"
-        else "insufficient_data"
-    )
+    signal_status = "active" if opinion.quant.gate.passed else "unavailable"
     signal_market = opinion.quant.asset.market
     if signal_market not in {"crypto", "macro", "gold"}:
         signal_market = "macro"

@@ -106,6 +106,10 @@ def test_batch_loader_uses_two_queries_for_one_or_twenty_five_assets() -> None:
     assert "PARTITION BY asset.id" in many.queries[0]
     assert "selected.dataset_rank = 1" in many.queries[0]
     assert "jsonb_array_elements" in many.queries[1]
+    assert "jsonb_typeof(signal.inputs) = 'array'" in many.queries[1]
+    assert "signal_scores AS" in many.queries[1]
+    assert "PARTITION BY source_observation_id" in many.queries[1]
+    assert "LEFT JOIN LATERAL" not in many.queries[1]
 
 
 def test_batch_loader_groups_bars_and_global_facts_without_future_or_kronos() -> None:
