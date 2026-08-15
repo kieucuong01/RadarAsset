@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { briefingSchema } from "./smart-insights-client";
+import { briefingSchema, fetchBriefing } from "./smart-insights-client";
 
 const base = {
   id: "briefing-a",
@@ -17,6 +17,8 @@ const base = {
 };
 
 describe("Smart Insights briefing contract", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("accepts a quantified asset opinion with chart series and evidence", () => {
     const result = briefingSchema.parse({
       ...base,
@@ -164,5 +166,39 @@ describe("Smart Insights briefing contract", () => {
         assetOpinions: [{ ...parsed, evidence: [{ ...parsed.evidence[0], unexpected: true }] }],
       }),
     ).toThrow();
+  });
+
+  it("treats 202 as generating without parsing it as a briefing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ state: "generating", requestVersion: 2 }), {
+          status: 202,
+        }),
+      ),
+    );
+
+    await expect(fetchBriefing()).resolves.toEqual({
+      state: "generating",
+      briefing: null,
+      errorCode: null,
+    });
+  });
+
+  it("returns the existing briefing contract as ready", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ ...base, assetOpinions: [] }), { status: 200 }),
+        ),
+    );
+
+    await expect(fetchBriefing()).resolves.toMatchObject({
+      state: "ready",
+      briefing: { id: "briefing-a" },
+      errorCode: null,
+    });
   });
 });

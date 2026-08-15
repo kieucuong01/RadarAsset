@@ -9,25 +9,26 @@ import { EvidenceDrawer } from "@/components/smart-insights/EvidenceDrawer";
 import { AssetOpinions } from "@/components/smart-insights/AssetOpinions";
 import { LegacyDailyHero } from "@/components/smart-insights/LegacyDailyHero";
 import { LegacyMarketPulse } from "@/components/smart-insights/LegacyMarketPulse";
-import { LegacyWatchlist } from "@/components/smart-insights/LegacyWatchlist";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import { useI18n } from "@/lib/i18n/context";
 import {
-  briefingSchema,
   calendarSchema,
   evidenceSchema,
   fetchParsed,
+  fetchBriefing,
   healthSchema,
   energyPulseSchema,
   macroEventRiskSchema,
   metricsSchema,
   preferencesSchema,
   putPreferences,
+  requestBriefingRefresh,
   regimesSchema,
   type BriefingModel,
+  type BriefingGenerationState,
   type CalendarModel,
   type EvidenceModel,
   type HealthModel,
@@ -53,6 +54,8 @@ export function SmartInsights() {
   const [evidenceId, setEvidenceId] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<EvidenceModel | null>(null);
   const [briefing, setBriefing] = useState<BriefingModel | null>(null);
+  const [briefingState, setBriefingState] = useState<BriefingGenerationState>("idle");
+  const [briefingRefreshPending, setBriefingRefreshPending] = useState(false);
   const [regimes, setRegimes] = useState<RegimeModel[]>([]);
   const [metrics, setMetrics] = useState<MetricModel[]>([]);
   const [events, setEvents] = useState<CalendarModel[]>([]);
@@ -70,15 +73,17 @@ export function SmartInsights() {
     const controller = new AbortController();
     setState("loading");
     Promise.allSettled([
-      fetchParsed("/api/smart-insights/briefing", briefingSchema, controller.signal),
+      fetchBriefing(controller.signal),
       fetchParsed("/api/smart-insights/regimes", regimesSchema, controller.signal),
       fetchParsed("/api/smart-insights/preferences", preferencesSchema, controller.signal),
       fetchParsed("/api/smart-insights/data-health", healthSchema, controller.signal),
     ]).then((results) => {
       if (controller.signal.aborted) return;
       const [briefingResult, regimeResult, preferenceResult, healthResult] = results;
-      if (briefingResult.status === "fulfilled") setBriefing(briefingResult.value);
-      else if (String(briefingResult.reason).includes("404")) setBriefing(null);
+      if (briefingResult.status === "fulfilled") {
+        setBriefing(briefingResult.value.briefing);
+        setBriefingState(briefingResult.value.state);
+      }
       if (regimeResult.status === "fulfilled") setRegimes(regimeResult.value.regimes);
       if (preferenceResult.status === "fulfilled") setPreferences(preferenceResult.value);
       if (healthResult.status === "fulfilled") setHealth(healthResult.value);
@@ -90,6 +95,39 @@ export function SmartInsights() {
     });
     return () => controller.abort();
   }, [refresh]);
+
+  useEffect(() => {
+    if (briefingState !== "generating") return;
+    const controller = new AbortController();
+    let timer = 0;
+    const poll = async () => {
+      try {
+        const result = await fetchBriefing(controller.signal);
+        setBriefing(result.briefing);
+        setBriefingState(result.state);
+        if (result.state === "generating") timer = window.setTimeout(poll, 5_000);
+      } catch {
+        if (!controller.signal.aborted) setBriefingState("failed");
+      }
+    };
+    timer = window.setTimeout(poll, 5_000);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [briefingState]);
+
+  async function refreshBriefing() {
+    setBriefingRefreshPending(true);
+    try {
+      await requestBriefingRefresh();
+      setBriefingState("generating");
+    } catch {
+      setBriefingState("failed");
+    } finally {
+      setBriefingRefreshPending(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -216,6 +254,9 @@ export function SmartInsights() {
         portfolioState={briefing?.portfolioState ?? "missing"}
         locale={locale}
         onEvidence={setEvidenceId}
+        generationState={briefingState}
+        onRefresh={refreshBriefing}
+        refreshPending={briefingRefreshPending}
       />
       <LegacyMarketPulse
         market={market}
@@ -226,13 +267,8 @@ export function SmartInsights() {
         macroPulseState={macroPulseState}
         onMarketChange={setMarket}
       />
-      <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <LegacyWatchlist />
-        </div>
-        <div className="min-w-0">
-          <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
-        </div>
+      <section className="min-w-0">
+        <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
       </section>
       <DataHealthPanel sources={health?.sources ?? []} />
       <EvidenceDrawer

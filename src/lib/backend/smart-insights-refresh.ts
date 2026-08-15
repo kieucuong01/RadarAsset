@@ -53,7 +53,12 @@ export async function loadBriefingRefreshState(
 
 export async function enqueueBriefingRefresh(
   context: Pick<TenantContext, "organizationId" | "userId">,
-  reason: "favorite_changed" | "portfolio_changed" | "manual" | "activation",
+  reason:
+    | "watchlist_saved"
+    | "watchlist_removed"
+    | "portfolio_transaction"
+    | "manual_refresh"
+    | "activation",
 ): Promise<BriefingRefreshState> {
   const prisma = getPrisma();
   const row = await prisma.$transaction(async (tx) => {

@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   requestMarketIngestion: vi.fn(),
   listMarketIngestionRequests: vi.fn(),
   listTenantCustomStrategyCatalog: vi.fn(),
+  enqueueBriefingRefresh: vi.fn(),
+  loadBriefingRefreshState: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/tenant-context", () => ({
@@ -128,6 +130,11 @@ vi.mock("@/lib/backend/ingestion-requests", () => ({
   IngestionRateLimitError: class IngestionRateLimitError extends Error {},
   requestMarketIngestion: mocks.requestMarketIngestion,
   listMarketIngestionRequests: mocks.listMarketIngestionRequests,
+}));
+
+vi.mock("@/lib/backend/smart-insights-refresh", () => ({
+  enqueueBriefingRefresh: mocks.enqueueBriefingRefresh,
+  loadBriefingRefreshState: mocks.loadBriefingRefreshState,
 }));
 
 import { GET as portfolioGet } from "./portfolio/route";
@@ -224,6 +231,12 @@ describe("tenant API authorization", () => {
     mocks.requestMarketIngestion.mockResolvedValue({ id: "request-a", created: true });
     mocks.listMarketIngestionRequests.mockResolvedValue([]);
     mocks.listTenantCustomStrategyCatalog.mockResolvedValue([]);
+    mocks.enqueueBriefingRefresh.mockResolvedValue({ requestVersion: 1 });
+    mocks.loadBriefingRefreshState.mockResolvedValue({
+      state: "idle",
+      requestVersion: 0,
+      errorCode: null,
+    });
     mocks.getWorkerImportContext.mockResolvedValue({
       organizationId: "service-org",
       userId: null,
@@ -358,6 +371,22 @@ describe("tenant API authorization", () => {
     expect(response.status).toBe(204);
     expect(mocks.requireTenantCapability).toHaveBeenCalledWith(editorContext, "watchlist", "write");
     expect(mocks.removeWatchlistItem).toHaveBeenCalledWith(editorContext, "favorite-a");
+    expect(mocks.enqueueBriefingRefresh).toHaveBeenCalledWith(editorContext, "watchlist_removed");
+  });
+
+  it("queues a briefing refresh after saving a favorite", async () => {
+    mocks.requireTenantContext.mockResolvedValue(editorContext);
+    const response = await watchlistPost(
+      new Request("http://localhost/api/watchlist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ symbol: "BTC" }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("x-smart-insights-refresh")).toBe("queued");
+    expect(mocks.enqueueBriefingRefresh).toHaveBeenCalledWith(editorContext, "watchlist_saved");
   });
 
   it("allows viewer reads of the versioned strategy catalog", async () => {

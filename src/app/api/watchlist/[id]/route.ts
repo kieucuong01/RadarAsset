@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
 import { removeWatchlistItem } from "@/lib/backend/db";
+import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +14,16 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Invalid favorite ID." }, { status: 400 });
     const removed = await removeWatchlistItem(context, id);
     if (!removed) return NextResponse.json({ error: "Favorite not found." }, { status: 404 });
-    return new NextResponse(null, { status: 204 });
+    let refresh = "queued";
+    try {
+      await enqueueBriefingRefresh(context, "watchlist_removed");
+    } catch {
+      refresh = "failed";
+    }
+    return new NextResponse(null, {
+      status: 204,
+      headers: { "X-Smart-Insights-Refresh": refresh },
+    });
   } catch (error) {
     return apiError(error);
   }

@@ -133,8 +133,39 @@ describe("AssetOpinions", () => {
         portfolioState="missing"
         locale="vi"
         onEvidence={() => undefined}
+        generationState="idle"
+        onRefresh={() => undefined}
       />,
     );
-    expect(html).toContain("Chưa có quan điểm theo tài sản");
+    expect(html).toContain("Chưa tạo quan điểm theo tài sản");
+    expect(html).toContain("Tạo quan điểm AI");
+  });
+
+  it("explains generating and failed states with a retry action", () => {
+    const generating = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+        generationState="generating"
+        onRefresh={() => undefined}
+      />,
+    );
+    const failed = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+        generationState="failed"
+        onRefresh={() => undefined}
+      />,
+    );
+
+    expect(generating).toContain("Đang tổng hợp dữ liệu định lượng");
+    expect(failed).toContain("Không thể tạo quan điểm");
+    expect(failed).toContain("Thử lại");
+    expect(generating).not.toContain("Dữ liệu mẫu");
   });
 });

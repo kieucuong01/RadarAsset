@@ -1,29 +1,72 @@
 "use client";
 
 import { useState } from "react";
-import { BrainCircuit } from "lucide-react";
+import { BrainCircuit, LoaderCircle, RefreshCw } from "lucide-react";
 
 import { AssetOpinionDetail } from "./AssetOpinionDetail";
 import { AssetOpinionList } from "./AssetOpinionList";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+import type { AssetOpinionModel, BriefingGenerationState } from "@/lib/smart-insights-client";
 
 export function AssetOpinions({
   opinions,
   portfolioState,
   locale,
   onEvidence,
+  generationState = opinions.length ? "ready" : "idle",
+  onRefresh,
+  refreshPending = false,
 }: {
   opinions: AssetOpinionModel[];
   portfolioState: "available" | "missing";
   locale: "vi" | "en";
   onEvidence: (id: string) => void;
+  generationState?: BriefingGenerationState;
+  onRefresh?: () => void;
+  refreshPending?: boolean;
 }) {
   const [selectedSymbol, setSelectedSymbol] = useState(opinions[0]?.symbol ?? "");
   const selected = opinions.find((opinion) => opinion.symbol === selectedSymbol) ?? opinions[0];
 
   if (!selected) {
+    const content =
+      generationState === "generating"
+        ? {
+            title:
+              locale === "vi" ? "Đang tổng hợp dữ liệu định lượng" : "Generating quant opinions",
+            detail:
+              locale === "vi"
+                ? "Hệ thống đang kiểm tra dữ liệu danh mục, danh sách yêu thích và BTC/XAU/VNINDEX. Trang sẽ tự cập nhật khi hoàn tất."
+                : "The system is checking portfolio, favorites, and BTC/XAU/VNINDEX data. This page will update automatically.",
+          }
+        : generationState === "failed"
+          ? {
+              title: locale === "vi" ? "Không thể tạo quan điểm" : "Opinion generation failed",
+              detail:
+                locale === "vi"
+                  ? "Dữ liệu hiện có vẫn được giữ nguyên. Bạn có thể thử tạo lại bản phân tích."
+                  : "Existing data remains unchanged. You can retry the analysis.",
+            }
+          : generationState === "ready"
+            ? {
+                title: locale === "vi" ? "Chưa đủ dữ liệu định lượng" : "Insufficient quant data",
+                detail:
+                  locale === "vi"
+                    ? "Không có tài sản nào vượt qua ngưỡng bằng chứng để hệ thống đưa ra quan điểm."
+                    : "No asset passed the evidence threshold for an opinion.",
+              }
+            : {
+                title:
+                  locale === "vi"
+                    ? "Chưa tạo quan điểm theo tài sản"
+                    : "No asset opinions generated",
+                detail:
+                  locale === "vi"
+                    ? "Tạo phân tích cho danh mục, danh sách yêu thích và các tài sản đại diện BTC/XAU/VNINDEX."
+                    : "Analyze the portfolio, favorites, and representative BTC/XAU/VNINDEX assets.",
+              };
     return (
       <Card>
         <CardHeader>
@@ -32,16 +75,41 @@ export function AssetOpinions({
           </CardTitle>
           <CardDescription>
             {locale === "vi"
-              ? "Phân tích danh mục, watchlist và BTC/XAU/VNINDEX dựa trên dữ liệu định lượng."
+              ? "Phân tích danh mục, danh sách yêu thích và BTC/XAU/VNINDEX dựa trên dữ liệu định lượng."
               : "Quant analysis for your portfolio, watchlist, and BTC/XAU/VNINDEX."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
-            {locale === "vi"
-              ? "Chưa có quan điểm theo tài sản. Hệ thống sẽ hiển thị khi bản tin định lượng hoàn tất."
-              : "No asset opinions yet. They will appear after the quantitative briefing completes."}
-          </p>
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed p-5">
+            <div className="flex items-start gap-3">
+              {generationState === "generating" ? (
+                <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
+              ) : (
+                <BrainCircuit className="mt-0.5 size-5 shrink-0 text-primary" />
+              )}
+              <div>
+                <p className="text-sm font-medium">{content.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{content.detail}</p>
+              </div>
+            </div>
+            {generationState !== "generating" && onRefresh ? (
+              <Button
+                size="sm"
+                variant={generationState === "failed" ? "outline" : "default"}
+                onClick={onRefresh}
+                disabled={refreshPending}
+              >
+                <RefreshCw className={refreshPending ? "animate-spin" : undefined} />
+                {generationState === "failed"
+                  ? locale === "vi"
+                    ? "Thử lại"
+                    : "Retry"
+                  : locale === "vi"
+                    ? "Tạo quan điểm AI"
+                    : "Generate AI opinions"}
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     );

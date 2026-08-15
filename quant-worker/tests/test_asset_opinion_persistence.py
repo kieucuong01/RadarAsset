@@ -137,6 +137,7 @@ def test_persistence_writes_existing_models_and_exactly_one_asset() -> None:
     assert "INSERT INTO signal_snapshots" in sql
     assert "INSERT INTO evidence_items" in sql
     assert "INSERT INTO ai_insights" in sql
+    assert "deepseek-chat-completions" in sql
     assert "INSERT INTO daily_briefing_items" not in sql
     assert "INSERT INTO research_runs" not in sql
     assert "SELECT id FROM signal_snapshots" not in sql

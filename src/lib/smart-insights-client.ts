@@ -450,6 +450,51 @@ export type MacroEventRiskModel = z.infer<typeof macroEventRiskSchema>;
 export type EnergyPulseModel = z.infer<typeof energyPulseSchema>;
 export type KronosShadowModel = z.infer<typeof kronosShadowSchema>;
 
+export type BriefingGenerationState = "idle" | "generating" | "failed" | "ready";
+export type BriefingFetchResult = {
+  state: BriefingGenerationState;
+  briefing: BriefingModel | null;
+  errorCode: string | null;
+};
+
+const briefingLifecycleSchema = z
+  .object({
+    state: z.enum(["idle", "generating", "failed"]),
+    errorCode: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export async function fetchBriefing(signal?: AbortSignal): Promise<BriefingFetchResult> {
+  const response = await fetch("/api/smart-insights/briefing", {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (response.status === 200) {
+    return {
+      state: "ready",
+      briefing: briefingSchema.parse(await response.json()),
+      errorCode: null,
+    };
+  }
+  if ([202, 404, 503].includes(response.status)) {
+    const lifecycle = briefingLifecycleSchema.parse(await response.json());
+    return {
+      state: lifecycle.state,
+      briefing: null,
+      errorCode: lifecycle.errorCode ?? null,
+    };
+  }
+  throw new Error(`Smart Insights briefing request failed (${response.status}).`);
+}
+
+export async function requestBriefingRefresh(): Promise<void> {
+  const response = await fetch("/api/smart-insights/briefing", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`Briefing refresh failed (${response.status}).`);
+}
+
 export async function fetchParsed<T>(
   url: string,
   schema: z.ZodType<T>,

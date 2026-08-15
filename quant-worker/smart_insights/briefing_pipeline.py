@@ -275,7 +275,7 @@ def _persist_asset_opinion(
             INSERT INTO ai_insights (
               id, asset_id, research_run_id, source, title, summary, sentiment,
               confidence, catalyst, risk, published_at, created_at
-            ) VALUES (%s,%s,%s,'openai-responses',%s,%s,%s,%s,%s,%s,%s,NOW())
+            ) VALUES (%s,%s,%s,'deepseek-chat-completions',%s,%s,%s,%s,%s,%s,%s,NOW())
             """,
             (
                 insight_id,
@@ -600,7 +600,7 @@ class PostgresBriefingRepository:
                             """INSERT INTO ai_insights
                                (id, asset_id, research_run_id, source, title, summary, sentiment,
                                 confidence, catalyst, risk, published_at, created_at)
-                               VALUES (%s,NULL,%s,'openai-responses',%s,%s,'neutral',%s,%s,%s,%s,NOW())""",
+                               VALUES (%s,NULL,%s,'deepseek-chat-completions',%s,%s,'neutral',%s,%s,%s,%s,NOW())""",
                             (insight_id, run_id, item.ai_output.headline, item.ai_output.what_changed,
                              item.ai_output.confidence, item.ai_output.why_it_matters,
                              _canonical(item.ai_output.risk_scenarios), draft.as_of),

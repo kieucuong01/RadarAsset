@@ -55,6 +55,7 @@ describe("Smart Insights source guard", () => {
       "utf8",
     );
     expect(smartInsightsPage).toContain("<AssetOpinions");
+    expect(smartInsightsPage).not.toContain("<LegacyWatchlist");
     for (const removed of ["LegacyAIDigest", "LegacyInvestorIntelligence", "LegacyExpertSignals"])
       expect(smartInsightsPage).not.toContain(removed);
     for (const endpoint of ["/api/research/runs", "/intelligence", "/api/insights"])

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
 import { loadWatchlist, upsertWatchlistItem } from "@/lib/backend/db";
+import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,16 @@ export async function POST(request: Request) {
     requireTenantCapability(context, "watchlist", "write");
     const payload = watchlistSchema.parse(await request.json());
     const watchlist = await upsertWatchlistItem(context, payload);
-    return NextResponse.json(watchlist, { status: 201 });
+    let refresh = "queued";
+    try {
+      await enqueueBriefingRefresh(context, "watchlist_saved");
+    } catch {
+      refresh = "failed";
+    }
+    return NextResponse.json(watchlist, {
+      status: 201,
+      headers: { "X-Smart-Insights-Refresh": refresh },
+    });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 503;
     return apiError(error, status);

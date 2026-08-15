@@ -4,6 +4,7 @@ import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
 import { createPortfolioTransaction } from "@/lib/backend/db";
 import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfolio";
+import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,16 @@ export async function POST(request: Request) {
   try {
     const payload = transactionSchema.parse(body);
     const portfolio = await createPortfolioTransaction(context, payload);
-    return NextResponse.json(portfolio, { status: 201 });
+    let refresh = "queued";
+    try {
+      await enqueueBriefingRefresh(context, "portfolio_transaction");
+    } catch {
+      refresh = "failed";
+    }
+    return NextResponse.json(portfolio, {
+      status: 201,
+      headers: { "X-Smart-Insights-Refresh": refresh },
+    });
   } catch (error) {
     const status =
       error instanceof z.ZodError

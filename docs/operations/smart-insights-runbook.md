@@ -15,8 +15,12 @@ Copy `.env.example` to `.env.local` and configure:
 - `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
 - `FRED_API_KEY`: required before the FRED collector can pass live smoke.
-- `OPENAI_API_KEY` and `SMART_INSIGHTS_AI_MODEL`: both are required to enable AI synthesis.
-  With either missing, the briefing deliberately remains `quant_only`.
+- `DEEPSEEK_API_KEY`: enables grounded AI explanations. With it missing, publication deliberately
+  remains `quant_only`.
+- `DEEPSEEK_BASE_URL`: defaults to `https://api.deepseek.com`.
+- `DEEPSEEK_MODEL`: defaults to `deepseek-v4-flash` and can be changed to another qualified
+  DeepSeek Chat Completions model.
+- `DEEPSEEK_TIMEOUT_SECONDS`: bounded model request timeout; defaults to 30 seconds.
 
 Scrapling, MarkItDown, Nodriver, and RapidOCR run in the main Python environment. They receive only source URLs
 registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
@@ -66,32 +70,32 @@ validates registration but does not prove that a provider is live.
 
 Current verified and enabled sources:
 
-| Source | Market | Frequency | Collection |
-| --- | --- | --- | --- |
-| `alternative-fng` | Crypto | Daily | API |
-| `bitinfocharts-top-addresses` | Crypto/BTC large-address cohort | Daily | Scrapling with Nodriver 403 fallback and MarkItDown normalization |
-| `coinmetrics-community` | Crypto/on-chain active addresses and MVRV | Daily | API |
-| `mempool-space` | Crypto/on-chain | Daily | API |
-| `defillama-stablecoins` | Crypto/liquidity | Daily | API |
-| `defillama-chains` | Crypto/on-chain | Daily | API |
-| `deribit-public` | Crypto/derivatives | Daily | API |
-| `cryptocraft` | Macro/calendar | Due-state calendar schedule | Scrapling |
-| `farside-btc-etf` | Crypto/Bitcoin ETF flows | Daily | Scrapling |
-| `farside-eth-etf` | Crypto/Ethereum ETF flows | Daily | Scrapling |
-| `farside-sol-etf` | Crypto/Solana ETF flows | Daily | Scrapling |
+| Source                        | Market                                    | Frequency                   | Collection                                                        |
+| ----------------------------- | ----------------------------------------- | --------------------------- | ----------------------------------------------------------------- |
+| `alternative-fng`             | Crypto                                    | Daily                       | API                                                               |
+| `bitinfocharts-top-addresses` | Crypto/BTC large-address cohort           | Daily                       | Scrapling with Nodriver 403 fallback and MarkItDown normalization |
+| `coinmetrics-community`       | Crypto/on-chain active addresses and MVRV | Daily                       | API                                                               |
+| `mempool-space`               | Crypto/on-chain                           | Daily                       | API                                                               |
+| `defillama-stablecoins`       | Crypto/liquidity                          | Daily                       | API                                                               |
+| `defillama-chains`            | Crypto/on-chain                           | Daily                       | API                                                               |
+| `deribit-public`              | Crypto/derivatives                        | Daily                       | API                                                               |
+| `cryptocraft`                 | Macro/calendar                            | Due-state calendar schedule | Scrapling                                                         |
+| `farside-btc-etf`             | Crypto/Bitcoin ETF flows                  | Daily                       | Scrapling                                                         |
+| `farside-eth-etf`             | Crypto/Ethereum ETF flows                 | Daily                       | Scrapling                                                         |
+| `farside-sol-etf`             | Crypto/Solana ETF flows                   | Daily                       | Scrapling                                                         |
 
 Implemented but disabled pending a successful deployment-environment smoke:
 
-| Source | Intended frequency | Current reason |
-| --- | --- | --- |
-| `mempool-btc-large-addresses` | Daily | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
-| `coinshares-weekly` | Weekly | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`) |
-| `fred` | Daily | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`) |
-| `cftc-legacy`, `cftc-disaggregated` | Weekly | Provider returned `HTTP_ERROR` from the deployment network |
-| `coinglass-margin-borrow` | Every four hours | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication |
-| `coinglass-liquidation-maxpain` | Every four hours | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication |
-| `blockchaincenter-altcoin-season` | Daily | Fixture parser is implemented; pending live SSR schema verification and PostgreSQL publication |
-| `cbbi-public` | Daily | Public page/JSON parser is implemented; pending live schema verification and PostgreSQL publication |
+| Source                              | Intended frequency | Current reason                                                                                                                                                                                                                                   |
+| ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mempool-btc-large-addresses`       | Daily              | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
+| `coinshares-weekly`                 | Weekly             | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`)                                         |
+| `fred`                              | Daily              | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`)                                                                                                                                                                                             |
+| `cftc-legacy`, `cftc-disaggregated` | Weekly             | Provider returned `HTTP_ERROR` from the deployment network                                                                                                                                                                                       |
+| `coinglass-margin-borrow`           | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
+| `coinglass-liquidation-maxpain`     | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
+| `blockchaincenter-altcoin-season`   | Daily              | Fixture parser is implemented; pending live SSR schema verification and PostgreSQL publication                                                                                                                                                   |
+| `cbbi-public`                       | Daily              | Public page/JSON parser is implemented; pending live schema verification and PostgreSQL publication                                                                                                                                              |
 
 WGC is retired from the active registry, scheduler, Data Health, and Gold score. Historical WGC
 providers, runs, snapshots, observations, evidence, and derived snapshots remain in PostgreSQL for
@@ -158,15 +162,15 @@ panel displayed `bitinfocharts-top-addresses` as `validated` and `FRESH`. The se
 
 The repository provides commands but does not create OS scheduled tasks.
 
-| Job | Recommended trigger | Command |
-| --- | --- | --- |
-| Daily market collection and regime calculation | Daily after source-day close | `scripts/run-smart-insights.ps1 -Schedule daily` |
-| CoinGlass public pressure tables | Every four hours | `scripts/run-smart-insights.ps1 -Schedule four-hourly` |
-| Weekly flows and positioning | Weekly after provider publication | `scripts/run-smart-insights.ps1 -Schedule weekly` |
-| CryptoCraft current week | Every 15 minutes | `scripts/run-smart-insights.ps1 -Schedule calendar-current` |
-| CryptoCraft next week | Every 12 hours | `scripts/run-smart-insights.ps1 -Schedule calendar-next` |
-| CryptoCraft high-impact details | Every 15 minutes | `scripts/run-smart-insights.ps1 -Schedule calendar-event` |
-| Daily member briefing | Daily after collectors | `scripts/run-smart-insights.ps1 -Schedule briefing -AllMemberships` |
+| Job                                            | Recommended trigger               | Command                                                             |
+| ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| Daily market collection and regime calculation | Daily after source-day close      | `scripts/run-smart-insights.ps1 -Schedule daily`                    |
+| CoinGlass public pressure tables               | Every four hours                  | `scripts/run-smart-insights.ps1 -Schedule four-hourly`              |
+| Weekly flows and positioning                   | Weekly after provider publication | `scripts/run-smart-insights.ps1 -Schedule weekly`                   |
+| CryptoCraft current week                       | Every 15 minutes                  | `scripts/run-smart-insights.ps1 -Schedule calendar-current`         |
+| CryptoCraft next week                          | Every 12 hours                    | `scripts/run-smart-insights.ps1 -Schedule calendar-next`            |
+| CryptoCraft high-impact details                | Every 15 minutes                  | `scripts/run-smart-insights.ps1 -Schedule calendar-event`           |
+| Daily member briefing                          | Daily after collectors            | `scripts/run-smart-insights.ps1 -Schedule briefing -AllMemberships` |
 
 The calendar worker persists due state: current-week data is fetched no more than every two hours,
 next-week data every twelve hours, and high-impact detail pages every fifteen minutes from T-30 to
@@ -208,7 +212,8 @@ and region weekly totals differ by more than USD 100,000. Stable public failure 
   explicitly `unavailable`.
 - Evidence stores source, observed/effective time, unit, methodology, and raw observation identity.
 - At most three primary signals and two risk signals are selected per daily briefing.
-- OpenAI Responses synthesis uses a strict JSON schema and `store: false`.
+- DeepSeek Chat Completions synthesis requests JSON Output, locally validates the closed schema,
+  and persists only content that passes the grounding verifier.
 - The grounding verifier rejects claims with unknown evidence, assets, numbers, confidence, or
   action language. Rejected or unavailable AI output falls back to `quant_only`; it never inserts
   plausible-looking prose.
@@ -218,10 +223,12 @@ and region weekly totals differ by more than USD 100,000. Stable public failure 
 ## Operational checks
 
 1. Apply Prisma migrations before enabling collection.
-2. Run `-DryRun` to validate the registry and schedule selection.
-3. Run a bounded `-LiveSmoke` per source from the deployment network.
-4. Run collection and inspect the process exit code (`0` success/not-due, `1` provider failure,
+2. Keep `python quant-worker/process_smart_insight_refreshes.py --watch --poll-seconds 5` running;
+   `npm run dev` starts it automatically for local development.
+3. Run `-DryRun` to validate the registry and schedule selection.
+4. Run a bounded `-LiveSmoke` per source from the deployment network.
+5. Run collection and inspect the process exit code (`0` success/not-due, `1` provider failure,
    `2` invalid/no enabled selection).
-5. Verify authenticated `GET /api/smart-insights/data-health` and the Cockpit freshness labels.
-6. Investigate `stale`, `disabled`, `quarantined`, and `failed` sources independently. Do not
+6. Verify authenticated `GET /api/smart-insights/data-health` and the Cockpit freshness labels.
+7. Investigate `stale`, `disabled`, `quarantined`, and `failed` sources independently. Do not
    substitute fixtures or promote a last-known value as current.

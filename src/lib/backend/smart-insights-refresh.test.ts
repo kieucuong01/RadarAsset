@@ -12,10 +12,7 @@ vi.mock("@/lib/db/prisma", () => ({
   getPrisma: () => ({ $transaction: mocks.transaction }),
 }));
 
-import {
-  enqueueBriefingRefresh,
-  loadBriefingRefreshState,
-} from "./smart-insights-refresh";
+import { enqueueBriefingRefresh, loadBriefingRefreshState } from "./smart-insights-refresh";
 
 const context = {
   organizationId: "00000000-0000-4000-8000-000000000001",
@@ -64,7 +61,7 @@ describe("Smart Insights briefing refresh queue", () => {
     mocks.findUnique.mockResolvedValue(null);
     mocks.create.mockResolvedValue(row());
 
-    const result = await enqueueBriefingRefresh(context, "favorite_changed");
+    const result = await enqueueBriefingRefresh(context, "watchlist_saved");
 
     expect(result).toEqual({ state: "generating", requestVersion: 1, errorCode: null });
     expect(mocks.create).toHaveBeenCalledWith({
@@ -72,7 +69,7 @@ describe("Smart Insights briefing refresh queue", () => {
         organizationId: context.organizationId,
         userId: context.userId,
         status: "queued",
-        reason: "favorite_changed",
+        reason: "watchlist_saved",
         requestVersion: 1,
       }),
     });
@@ -82,7 +79,7 @@ describe("Smart Insights briefing refresh queue", () => {
     mocks.findUnique.mockResolvedValue(row({ requestVersion: 3 }));
     mocks.update.mockResolvedValue(row({ requestVersion: 4 }));
 
-    const result = await enqueueBriefingRefresh(context, "portfolio_changed");
+    const result = await enqueueBriefingRefresh(context, "portfolio_transaction");
 
     expect(result.requestVersion).toBe(4);
     expect(mocks.create).not.toHaveBeenCalled();
@@ -90,7 +87,7 @@ describe("Smart Insights briefing refresh queue", () => {
       where: { id: "request-a" },
       data: expect.objectContaining({
         status: "queued",
-        reason: "portfolio_changed",
+        reason: "portfolio_transaction",
         requestVersion: 4,
         processingVersion: null,
       }),
@@ -105,7 +102,7 @@ describe("Smart Insights briefing refresh queue", () => {
       row({ status: "running", requestVersion: 3, processingVersion: 2 }),
     );
 
-    const result = await enqueueBriefingRefresh(context, "favorite_changed");
+    const result = await enqueueBriefingRefresh(context, "watchlist_removed");
 
     expect(result).toEqual({ state: "generating", requestVersion: 3, errorCode: null });
     expect(mocks.update).toHaveBeenCalledWith({

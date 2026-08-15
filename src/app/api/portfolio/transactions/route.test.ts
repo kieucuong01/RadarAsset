@@ -4,6 +4,7 @@ import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfol
 
 const mocks = vi.hoisted(() => ({
   createPortfolioTransaction: vi.fn(),
+  enqueueBriefingRefresh: vi.fn(),
   requireTenantContext: vi.fn(),
   requireTenantCapability: vi.fn(),
 }));
@@ -15,6 +16,10 @@ vi.mock("@/lib/backend/db", () => ({
 vi.mock("@/lib/auth/tenant-context", () => ({
   requireTenantContext: mocks.requireTenantContext,
   requireTenantCapability: mocks.requireTenantCapability,
+}));
+
+vi.mock("@/lib/backend/smart-insights-refresh", () => ({
+  enqueueBriefingRefresh: mocks.enqueueBriefingRefresh,
 }));
 
 import { POST } from "./route";
@@ -53,6 +58,8 @@ describe("POST /api/portfolio/transactions", () => {
     vi.useRealTimers();
     mocks.createPortfolioTransaction.mockReset();
     mocks.createPortfolioTransaction.mockResolvedValue({ portfolioId: "portfolio-demo" });
+    mocks.enqueueBriefingRefresh.mockReset();
+    mocks.enqueueBriefingRefresh.mockResolvedValue({ requestVersion: 1 });
     mocks.requireTenantContext.mockReset();
     mocks.requireTenantContext.mockResolvedValue(editorContext);
     mocks.requireTenantCapability.mockReset();
@@ -172,6 +179,20 @@ describe("POST /api/portfolio/transactions", () => {
     const response = await POST(request({}));
 
     expect(response.status).toBe(201);
+    expect(response.headers.get("x-smart-insights-refresh")).toBe("queued");
+    expect(mocks.enqueueBriefingRefresh).toHaveBeenCalledWith(
+      editorContext,
+      "portfolio_transaction",
+    );
     expect(await response.json()).toEqual({ portfolioId: "portfolio-demo" });
+  });
+
+  it("keeps the saved transaction successful when refresh enqueue fails", async () => {
+    mocks.enqueueBriefingRefresh.mockRejectedValue(new Error("Queue unavailable"));
+
+    const response = await POST(request({}));
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("x-smart-insights-refresh")).toBe("failed");
   });
 });
