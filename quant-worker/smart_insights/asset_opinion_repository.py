@@ -94,9 +94,9 @@ WITH ranked AS (
   WHERE (asset.symbol = ANY(%s) OR observation.asset_id IS NULL)
     AND (
       metric.code = ANY(%s)
-      OR metric.code LIKE 'equity.liquidity.%'
-      OR metric.code LIKE 'equity.foreign_flow.%'
-      OR metric.code LIKE 'equity.valuation.%'
+      OR metric.code LIKE 'equity.liquidity.%%'
+      OR metric.code LIKE 'equity.foreign_flow.%%'
+      OR metric.code LIKE 'equity.valuation.%%'
     )
     AND observation.effective_at <= %s
     AND observation.observed_at <= %s

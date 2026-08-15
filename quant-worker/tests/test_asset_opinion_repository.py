@@ -128,6 +128,7 @@ def test_batch_loader_uses_two_queries_for_one_or_twenty_five_assets() -> None:
     assert "PARTITION BY source_observation_id" in many.queries[1]
     assert "LEFT JOIN LATERAL" not in many.queries[1]
     assert "metric.code = ANY(%s)" in many.queries[1]
+    assert "metric.code LIKE 'equity.liquidity.%%'" in many.queries[1]
     assert "PARTITION BY fact_scope, metric_code" in many.queries[1]
     assert "metric_rank <= 100" in many.queries[1]
     assert "LIMIT 1000" not in many.queries[1]
