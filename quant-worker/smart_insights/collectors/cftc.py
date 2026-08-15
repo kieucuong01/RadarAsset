@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from io import BytesIO, StringIO
 import json
 from typing import Any
 from urllib.parse import urlencode
+from zipfile import BadZipFile, ZipFile
 
 from smart_insights.contracts import ObservationInput, RawSnapshot
 from smart_insights.http import SourceFetchError, UrllibTransport
@@ -16,6 +19,53 @@ from . import CollectionBatch
 
 
 _RATIO_QUANTUM = Decimal("0.0000000001")
+_CFTC_ARCHIVE_MAX_UNCOMPRESSED_BYTES = 25_000_000
+
+
+def _csv_records(content: bytes, *, has_header: bool) -> tuple[list[str], ...]:
+    try:
+        records = tuple(csv.reader(StringIO(content.decode("utf-8-sig"))))
+    except (UnicodeDecodeError, csv.Error) as error:
+        raise ValueError("INVALID_RESPONSE") from error
+    if not records or any(len(record) != 191 for record in records):
+        raise ValueError("SCHEMA_DRIFT")
+    if not has_header:
+        return records
+    header = records[0]
+    expected = {
+        0: "Market_and_Exchange_Names",
+        2: "Report_Date_as_YYYY-MM-DD",
+        3: "CFTC_Contract_Market_Code",
+        7: "Open_Interest_All",
+        13: "M_Money_Positions_Long_All",
+        14: "M_Money_Positions_Short_All",
+        190: "FutOnly_or_Combined",
+    }
+    if any(header[index] != value for index, value in expected.items()):
+        raise ValueError("SCHEMA_DRIFT")
+    return records[1:]
+
+
+def _archive_records(content: bytes) -> tuple[list[str], ...]:
+    try:
+        with ZipFile(BytesIO(content)) as archive:
+            members = tuple(
+                member
+                for member in archive.infolist()
+                if not member.is_dir() and member.filename.casefold().endswith(".txt")
+            )
+            if len(members) != 1:
+                raise ValueError("SCHEMA_DRIFT")
+            member = members[0]
+            if (
+                member.file_size <= 0
+                or member.file_size > _CFTC_ARCHIVE_MAX_UNCOMPRESSED_BYTES
+                or "/" in member.filename.replace("\\", "/")
+            ):
+                raise ValueError("RESPONSE_TOO_LARGE")
+            return _csv_records(archive.read(member), has_header=True)
+    except (BadZipFile, RuntimeError) as error:
+        raise ValueError("INVALID_RESPONSE") from error
 
 
 def _report_date(value: object) -> datetime:
@@ -89,16 +139,43 @@ class CftcCollector:
             }
         )
         request_url = f"{source.urls[0]}?{query}"
-        response = self._transport.fetch(
-            request_url, timeout_seconds=30, max_bytes=10_000_000
-        )
+        source_url = source.urls[0]
+        csv_fallback = False
+        archive_fallback = False
+        try:
+            response = self._transport.fetch(
+                request_url, timeout_seconds=30, max_bytes=10_000_000
+            )
+        except SourceFetchError:
+            if source.code != "cftc-disaggregated" or len(source.urls) < 3:
+                raise
+            archive_url = (
+                f"{source.urls[2]}fut_disagg_txt_{self._clock().year}.zip"
+            )
+            try:
+                source_url = archive_url
+                response = self._transport.fetch(
+                    source_url, timeout_seconds=30, max_bytes=5_000_000
+                )
+                archive_fallback = True
+            except SourceFetchError:
+                source_url = source.urls[1]
+                response = self._transport.fetch(
+                    source_url, timeout_seconds=30, max_bytes=10_000_000
+                )
+                csv_fallback = True
         if response.status != 200 or response.url != request_url:
-            raise SourceFetchError("INVALID_RESPONSE")
+            if not (csv_fallback or archive_fallback) or response.url != source_url:
+                raise SourceFetchError("INVALID_RESPONSE")
         observed_at = self._clock()
         snapshot = RawSnapshot(
             content=response.body,
-            content_type="application/json",
-            source_url=source.urls[0],
+            content_type=(
+                "application/zip"
+                if archive_fallback
+                else "text/csv" if csv_fallback else "application/json"
+            ),
+            source_url=source_url,
             effective_at=None,
             published_at=None,
             observed_at=observed_at,
@@ -110,10 +187,34 @@ class CftcCollector:
                 "parser_version": source.parser_version,
             },
         )
-        try:
-            rows = json.loads(response.body)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return CollectionBatch(source, snapshot, (), "INVALID_RESPONSE")
+        if csv_fallback or archive_fallback:
+            try:
+                records = (
+                    _archive_records(response.body)
+                    if archive_fallback
+                    else _csv_records(response.body, has_header=False)
+                )
+            except ValueError as error:
+                return CollectionBatch(source, snapshot, (), str(error))
+            rows = [
+                {
+                    "market_and_exchange_names": record[0],
+                    "report_date_as_yyyy_mm_dd": record[2],
+                    "cftc_contract_market_code": record[3],
+                    "open_interest_all": record[7],
+                    "m_money_positions_long_all": record[13],
+                    "m_money_positions_short_all": record[14],
+                    "futonly_or_combined": record[190],
+                }
+                for record in records
+                if record[3] == market.contract_market_code
+                and record[2] >= report_date_from.isoformat()
+            ]
+        else:
+            try:
+                rows = json.loads(response.body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return CollectionBatch(source, snapshot, (), "INVALID_RESPONSE")
         if not isinstance(rows, list):
             return CollectionBatch(source, snapshot, (), "SCHEMA_DRIFT")
         if len(rows) > 5_000:

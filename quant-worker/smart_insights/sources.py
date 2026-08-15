@@ -26,9 +26,11 @@ ENABLED_SOURCE_CODES = frozenset(
         "bitinfocharts-top-addresses",
         "blockchaincenter-altcoin-season",
         "cbbi-public",
+        "cftc-disaggregated",
         "coinglass-liquidation-maxpain",
         "coinglass-margin-borrow",
         "coinmetrics-community",
+        "coinshares-weekly",
         "cryptocraft",
         "defillama-chains",
         "defillama-stablecoins",
@@ -36,6 +38,7 @@ ENABLED_SOURCE_CODES = frozenset(
         "farside-btc-etf",
         "farside-eth-etf",
         "farside-sol-etf",
+        "fred",
         "gdacs-events",
         "mempool-space",
         "nasa-eonet",
@@ -269,7 +272,10 @@ SOURCE_ROWS = (
         "Federal Reserve Economic Data",
         Market.MACRO,
         CollectionMode.API,
-        ("https://api.stlouisfed.org/fred/series/observations",),
+        (
+            "https://api.stlouisfed.org/fred/series/observations",
+            "https://fred.stlouisfed.org/graph/fredgraph.csv",
+        ),
         "daily",
         "fred-v1",
         4_320,
@@ -293,7 +299,11 @@ SOURCE_ROWS = (
         "CFTC Disaggregated Commitments of Traders",
         Market.GOLD,
         CollectionMode.API,
-        ("https://publicreporting.cftc.gov/resource/72hh-3qpy.json",),
+        (
+            "https://publicreporting.cftc.gov/resource/72hh-3qpy.json",
+            "https://www.cftc.gov/dea/newcot/f_disagg.txt",
+            "https://www.cftc.gov/files/dea/history/",
+        ),
         "weekly",
         "cftc-disaggregated-v1",
         14_400,
@@ -473,6 +483,13 @@ def is_source_url_allowed(source: SourceDefinition, url: str) -> bool:
             is not None
         )
         return index_page or article or image
+    if source.code == "cftc-disaggregated":
+        return (
+            parsed.hostname == "www.cftc.gov"
+            and re.fullmatch(r"/files/dea/history/fut_disagg_txt_\d{4}\.zip", parsed.path)
+            is not None
+            and not parsed.query
+        )
     if source.code in {
         "gdelt-events",
         "gdacs-events",

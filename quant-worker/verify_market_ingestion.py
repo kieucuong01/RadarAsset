@@ -11,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ingest_market_data import load_database_url, psycopg_connection_url
+from backtest.catalog import FEEDS
 
 
 class SchedulerAlreadyRunning(RuntimeError):
@@ -103,6 +104,31 @@ def recover_stale_scheduler_runs(connection: Any, *, maximum_age_minutes: int = 
         recovered = cursor.rowcount
     connection.commit()
     return recovered
+
+
+def retire_out_of_scope_requests(
+    connection: Any, allowed_symbols: Sequence[str]
+) -> int:
+    normalized = tuple(dict.fromkeys(symbol.strip().upper() for symbol in allowed_symbols))
+    if not normalized or any(not symbol for symbol in normalized):
+        raise ValueError("At least one allowed symbol is required.")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE market_ingestion_requests AS request
+            SET status = 'failed', error_code = 'SCOPE_RETIRED',
+                worker_id = NULL, lease_expires_at = NULL, updated_at = NOW()
+            FROM provider_instruments AS instrument
+            JOIN assets AS asset ON asset.id = instrument.asset_id
+            WHERE request.provider_instrument_id = instrument.id
+              AND request.status IN ('queued', 'running')
+              AND NOT (UPPER(asset.symbol) = ANY(%s))
+            """,
+            (list(normalized),),
+        )
+        retired = cursor.rowcount
+    connection.commit()
+    return retired
 
 
 def start_scheduler_run(connection: Any, command: str) -> str:
@@ -222,6 +248,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--processed-count", type=int, default=0)
     parser.add_argument("--failed-count", type=int, default=0)
     parser.add_argument("--error-code")
+    parser.add_argument("--retire-out-of-scope", action="store_true")
     args = parser.parse_args(argv)
     if not 1 <= args.maximum_backlog_age_hours <= 168 or not 0 <= args.maximum_recent_failures <= 10_000:
         print(json.dumps({"status": "failed", "errorCode": "configuration_error"}))
@@ -229,6 +256,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         url = psycopg_connection_url(load_database_url(Path(args.env_file)))
         with psycopg.connect(url) as connection:
+            if args.retire_out_of_scope:
+                retired = retire_out_of_scope_requests(connection, tuple(FEEDS))
+                print(json.dumps({"status": "succeeded", "retired": retired}))
+                return 0
             if args.start_command:
                 run_id = start_scheduler_run(connection, args.start_command)
                 print(json.dumps({"status": "running", "runId": run_id}))

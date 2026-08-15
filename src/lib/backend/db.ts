@@ -6,6 +6,7 @@ import { buildTickerResponse } from "./market";
 import {
   buildPortfolioResponse,
   buildTradeAwarePerformance,
+  isSupportedPortfolioAsset,
   PortfolioDomainError,
   PortfolioInputError,
   replayPortfolioLedger,
@@ -331,7 +332,7 @@ export async function loadPortfolioResponse(
     new Set(portfolio.transactions.map((transaction) => transaction.assetId)),
   );
   const benchmark = await prisma.asset.findUnique({
-    where: { symbol: "SPY" },
+    where: { symbol: "VNINDEX" },
     select: { id: true },
   });
   const barAssetIds = Array.from(new Set([...assetIds, ...(benchmark ? [benchmark.id] : [])]));
@@ -443,6 +444,12 @@ export async function createPortfolioTransaction(
 
   const asset = await prisma.asset.findUnique({ where: { symbol } });
   if (!asset) throw new PortfolioInputError(`Asset ${symbol} not found.`, "ASSET_NOT_FOUND");
+  if (!isSupportedPortfolioAsset(asset)) {
+    throw new PortfolioInputError(
+      `Asset ${symbol} is outside the supported Vietnam equity, crypto, and gold markets.`,
+      "ASSET_UNSUPPORTED",
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "portfolios" WHERE "id" = ${portfolio.id} FOR UPDATE`;
@@ -556,6 +563,16 @@ export async function loadPortfolioPerformance(
 export async function loadAssets() {
   const prisma = getPrisma();
   const assets = await prisma.asset.findMany({
+    where: {
+      market: { in: ["vn_equity", "crypto_spot", "metal_spot"] },
+      NOT: [
+        {
+          market: { not: "vn_equity" },
+          assetClass: { in: ["equity", "etf", "stock", "index"] },
+        },
+        { symbol: "XMR" },
+      ],
+    },
     orderBy: [{ assetClass: "asc" }, { symbol: "asc" }],
     select: {
       id: true,

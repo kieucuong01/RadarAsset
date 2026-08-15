@@ -25,7 +25,7 @@ const SAMPLE_WATCHLIST: WatchlistItemResponse[] = [
   },
   {
     id: "sample-gold",
-    sym: "GOLD",
+    sym: "XAU",
     name: "Gold",
     price: 100,
     chg: -0.3,

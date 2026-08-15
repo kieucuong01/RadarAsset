@@ -71,10 +71,10 @@ describe("ticker presentation", () => {
   it("requests and renders only approved symbols in approved order", () => {
     const snapshot = resolveCuratedTickerSnapshot([
       row("ETH", "crypto"),
-      row("GOLD", "commodity"),
+      row("DOGE", "crypto"),
       row("VIC"),
       row("BTC", "crypto"),
-      row("TSLA"),
+      row("BCH", "crypto"),
       row("XAU", "commodity"),
     ]);
 

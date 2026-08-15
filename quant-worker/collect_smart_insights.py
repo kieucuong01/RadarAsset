@@ -70,7 +70,7 @@ from smart_insights.http import SourceFetchError
 from smart_insights.metrics.crypto import CRYPTO_METRIC_DEFINITIONS
 from smart_insights.metrics.gold import GOLD_METRIC_DEFINITIONS
 from smart_insights.macro_pipeline import run_global_event_risk_pipeline, run_macro_pipeline
-from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES
+from smart_insights.macro_registry import CFTC_MARKETS, FRED_SERIES, FredSeriesDefinition
 from smart_insights.metrics.macro import MACRO_METRIC_DEFINITIONS
 from smart_insights.repository import PostgresInsightRepository
 from smart_insights.scheduling import due_calendar_jobs
@@ -609,18 +609,29 @@ def build_batch_collectors(
         overlap_days = _bounded_environment_int(
             "SMART_INSIGHTS_FRED_OVERLAP_DAYS", 14, minimum=1, maximum=365
         )
-        collector = FredCollector(api_key=os.getenv("FRED_API_KEY", ""))
+        collector = FredCollector(api_key=os.getenv("FRED_API_KEY"))
+
+        def start_for(series: FredSeriesDefinition) -> date:
+            history_days = {
+                # Percentile scoring needs at least 60 daily observations. Fetching
+                # one bounded year also makes a clean installation useful on day one.
+                "daily": max(overlap_days, 365),
+                "weekly": max(overlap_days, 196),
+                "monthly": max(overlap_days, 400),
+                "quarterly": max(overlap_days, 800),
+            }[series.frequency]
+            start = (as_of - timedelta(days=history_days)).date()
+            if series.frequency == "monthly":
+                return start.replace(day=1)
+            if series.frequency == "quarterly":
+                quarter_month = ((start.month - 1) // 3) * 3 + 1
+                return start.replace(month=quarter_month, day=1)
+            return start
+
         batches = tuple(
             collector.collect(
                 series,
-                (
-                    as_of
-                    - timedelta(
-                        days=max(overlap_days, 196)
-                        if series.series_id == "M2SL"
-                        else overlap_days
-                    )
-                ).date(),
+                start_for(series),
                 as_of.date(),
             )
             for series in FRED_SERIES.values()
@@ -644,7 +655,7 @@ def build_batch_collectors(
 
     def cftc_disaggregated(as_of: datetime) -> CollectionBatch:
         overlap_weeks = _bounded_environment_int(
-            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 8, minimum=1, maximum=520
+            "SMART_INSIGHTS_CFTC_OVERLAP_WEEKS", 52, minimum=26, maximum=520
         )
         collector = CftcCollector()
         batch = collector.collect(

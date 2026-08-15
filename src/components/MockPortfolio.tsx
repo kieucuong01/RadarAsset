@@ -325,7 +325,7 @@ export function MockPortfolio() {
               <span className="w-2.5 h-2.5 rounded-full bg-primary" /> {t("common.portfolio")}
             </span>
             <span className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground" /> SPY
+              <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground" /> VNINDEX
             </span>
           </div>
 

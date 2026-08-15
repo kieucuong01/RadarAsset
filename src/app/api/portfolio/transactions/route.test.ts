@@ -159,6 +159,16 @@ describe("POST /api/portfolio/transactions", () => {
     expect(response.status).toBe(404);
   });
 
+  it("returns 400 for a foreign equity or ETF", async () => {
+    mocks.createPortfolioTransaction.mockRejectedValue(
+      new PortfolioInputError("Foreign equities are not supported.", "ASSET_UNSUPPORTED"),
+    );
+
+    const response = await POST(request({ symbol: "SPY" }));
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 503 for an unexpected persistence failure", async () => {
     mocks.createPortfolioTransaction.mockRejectedValue(new Error("Database unavailable"));
 

@@ -65,15 +65,18 @@ CRYPTO_RULES = {
     "crypto.etf.net_flow_usd": InputRule("fund_flow", Decimal("0.75")),
     "crypto.coinshares.net_flow_usd": InputRule("fund_flow", Decimal("0.25")),
     "crypto.fear_greed.index": InputRule(
-        "sentiment_onchain", Decimal("0.60"), "fear_greed_centered_v1"
+        "sentiment_onchain", Decimal("0.55"), "fear_greed_centered_v1"
     ),
     "crypto.onchain.adjusted_transfer_usd": InputRule(
-        "sentiment_onchain", Decimal("0.15")
+        "sentiment_onchain", Decimal("0.10")
     ),
     "crypto.onchain.active_addresses": InputRule(
         "sentiment_onchain", Decimal("0.15")
     ),
     "crypto.onchain.nvt": InputRule("sentiment_onchain", Decimal("0.10")),
+    "crypto.large_address.exchange_flow_pressure_btc": InputRule(
+        "sentiment_onchain", Decimal("0.10")
+    ),
 }
 
 CRYPTO_MACRO_RULES = {

@@ -832,6 +832,32 @@ def test_coinshares_reconstructs_tables_and_keeps_weekly_period() -> None:
     assert all(len(image["sha256"]) == 64 for image in payload["images"])
 
 
+def test_coinshares_accepts_current_ranked_layout_and_ignores_untracked_noise() -> None:
+    module = coinshares_ocr_module()
+    tokens = list(ocr_tokens("coinshares-asset-ocr.json"))
+    tokens[-1] = module.OcrToken(
+        text="Source: CoinShares, data available as at 29 May 2026",
+        confidence=tokens[-1].confidence,
+        box=tokens[-1].box,
+    )
+    tokens.extend(
+        (
+            module.OcrToken("Unreadable", Decimal("0.60"), (10, 190, 100, 210)),
+            module.OcrToken("0", Decimal("0.60"), (210, 190, 290, 210)),
+            module.OcrToken("1", Decimal("0.99"), (400, 190, 490, 210)),
+        )
+    )
+
+    table = module.reconstruct_coinshares_table(
+        tuple(tokens),
+        dimension="asset",
+        include_labels=frozenset({"Bitcoin", "Ethereum"}),
+    )
+
+    assert tuple(row.label for row in table.rows) == ("Bitcoin", "Ethereum")
+    assert table.effective_at == datetime(2026, 5, 29, tzinfo=timezone.utc)
+
+
 def test_coinshares_ocr_fails_closed_on_confidence_layout_unit_and_totals() -> None:
     module = coinshares_ocr_module()
     asset = list(ocr_tokens("coinshares-asset-ocr.json"))

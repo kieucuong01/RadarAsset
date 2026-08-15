@@ -817,6 +817,12 @@ def test_feed_catalog_includes_vnindex_as_a_daily_benchmark() -> None:
     assert feed.maximum_leverage == Decimal("1")
 
 
+def test_feed_catalog_includes_vn30_and_retires_xmr() -> None:
+    assert FEEDS["VN30"].canonical_key == "VN:INDEX:VN30"
+    assert FEEDS["VN30"].maximum_leverage == Decimal("1")
+    assert "XMR" not in FEEDS
+
+
 def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
     transport = SequenceTransport(
         [
@@ -838,24 +844,15 @@ def test_binance_lists_only_trading_usdt_spot_instruments() -> None:
     instruments = BinanceSpotAdapter(transport=transport).list_instruments()
 
     assert "DOGE" not in {item.canonical_symbol for item in instruments}
-    assert {
-        ProviderInstrumentDescriptor(
-            provider_symbol="ETHUSDT",
-            canonical_symbol="ETH",
-            name="ETH / Tether",
-            market="crypto_spot",
-            venue="BINANCE",
-            currency="USDT",
-        ),
-        ProviderInstrumentDescriptor(
-            provider_symbol="XMRUSDT",
-            canonical_symbol="XMR",
-            name="XMR / Tether",
-            market="crypto_spot",
-            venue="BINANCE",
-            currency="USDT",
-        ),
-    } <= set(instruments)
+    assert ProviderInstrumentDescriptor(
+        provider_symbol="ETHUSDT",
+        canonical_symbol="ETH",
+        name="ETH / Tether",
+        market="crypto_spot",
+        venue="BINANCE",
+        currency="USDT",
+    ) in set(instruments)
+    assert "XMR" not in {item.canonical_symbol for item in instruments}
     assert transport.urls == [
         "https://data-api.binance.vision/api/v3/exchangeInfo"
         "?symbolStatus=TRADING&showPermissionSets=false"

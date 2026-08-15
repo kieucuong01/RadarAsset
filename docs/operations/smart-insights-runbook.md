@@ -14,7 +14,8 @@ Copy `.env.example` to `.env.local` and configure:
 - `SMART_INSIGHTS_TIMEZONE`: product day boundary, normally `Asia/Bangkok`.
 - `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
-- `FRED_API_KEY`: required before the FRED collector can pass live smoke.
+- `FRED_API_KEY`: optional. When absent, the collector uses the official bounded
+  `fredgraph.csv` endpoint and keeps the same validated metric contract.
 - `DEEPSEEK_API_KEY`: enables grounded AI explanations. With it missing, publication deliberately
   remains `quant_only`.
 - `DEEPSEEK_BASE_URL`: defaults to `https://api.deepseek.com`.
@@ -84,18 +85,19 @@ Current verified and enabled sources:
 | `farside-btc-etf`             | Crypto/Bitcoin ETF flows                  | Daily                       | Scrapling                                                         |
 | `farside-eth-etf`             | Crypto/Ethereum ETF flows                 | Daily                       | Scrapling                                                         |
 | `farside-sol-etf`             | Crypto/Solana ETF flows                   | Daily                       | Scrapling                                                         |
+| `coinshares-weekly`           | Crypto/digital-asset fund flows           | Weekly                      | Scrapling plus local RapidOCR                                     |
+| `fred`                        | Macro/rates, liquidity and USD            | Daily                       | Official API or keyless official CSV                              |
+| `cftc-disaggregated`          | Gold/managed-money positioning            | Weekly                      | Official API with official yearly-archive fallback                |
+| `coinglass-margin-borrow`     | Crypto/derivatives pressure               | Every four hours            | Bounded Nodriver rendering                                        |
+| `coinglass-liquidation-maxpain` | Crypto/options and liquidation pressure | Every four hours          | Bounded Nodriver rendering                                        |
+| `cbbi-public`                 | Crypto/cycle composite                    | Daily                       | Scrapling/public JSON                                             |
 
 Implemented but disabled pending a successful deployment-environment smoke:
 
 | Source                              | Intended frequency | Current reason                                                                                                                                                                                                                                   |
 | ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `mempool-btc-large-addresses`       | Daily              | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
-| `coinshares-weekly`                 | Weekly             | Live smoke on 2026-08-14 reached local OCR but failed closed: the asset footer period was unreadable and one numeric token scored 0.881 below the 0.90 threshold (`MISSING_PERIOD`/`OCR_LOW_CONFIDENCE`)                                         |
-| `fred`                              | Daily              | Deployment `FRED_API_KEY` missing (`CONFIG_MISSING`)                                                                                                                                                                                             |
-| `cftc-legacy`, `cftc-disaggregated` | Weekly             | Provider returned `HTTP_ERROR` from the deployment network                                                                                                                                                                                       |
-| `coinglass-margin-borrow`           | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
-| `coinglass-liquidation-maxpain`     | Every four hours   | Fixture parser and bounded renderer are implemented; pending independent live smoke and PostgreSQL publication                                                                                                                                   |
-| `cbbi-public`                       | Daily              | Public page/JSON parser is implemented; pending live schema verification and PostgreSQL publication                                                                                                                                              |
+| `cftc-legacy`                       | Weekly             | The four financial-futures positioning markets have not passed an independent deployment-network smoke; Macro therefore stays unavailable when its other groups cover less than 60%                                                              |
 
 The 2026-08-15 bounded production-parser smoke fetched 3 BlockchainCenter observations and
 195/165/105 Farside BTC/ETH/SOL observations. Live smoke is write-free; enabled scheduled
@@ -144,6 +146,17 @@ margin points, BTC/ETH/SOL max-pain rows, Altcoin Season 61/43/37, CBBI Confiden
 CBBI components. The worktree web listener returned HTTP 200 on port 3117; authenticated visual QA
 remained unavailable because the local env had no configured demo login password, so this evidence
 does not claim an authenticated browser pass.
+
+Activation refresh on 2026-08-16: keyless FRED live smoke and publication each fetched 1,984
+validated observations from the official CSV endpoint. The production database then contained 249
+10-year real-yield points and 245 broad-USD-index points. CFTC Disaggregated first attempted its
+official reporting API, then used the bounded official 2026 yearly ZIP archive after the API denied
+the deployment network; live smoke and publication each fetched 160 Gold observations. The resulting
+managed-money net/open-interest series contained 32 weekly points. The derived XAU regime published
+`active` with all four groups present, coverage 1.0000, and data confidence 98.72. The archive parser
+accepts one root-level text member, caps compressed and decompressed bytes, validates the 191-column
+official header, filters the allow-listed Gold contract, and falls back to the current official CSV
+only when the archive request itself fails.
 
 After a smoke succeeds, add only that source code to `ENABLED_SOURCE_CODES`, run tests, and deploy
 the code change. To roll back a provider, remove its code from that set. Never delete historical

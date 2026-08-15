@@ -289,7 +289,7 @@ export const dictionaries = {
       },
       performance: {
         title: "Hiệu suất so với benchmark",
-        description: "Danh mục so với SPY",
+        description: "Danh mục so với VNINDEX",
       },
       holdings: {
         title: "Holdings thông minh",
@@ -1239,7 +1239,7 @@ export const dictionaries = {
       },
       performance: {
         title: "Performance vs Benchmark",
-        description: "Portfolio compared to SPY",
+        description: "Portfolio compared to VNINDEX",
       },
       holdings: {
         title: "Smart Holdings",

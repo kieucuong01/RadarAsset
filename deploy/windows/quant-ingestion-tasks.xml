@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <QuantIngestionTasks version="1">
-  <Task name="RadarAsset Quant Ingestion Hourly">
-    <Trigger startBoundary="2026-08-14T00:10:00Z" repetitionInterval="PT1H" />
+  <Task name="RadarAsset Smart Insights Four Hourly">
+    <Trigger startBoundary="2026-08-14T00:10:00Z" repetitionInterval="PT4H" />
     <Command>powershell.exe</Command>
-    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-market-ingestion.ps1 -Command hourly</Arguments>
+    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-smart-insights.ps1 -Schedule four-hourly</Arguments>
   </Task>
-  <Task name="RadarAsset Quant Ingestion Daily">
+  <Task name="RadarAsset Intelligence Daily">
     <Trigger startBoundary="2026-08-14T01:15:00Z" repetitionInterval="P1D" />
     <Command>powershell.exe</Command>
     <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/refresh-asset-opinions.ps1</Arguments>
+  </Task>
+  <Task name="RadarAsset Intelligence Weekly">
+    <Trigger startBoundary="2026-08-17T01:15:00Z" repetitionInterval="P1W" />
+    <Command>powershell.exe</Command>
+    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-smart-insights.ps1 -Schedule weekly</Arguments>
   </Task>
 </QuantIngestionTasks>

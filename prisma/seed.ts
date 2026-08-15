@@ -30,22 +30,76 @@ const prisma = new PrismaClient({
 const demoEmail = "demo@radarasset.local";
 
 const assetSeed = [
-  { symbol: "BTC", name: "Bitcoin", assetClass: "crypto", price: 67420, cost: 54200, qty: 0.85 },
-  { symbol: "ETH", name: "Ethereum", assetClass: "crypto", price: 3512, cost: 2980, qty: 12.4 },
-  { symbol: "SPY", name: "S&P 500 ETF", assetClass: "etf", price: 528.1, cost: 510.2, qty: 45 },
-  { symbol: "QQQ", name: "Nasdaq 100 ETF", assetClass: "etf", price: 452.3, cost: 438.8, qty: 18 },
   {
-    symbol: "NVDA",
-    name: "NVIDIA Corp.",
-    assetClass: "equity",
-    price: 1142.5,
-    cost: 720.3,
-    qty: 28,
+    symbol: "BTC",
+    name: "Bitcoin",
+    assetClass: "crypto",
+    market: "crypto_spot",
+    currency: "USDT",
+    price: 67420,
+    cost: 54200,
+    qty: 0.85,
   },
-  { symbol: "TSLA", name: "Tesla Inc.", assetClass: "equity", price: 178.4, cost: 220.1, qty: 22 },
-  { symbol: "GOLD", name: "Gold Spot", assetClass: "commodity", price: 2402, cost: 2260, qty: 6 },
-  { symbol: "VN30", name: "VN30 Index", assetClass: "index", price: 1328.2, cost: 1268, qty: 5 },
-  { symbol: "USDC", name: "USD Cash", assetClass: "cash", price: 1, cost: 1, qty: 20000 },
+  {
+    symbol: "ETH",
+    name: "Ethereum",
+    assetClass: "crypto",
+    market: "crypto_spot",
+    currency: "USDT",
+    price: 3512,
+    cost: 2980,
+    qty: 12.4,
+  },
+  {
+    symbol: "FPT",
+    name: "FPT Corporation",
+    assetClass: "equity",
+    market: "vn_equity",
+    currency: "VND",
+    price: 150,
+    cost: 120,
+    qty: 100,
+  },
+  {
+    symbol: "VCB",
+    name: "Vietcombank",
+    assetClass: "equity",
+    market: "vn_equity",
+    currency: "VND",
+    price: 70,
+    cost: 65,
+    qty: 200,
+  },
+  {
+    symbol: "HPG",
+    name: "Hoa Phat Group",
+    assetClass: "equity",
+    market: "vn_equity",
+    currency: "VND",
+    price: 28,
+    cost: 25,
+    qty: 500,
+  },
+  {
+    symbol: "XAU",
+    name: "Gold Spot",
+    assetClass: "commodity",
+    market: "metal_spot",
+    currency: "USD",
+    price: 2402,
+    cost: 2260,
+    qty: 6,
+  },
+  {
+    symbol: "VN30",
+    name: "VN30 Index",
+    assetClass: "index",
+    market: "vn_equity",
+    currency: "VND",
+    price: 1328.2,
+    cost: 1268,
+    qty: 5,
+  },
 ] as const;
 
 const insightSeed = [
@@ -73,7 +127,7 @@ const insightSeed = [
   },
   {
     source: "Bloomberg",
-    symbol: "GOLD",
+    symbol: "XAU",
     sentiment: "bull",
     confidence: 72,
     catalyst: "Central bank demand",
@@ -216,14 +270,16 @@ async function main() {
         symbol: asset.symbol,
         name: asset.name,
         assetClass: asset.assetClass,
-        currency: "USD",
+        market: asset.market,
+        currency: asset.currency,
         provider: "seed",
         providerSymbol: asset.symbol,
       },
       update: {
         name: asset.name,
         assetClass: asset.assetClass,
-        currency: "USD",
+        market: asset.market,
+        currency: asset.currency,
         provider: "seed",
         providerSymbol: asset.symbol,
       },
@@ -253,7 +309,7 @@ async function main() {
   for (const asset of assetSeed) {
     const assetId = assetBySymbol.get(asset.symbol)?.id;
     if (!assetId || asset.qty <= 0) continue;
-    const openingFee = asset.symbol === "USDC" ? 0 : Math.max(1, asset.cost * asset.qty * 0.0002);
+    const openingFee = Math.max(1, asset.cost * asset.qty * 0.0002);
     await prisma.portfolioPosition.create({
       data: {
         portfolioId: portfolio.id,
@@ -279,9 +335,9 @@ async function main() {
   for (const item of [
     { symbol: "BTC", alert: 70000 },
     { symbol: "ETH", alert: 3800 },
-    { symbol: "NVDA", alert: 1200 },
-    { symbol: "TSLA", alert: 165 },
-    { symbol: "GOLD", alert: 2450 },
+    { symbol: "FPT", alert: 155 },
+    { symbol: "VCB", alert: 75 },
+    { symbol: "XAU", alert: 2450 },
     { symbol: "VN30", alert: 1350 },
   ]) {
     const assetId = assetBySymbol.get(item.symbol)?.id;
@@ -298,7 +354,7 @@ async function main() {
 
   const btcAssetId = assetBySymbol.get("BTC")?.id;
   const vn30AssetId = assetBySymbol.get("VN30")?.id;
-  const goldAssetId = assetBySymbol.get("GOLD")?.id;
+  const goldAssetId = assetBySymbol.get("XAU")?.id;
 
   await prisma.investmentThesis.deleteMany({
     where: {
@@ -586,7 +642,7 @@ async function main() {
       userId: user.id,
       strategyName: "Seed Momentum Backtest",
       status: "succeeded",
-      parameters: { assets: ["BTC", "SPY"], from: "2026-05-15", to: "2026-06-13" },
+      parameters: { assets: ["BTC", "FPT"], from: "2026-05-15", to: "2026-06-13" },
       metrics: { totalReturn: 12.4, sharpe: 1.38, maxDrawdown: -6.2 },
       startedAt: new Date("2026-06-13T05:00:00.000Z"),
       finishedAt: new Date("2026-06-13T05:00:10.000Z"),

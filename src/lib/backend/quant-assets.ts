@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 const SUPPORTED_MARKETS = ["vn_equity", "crypto_spot", "metal_spot"] as const;
+const FOREIGN_EQUITY_CLASSES = ["equity", "etf", "stock", "index"] as const;
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 const CATALOG_SCAN_LIMIT = 500;
 const CATALOG_RESPONSE_LIMIT = 50;
@@ -89,6 +90,13 @@ export async function loadQuantAssetCatalog(
   const assets = await getPrisma().asset.findMany({
     where: {
       market: { in: [...SUPPORTED_MARKETS] },
+      NOT: [
+        {
+          market: { not: "vn_equity" },
+          assetClass: { in: [...FOREIGN_EQUITY_CLASSES] },
+        },
+        { symbol: "XMR" },
+      ],
       ...(query.q
         ? {
             OR: [

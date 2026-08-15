@@ -508,6 +508,12 @@ class PostgresBriefingRepository:
                 JOIN portfolios p ON p.id = pp.portfolio_id
                 JOIN assets a ON a.id = pp.asset_id
                 WHERE p.organization_id = %s AND p.user_id = %s
+                  AND UPPER(a.symbol) <> 'XMR'
+                  AND (
+                    (a.market = 'vn_equity' AND a.asset_class IN ('equity', 'index'))
+                    OR (a.market = 'crypto_spot' AND a.asset_class = 'crypto')
+                    OR (a.market = 'metal_spot' AND a.asset_class IN ('commodity', 'metal'))
+                  )
                 GROUP BY a.symbol, a.name, a.market, a.asset_class
                 """,
                 (organization_id, user_id),
@@ -545,6 +551,12 @@ class PostgresBriefingRepository:
                 """SELECT a.symbol, a.name, a.market, a.asset_class
                    FROM watchlist_items w JOIN assets a ON a.id = w.asset_id
                    WHERE w.organization_id = %s AND w.user_id = %s
+                     AND UPPER(a.symbol) <> 'XMR'
+                     AND (
+                       (a.market = 'vn_equity' AND a.asset_class IN ('equity', 'index'))
+                       OR (a.market = 'crypto_spot' AND a.asset_class = 'crypto')
+                       OR (a.market = 'metal_spot' AND a.asset_class IN ('commodity', 'metal'))
+                     )
                    ORDER BY w.created_at, w.id""",
                 (organization_id, user_id),
             )

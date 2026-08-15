@@ -53,7 +53,7 @@ def read_bounded_environment_integer(
 
 
 def supports_scheduled_timeframe(asset: str, timeframe: str) -> bool:
-    return not (asset == "VNINDEX" and timeframe == "1h")
+    return not (asset in {"VNINDEX", "VN30"} and timeframe == "1h")
 
 
 def load_database_url(env_file: Path) -> str:
