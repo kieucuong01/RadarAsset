@@ -33,4 +33,3 @@ Complete the evidence path behind asset opinions for Crypto, Vietnamese equities
 - Bars remain capped at 260 per requested symbol.
 - Fact history is capped per asset/metric partition and filtered to the decision allow-list before ranking.
 - The UI receives only the latest evidence selected by the existing 12-input/5-support/3-counter-evidence limits.
-

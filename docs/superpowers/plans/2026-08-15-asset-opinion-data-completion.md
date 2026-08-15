@@ -47,4 +47,3 @@
 - Run live ingestion for VNINDEX, FPT, XAU and daily Smart Insights collectors.
 - Regenerate briefings and inspect the resulting asset-opinion records.
 - Verify the local UI in a browser, including desktop and mobile states and performance budgets.
-
