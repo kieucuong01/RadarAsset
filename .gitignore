@@ -23,6 +23,7 @@ quant-worker/.runtime/
 .pytest-*/
 test-results/
 playwright-report/
+graphify-out/
 dist
 dist-ssr
 .output
