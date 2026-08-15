@@ -29,6 +29,8 @@ class UserInsightPreference:
 class PortfolioPosition:
     asset: str
     weight: Decimal
+    quantity: Decimal = Decimal("0")
+    average_cost: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

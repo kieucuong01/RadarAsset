@@ -225,7 +225,13 @@ class PostgresBriefingRepository:
         with self.connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
                 """
-                SELECT a.symbol, SUM(ABS(pp.quantity * pp.average_cost)) AS value
+                SELECT a.symbol,
+                       SUM(ABS(pp.quantity * pp.average_cost)) AS value,
+                       SUM(pp.quantity) AS quantity,
+                       CASE
+                         WHEN SUM(ABS(pp.quantity)) = 0 THEN NULL
+                         ELSE SUM(ABS(pp.quantity) * pp.average_cost) / SUM(ABS(pp.quantity))
+                       END AS average_cost
                 FROM portfolio_positions pp
                 JOIN portfolios p ON p.id = pp.portfolio_id
                 JOIN assets a ON a.id = pp.asset_id
@@ -234,11 +240,24 @@ class PostgresBriefingRepository:
                 """,
                 (organization_id, user_id),
             )
-            raw_positions = tuple((str(row["symbol"]), Decimal(str(row["value"]))) for row in cursor.fetchall())
+            raw_positions = tuple(
+                (
+                    str(row["symbol"]),
+                    Decimal(str(row["value"])),
+                    Decimal(str(row.get("quantity") or "0")),
+                    (
+                        Decimal(str(row["average_cost"]))
+                        if row.get("average_cost") is not None
+                        else None
+                    ),
+                )
+                for row in cursor.fetchall()
+            )
             total = sum((row[1] for row in raw_positions), Decimal("0"))
             positions = tuple(
-                PortfolioPosition(symbol, value / total)
-                for symbol, value in raw_positions if total > 0
+                PortfolioPosition(symbol, value / total, quantity, average_cost)
+                for symbol, value, quantity, average_cost in raw_positions
+                if total > 0
             )
             cursor.execute(
                 """SELECT a.symbol FROM watchlist_items w JOIN assets a ON a.id = w.asset_id

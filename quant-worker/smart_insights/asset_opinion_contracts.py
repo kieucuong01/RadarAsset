@@ -180,3 +180,15 @@ class QuantAssetOpinion:
             raise ValueError("confidence must be between 0 and 100.")
         if not Decimal("0") <= self.data_coverage <= Decimal("1"):
             raise ValueError("data_coverage must be between 0 and 1.")
+
+
+@dataclass(frozen=True, slots=True)
+class AssetOpinionMarketData:
+    bars: tuple[tuple[str, tuple[MarketBar, ...]], ...]
+    facts: tuple[tuple[str, tuple[QuantFact, ...]], ...]
+
+    def bars_for(self, symbol: str) -> tuple[MarketBar, ...]:
+        return next((rows for key, rows in self.bars if key == symbol), ())
+
+    def facts_for(self, symbol: str) -> tuple[QuantFact, ...]:
+        return next((rows for key, rows in self.facts if key == symbol), ())

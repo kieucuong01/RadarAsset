@@ -51,3 +51,15 @@ def test_missing_portfolio_uses_preferences_without_fake_exposure() -> None:
     ranked = rank_candidates((candidate("gold", "gold", "XAU"),), portfolio=(), preferences=preferences, now=NOW)
     assert ranked.portfolio_state == "missing"
     assert ranked.primary[0].components["exposure"] == Decimal("0")
+
+
+def test_portfolio_position_preserves_cost_context_for_asset_opinions() -> None:
+    position = PortfolioPosition(
+        "BTC",
+        Decimal("0.25"),
+        quantity=Decimal("2"),
+        average_cost=Decimal("100"),
+    )
+
+    assert position.quantity == Decimal("2")
+    assert position.average_cost == Decimal("100")
