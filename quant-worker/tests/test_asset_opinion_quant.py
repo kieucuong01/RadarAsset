@@ -551,6 +551,40 @@ def test_btc_80_20_ledger_exposes_exact_weighted_contributions() -> None:
     assert opinion.contradicting_fact_ids
 
 
+def test_whale_exchange_pressure_is_a_btc_only_decision_input() -> None:
+    whale = fact(
+        "crypto.large_address.exchange_flow_pressure_btc",
+        "bitinfocharts-top-addresses",
+        score="80",
+    )
+    btc = build_quant_opinion(
+        asset=candidate("BTC", market="crypto"),
+        bars=bars(220, symbol="BTC"),
+        specialized=(*supportive_crypto_facts(), whale),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    alt = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(220, symbol="ADA"),
+        specialized=(*alt_context_facts(), whale),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    btc_whale = next(
+        row
+        for row in btc.decision_inputs
+        if row.metric_code == "crypto.large_address.exchange_flow_pressure_btc"
+    )
+    assert btc_whale.pillar_code == "sentiment_onchain"
+    assert btc_whale.input_weight == Decimal("0.10")
+    assert all(
+        row.metric_code != "crypto.large_address.exchange_flow_pressure_btc"
+        for row in alt.decision_inputs
+    )
+
+
 def test_fear_greed_has_a_direct_explainable_score_without_signal_snapshot() -> None:
     opinion = build_quant_opinion(
         asset=candidate("BTC"),
