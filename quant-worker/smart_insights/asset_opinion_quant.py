@@ -39,7 +39,7 @@ CONCENTRATION_LIMITS = {
     "aggressive": Decimal("0.35"),
 }
 
-METHODOLOGY_VERSION = "asset-opinion-v1"
+METHODOLOGY_VERSION = "asset-opinion-v2"
 
 BENCHMARK_BY_MARKET = {
     "crypto": "BTC",
@@ -369,14 +369,14 @@ def _lookback(metric_code: str) -> str | None:
 
 
 def _decision_ledger(
-    market: str, facts: tuple[QuantFact, ...]
+    market: str, symbol: str, facts: tuple[QuantFact, ...]
 ) -> tuple[tuple[PillarScore, ...], tuple[DecisionInput, ...]]:
-    configured_weights = pillar_weights(market)
+    configured_weights = pillar_weights(market, symbol)
     candidates: list[tuple[QuantFact, InputRule, Decimal, str]] = []
     for fact in facts:
         if not fact.fresh:
             continue
-        rule = input_rule(market, fact.metric_code)
+        rule = input_rule(market, symbol, fact.metric_code)
         scored = _fact_score(fact)
         if rule is None or scored is None:
             continue
@@ -391,6 +391,21 @@ def _decision_ledger(
         candidates = [
             row for row in candidates if row[0].metric_code != "macro.regime.score"
         ]
+
+    macro_rows = sorted(
+        (row for row in candidates if row[1].pillar_code == "macro"),
+        key=lambda row: (
+            -abs(row[2] * row[1].input_weight),
+            row[0].metric_code,
+            row[0].id,
+        ),
+    )[:2]
+    allowed_macro_ids = {row[0].id for row in macro_rows}
+    candidates = [
+        row
+        for row in candidates
+        if row[1].pillar_code != "macro" or row[0].id in allowed_macro_ids
+    ]
 
     candidates.sort(
         key=lambda row: (
@@ -518,7 +533,7 @@ def build_quant_opinion(
         and "kronos" not in row.methodology_version.casefold()
     )
     facts = tuple(sorted((*common, *permitted_specialized), key=lambda row: (row.metric_code, row.id)))
-    pillars, decision_inputs = _decision_ledger(asset.market, facts)
+    pillars, decision_inputs = _decision_ledger(asset.market, asset.symbol, facts)
     coverage = sum((row.configured_weight for row in pillars), Decimal("0"))
     decision_fact_ids = {row.fact_id for row in decision_inputs}
     source_families = tuple(

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from smart_insights.asset_opinion_contracts import AssetCandidate, MarketBar, QuantFact
 from smart_insights.asset_opinion_quant import build_quant_opinion
+from smart_insights.asset_opinion_rules import pillar_weights
 
 
 NOW = datetime(2026, 8, 15, tzinfo=timezone.utc)
@@ -82,6 +83,104 @@ def supportive_crypto_facts() -> tuple[QuantFact, ...]:
         fact("crypto.fear_greed.index", "alternative-fng", score="40"),
         fact("macro.regime.score", "fred", score="30"),
     )
+
+
+def alt_context_facts(*, etf: bool = False, macro: bool = False) -> tuple[QuantFact, ...]:
+    rows = [
+        fact("crypto.btc.return_20d", "market_bars", score="30"),
+        fact("crypto.btc.return_60d", "market_bars", score="20"),
+        fact("crypto.cycle.altcoin_season.index", "blockchaincenter", score="40", value="70"),
+        fact("crypto.fear_greed.index", "alternative-fng", score="20", value="60"),
+    ]
+    if etf:
+        rows.append(fact("crypto.etf.net_flow_usd", "farside", score="50"))
+    if macro:
+        rows.extend(
+            (
+                fact("macro.real_yield.10y_pct", "fred-real-yield", score="90"),
+                fact("macro.usd_broad_index", "fred-usd", score="85"),
+                fact("macro.fed_balance_sheet_change_4w", "fred-balance", score="100"),
+                fact("macro.tga_change_4w", "fred-tga", score="-100"),
+            )
+        )
+    return tuple(rows)
+
+
+def test_crypto_profiles_use_exact_weights_without_changing_btc() -> None:
+    assert pillar_weights("crypto", "ADA") == {
+        "trend": Decimal("0.30"),
+        "btc_trend": Decimal("0.25"),
+        "altcoin_rotation": Decimal("0.20"),
+        "macro": Decimal("0.15"),
+        "broad_sentiment": Decimal("0.10"),
+    }
+    assert pillar_weights("crypto", "ETH") == {
+        "trend": Decimal("0.25"),
+        "btc_trend": Decimal("0.20"),
+        "altcoin_rotation": Decimal("0.15"),
+        "etf_flow": Decimal("0.25"),
+        "macro": Decimal("0.10"),
+        "broad_sentiment": Decimal("0.05"),
+    }
+    assert pillar_weights("crypto", "BTC") == {
+        "trend": Decimal("0.40"),
+        "fund_flow": Decimal("0.30"),
+        "macro": Decimal("0.15"),
+        "sentiment_onchain": Decimal("0.15"),
+    }
+
+
+def test_altcoin_coverage_reflects_optional_macro_and_etf_pillars() -> None:
+    standard = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=alt_context_facts(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    eth_with_etf = build_quant_opinion(
+        asset=candidate("ETH", market="crypto"),
+        bars=bars(90, symbol="ETH"),
+        specialized=alt_context_facts(etf=True),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    eth_without_etf = build_quant_opinion(
+        asset=candidate("ETH", market="crypto"),
+        bars=bars(90, symbol="ETH"),
+        specialized=alt_context_facts(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+    price_only = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=(),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    assert standard.data_coverage == Decimal("0.85")
+    assert eth_with_etf.data_coverage == Decimal("0.90")
+    assert eth_without_etf.data_coverage == Decimal("0.65")
+    assert price_only.data_coverage == Decimal("0.30")
+    assert "PILLAR_COVERAGE_MINIMUM_60" in price_only.gate.failed_gates
+
+
+def test_altcoin_ledger_keeps_only_two_strongest_macro_inputs() -> None:
+    opinion = build_quant_opinion(
+        asset=candidate("ADA", market="crypto"),
+        bars=bars(90, symbol="ADA"),
+        specialized=alt_context_facts(macro=True),
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    macro_codes = {
+        row.metric_code for row in opinion.decision_inputs if row.pillar_code == "macro"
+    }
+    assert macro_codes == {"macro.real_yield.10y_pct", "macro.usd_broad_index"}
+    assert len(opinion.decision_inputs) <= 12
 
 
 def test_fact_sheet_ignores_future_and_uses_independent_sources() -> None:
