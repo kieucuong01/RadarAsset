@@ -16,6 +16,7 @@ export default defineConfig({
       "**/*.integration.test.ts",
       "e2e/**",
       "scripts/dev-local.test.mjs",
+      "scripts/run-python-tests.test.mjs",
     ],
   },
 });
