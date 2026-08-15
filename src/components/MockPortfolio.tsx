@@ -12,7 +12,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Area,
@@ -27,6 +27,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { toast } from "sonner";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { FavoriteAssetsPanel } from "@/components/FavoriteAssetsPanel";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
@@ -40,6 +41,7 @@ import type {
   PortfolioTimeframe,
 } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
+import { clearCachedPortfolio, getCachedPortfolio } from "@/lib/portfolio-client";
 
 const TIMEFRAMES = ["1W", "1M", "YTD", "1Y"] as const;
 type Timeframe = PortfolioTimeframe;
@@ -79,27 +81,33 @@ export function MockPortfolio() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPortfolio = async (nextTimeframe = timeframe) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/portfolio?timeframe=${nextTimeframe}`, { cache: "no-store" });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Portfolio API unavailable");
+  const loadPortfolio = useCallback(
+    async (nextTimeframe = timeframe) => {
+      setLoading(true);
+      setError(null);
+      const toastId = toast.loading(t("portfolio.toasts.loading"));
+      try {
+        setPortfolio(await getCachedPortfolio(nextTimeframe));
+        toast.success(t("portfolio.toasts.loaded"), { id: toastId });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : t("portfolio.toasts.error");
+        setError(message);
+        toast.error(message, { id: toastId });
+      } finally {
+        setLoading(false);
       }
-      setPortfolio((await res.json()) as PortfolioResponse);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load portfolio.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [timeframe, t],
+  );
+
+  const handlePortfolioRecorded = useCallback((nextPortfolio: PortfolioResponse) => {
+    clearCachedPortfolio();
+    setPortfolio(nextPortfolio);
+  }, []);
 
   useEffect(() => {
     void loadPortfolio(timeframe);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeframe]);
+  }, [loadPortfolio, timeframe]);
 
   const allocationData = useMemo(
     () => portfolio?.allocation.map((item) => ({ name: item.category, value: item.value })) ?? [],
@@ -299,7 +307,7 @@ export function MockPortfolio() {
               {TIMEFRAMES.map((item) => (
                 <button
                   key={item}
-                  onClick={() => setTimeframe(item)}
+                  onClick={() => startTransition(() => setTimeframe(item))}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                     timeframe === item
                       ? "bg-background text-foreground shadow-sm"
@@ -378,13 +386,17 @@ export function MockPortfolio() {
       </section>
 
       <HoldingsTable holdings={holdings} fmt0={fmt0} fmt2={fmt2} />
-      <FavoriteAssetsPanel holdings={holdings} timeframe={timeframe} onRecorded={setPortfolio} />
+      <FavoriteAssetsPanel
+        holdings={holdings}
+        timeframe={timeframe}
+        onRecorded={handlePortfolioRecorded}
+      />
       <RiskMetrics metrics={portfolio?.riskMetrics ?? []} />
       <StrategyAssignmentPanel
         holdings={holdings}
         disabled={!portfolio}
         timeframe={timeframe}
-        onRecorded={setPortfolio}
+        onRecorded={handlePortfolioRecorded}
       />
       <PortfolioStrategyForwardTests />
       <TransactionLog
@@ -393,7 +405,7 @@ export function MockPortfolio() {
         disabled={!portfolio}
         timeframe={timeframe}
         fmt2={fmt2}
-        onRecorded={setPortfolio}
+        onRecorded={handlePortfolioRecorded}
       />
     </main>
   );
