@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, start_scheduler_run, verify_health
+from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, retire_out_of_scope_requests, start_scheduler_run, verify_health
 from verify_market_ingestion import health_json_output
 
 
@@ -83,22 +83,25 @@ def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:
     assert '"--processed-count"' in source
 
 
-def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> None:
+def test_scheduler_artifact_has_bounded_four_hourly_daily_and_weekly_triggers() -> None:
     source = (ROOT / "deploy" / "windows" / "quant-ingestion-tasks.xml").read_text(
         encoding="utf-8"
     )
 
-    assert source.count("run-market-ingestion.ps1 -Command hourly") == 1
+    assert "run-market-ingestion.ps1 -Command hourly" not in source
+    assert source.count("run-smart-insights.ps1 -Schedule four-hourly") == 1
     assert source.count("refresh-asset-opinions.ps1") == 1
-    assert "PT1H" in source
+    assert source.count("run-smart-insights.ps1 -Schedule weekly") == 1
+    assert "PT4H" in source
     assert "01:15:00Z" in source
+    assert "P1W" in source
 
     installer = (ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1").read_text(
         encoding="utf-8"
     )
     assert "[switch]$Install" in installer
     assert "Register-ScheduledTask" in installer
-    assert installer.count("New-ScheduledTaskTrigger") == 2
+    assert installer.count("New-ScheduledTaskTrigger") == 3
     assert "[switch]$Verify" in installer
     assert "RestartCount" in installer
     assert '$ErrorActionPreference = "Stop"' in installer
@@ -118,15 +121,19 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
     assert market < sources < briefing
     assert '$taskAssets = @(' in wrapper
     assert '"VNINDEX"' in wrapper
+    assert '"VN30"' in wrapper
     assert '"FPT"' in wrapper
     assert '"BTC"' in wrapper
     assert '"XAU"' in wrapper
+    assert '"XMR"' not in wrapper
     assert '"--asset"' in wrapper
     assert '"--timeframe" "1d"' in wrapper
     assert '"--env-file"' in wrapper
     assert 'run-market-ingestion.ps1' not in wrapper
     assert '-AllMemberships' in wrapper
-    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 3
+    assert '-Schedule "calendar-current"' in wrapper
+    assert '"--retire-out-of-scope"' in wrapper
+    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 5
 
     installer = (
         ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1"
@@ -200,6 +207,41 @@ def test_scheduler_start_recovers_abandoned_running_rows() -> None:
     assert recover_stale_scheduler_runs(connection, maximum_age_minutes=180) == 2
     assert "status = 'failed'" in connection.cursor_value.query
     assert connection.cursor_value.params == (180,)
+    assert connection.committed is True
+
+
+def test_retire_out_of_scope_requests_marks_only_active_unsupported_work() -> None:
+    class Cursor:
+        rowcount = 7
+
+        def execute(self, query, params):
+            self.query = query
+            self.params = params
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Connection:
+        def __init__(self):
+            self.value = Cursor()
+
+        def cursor(self):
+            return self.value
+
+        def commit(self):
+            self.committed = True
+
+    connection = Connection()
+    allowed = ("VNINDEX", "VN30", "FPT", "BTC", "XAU")
+
+    assert retire_out_of_scope_requests(connection, allowed) == 7
+    assert "status IN ('queued', 'running')" in connection.value.query
+    assert "error_code = 'SCOPE_RETIRED'" in connection.value.query
+    assert "UPPER(asset.symbol) = ANY(%s)" in connection.value.query
+    assert connection.value.params == (list(allowed),)
     assert connection.committed is True
 
 

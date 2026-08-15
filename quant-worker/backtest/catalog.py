@@ -75,7 +75,6 @@ DEFAULT_CRYPTO_UNIVERSE = (
     "AVAX",
     "TRX",
     "ZEC",
-    "XMR",
     "XLM",
 )
 
@@ -102,6 +101,7 @@ def crypto_feed(symbol: str, name: str | None = None) -> AssetFeed:
 
 FEEDS = {
     "VNINDEX": vn_index_feed("VNINDEX", "VN-Index"),
+    "VN30": vn_index_feed("VN30", "VN30 Index"),
     "FPT": vn_equity_feed("FPT", "FPT Corporation"),
     "VCB": vn_equity_feed(
         "VCB", "Joint Stock Commercial Bank for Foreign Trade of Vietnam"

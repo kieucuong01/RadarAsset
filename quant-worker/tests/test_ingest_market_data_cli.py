@@ -27,7 +27,7 @@ def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
     hourly = build_selections("hourly", asset=None, timeframe=None)
     daily = build_selections("daily", asset=None, timeframe=None)
     all_selections = build_selections("all", asset=None, timeframe=None)
-    hourly_symbols = [symbol for symbol in FEEDS if symbol != "VNINDEX"]
+    hourly_symbols = [symbol for symbol in FEEDS if symbol not in {"VNINDEX", "VN30"}]
 
     assert [(item.asset, item.timeframe) for item in hourly] == [
         (symbol, "1h") for symbol in hourly_symbols
@@ -78,7 +78,7 @@ def test_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -
     )
 
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    hourly_symbols = [symbol for symbol in FEEDS if symbol != "VNINDEX"]
+    hourly_symbols = [symbol for symbol in FEEDS if symbol not in {"VNINDEX", "VN30"}]
     assert exit_code == 2
     assert [(item.asset, item.timeframe) for item in captured] == [
         (symbol, "1h") for symbol in hourly_symbols
