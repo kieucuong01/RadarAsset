@@ -548,6 +548,32 @@ def test_vnstock_caps_vnindex_history_to_the_verified_hose_calendar() -> None:
     assert market.instrument.calls[0]["start"] == "2024-01-01"
 
 
+def test_vnstock_caps_equity_history_to_the_verified_hose_calendar() -> None:
+    market = FakeMarket(
+        [
+            {
+                "time": "2026-08-10T00:00:00",
+                "open": 100,
+                "high": 101,
+                "low": 99,
+                "close": 100,
+                "volume": 1_000_000,
+            }
+        ]
+    )
+
+    VnstockAdapter(market_factory=lambda: market).fetch(
+        symbol="FPT",
+        asset="FPT",
+        timeframe="1d",
+        start=utc(2010, 1, 1),
+        end=utc(2026, 8, 12),
+        now=utc(2026, 8, 12),
+    )
+
+    assert market.instrument.calls[0]["start"] == "2024-01-01"
+
+
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:
     adapter = VnstockAdapter(
         listing_factory=lambda: FakeListing(

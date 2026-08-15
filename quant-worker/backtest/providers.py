@@ -806,12 +806,14 @@ class VnstockAdapter:
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Vnstock fetch requires an ordered timezone-aware range.")
         provider_start = start
-        if is_index:
-            free_history_start = end - timedelta(days=8 * 365)
+        if not is_metal:
             verified_history_start = datetime.combine(
                 HOSE_VERIFIED_FROM, datetime.min.time(), tzinfo=timezone.utc
             )
-            provider_start = max(start, free_history_start, verified_history_start)
+            provider_start = max(provider_start, verified_history_start)
+        if is_index:
+            free_history_start = end - timedelta(days=8 * 365)
+            provider_start = max(provider_start, free_history_start)
 
         records: Any = None
         last_error: Exception | None = None
