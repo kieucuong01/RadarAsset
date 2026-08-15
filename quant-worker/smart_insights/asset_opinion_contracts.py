@@ -225,3 +225,14 @@ class AssetOpinionAiOutput:
 class AssetOpinionGroundingAccepted:
     output: AssetOpinionAiOutput
     bundle_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class AssetOpinionDraft:
+    symbol: str
+    signal_key: str
+    quant: QuantAssetOpinion
+    evidence_bundle: object
+    explanation_status: str
+    ai_output: AssetOpinionAiOutput | None
+    rejection_code: str | None

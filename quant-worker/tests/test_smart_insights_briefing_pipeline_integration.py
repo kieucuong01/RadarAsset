@@ -8,6 +8,7 @@ from smart_insights.briefing_pipeline import (
     generate_briefing,
     replay_briefing,
 )
+from smart_insights.asset_opinion_contracts import AssetOpinionMarketData
 from smart_insights.evidence import EvidenceObservation
 from smart_insights.openai_responses import AiUnavailable
 from smart_insights.personalization import CandidateSignal, UserInsightPreference
@@ -31,6 +32,12 @@ class FakeRepository:
 
     def load_personalization(self, organization_id: str, user_id: str, *, as_of: datetime):
         return (), (), UserInsightPreference(markets=("gold",), assets=("XAU",))
+
+    def load_asset_opinion_market_data(self, symbols, benchmark_symbols, *, as_of: datetime):
+        return AssetOpinionMarketData(
+            bars=tuple((symbol, ()) for symbol in (*symbols, *benchmark_symbols)),
+            facts=tuple((symbol, ()) for symbol in symbols),
+        )
 
     def publish_briefing(self, draft):
         existing = next((row for row in self.records if row.fingerprint == draft.fingerprint), None)
@@ -56,6 +63,8 @@ def test_ai_failure_keeps_quant_briefing_without_sample_prose() -> None:
     assert result.status == "quant_only"
     assert result.primary_signal_ids == ("signal",)
     assert result.ai_insight_count == 0
+    assert result.asset_opinion_count == 3
+    assert tuple(row.symbol for row in result.asset_opinions) == ("VNINDEX", "XAU", "BTC")
 
 
 def test_late_data_creates_revision_without_mutating_first() -> None:

@@ -14,6 +14,16 @@ from psycopg.rows import dict_row
 
 from smart_insights.evidence import EvidenceBundle, EvidenceObservation, SignalEvidenceInput, build_bundle
 from smart_insights.grounding import GroundingAccepted, verify
+from smart_insights.asset_opinion_contracts import (
+    AssetCandidate,
+    AssetOpinionDraft,
+    AssetOpinionMarketData,
+)
+from smart_insights.asset_opinion_pipeline import AssetOpinionBatch, build_asset_opinion_drafts
+from smart_insights.asset_opinion_quant import build_asset_universe
+from smart_insights.asset_opinion_repository import (
+    load_asset_opinion_market_data as load_asset_opinion_market_data_batch,
+)
 from smart_insights.openai_responses import (
     AiSchemaError,
     AiUnavailable,
@@ -65,11 +75,13 @@ class BriefingDraft:
     preferences: UserInsightPreference
     items: tuple[BriefingItem, ...]
     fingerprint: str
+    asset_opinions: tuple[AssetOpinionDraft, ...] = ()
 
     def to_record(self, briefing_id: str, revision: int) -> "BriefingRecord":
         return BriefingRecord(
             briefing_id, revision, self.local_date, self.timezone, self.as_of, self.status,
             self.data_confidence, self.portfolio_state, self.items, self.fingerprint,
+            self.asset_opinions,
         )
 
 
@@ -85,6 +97,7 @@ class BriefingRecord:
     portfolio_state: str
     items: tuple[BriefingItem, ...]
     fingerprint: str
+    asset_opinions: tuple[AssetOpinionDraft, ...] = ()
 
     @property
     def primary_signal_ids(self) -> tuple[str, ...]:
@@ -93,6 +106,10 @@ class BriefingRecord:
     @property
     def ai_insight_count(self) -> int:
         return sum(row.ai_output is not None for row in self.items)
+
+    @property
+    def asset_opinion_count(self) -> int:
+        return len(self.asset_opinions)
 
 
 class BriefingRepository(Protocol):
@@ -103,6 +120,14 @@ class BriefingRepository(Protocol):
     def load_personalization(
         self, organization_id: str, user_id: str, *, as_of: datetime
     ) -> tuple[tuple[PortfolioPosition, ...], tuple[str, ...], UserInsightPreference]: ...
+
+    def load_asset_opinion_market_data(
+        self,
+        symbols: tuple[str, ...],
+        benchmark_symbols: tuple[str, ...],
+        *,
+        as_of: datetime,
+    ) -> AssetOpinionMarketData: ...
 
     def publish_briefing(self, draft: BriefingDraft) -> BriefingRecord: ...
 
@@ -129,6 +154,222 @@ def _evidence_unit(unit: str) -> str | None:
     }.get(normalized)
 
 
+def _persist_asset_opinion(
+    cursor: object,
+    *,
+    opinion: AssetOpinionDraft,
+    organization_id: str,
+    user_id: str,
+    run_id: str,
+    briefing_id: str,
+    rank: int,
+    as_of: datetime,
+) -> None:
+    cursor.execute("SELECT id FROM assets WHERE symbol = %s", (opinion.symbol,))
+    asset_row = cursor.fetchone()
+    asset_id = str(asset_row["id"]) if asset_row is not None else None
+    signal_id = str(uuid4())
+    idempotency_key = hashlib.sha256(
+        (
+            f"{organization_id}:{user_id}:{opinion.signal_key}:"
+            f"{opinion.evidence_bundle.fingerprint}:{opinion.quant.methodology_version}"
+        ).encode("utf-8")
+    ).hexdigest()
+    signal_inputs = {
+        "schemaVersion": "asset-opinion-v1",
+        "symbol": opinion.symbol,
+        "assetName": opinion.quant.asset.name,
+        "portfolioWeightPct": opinion.quant.asset.portfolio_weight * Decimal("100"),
+        "unrealizedReturn": opinion.quant.unrealized_return,
+        "pillars": [asdict(row) for row in opinion.quant.pillars],
+        "gate": asdict(opinion.quant.gate),
+        "facts": [
+            {
+                "id": row.id,
+                "metricCode": row.metric_code,
+                "value": row.value,
+                "unit": row.unit,
+                "effectiveAt": row.effective_at,
+                "observedAt": row.observed_at,
+                "sourceCode": row.source_code,
+                "sourceUrl": row.source_url,
+                "fresh": row.fresh,
+                "contradicting": row.contradicting,
+                "methodologyVersion": row.methodology_version,
+            }
+            for row in opinion.quant.facts
+        ],
+        "freshness": opinion.quant.freshness,
+        "rejectionCode": opinion.rejection_code,
+    }
+    signal_status = (
+        "active"
+        if opinion.quant.gate.passed
+        else "unavailable"
+        if opinion.explanation_status == "unavailable"
+        else "insufficient_data"
+    )
+    cursor.execute(
+        """
+        INSERT INTO signal_snapshots (
+          id, market, asset_id, effective_at, methodology_version,
+          signal_type, score, label, data_confidence, coverage,
+          inputs, status, idempotency_key, created_at
+        ) VALUES (
+          %s,%s,%s,%s,%s,
+          'asset_opinion',%s,%s,%s,%s,
+          %s::jsonb,%s,%s,NOW()
+        )
+        ON CONFLICT (idempotency_key) DO NOTHING
+        RETURNING id
+        """,
+        (
+            signal_id,
+            opinion.quant.asset.market,
+            asset_id,
+            as_of,
+            opinion.quant.methodology_version,
+            opinion.quant.quant_score,
+            opinion.quant.stance,
+            opinion.quant.confidence,
+            opinion.quant.data_coverage,
+            _canonical(signal_inputs),
+            signal_status,
+            idempotency_key,
+        ),
+    )
+    inserted_signal = cursor.fetchone()
+    if inserted_signal is not None:
+        signal_id = str(inserted_signal["id"])
+    else:
+        cursor.execute(
+            "SELECT id FROM signal_snapshots WHERE idempotency_key = %s",
+            (idempotency_key,),
+        )
+        existing_signal = cursor.fetchone()
+        if existing_signal is None:
+            raise RuntimeError("Asset opinion signal idempotency lookup failed.")
+        signal_id = str(existing_signal["id"])
+
+    evidence_ids: dict[str, str] = {}
+    for fact in opinion.evidence_bundle.evidence:
+        evidence_id = str(uuid4())
+        evidence_ids[fact.evidence_id] = evidence_id
+        cursor.execute(
+            """
+            INSERT INTO evidence_items (
+              id, research_run_id, asset_id, insight_id, source_type, source_name,
+              url, title, excerpt, engagement, observed_at, created_at
+            ) VALUES (%s,%s,%s,NULL,'metric',%s,%s,%s,%s,0,%s,NOW())
+            """,
+            (
+                evidence_id,
+                run_id,
+                asset_id,
+                fact.source_code,
+                fact.source_url,
+                fact.metric_code,
+                _canonical(asdict(fact)),
+                datetime.fromisoformat(fact.observed_at),
+            ),
+        )
+
+    insight_id: str | None = None
+    if opinion.ai_output is not None:
+        insight_id = str(uuid4())
+        risk_payload = {
+            "bearCase": opinion.ai_output.bear_case,
+            "invalidationConditions": opinion.ai_output.invalidation_conditions,
+        }
+        cursor.execute(
+            """
+            INSERT INTO ai_insights (
+              id, asset_id, research_run_id, source, title, summary, sentiment,
+              confidence, catalyst, risk, published_at, created_at
+            ) VALUES (%s,%s,%s,'openai-responses',%s,%s,%s,%s,%s,%s,%s,NOW())
+            """,
+            (
+                insight_id,
+                asset_id,
+                run_id,
+                opinion.ai_output.thesis,
+                opinion.ai_output.base_case,
+                opinion.quant.stance.casefold(),
+                opinion.ai_output.confidence,
+                opinion.ai_output.bull_case,
+                _canonical(risk_payload),
+                as_of,
+            ),
+        )
+        if evidence_ids:
+            cursor.execute(
+                "UPDATE evidence_items SET insight_id = %s WHERE id = ANY(%s::uuid[])",
+                (insight_id, list(evidence_ids.values())),
+            )
+
+    supporting_ids = [
+        evidence_ids[value]
+        for value in opinion.evidence_bundle.supporting_evidence_ids
+        if value in evidence_ids
+    ]
+    contradicting_ids = [
+        evidence_ids[value]
+        for value in opinion.evidence_bundle.contradicting_evidence_ids
+        if value in evidence_ids
+    ]
+    scenarios = (
+        [
+            opinion.ai_output.bull_case,
+            opinion.ai_output.base_case,
+            opinion.ai_output.bear_case,
+        ]
+        if opinion.ai_output is not None
+        else []
+    )
+    confidence = (
+        Decimal(opinion.ai_output.confidence)
+        if opinion.ai_output is not None
+        else opinion.quant.confidence
+    )
+    cursor.execute(
+        """
+        INSERT INTO daily_briefing_items (
+          id, daily_briefing_id, signal_snapshot_id, ai_insight_id, rank, section,
+          relevance_score, relevance_components, supporting_evidence_ids,
+          contradicting_evidence_ids, affected_assets, time_horizon, risk_scenarios,
+          suggested_check_template, explanation_status, confidence, outcomes, created_at
+        ) VALUES (
+          %s,%s,%s,%s,%s,'asset_opinion',
+          %s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s::jsonb,
+          %s,%s,%s,%s::jsonb,NOW()
+        )
+        """,
+        (
+            str(uuid4()),
+            briefing_id,
+            signal_id,
+            insight_id,
+            rank,
+            min(Decimal("100"), abs(opinion.quant.asset.portfolio_weight) * Decimal("100")),
+            _canonical(
+                {
+                    "exposure": abs(opinion.quant.asset.portfolio_weight) * Decimal("100"),
+                    "dataConfidence": opinion.quant.confidence,
+                }
+            ),
+            _canonical(supporting_ids),
+            _canonical(contradicting_ids),
+            _canonical([opinion.symbol]),
+            opinion.quant.horizon,
+            _canonical(scenarios),
+            opinion.quant.personalized_action,
+            opinion.explanation_status,
+            confidence,
+            _canonical({"rejectionCode": opinion.rejection_code}),
+        ),
+    )
+
+
 class PostgresBriefingRepository:
     """Small SQL adapter that keeps tenant-scoped briefing writes in one transaction."""
 
@@ -150,6 +391,7 @@ class PostgresBriefingRepository:
                 FROM signal_snapshots s
                 LEFT JOIN assets a ON a.id = s.asset_id
                 WHERE s.status = 'active' AND s.effective_at <= %s
+                  AND s.signal_type <> 'asset_opinion'
                   AND s.effective_at >= %s - INTERVAL '31 days'
                 ORDER BY s.market, COALESCE(s.asset_id::text, ''), s.signal_type,
                          s.effective_at DESC, s.created_at DESC
@@ -286,6 +528,20 @@ class PostgresBriefingRepository:
             )
         return positions, watchlist, preferences
 
+    def load_asset_opinion_market_data(
+        self,
+        symbols: tuple[str, ...],
+        benchmark_symbols: tuple[str, ...],
+        *,
+        as_of: datetime,
+    ) -> AssetOpinionMarketData:
+        return load_asset_opinion_market_data_batch(
+            self.connection,
+            symbols,
+            benchmark_symbols,
+            as_of,
+        )
+
     def publish_briefing(self, draft: BriefingDraft) -> BriefingRecord:
         with self.connection.transaction():
             with self.connection.cursor(row_factory=dict_row) as cursor:
@@ -375,7 +631,18 @@ class PostgresBriefingRepository:
                          _canonical([]), _canonical(item.evidence_bundle.affected_assets),
                          item.ai_output.time_horizon if item.ai_output else draft.preferences.investment_horizon,
                          _canonical(item.ai_output.risk_scenarios if item.ai_output else ()),
-                         item.suggested_check_template, item.explanation_status, item.confidence),
+                        item.suggested_check_template, item.explanation_status, item.confidence),
+                    )
+                for offset, opinion in enumerate(draft.asset_opinions, start=1):
+                    _persist_asset_opinion(
+                        cursor,
+                        opinion=opinion,
+                        organization_id=draft.organization_id,
+                        user_id=draft.user_id,
+                        run_id=run_id,
+                        briefing_id=briefing_id,
+                        rank=len(draft.items) + offset,
+                        as_of=draft.as_of,
                     )
         return draft.to_record(briefing_id, revision)
 
@@ -399,6 +666,7 @@ class PostgresBriefingRepository:
 
 
 Synthesizer = Callable[..., StructuredInsightOutput | AiUnavailable | AiSchemaError]
+AssetSynthesizer = Callable[..., object]
 
 
 def _canonical(value: object) -> str:
@@ -426,6 +694,7 @@ def generate_briefing(
     repository: BriefingRepository, *, organization_id: str, user_id: str,
     local_date: date, timezone_name: str, as_of: datetime,
     synthesizer: Synthesizer = synthesize,
+    asset_synthesizer: AssetSynthesizer | None = None,
 ) -> BriefingRecord:
     signals = repository.load_briefing_signals(organization_id, user_id, as_of=as_of)
     portfolio, watchlist, preferences = repository.load_personalization(
@@ -474,10 +743,87 @@ def generate_briefing(
             ranked.signal_id, section, rank, ranked.relevance, ranked.components,
             bundle, explanation_status, ai_output, suggested_check, confidence,
         ))
-    status = "complete" if items and all(row.ai_output is not None for row in items) else "quant_only"
+
+    market_by_symbol = {
+        asset.upper(): signal.candidate.market
+        for signal in signals
+        for asset in signal.candidate.affected_assets
+    }
+
+    def asset_market(symbol: str) -> str:
+        normalized = symbol.upper()
+        return market_by_symbol.get(
+            normalized,
+            {"BTC": "crypto", "XAU": "gold", "VNINDEX": "equity"}.get(
+                normalized, "other"
+            ),
+        )
+
+    portfolio_candidates = tuple(
+        AssetCandidate(
+            symbol=row.asset,
+            name=row.asset,
+            market=asset_market(row.asset),
+            portfolio_weight=row.weight,
+            watchlist_rank=0,
+            quantity=row.quantity,
+            average_cost=row.average_cost,
+        )
+        for row in portfolio
+    )
+    watchlist_candidates = tuple(
+        AssetCandidate(
+            symbol=symbol,
+            name=symbol,
+            market=asset_market(symbol),
+            portfolio_weight=Decimal("0"),
+            watchlist_rank=index,
+        )
+        for index, symbol in enumerate(watchlist)
+    )
+    universe = build_asset_universe(
+        portfolio_candidates,
+        watchlist_candidates,
+        ("VNINDEX", "XAU", "BTC"),
+        limit=25,
+    )
+    benchmark_symbols = tuple(
+        dict.fromkeys(
+            {"crypto": "BTC", "gold": "XAU", "equity": "VNINDEX", "stock_vn": "VNINDEX"}.get(
+                row.market, row.symbol
+            )
+            for row in universe.assets
+        )
+    )
+    market_data = repository.load_asset_opinion_market_data(
+        tuple(row.symbol for row in universe.assets),
+        benchmark_symbols,
+        as_of=as_of,
+    )
+    asset_kwargs = {}
+    if asset_synthesizer is not None:
+        asset_kwargs["synthesizer"] = asset_synthesizer
+    asset_opinions = build_asset_opinion_drafts(
+        AssetOpinionBatch(
+            universe=universe,
+            market_data=market_data,
+            preferences=preferences,
+            as_of=as_of,
+            organization_id=organization_id,
+        ),
+        **asset_kwargs,
+    )
+    all_explanations = [row.ai_output is not None for row in items] + [
+        row.explanation_status == "accepted" for row in asset_opinions
+    ]
+    status = "complete" if all_explanations and all(all_explanations) else "quant_only"
+    confidence_values = [row.confidence for row in items] + [
+        row.quant.confidence for row in asset_opinions
+    ]
     confidence = (
-        sum((row.confidence for row in items), Decimal("0")) / Decimal(len(items))
-        if items else Decimal("0")
+        sum(confidence_values, Decimal("0")) / Decimal(len(confidence_values))
+        if confidence_values
+        else Decimal("0")
     ).quantize(Decimal("0.01"))
     fingerprint_payload = {
         "organizationId": organization_id,
@@ -499,11 +845,35 @@ def generate_briefing(
             }
             for row in items
         ],
+        "assetOpinions": [
+            {
+                "symbol": row.symbol,
+                "signalKey": row.signal_key,
+                "methodology": row.quant.methodology_version,
+                "gate": asdict(row.quant.gate),
+                "pillars": [asdict(pillar) for pillar in row.quant.pillars],
+                "bundle": row.evidence_bundle.fingerprint,
+                "explanationStatus": row.explanation_status,
+                "ai": asdict(row.ai_output) if row.ai_output else None,
+                "action": row.quant.personalized_action,
+            }
+            for row in asset_opinions
+        ],
     }
     draft = BriefingDraft(
-        organization_id, user_id, local_date, timezone_name, as_of, status,
-        confidence, selection.portfolio_state, portfolio, preferences, tuple(items),
-        _fingerprint(fingerprint_payload),
+        organization_id=organization_id,
+        user_id=user_id,
+        local_date=local_date,
+        timezone=timezone_name,
+        as_of=as_of,
+        status=status,
+        data_confidence=confidence,
+        portfolio_state=selection.portfolio_state,
+        portfolio=portfolio,
+        preferences=preferences,
+        items=tuple(items),
+        fingerprint=_fingerprint(fingerprint_payload),
+        asset_opinions=asset_opinions,
     )
     return repository.publish_briefing(draft)
 
