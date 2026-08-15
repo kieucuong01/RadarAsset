@@ -35,6 +35,51 @@ const briefingItemSchema = z.object({
   riskScenarios: z.array(z.string()),
 });
 
+const assetOpinionSchema = z.object({
+  symbol: z.string(),
+  assetName: z.string(),
+  stance: z.string(),
+  quantScore: decimal.nullable(),
+  confidence: decimal,
+  horizon: z.string(),
+  portfolioWeightPct: decimal,
+  personalizedAction: z.string(),
+  pillars: z.array(
+    z.object({
+      code: z.string(),
+      score: decimal.nullable(),
+      weight: decimal,
+      confidence: decimal,
+      factIds: z.array(z.string()),
+      series: z.array(z.object({ ts: z.string(), value: z.number().finite() })),
+    }),
+  ),
+  thesis: z.string().nullable(),
+  bullCase: z.string().nullable(),
+  baseCase: z.string().nullable(),
+  bearCase: z.string().nullable(),
+  invalidationConditions: z.array(z.string()),
+  evidence: z.array(
+    z.object({
+      id: z.string(),
+      metricCode: z.string(),
+      displayValue: z.string(),
+      delta: decimal.nullable(),
+      percentile: decimal.nullable(),
+      impact: z.enum(["supporting", "contradicting", "neutral"]),
+      sourceCode: z.string(),
+      sourceUrl: z.string(),
+      effectiveAt: z.string(),
+      observedAt: z.string(),
+      freshness,
+    }),
+  ),
+  dataCoverage: decimal,
+  freshness,
+  explanationStatus: z.enum(["accepted", "quant_only", "insufficient_data", "unavailable"]),
+  failedGates: z.array(z.string()),
+});
+
 export const briefingSchema = z.object({
   id: z.string(),
   localDate: z.string(),
@@ -46,8 +91,9 @@ export const briefingSchema = z.object({
   portfolioState: z.enum(["available", "missing"]),
   primary: z.array(briefingItemSchema),
   riskAlerts: z.array(briefingItemSchema),
+  assetOpinions: z.array(assetOpinionSchema),
   sourceRunId: z.string(),
-});
+}).strict();
 
 const regimeGroupSchema = z.object({
   metricCode: z.string(),
@@ -313,6 +359,7 @@ export const kronosShadowSchema = z.object({
 
 export type BriefingModel = z.infer<typeof briefingSchema>;
 export type BriefingItemModel = z.infer<typeof briefingItemSchema>;
+export type AssetOpinionModel = z.infer<typeof assetOpinionSchema>;
 export type RegimeModel = z.infer<typeof regimesSchema>["regimes"][number];
 export type MetricModel = z.infer<typeof metricsSchema>["metrics"][number];
 export type CalendarModel = z.infer<typeof calendarSchema>["events"][number];

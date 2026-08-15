@@ -4,6 +4,8 @@ import type { TenantContext } from "@/lib/auth/tenant-context";
 import { getPrisma } from "@/lib/db/prisma";
 
 import type {
+  AssetOpinionEvidenceReadModel,
+  AssetOpinionReadModel,
   BriefingItemReadModel,
   BriefingReadModel,
   CalendarEventReadModel,
@@ -135,10 +137,183 @@ function briefingItem(row: {
   };
 }
 
-export async function loadBriefing(
+type AssetOpinionItemRow = {
+  id: string;
+  signalSnapshotId: string;
+  supportingEvidenceIds: Prisma.JsonValue;
+  contradictingEvidenceIds: Prisma.JsonValue;
+  affectedAssets: Prisma.JsonValue;
+  timeHorizon: string;
+  suggestedCheckTemplate: string;
+  explanationStatus: string;
+  confidence: unknown;
+  signalSnapshot: {
+    score: unknown;
+    label: string;
+    coverage: unknown;
+    inputs: Prisma.JsonValue;
+    asset: { symbol: string; name: string } | null;
+  };
+  aiInsight: {
+    title: string;
+    summary: string;
+    catalyst: string | null;
+    risk: string | null;
+  } | null;
+};
+
+type EvidenceRow = { id: string; excerpt: string };
+
+function finiteNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function assetFreshness(value: unknown): FreshnessState {
+  return value === "fresh" || value === "stale" || value === "conflicting" ||
+    value === "partial" || value === "unavailable"
+    ? value
+    : "unavailable";
+}
+
+function assetOpinionFallback(row: AssetOpinionItemRow): AssetOpinionReadModel {
+  const symbol = row.signalSnapshot.asset?.symbol ?? strings(row.affectedAssets)[0] ?? "UNKNOWN";
+  return {
+    symbol,
+    assetName: row.signalSnapshot.asset?.name ?? symbol,
+    stance: row.signalSnapshot.label || "INSUFFICIENT_DATA",
+    quantScore: row.signalSnapshot.score == null ? null : decimal(row.signalSnapshot.score),
+    confidence: decimal(row.confidence),
+    horizon: row.timeHorizon,
+    portfolioWeightPct: "0",
+    personalizedAction: "NO_ACTION_INSUFFICIENT_DATA",
+    pillars: [],
+    thesis: null,
+    bullCase: null,
+    baseCase: null,
+    bearCase: null,
+    invalidationConditions: [],
+    evidence: [],
+    dataCoverage: decimal(row.signalSnapshot.coverage),
+    freshness: "unavailable",
+    explanationStatus: "unavailable",
+    failedGates: ["STORED_CONTRACT_INVALID"],
+  };
+}
+
+function parseEvidence(
+  row: EvidenceRow,
+  supporting: Set<string>,
+  contradicting: Set<string>,
+): AssetOpinionEvidenceReadModel | null {
+  try {
+    const fact = JSON.parse(row.excerpt) as Record<string, unknown>;
+    const warnings = Array.isArray(fact.warnings) ? fact.warnings : [];
+    return {
+      id: row.id,
+      metricCode: String(fact.metric_code ?? ""),
+      displayValue: String(fact.display_value ?? fact.raw_value ?? ""),
+      delta: fact.delta == null ? null : String(fact.delta),
+      percentile: fact.percentile == null ? null : String(fact.percentile),
+      impact: supporting.has(row.id)
+        ? "supporting"
+        : contradicting.has(row.id)
+          ? "contradicting"
+          : "neutral",
+      sourceCode: String(fact.source_code ?? ""),
+      sourceUrl: String(fact.source_url ?? ""),
+      effectiveAt: String(fact.effective_end ?? fact.effective_start ?? ""),
+      observedAt: String(fact.observed_at ?? ""),
+      freshness: warnings.includes("STALE") ? "stale" : "fresh",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function assetOpinion(
+  row: AssetOpinionItemRow,
+  evidenceById: ReadonlyMap<string, EvidenceRow>,
+): AssetOpinionReadModel {
+  try {
+    const inputs = object(row.signalSnapshot.inputs);
+    if (!Array.isArray(inputs.pillars)) throw new Error("Invalid pillars.");
+    const gate = object(inputs.gate as Prisma.JsonValue);
+    const supportingIds = strings(row.supportingEvidenceIds);
+    const contradictingIds = strings(row.contradictingEvidenceIds);
+    const supporting = new Set(supportingIds);
+    const contradicting = new Set(contradictingIds);
+    const evidence = [...supportingIds, ...contradictingIds]
+      .filter((id, index, all) => all.indexOf(id) === index)
+      .flatMap((id) => {
+        const source = evidenceById.get(id);
+        if (!source) return [];
+        const parsed = parseEvidence(source, supporting, contradicting);
+        return parsed ? [parsed] : [];
+      });
+    const risk = row.aiInsight?.risk ? JSON.parse(row.aiInsight.risk) as Record<string, unknown> : {};
+    const pillars = inputs.pillars.map((raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid pillar.");
+      const item = raw as Record<string, unknown>;
+      if (!Array.isArray(item.fact_ids) || !Array.isArray(item.series)) {
+        throw new Error("Invalid pillar fields.");
+      }
+      return {
+        code: String(item.code ?? ""),
+        score: item.score == null ? null : String(item.score),
+        weight: String(item.configured_weight ?? "0"),
+        confidence: String(item.confidence ?? "0"),
+        factIds: item.fact_ids.filter((value): value is string => typeof value === "string"),
+        series: item.series.map((point) => {
+          if (!Array.isArray(point) || point.length !== 2) throw new Error("Invalid series point.");
+          const value = finiteNumber(point[1]);
+          if (value == null) throw new Error("Invalid series value.");
+          return { ts: String(point[0]), value };
+        }),
+      };
+    });
+    const symbol = row.signalSnapshot.asset?.symbol ?? strings(row.affectedAssets)[0];
+    if (!symbol) throw new Error("Missing asset symbol.");
+    const status = row.explanationStatus;
+    const explanationStatus: AssetOpinionReadModel["explanationStatus"] =
+      status === "accepted" || status === "quant_only" || status === "insufficient_data" ||
+      status === "unavailable"
+        ? status
+        : "unavailable";
+    return {
+      symbol,
+      assetName: String(inputs.assetName ?? row.signalSnapshot.asset?.name ?? symbol),
+      stance: row.signalSnapshot.label,
+      quantScore: row.signalSnapshot.score == null ? null : decimal(row.signalSnapshot.score),
+      confidence: decimal(row.confidence),
+      horizon: row.timeHorizon,
+      portfolioWeightPct: String(inputs.portfolioWeightPct ?? "0"),
+      personalizedAction: row.suggestedCheckTemplate,
+      pillars,
+      thesis: row.aiInsight?.title ?? null,
+      bullCase: row.aiInsight?.catalyst ?? null,
+      baseCase: row.aiInsight?.summary ?? null,
+      bearCase: risk.bearCase == null ? null : String(risk.bearCase),
+      invalidationConditions: Array.isArray(risk.invalidationConditions)
+        ? risk.invalidationConditions.filter((value): value is string => typeof value === "string")
+        : [],
+      evidence,
+      dataCoverage: decimal(row.signalSnapshot.coverage),
+      freshness: assetFreshness(inputs.freshness),
+      explanationStatus,
+      failedGates: strings(gate.failed_gates as Prisma.JsonValue),
+    };
+  } catch {
+    return assetOpinionFallback(row);
+  }
+}
+
+export type BriefingEnvelope = { briefing: BriefingReadModel; fingerprint: string };
+
+export async function loadBriefingEnvelope(
   context: TenantContext,
   localDate?: string | null,
-): Promise<BriefingReadModel | null> {
+): Promise<BriefingEnvelope | null> {
   const parsedDate = localDate ? new Date(`${localDate}T00:00:00.000Z`) : null;
   if (parsedDate && Number.isNaN(parsedDate.getTime()))
     throw new SmartInsightsInputError("Invalid local date.");
@@ -153,16 +328,32 @@ export async function loadBriefing(
       items: {
         orderBy: { rank: "asc" },
         include: {
-          signalSnapshot: { include: { asset: { select: { symbol: true } } } },
-          aiInsight: { select: { title: true, summary: true, catalyst: true } },
+          signalSnapshot: { include: { asset: { select: { symbol: true, name: true } } } },
+          aiInsight: { select: { title: true, summary: true, catalyst: true, risk: true } },
         },
       },
     },
   });
   if (!row) return null;
-  const items = row.items.map(briefingItem);
+  const legacyRows = row.items.filter((item) => item.section !== "asset_opinion");
+  const opinionRows = row.items.filter((item) => item.section === "asset_opinion");
+  const evidenceIds = opinionRows.flatMap((item) => [
+    ...strings(item.supportingEvidenceIds),
+    ...strings(item.contradictingEvidenceIds),
+  ]);
+  const evidenceRows = evidenceIds.length
+    ? await getPrisma().evidenceItem.findMany({
+        where: {
+          id: { in: [...new Set(evidenceIds)] },
+          researchRun: { organizationId: context.organizationId, userId: context.userId },
+        },
+        select: { id: true, excerpt: true },
+      })
+    : [];
+  const evidenceById = new Map(evidenceRows.map((item) => [item.id, item]));
+  const items = legacyRows.map(briefingItem);
   const portfolio = object(row.portfolioSnapshot);
-  return {
+  const briefing: BriefingReadModel = {
     id: row.id,
     localDate: dateOnly(row.effectiveDate),
     revision: row.revision,
@@ -171,10 +362,19 @@ export async function loadBriefing(
     status: row.status as BriefingReadModel["status"],
     overallDataConfidence: decimal(row.dataConfidence),
     portfolioState: portfolio.portfolioState === "available" ? "available" : "missing",
-    primary: items.filter((_, index) => row.items[index]?.section === "primary"),
-    riskAlerts: items.filter((_, index) => row.items[index]?.section === "risk"),
+    primary: items.filter((_, index) => legacyRows[index]?.section === "primary"),
+    riskAlerts: items.filter((_, index) => legacyRows[index]?.section === "risk"),
+    assetOpinions: opinionRows.map((item) => assetOpinion(item, evidenceById)),
     sourceRunId: row.researchRunId,
   };
+  return { briefing, fingerprint: row.fingerprint };
+}
+
+export async function loadBriefing(
+  context: TenantContext,
+  localDate?: string | null,
+): Promise<BriefingReadModel | null> {
+  return (await loadBriefingEnvelope(context, localDate))?.briefing ?? null;
 }
 
 export async function loadRegimes(): Promise<MarketRegimeReadModel[]> {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   loadMarketDataHealth: vi.fn(),
   loadSmartInsightsDataHealth: vi.fn(),
   loadBriefing: vi.fn(),
+  loadBriefingEnvelope: vi.fn(),
   loadRegimes: vi.fn(),
   loadMetrics: vi.fn(),
   loadCalendar: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock("@/lib/backend/smart-insights", async (importOriginal) => {
   return {
     ...original,
     loadBriefing: mocks.loadBriefing,
+    loadBriefingEnvelope: mocks.loadBriefingEnvelope,
     loadRegimes: mocks.loadRegimes,
     loadMetrics: mocks.loadMetrics,
     loadCalendar: mocks.loadCalendar,
@@ -185,6 +187,7 @@ describe("tenant API authorization", () => {
     mocks.loadMarketDataHealth.mockResolvedValue([]);
     mocks.loadSmartInsightsDataHealth.mockResolvedValue({ generatedAt: "now", sources: [] });
     mocks.loadBriefing.mockResolvedValue(null);
+    mocks.loadBriefingEnvelope.mockResolvedValue(null);
     mocks.loadRegimes.mockResolvedValue([]);
     mocks.loadMetrics.mockResolvedValue([]);
     mocks.loadCalendar.mockResolvedValue([]);
@@ -260,8 +263,29 @@ describe("tenant API authorization", () => {
         )
       ).status,
     ).toBe(404);
-    expect(mocks.loadBriefing).toHaveBeenCalledWith(viewerContext, null);
+    expect(mocks.loadBriefingEnvelope).toHaveBeenCalledWith(viewerContext, null);
     expect(mocks.loadEvidence).toHaveBeenCalledWith(viewerContext, "e-a");
+  });
+
+  it("returns a private ETag and short-circuits an unchanged briefing", async () => {
+    mocks.loadBriefingEnvelope.mockResolvedValue({
+      fingerprint: "fingerprint-a",
+      briefing: { id: "briefing-a", assetOpinions: [] },
+    });
+    const first = await smartInsightsBriefingGet(
+      new Request("http://localhost/api/smart-insights/briefing"),
+    );
+    const unchanged = await smartInsightsBriefingGet(
+      new Request("http://localhost/api/smart-insights/briefing", {
+        headers: { "if-none-match": '"fingerprint-a"' },
+      }),
+    );
+
+    expect(first.status).toBe(200);
+    expect(first.headers.get("etag")).toBe('"fingerprint-a"');
+    expect(first.headers.get("cache-control")).toBe("private, no-cache");
+    expect(unchanged.status).toBe(304);
+    expect(await unchanged.text()).toBe("");
   });
 
   it("rejects metric and calendar windows over 31 days", async () => {

@@ -42,6 +42,51 @@ export type BriefingItemReadModel = {
   riskScenarios: string[];
 };
 
+export type AssetOpinionPillarReadModel = {
+  code: string;
+  score: string | null;
+  weight: string;
+  confidence: string;
+  factIds: string[];
+  series: Array<{ ts: string; value: number }>;
+};
+
+export type AssetOpinionEvidenceReadModel = {
+  id: string;
+  metricCode: string;
+  displayValue: string;
+  delta: string | null;
+  percentile: string | null;
+  impact: "supporting" | "contradicting" | "neutral";
+  sourceCode: string;
+  sourceUrl: string;
+  effectiveAt: string;
+  observedAt: string;
+  freshness: FreshnessState;
+};
+
+export type AssetOpinionReadModel = {
+  symbol: string;
+  assetName: string;
+  stance: string;
+  quantScore: string | null;
+  confidence: string;
+  horizon: string;
+  portfolioWeightPct: string;
+  personalizedAction: string;
+  pillars: AssetOpinionPillarReadModel[];
+  thesis: string | null;
+  bullCase: string | null;
+  baseCase: string | null;
+  bearCase: string | null;
+  invalidationConditions: string[];
+  evidence: AssetOpinionEvidenceReadModel[];
+  dataCoverage: string;
+  freshness: FreshnessState;
+  explanationStatus: "accepted" | "quant_only" | "insufficient_data" | "unavailable";
+  failedGates: string[];
+};
+
 export type BriefingReadModel = {
   id: string;
   localDate: string;
@@ -53,6 +98,7 @@ export type BriefingReadModel = {
   portfolioState: "available" | "missing";
   primary: BriefingItemReadModel[];
   riskAlerts: BriefingItemReadModel[];
+  assetOpinions: AssetOpinionReadModel[];
   sourceRunId: string;
 };
 
