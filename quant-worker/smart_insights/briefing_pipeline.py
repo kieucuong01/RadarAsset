@@ -161,10 +161,9 @@ def _persist_asset_opinion(
     organization_id: str,
     user_id: str,
     run_id: str,
-    briefing_id: str,
-    rank: int,
     as_of: datetime,
-) -> None:
+    risk_tolerance: str,
+) -> dict[str, object]:
     cursor.execute("SELECT id FROM assets WHERE symbol = %s", (opinion.symbol,))
     asset_row = cursor.fetchone()
     asset_id = str(asset_row["id"]) if asset_row is not None else None
@@ -209,6 +208,9 @@ def _persist_asset_opinion(
         if opinion.explanation_status == "unavailable"
         else "insufficient_data"
     )
+    signal_market = opinion.quant.asset.market
+    if signal_market not in {"crypto", "macro", "gold"}:
+        signal_market = "macro"
     cursor.execute(
         """
         INSERT INTO signal_snapshots (
@@ -221,11 +223,10 @@ def _persist_asset_opinion(
           %s::jsonb,%s,%s,NOW()
         )
         ON CONFLICT (idempotency_key) DO NOTHING
-        RETURNING id
         """,
         (
             signal_id,
-            opinion.quant.asset.market,
+            signal_market,
             asset_id,
             as_of,
             opinion.quant.methodology_version,
@@ -238,18 +239,6 @@ def _persist_asset_opinion(
             idempotency_key,
         ),
     )
-    inserted_signal = cursor.fetchone()
-    if inserted_signal is not None:
-        signal_id = str(inserted_signal["id"])
-    else:
-        cursor.execute(
-            "SELECT id FROM signal_snapshots WHERE idempotency_key = %s",
-            (idempotency_key,),
-        )
-        existing_signal = cursor.fetchone()
-        if existing_signal is None:
-            raise RuntimeError("Asset opinion signal idempotency lookup failed.")
-        signal_id = str(existing_signal["id"])
 
     evidence_ids: dict[str, str] = {}
     for fact in opinion.evidence_bundle.evidence:
@@ -307,67 +296,69 @@ def _persist_asset_opinion(
                 (insight_id, list(evidence_ids.values())),
             )
 
-    supporting_ids = [
-        evidence_ids[value]
-        for value in opinion.evidence_bundle.supporting_evidence_ids
-        if value in evidence_ids
-    ]
-    contradicting_ids = [
-        evidence_ids[value]
-        for value in opinion.evidence_bundle.contradicting_evidence_ids
-        if value in evidence_ids
-    ]
-    scenarios = (
-        [
-            opinion.ai_output.bull_case,
-            opinion.ai_output.base_case,
-            opinion.ai_output.bear_case,
-        ]
-        if opinion.ai_output is not None
-        else []
-    )
-    confidence = (
-        Decimal(opinion.ai_output.confidence)
-        if opinion.ai_output is not None
-        else opinion.quant.confidence
-    )
-    cursor.execute(
-        """
-        INSERT INTO daily_briefing_items (
-          id, daily_briefing_id, signal_snapshot_id, ai_insight_id, rank, section,
-          relevance_score, relevance_components, supporting_evidence_ids,
-          contradicting_evidence_ids, affected_assets, time_horizon, risk_scenarios,
-          suggested_check_template, explanation_status, confidence, outcomes, created_at
-        ) VALUES (
-          %s,%s,%s,%s,%s,'asset_opinion',
-          %s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s::jsonb,
-          %s,%s,%s,%s::jsonb,NOW()
+    support_set = set(opinion.evidence_bundle.supporting_evidence_ids)
+    contradict_set = set(opinion.evidence_bundle.contradicting_evidence_ids)
+    evidence = []
+    for fact in opinion.evidence_bundle.evidence:
+        impact = (
+            "supporting"
+            if fact.evidence_id in support_set
+            else "contradicting"
+            if fact.evidence_id in contradict_set
+            else "neutral"
         )
-        """,
-        (
-            str(uuid4()),
-            briefing_id,
-            signal_id,
-            insight_id,
-            rank,
-            min(Decimal("100"), abs(opinion.quant.asset.portfolio_weight) * Decimal("100")),
-            _canonical(
-                {
-                    "exposure": abs(opinion.quant.asset.portfolio_weight) * Decimal("100"),
-                    "dataConfidence": opinion.quant.confidence,
-                }
-            ),
-            _canonical(supporting_ids),
-            _canonical(contradicting_ids),
-            _canonical([opinion.symbol]),
-            opinion.quant.horizon,
-            _canonical(scenarios),
-            opinion.quant.personalized_action,
-            opinion.explanation_status,
-            confidence,
-            _canonical({"rejectionCode": opinion.rejection_code}),
-        ),
-    )
+        evidence.append(
+            {
+                "id": evidence_ids[fact.evidence_id],
+                "metricCode": fact.metric_code,
+                "displayValue": fact.display_value,
+                "delta": None,
+                "percentile": None,
+                "impact": impact,
+                "sourceCode": fact.source_code,
+                "sourceUrl": fact.source_url,
+                "effectiveAt": fact.effective_end,
+                "observedAt": fact.observed_at,
+                "freshness": "stale" if "STALE" in fact.warnings else "fresh",
+            }
+        )
+    ai = opinion.ai_output
+    return {
+        "symbol": opinion.symbol,
+        "assetName": opinion.quant.asset.name,
+        "stance": opinion.quant.stance,
+        "quantScore": opinion.quant.quant_score,
+        "confidence": opinion.quant.confidence,
+        "horizon": opinion.quant.horizon,
+        "portfolioWeightPct": opinion.quant.asset.portfolio_weight * Decimal("100"),
+        "unrealizedReturn": opinion.quant.unrealized_return,
+        "riskTolerance": risk_tolerance,
+        "personalizedAction": opinion.quant.personalized_action,
+        "pillars": [
+            {
+                "code": pillar.code,
+                "score": pillar.score,
+                "weight": pillar.configured_weight,
+                "confidence": pillar.confidence,
+                "factIds": list(pillar.fact_ids),
+                "series": [
+                    {"ts": timestamp, "value": float(value)}
+                    for timestamp, value in pillar.series
+                ],
+            }
+            for pillar in opinion.quant.pillars
+        ],
+        "thesis": ai.thesis if ai else None,
+        "bullCase": ai.bull_case if ai else None,
+        "baseCase": ai.base_case if ai else None,
+        "bearCase": ai.bear_case if ai else None,
+        "invalidationConditions": list(ai.invalidation_conditions) if ai else [],
+        "evidence": evidence,
+        "dataCoverage": opinion.quant.data_coverage,
+        "freshness": opinion.quant.freshness,
+        "explanationStatus": opinion.explanation_status,
+        "failedGates": list(opinion.quant.gate.failed_gates),
+    }
 
 
 class PostgresBriefingRepository:
@@ -503,7 +494,8 @@ class PostgresBriefingRepository:
             )
             cursor.execute(
                 """SELECT a.symbol FROM watchlist_items w JOIN assets a ON a.id = w.asset_id
-                   WHERE w.organization_id = %s AND w.user_id = %s ORDER BY a.symbol""",
+                   WHERE w.organization_id = %s AND w.user_id = %s
+                   ORDER BY w.created_at, w.id""",
                 (organization_id, user_id),
             )
             watchlist = tuple(str(row["symbol"]) for row in cursor.fetchall())
@@ -626,24 +618,37 @@ class PostgresBriefingRepository:
                             suggested_check_template, explanation_status, confidence, outcomes, created_at)
                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s,
                                    %s::jsonb,%s,%s,%s,'{}'::jsonb,NOW())""",
-                        (str(uuid4()), briefing_id, item.signal_id, insight_id, item.rank, item.section,
+                        (str(uuid4()), briefing_id, item.signal_id, insight_id, item.rank,
+                         "primary_change" if item.section == "primary" else "risk_alert",
                          item.relevance, _canonical(item.relevance_components), _canonical(evidence_ids),
                          _canonical([]), _canonical(item.evidence_bundle.affected_assets),
                          item.ai_output.time_horizon if item.ai_output else draft.preferences.investment_horizon,
                          _canonical(item.ai_output.risk_scenarios if item.ai_output else ()),
                         item.suggested_check_template, item.explanation_status, item.confidence),
                     )
-                for offset, opinion in enumerate(draft.asset_opinions, start=1):
-                    _persist_asset_opinion(
+                asset_opinion_snapshots = []
+                for opinion in draft.asset_opinions:
+                    asset_opinion_snapshots.append(_persist_asset_opinion(
                         cursor,
                         opinion=opinion,
                         organization_id=draft.organization_id,
                         user_id=draft.user_id,
                         run_id=run_id,
-                        briefing_id=briefing_id,
-                        rank=len(draft.items) + offset,
                         as_of=draft.as_of,
-                    )
+                        risk_tolerance=draft.preferences.risk_tolerance,
+                    ))
+                cursor.execute(
+                    "UPDATE daily_briefings SET market_summary = %s::jsonb WHERE id = %s",
+                    (
+                        _canonical(
+                            {
+                                "portfolioState": draft.portfolio_state,
+                                "assetOpinions": asset_opinion_snapshots,
+                            }
+                        ),
+                        briefing_id,
+                    ),
+                )
         return draft.to_record(briefing_id, revision)
 
     def load_briefing(self, briefing_id: str) -> BriefingRecord:

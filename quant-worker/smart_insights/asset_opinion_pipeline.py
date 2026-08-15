@@ -183,19 +183,23 @@ def build_asset_opinion_drafts(
             )
             continue
 
-        generated = synthesizer(
-            bundle,
-            deterministic_action=quant.personalized_action,
-            locale=inputs.preferences.locale,
-            model=os.getenv("SMART_INSIGHTS_AI_MODEL"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout_seconds=int(os.getenv("SMART_INSIGHTS_AI_TIMEOUT_SECONDS", "30")),
-        )
-        verified = (
-            verify_asset_opinion(generated, bundle, quant.personalized_action)
-            if isinstance(generated, AssetOpinionAiOutput)
-            else generated
-        )
+        try:
+            generated = synthesizer(
+                bundle,
+                deterministic_action=quant.personalized_action,
+                locale=inputs.preferences.locale,
+                model=os.getenv("SMART_INSIGHTS_AI_MODEL"),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout_seconds=int(os.getenv("SMART_INSIGHTS_AI_TIMEOUT_SECONDS", "30")),
+            )
+            verified = (
+                verify_asset_opinion(generated, bundle, quant.personalized_action)
+                if isinstance(generated, AssetOpinionAiOutput)
+                else generated
+            )
+        except Exception:
+            generated = AiUnavailable("AI_PROCESSING_FAILED")
+            verified = generated
         if isinstance(verified, AssetOpinionGroundingAccepted):
             status = "accepted"
             output = verified.output

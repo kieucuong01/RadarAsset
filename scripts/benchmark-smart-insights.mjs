@@ -33,6 +33,9 @@ export function assertBudgets(result) {
   if (result.gzipBytes > BUDGETS.gzipBytes) {
     failures.push(`gzip ${result.gzipBytes} > ${BUDGETS.gzipBytes}`);
   }
+  if (Number.isFinite(result.assetCount) && result.assetCount > 25) {
+    failures.push(`asset count ${result.assetCount} > 25`);
+  }
   if (failures.length > 0) throw new Error(failures.join(", "));
 }
 
@@ -42,22 +45,31 @@ export async function benchmark({ url, cookie, iterations = 20, fetchImpl = fetc
     throw new RangeError("iterations must be an integer from 1 to 100");
   }
 
+  const headers = cookie
+    ? { Accept: "application/json", Cookie: cookie }
+    : { Accept: "application/json" };
+  const request = async () => {
+    const response = await fetchImpl(url, { headers });
+    if (!response.ok) throw new Error(`benchmark HTTP ${response.status}`);
+    return response.text();
+  };
+
+  await request();
   const samples = [];
   let body = "";
   for (let index = 0; index < iterations; index += 1) {
     const started = performance.now();
-    const response = await fetchImpl(url, {
-      headers: cookie
-        ? { Accept: "application/json", Cookie: cookie }
-        : { Accept: "application/json" },
-    });
-    if (!response.ok) throw new Error(`benchmark HTTP ${response.status}`);
-    body = await response.text();
+    body = await request();
     samples.push(performance.now() - started);
   }
 
+  const parsed = JSON.parse(body);
+  const assetCount = Array.isArray(parsed?.assetOpinions) ? parsed.assetOpinions.length : 0;
+
   return {
     iterations,
+    requestCount: iterations + 1,
+    assetCount,
     p50Ms: Math.round(percentile(samples, 0.5)),
     p95Ms: Math.round(percentile(samples, 0.95)),
     bytes: Buffer.byteLength(body),
@@ -74,5 +86,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     iterations: 20,
   });
   console.log(JSON.stringify(result));
-  if (process.env.SMART_INSIGHTS_BENCH_ENFORCE === "1") assertBudgets(result);
+  assertBudgets(result);
 }

@@ -12,25 +12,44 @@ from .asset_opinion_quant import canonical_symbol
 
 
 BAR_QUERY = """
-WITH ranked AS (
-  SELECT bar.id,
+WITH candidate_versions AS (
+  SELECT version.id AS dataset_version_id,
          asset.symbol AS asset_symbol,
-         bar.ts,
-         bar.close,
-         version.published_at AT TIME ZONE current_setting('TIMEZONE') AS observed_at,
+         version.published_at,
          ROW_NUMBER() OVER (
-           PARTITION BY asset.symbol
-           ORDER BY bar.ts DESC, bar.ingested_at DESC, bar.id
-         ) AS row_number
-  FROM dataset_bars bar
-  JOIN dataset_versions version ON version.id = bar.dataset_version_id
+           PARTITION BY asset.id
+           ORDER BY
+             CASE
+               WHEN asset.market = 'vn_equity' AND dataset.adjustment_policy = 'total_return' THEN 0
+               WHEN dataset.adjustment_policy = 'raw' THEN 1
+               ELSE 2
+             END,
+             version.published_at DESC,
+             version.version DESC,
+             version.id
+         ) AS dataset_rank
+  FROM dataset_versions version
   JOIN datasets dataset ON dataset.id = version.dataset_id
   JOIN assets asset ON asset.id = dataset.asset_id
   WHERE asset.symbol = ANY(%s)
     AND dataset.timeframe = '1d'
+    AND dataset.adjustment_policy IN ('raw', 'total_return')
     AND version.is_active = true
     AND version.quality_status IN ('passed', 'warning')
     AND version.published_at <= (%s AT TIME ZONE current_setting('TIMEZONE'))
+), ranked AS (
+  SELECT bar.id,
+         selected.asset_symbol,
+         bar.ts,
+         bar.close,
+         selected.published_at AT TIME ZONE current_setting('TIMEZONE') AS observed_at,
+         ROW_NUMBER() OVER (
+           PARTITION BY selected.asset_symbol
+           ORDER BY bar.ts DESC, bar.ingested_at DESC, bar.id
+         ) AS row_number
+  FROM candidate_versions selected
+  JOIN dataset_bars bar ON bar.dataset_version_id = selected.dataset_version_id
+  WHERE selected.dataset_rank = 1
     AND bar.ts <= %s
     AND bar.ingested_at <= (%s AT TIME ZONE current_setting('TIMEZONE'))
 )
@@ -150,22 +169,26 @@ def load_asset_opinion_market_data(
         cursor.execute(FACT_QUERY, (list(canonical_assets), as_of, as_of, as_of))
         raw_facts = tuple(cursor.fetchall())
 
-    bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
+    bars_by_symbol: dict[str, dict[datetime, MarketBar]] = defaultdict(dict)
     for row in raw_bars:
         ts = _aware(row["ts"])
         observed_at = _aware(row["observed_at"])
         symbol = canonical_symbol(str(row["asset_symbol"]))
         if symbol not in requested or ts > as_of or observed_at > as_of:
             continue
-        bars_by_symbol[symbol].append(
-            MarketBar(
-                id=str(row["id"]),
-                symbol=symbol,
-                ts=ts,
-                close=Decimal(str(row["close"])),
-                observed_at=observed_at,
-            )
+        candidate = MarketBar(
+            id=str(row["id"]),
+            symbol=symbol,
+            ts=ts,
+            close=Decimal(str(row["close"])),
+            observed_at=observed_at,
         )
+        current = bars_by_symbol[symbol].get(ts)
+        if current is None or (candidate.observed_at, candidate.id) > (
+            current.observed_at,
+            current.id,
+        ):
+            bars_by_symbol[symbol][ts] = candidate
 
     direct_facts: dict[str, list[QuantFact]] = defaultdict(list)
     global_facts: list[QuantFact] = []
@@ -208,7 +231,7 @@ def load_asset_opinion_market_data(
     bars_output = tuple(
         (
             symbol,
-            tuple(sorted(bars_by_symbol.get(symbol, ()), key=lambda row: (row.ts, row.id))),
+            tuple(sorted(bars_by_symbol.get(symbol, {}).values(), key=lambda row: (row.ts, row.id))),
         )
         for symbol in requested
     )

@@ -43,18 +43,18 @@ for (const [command, args] of [
 }
 
 const python = resolvePythonExecutable(repoRoot, env, existsSync);
-const children = [
-  spawn(
-    process.execPath,
-    [
+const productionMode = process.env.E2E_PRODUCTION === "1";
+const nextArgs = productionMode
+  ? [path.join(repoRoot, "node_modules", "next", "dist", "bin", "next"), "start", "-p", "3102"]
+  : [
       path.join(repoRoot, "node_modules", "next", "dist", "bin", "next"),
       "dev",
       "-p",
       "3102",
       "--webpack",
-    ],
-    { cwd: repoRoot, env, stdio: "inherit", windowsHide: true },
-  ),
+    ];
+const children = [
+  spawn(process.execPath, nextArgs, { cwd: repoRoot, env, stdio: "inherit", windowsHide: true }),
   spawn(python, [path.join(repoRoot, "quant-worker", "worker.py")], {
     cwd: repoRoot,
     env,

@@ -57,6 +57,16 @@ function dateLabel(value: string, locale: Locale) {
   }).format(new Date(value));
 }
 
+function percentLabel(value: string | null, locale: Locale, multiplier = 1) {
+  if (value == null) return "—";
+  const parsed = Number(value) * multiplier;
+  return Number.isFinite(parsed)
+    ? `${new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
+        maximumFractionDigits: 1,
+      }).format(parsed)}%`
+    : "—";
+}
+
 function chartRows(opinion: AssetOpinionModel) {
   const rows = new Map<string, Record<string, string | number>>();
   for (const pillar of opinion.pillars) {
@@ -190,10 +200,12 @@ function Charts({ opinion, locale }: { opinion: AssetOpinionModel; locale: Local
 
 export function AssetOpinionDetail({
   opinion,
+  portfolioState,
   locale,
   onEvidence,
 }: {
   opinion: AssetOpinionModel;
+  portfolioState: "available" | "missing";
   locale: Locale;
   onEvidence: (id: string) => void;
 }) {
@@ -202,7 +214,7 @@ export function AssetOpinionDetail({
     opinion.explanationStatus === "insufficient_data" ||
     opinion.explanationStatus === "unavailable";
   return (
-    <Card className="min-w-0 border-primary/20 shadow-none">
+    <Card className="min-w-0 border-primary/20 shadow-none" data-testid="asset-opinion-detail">
       <CardHeader className="gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -226,52 +238,110 @@ export function AssetOpinionDetail({
             <p className="text-xs text-muted-foreground">Quant score</p>
           </div>
         </div>
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
-            <div className="flex min-w-0 flex-col gap-2">
-              <p className="font-semibold">{actionLabel(opinion.personalizedAction, locale)}</p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section
+            className="rounded-xl border bg-background/60 p-4"
+            aria-labelledby="general-quant-opinion"
+          >
+            <div className="flex items-center gap-2 text-primary">
+              <Sparkles aria-hidden="true" />
+              <h3 id="general-quant-opinion" className="font-semibold text-foreground">
+                {locale === "vi" ? "Quan điểm định lượng chung" : "General quant view"}
+              </h3>
+            </div>
+            <div className="mt-3 text-sm leading-6 text-muted-foreground">
               {quantOnly ? (
-                <p className="text-sm text-muted-foreground">
+                <p>
                   {locale === "vi"
                     ? "Chỉ có quan điểm định lượng; phần diễn giải AI chưa vượt qua kiểm tra bằng chứng."
                     : "Quant view only; the AI explanation did not pass evidence verification."}
                 </p>
               ) : null}
               {insufficient ? (
-                <p className="text-sm text-muted-foreground">
+                <p>
                   {locale === "vi"
                     ? "Chưa đủ bằng chứng để đưa ra quan điểm hoặc hành động."
                     : "Insufficient evidence for a stance or action."}
                 </p>
               ) : null}
-              {!quantOnly && !insufficient ? (
-                <p className="text-sm leading-6 text-muted-foreground">{opinion.thesis}</p>
-              ) : null}
+              {!quantOnly && !insufficient ? <p>{opinion.thesis}</p> : null}
             </div>
-          </div>
+          </section>
+          <section
+            className="rounded-xl border border-primary/20 bg-primary/5 p-4"
+            aria-labelledby="portfolio-opinion"
+          >
+            <div className="flex items-center gap-2 text-primary">
+              <ShieldAlert aria-hidden="true" />
+              <h3 id="portfolio-opinion" className="font-semibold text-foreground">
+                {locale === "vi" ? "Quan điểm theo danh mục" : "Portfolio-aware guidance"}
+              </h3>
+            </div>
+            <p className="mt-3 font-semibold">{actionLabel(opinion.personalizedAction, locale)}</p>
+            {portfolioState === "missing" ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {locale === "vi"
+                  ? "Chưa có danh mục để tính mức phơi nhiễm; hành động này chỉ dùng làm điểm cần theo dõi."
+                  : "No portfolio is available to calculate exposure; treat this action as a review point only."}
+              </p>
+            ) : null}
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {locale === "vi" ? "Tỷ trọng hiện tại" : "Current weight"}
+                </dt>
+                <dd className="mt-1 font-mono tabular-nums">
+                  {portfolioState === "available"
+                    ? percentLabel(opinion.portfolioWeightPct, locale)
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {locale === "vi" ? "Lãi/lỗ chưa thực hiện" : "Unrealized return"}
+                </dt>
+                <dd className="mt-1 font-mono tabular-nums">
+                  {portfolioState === "available"
+                    ? percentLabel(opinion.unrealizedReturn, locale, 100)
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Horizon</dt>
+                <dd className="mt-1">{opinion.horizon}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {locale === "vi" ? "Khẩu vị rủi ro" : "Risk tolerance"}
+                </dt>
+                <dd className="mt-1 capitalize">{opinion.riskTolerance}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-6">
         <Charts opinion={opinion} locale={locale} />
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Scenario
-            kind="bull"
-            title={locale === "vi" ? "Kịch bản tích cực" : "Bull case"}
-            body={opinion.bullCase}
-          />
-          <Scenario
-            kind="base"
-            title={locale === "vi" ? "Kịch bản cơ sở" : "Base case"}
-            body={opinion.baseCase}
-          />
-          <Scenario
-            kind="bear"
-            title={locale === "vi" ? "Kịch bản tiêu cực" : "Bear case"}
-            body={opinion.bearCase}
-          />
-        </div>
-        {opinion.invalidationConditions.length ? (
+        {opinion.explanationStatus === "accepted" ? (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Scenario
+              kind="bull"
+              title={locale === "vi" ? "Kịch bản tích cực" : "Bull case"}
+              body={opinion.bullCase}
+            />
+            <Scenario
+              kind="base"
+              title={locale === "vi" ? "Kịch bản cơ sở" : "Base case"}
+              body={opinion.baseCase}
+            />
+            <Scenario
+              kind="bear"
+              title={locale === "vi" ? "Kịch bản tiêu cực" : "Bear case"}
+              body={opinion.bearCase}
+            />
+          </div>
+        ) : null}
+        {opinion.explanationStatus === "accepted" && opinion.invalidationConditions.length ? (
           <section className="rounded-xl border border-bear/20 bg-bear/5 p-4">
             <div className="flex items-center gap-2 font-semibold text-bear">
               <ShieldAlert aria-hidden="true" />{" "}

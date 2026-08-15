@@ -14,6 +14,8 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
     confidence: "72.00",
     horizon: "WEEKS_1_4",
     portfolioWeightPct: "18.00",
+    unrealizedReturn: "0.12",
+    riskTolerance: "moderate",
     personalizedAction: "HOLD",
     pillars: [
       {
@@ -59,12 +61,21 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
 describe("AssetOpinions", () => {
   it("renders table, mobile cards, three scenarios, and numerical evidence", () => {
     const html = renderToStaticMarkup(
-      <AssetOpinions opinions={[opinion()]} locale="vi" onEvidence={() => undefined} />,
+      <AssetOpinions
+        opinions={[opinion()]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
     );
     expect(html).toContain("Quan điểm AI theo tài sản");
     expect(html).toContain("hidden md:block");
     expect(html).toContain("md:hidden");
     expect(html).toContain("Kịch bản cơ sở");
+    expect(html).toContain("Quan điểm định lượng chung");
+    expect(html).toContain("Quan điểm theo danh mục");
+    expect(html).toContain("Tỷ trọng hiện tại");
+    expect(html).toContain("Khẩu vị rủi ro");
     expect(html).toContain("Nguồn &amp; độ mới");
     expect(html).toContain("1.00");
     expect(html).not.toContain("animationDuration");
@@ -90,18 +101,39 @@ describe("AssetOpinions", () => {
             failedGates: ["SOURCE_FAMILIES_MINIMUM_2"],
           }),
         ]}
+        portfolioState="available"
         locale="vi"
         onEvidence={() => undefined}
       />,
     );
     expect(html).toContain("Chỉ có quan điểm định lượng");
     expect(html).toContain("Chưa đủ bằng chứng");
+    expect(html).not.toContain("Dòng tiền 1.00 tiếp tục hỗ trợ");
     expect(html).not.toContain("Dữ liệu mẫu");
+  });
+
+  it("distinguishes a missing portfolio from a real zero-weight asset", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[opinion({ portfolioWeightPct: "0" })]}
+        portfolioState="missing"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Chưa có danh mục để tính mức phơi nhiễm");
+    expect(html).toContain("Tỷ trọng hiện tại");
   });
 
   it("renders a useful empty state without fetching", () => {
     const html = renderToStaticMarkup(
-      <AssetOpinions opinions={[]} locale="vi" onEvidence={() => undefined} />,
+      <AssetOpinions
+        opinions={[]}
+        portfolioState="missing"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
     );
     expect(html).toContain("Chưa có quan điểm theo tài sản");
   });

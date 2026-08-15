@@ -102,6 +102,9 @@ def test_batch_loader_uses_two_queries_for_one_or_twenty_five_assets() -> None:
     assert one.execute_count == 2
     assert many.execute_count == 2
     assert "ROW_NUMBER() OVER" in many.queries[0]
+    assert "dataset.adjustment_policy IN ('raw', 'total_return')" in many.queries[0]
+    assert "PARTITION BY asset.id" in many.queries[0]
+    assert "selected.dataset_rank = 1" in many.queries[0]
     assert "jsonb_array_elements" in many.queries[1]
 
 
@@ -135,3 +138,13 @@ def test_batch_loader_rejects_more_than_twenty_five_opinion_assets() -> None:
             ("VNINDEX",),
             NOW,
         )
+
+
+def test_batch_loader_deduplicates_same_symbol_and_trading_date() -> None:
+    first = bar_row("BTC", 1)
+    replacement = {**bar_row("BTC", 2), "observed_at": NOW}
+    connection = CountingConnection(bar_rows=[first, replacement])
+
+    result = load_asset_opinion_market_data(connection, ("BTC",), ("BTC",), NOW)
+
+    assert tuple(row.id for row in result.bars_for("BTC")) == ("bar-BTC-2",)

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from inspect import getsource
 
 from smart_insights.asset_opinion_contracts import (
     AssetCandidate,
@@ -62,8 +63,8 @@ class EmptySignalConnection:
         return EmptySignalCursor(self)
 
 
-def draft():
-    asset = AssetCandidate("BTC", "Bitcoin", "crypto", Decimal("0.18"), 0)
+def draft(asset_market: str = "crypto"):
+    asset = AssetCandidate("BTC", "Bitcoin", asset_market, Decimal("0.18"), 0)
     bars = tuple(
         MarketBar(
             f"bar-{index}",
@@ -122,31 +123,29 @@ def test_persistence_writes_existing_models_and_exactly_one_asset() -> None:
     cursor = FakeCursor()
     opinion = draft()
 
-    _persist_asset_opinion(
+    snapshot = _persist_asset_opinion(
         cursor,
         opinion=opinion,
         organization_id="organization",
         user_id="user",
         run_id="33333333-3333-3333-3333-333333333333",
-        briefing_id="44444444-4444-4444-4444-444444444444",
-        rank=1,
         as_of=NOW,
+        risk_tolerance="moderate",
     )
 
     sql = "\n".join(query for query, _ in cursor.calls)
     assert "INSERT INTO signal_snapshots" in sql
     assert "INSERT INTO evidence_items" in sql
     assert "INSERT INTO ai_insights" in sql
-    assert "INSERT INTO daily_briefing_items" in sql
+    assert "INSERT INTO daily_briefing_items" not in sql
     assert "INSERT INTO research_runs" not in sql
-
-    daily_parameters = next(
-        parameters
-        for query, parameters in cursor.calls
-        if "INSERT INTO daily_briefing_items" in query
-    )
-    assert '"BTC"' in str(daily_parameters)
-    assert '"kronos"' not in str(daily_parameters).casefold()
+    assert "SELECT id FROM signal_snapshots" not in sql
+    assert snapshot["symbol"] == "BTC"
+    assert snapshot["explanationStatus"] == "accepted"
+    assert snapshot["evidence"][0]["sourceCode"] == "farside"
+    assert snapshot["riskTolerance"] == "moderate"
+    assert snapshot["unrealizedReturn"] is None
+    assert "kronos" not in str(snapshot).casefold()
 
 
 def test_signal_loader_does_not_reconsume_asset_opinion_snapshots() -> None:
@@ -155,3 +154,32 @@ def test_signal_loader_does_not_reconsume_asset_opinion_snapshots() -> None:
 
     assert repository.load_briefing_signals("organization", "user", as_of=NOW) == ()
     assert "s.signal_type <> 'asset_opinion'" in connection.queries[0]
+
+
+def test_persistence_maps_non_smart_insights_markets_to_macro() -> None:
+    cursor = FakeCursor()
+
+    _persist_asset_opinion(
+        cursor,
+        opinion=draft("equity"),
+        organization_id="organization",
+        user_id="user",
+        run_id="33333333-3333-3333-3333-333333333333",
+        as_of=NOW,
+        risk_tolerance="moderate",
+    )
+
+    signal_insert = next(
+        parameters
+        for query, parameters in cursor.calls
+        if "INSERT INTO signal_snapshots" in query
+    )
+    assert isinstance(signal_insert, tuple)
+    assert signal_insert[1] == "macro"
+
+
+def test_personalization_preserves_watchlist_creation_order() -> None:
+    source = getsource(PostgresBriefingRepository.load_personalization)
+
+    assert "ORDER BY w.created_at, w.id" in source
+    assert "ORDER BY a.symbol" not in source

@@ -73,6 +73,8 @@ export type AssetOpinionReadModel = {
   confidence: string;
   horizon: string;
   portfolioWeightPct: string;
+  unrealizedReturn: string | null;
+  riskTolerance: "conservative" | "moderate" | "aggressive";
   personalizedAction: string;
   pillars: AssetOpinionPillarReadModel[];
   thesis: string | null;

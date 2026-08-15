@@ -25,7 +25,53 @@ describe("Smart Insights read bounds", () => {
     prisma.evidenceItem.findMany.mockResolvedValue([]);
   });
 
-  it("loads asset opinions and their evidence with a constant two-query read", async () => {
+  it("loads 25 embedded asset opinions with one tenant-scoped briefing query", async () => {
+    const storedOpinion = {
+      symbol: "BTC",
+      assetName: "Bitcoin",
+      stance: "CONSTRUCTIVE",
+      quantScore: "61.25",
+      confidence: "76",
+      horizon: "WEEKS_1_4",
+      portfolioWeightPct: "18",
+      unrealizedReturn: "0.12",
+      riskTolerance: "moderate",
+      personalizedAction: "HOLD",
+      pillars: [
+        {
+          code: "trend",
+          score: "70",
+          weight: "0.35",
+          confidence: "80",
+          factIds: ["fact-a"],
+          series: [{ ts: "2026-08-14T00:00:00+00:00", value: 65 }],
+        },
+      ],
+      thesis: "BTC duy tri xu huong tich cuc.",
+      bullCase: "Dong tien ETF tiep tuc duong.",
+      baseCase: "Kich ban co so duoc dong tien ho tro.",
+      bearCase: "Dong tien ETF dao chieu.",
+      invalidationConditions: ["Gia mat MA50."],
+      evidence: [
+        {
+          id: "e-support",
+          metricCode: "crypto.etf.net_flow_usd",
+          displayValue: "$120.00m",
+          delta: null,
+          percentile: null,
+          impact: "supporting",
+          sourceCode: "farside",
+          sourceUrl: "https://farside.co.uk",
+          effectiveAt: "2026-08-14T00:00:00+00:00",
+          observedAt: "2026-08-15T00:00:00+00:00",
+          freshness: "fresh",
+        },
+      ],
+      dataCoverage: "0.8",
+      freshness: "fresh",
+      explanationStatus: "accepted",
+      failedGates: [],
+    };
     prisma.dailyBriefing.findFirst.mockResolvedValue({
       id: "briefing-a",
       effectiveDate: new Date("2026-08-15T00:00:00Z"),
@@ -37,83 +83,9 @@ describe("Smart Insights read bounds", () => {
       portfolioSnapshot: { portfolioState: "available" },
       researchRunId: "run-a",
       fingerprint: "fingerprint-a",
-      items: [
-        {
-          id: "item-btc",
-          signalSnapshotId: "signal-btc",
-          section: "asset_opinion",
-          relevanceScore: { toString: () => "18" },
-          relevanceComponents: {},
-          supportingEvidenceIds: ["e-support"],
-          contradictingEvidenceIds: ["e-risk"],
-          affectedAssets: ["BTC"],
-          timeHorizon: "WEEKS_1_4",
-          riskScenarios: [],
-          suggestedCheckTemplate: "HOLD_REVIEW_RISK",
-          explanationStatus: "accepted",
-          confidence: { toString: () => "76" },
-          outcomes: {},
-          signalSnapshot: {
-            market: "crypto",
-            signalType: "asset_opinion",
-            score: { toString: () => "61.25" },
-            label: "CONSTRUCTIVE",
-            inputs: {
-              assetName: "Bitcoin",
-              portfolioWeightPct: "18",
-              freshness: "fresh",
-              gate: { failed_gates: [] },
-              pillars: [
-                {
-                  code: "trend",
-                  score: "70",
-                  configured_weight: "0.35",
-                  confidence: "80",
-                  fact_ids: ["fact-a"],
-                  series: [["2026-08-14T00:00:00+00:00", "65"]],
-                },
-              ],
-            },
-            asset: { symbol: "BTC", name: "Bitcoin" },
-          },
-          aiInsight: {
-            title: "BTC duy tri xu huong tich cuc.",
-            summary: "Kich ban co so duoc dong tien ho tro.",
-            catalyst: "Dong tien ETF tiep tuc duong.",
-            risk: JSON.stringify({
-              bearCase: "Dong tien ETF dao chieu.",
-              invalidationConditions: ["Gia mat MA50."],
-            }),
-          },
-        },
-      ],
+      marketSummary: { assetOpinions: Array.from({ length: 25 }, () => storedOpinion) },
+      items: [],
     });
-    prisma.evidenceItem.findMany.mockResolvedValue([
-      {
-        id: "e-support",
-        excerpt: JSON.stringify({
-          metric_code: "crypto.etf.net_flow_usd",
-          display_value: "$120.00m",
-          source_code: "farside",
-          source_url: "https://farside.co.uk",
-          effective_end: "2026-08-14T00:00:00+00:00",
-          observed_at: "2026-08-15T00:00:00+00:00",
-          warnings: [],
-        }),
-      },
-      {
-        id: "e-risk",
-        excerpt: JSON.stringify({
-          metric_code: "crypto.onchain.whale_balance",
-          display_value: "-2.10%",
-          source_code: "bitinfocharts",
-          source_url: "https://bitinfocharts.com",
-          effective_end: "2026-08-14T00:00:00+00:00",
-          observed_at: "2026-08-15T00:00:00+00:00",
-          warnings: ["STALE"],
-        }),
-      },
-    ]);
 
     const result = await loadBriefingEnvelope(
       { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
@@ -121,28 +93,28 @@ describe("Smart Insights read bounds", () => {
     );
 
     expect(result?.fingerprint).toBe("fingerprint-a");
-    expect(result?.briefing.assetOpinions).toEqual([
+    expect(result?.briefing.assetOpinions).toHaveLength(25);
+    expect(result?.briefing.assetOpinions[0]).toEqual(
       expect.objectContaining({
         symbol: "BTC",
         assetName: "Bitcoin",
         stance: "CONSTRUCTIVE",
         quantScore: "61.25",
-        personalizedAction: "HOLD_REVIEW_RISK",
+        personalizedAction: "HOLD",
         explanationStatus: "accepted",
         bullCase: "Dong tien ETF tiep tuc duong.",
         bearCase: "Dong tien ETF dao chieu.",
         invalidationConditions: ["Gia mat MA50."],
         evidence: [
           expect.objectContaining({ id: "e-support", impact: "supporting", freshness: "fresh" }),
-          expect.objectContaining({ id: "e-risk", impact: "contradicting", freshness: "stale" }),
         ],
       }),
-    ]);
+    );
     expect(prisma.dailyBriefing.findFirst).toHaveBeenCalledOnce();
-    expect(prisma.evidenceItem.findMany).toHaveBeenCalledOnce();
+    expect(prisma.evidenceItem.findMany).not.toHaveBeenCalled();
   });
 
-  it("fails only the malformed asset opinion and preserves the briefing", async () => {
+  it("fails only a quant-only asset carrying stale AI prose", async () => {
     prisma.dailyBriefing.findFirst.mockResolvedValue({
       id: "briefing-b",
       effectiveDate: new Date("2026-08-15T00:00:00Z"),
@@ -154,38 +126,41 @@ describe("Smart Insights read bounds", () => {
       portfolioSnapshot: {},
       researchRunId: "run-b",
       fingerprint: "fingerprint-b",
-      items: [
-        {
-          id: "item-bad",
-          signalSnapshotId: "signal-bad",
-          section: "asset_opinion",
-          relevanceScore: { toString: () => "0" },
-          relevanceComponents: {},
-          supportingEvidenceIds: [],
-          contradictingEvidenceIds: [],
-          affectedAssets: ["XAU"],
-          timeHorizon: "WEEKS_1_4",
-          riskScenarios: [],
-          suggestedCheckTemplate: "NO_ACTION_INSUFFICIENT_DATA",
-          explanationStatus: "accepted",
-          confidence: { toString: () => "0" },
-          outcomes: {},
-          signalSnapshot: {
-            market: "gold",
-            signalType: "asset_opinion",
-            score: null,
-            label: "INSUFFICIENT_DATA",
-            inputs: { pillars: "malformed" },
-            asset: { symbol: "XAU", name: "Gold" },
+      marketSummary: {
+        assetOpinions: [
+          {
+            symbol: "XAU",
+            assetName: "Gold",
+            stance: "NEUTRAL",
+            quantScore: "0",
+            confidence: "50",
+            horizon: "WEEKS_1_4",
+            portfolioWeightPct: "0",
+            unrealizedReturn: null,
+            riskTolerance: "moderate",
+            personalizedAction: "HOLD",
+            pillars: [],
+            thesis: "Stale AI prose",
+            bullCase: null,
+            baseCase: null,
+            bearCase: null,
+            invalidationConditions: [],
+            evidence: [],
+            dataCoverage: "0.8",
+            freshness: "fresh",
+            explanationStatus: "quant_only",
+            failedGates: [],
           },
-          aiInsight: null,
-        },
-      ],
+        ],
+      },
+      items: [],
     });
 
-    const result = await loadBriefingEnvelope(
-      { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
-    );
+    const result = await loadBriefingEnvelope({
+      organizationId: "org-a",
+      userId: "user-a",
+      role: "viewer",
+    } as never);
 
     expect(result?.briefing.assetOpinions).toEqual([
       expect.objectContaining({

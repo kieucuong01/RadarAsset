@@ -29,7 +29,9 @@ describe("Smart Insights briefing contract", () => {
           confidence: "76",
           horizon: "WEEKS_1_4",
           portfolioWeightPct: "18",
-          personalizedAction: "HOLD_REVIEW_RISK",
+          unrealizedReturn: "0.12",
+          riskTolerance: "moderate",
+          personalizedAction: "HOLD",
           pillars: [
             {
               code: "trend",
@@ -73,5 +75,94 @@ describe("Smart Insights briefing contract", () => {
 
   it("rejects leaked research-run internals", () => {
     expect(() => briefingSchema.parse({ ...base, assetOpinions: [], prompt: "secret" })).toThrow();
+  });
+
+  it("rejects unknown actions", () => {
+    const opinion = {
+      symbol: "BTC",
+      assetName: "Bitcoin",
+      stance: "CONSTRUCTIVE",
+      quantScore: "61.25",
+      confidence: "76",
+      horizon: "WEEKS_1_4",
+      portfolioWeightPct: "18",
+      unrealizedReturn: null,
+      riskTolerance: "moderate",
+      personalizedAction: "BUY_NOW",
+      pillars: [],
+      thesis: null,
+      bullCase: null,
+      baseCase: null,
+      bearCase: null,
+      invalidationConditions: [],
+      evidence: [],
+      dataCoverage: "0.8",
+      freshness: "fresh",
+      explanationStatus: "quant_only",
+      failedGates: [],
+    };
+
+    expect(() => briefingSchema.parse({ ...base, assetOpinions: [opinion] })).toThrow();
+    expect(() =>
+      briefingSchema.parse({
+        ...base,
+        assetOpinions: [{ ...opinion, personalizedAction: "HOLD", thesis: "Stale prose" }],
+      }),
+    ).toThrow(/Non-accepted opinions cannot contain AI prose/);
+  });
+
+  it("rejects accepted opinions with stale data or nested extra fields", () => {
+    const parsed = briefingSchema.parse({
+      ...base,
+      assetOpinions: [
+        {
+          symbol: "BTC",
+          assetName: "Bitcoin",
+          stance: "CONSTRUCTIVE",
+          quantScore: "61.25",
+          confidence: "76",
+          horizon: "WEEKS_1_4",
+          portfolioWeightPct: "18",
+          unrealizedReturn: null,
+          riskTolerance: "moderate",
+          personalizedAction: "HOLD",
+          pillars: [],
+          thesis: "Thesis",
+          bullCase: "Bull",
+          baseCase: "Base",
+          bearCase: "Bear",
+          invalidationConditions: ["Invalidation"],
+          evidence: [
+            {
+              id: "e-a",
+              metricCode: "trend.return_20d",
+              displayValue: "1%",
+              delta: null,
+              percentile: null,
+              impact: "supporting",
+              sourceCode: "market-bars",
+              sourceUrl: "https://example.test/source",
+              effectiveAt: "2026-08-14T00:00:00Z",
+              observedAt: "2026-08-15T00:00:00Z",
+              freshness: "fresh",
+            },
+          ],
+          dataCoverage: "0.8",
+          freshness: "fresh",
+          explanationStatus: "accepted",
+          failedGates: [],
+        },
+      ],
+    }).assetOpinions[0];
+
+    expect(() =>
+      briefingSchema.parse({ ...base, assetOpinions: [{ ...parsed, freshness: "stale" }] }),
+    ).toThrow(/Accepted data must be fresh/);
+    expect(() =>
+      briefingSchema.parse({
+        ...base,
+        assetOpinions: [{ ...parsed, evidence: [{ ...parsed.evidence[0], unexpected: true }] }],
+      }),
+    ).toThrow();
   });
 });

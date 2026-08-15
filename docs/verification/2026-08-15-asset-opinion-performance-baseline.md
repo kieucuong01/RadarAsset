@@ -63,3 +63,71 @@ captured at baseline. No synthetic success response was substituted.
 Final verification must use an authenticated maximum-universe briefing. When a baseline measurement
 was unavailable, the final result is evaluated against the absolute budget and the reason for the
 missing baseline remains visible rather than being backfilled with an estimate.
+
+## Final verification
+
+Final branch: `feat/asset-opinion-design`
+
+Measurement mode:
+
+- Optimized Next.js production build served locally with the isolated test database.
+- Authenticated browser session created through the real sign-up and workspace flow.
+- The briefing contains a deterministic 25-asset E2E fixture. These figures prove the application
+  path and performance budget; they are not evidence of live market-provider freshness.
+- The endpoint benchmark performs one excluded warm-up followed by 20 measured requests.
+
+```powershell
+$env:E2E_PRODUCTION='1'
+npm run test:e2e -- e2e/smart-insights-asset-opinions.spec.ts
+```
+
+Result: 2 tests passed (desktop and mobile).
+
+| Metric | Baseline | Final | Budget | Result |
+|---|---:|---:|---:|---|
+| Briefing assets | Not captured | 25 | At most 25 | Pass |
+| Briefing endpoint p50 | Not captured | 17 ms | Informational | Recorded |
+| Briefing endpoint p95 | Not captured | 37 ms | At most 200 ms | Pass |
+| Briefing response bytes | Not captured | 77,808 B | At most 250,000 B | Pass |
+| Briefing gzip bytes | Not captured | 4,169 B | At most 75,000 B | Pass |
+| Briefing read query shape | 1 Prisma query with nested legacy items | 1 Prisma query; opinions embedded in `market_summary` | Constant | Pass |
+| Additional opinion evidence query | Not applicable | 0 | 0 | Pass |
+| Desktop LCP | Not captured | 524 ms | At most 2,500 ms | Pass |
+| Desktop INP | Not captured | 64 ms | At most 200 ms | Pass |
+| Desktop CLS | Not captured | 0 | At most 0.1 | Pass |
+| Mobile LCP | Not captured | 348 ms | At most 2,500 ms | Pass |
+| Mobile INP | Not captured | 40 ms | At most 200 ms | Pass |
+| Mobile CLS | Not captured | 0 | At most 0.1 | Pass |
+| Initial page JavaScript | Not captured | 472,426 encoded B across 20 resources | Delta at most 30 KB | Delta unavailable |
+
+The initial-JavaScript delta cannot be calculated because Task 1 did not capture a baseline build.
+The final total is recorded without relabeling it as a feature delta. Runtime budgets are enforced in
+the production E2E test; development-mode Web Vitals are recorded but not enforced because Next.js
+compilation and Fast Refresh distort those values.
+
+## Functional and data-boundary evidence
+
+- The desktop renders the table and one selected detail region; mobile renders stacked cards.
+- BTC and XAU selection updates the same detail region and only the selected asset renders charts.
+- No horizontal overflow is present at the tested desktop or 390 x 844 mobile viewport.
+- The page does not request legacy research-run, intelligence, or generic-insights endpoints.
+- `Research run`, `Investor Intelligence`, and `Tài sản nổi bật` are absent from the rendered page.
+- Each malformed stored asset falls back independently instead of invalidating the whole briefing.
+- Signal, evidence, and AI provenance remain in normalized tables. The bounded read snapshot is stored
+  in the existing briefing JSON, avoiding a migration and the former N+1 evidence read.
+
+## Final command results
+
+```text
+npm run lint
+0 errors; 13 Fast Refresh warnings in files outside the feature diff
+
+npm test
+80 files passed; 418 tests passed
+
+focused quant-worker pytest
+40 tests passed
+
+production next build
+compiled, type-checked, and generated all pages successfully
+```

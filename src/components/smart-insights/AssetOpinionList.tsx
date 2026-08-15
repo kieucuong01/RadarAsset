@@ -96,7 +96,7 @@ export function AssetOpinionList({
 }) {
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden md:block" data-testid="asset-opinion-table">
         <Table>
           <TableHeader>
             <TableRow>
@@ -161,7 +161,7 @@ export function AssetOpinionList({
         </Table>
       </div>
 
-      <div className="grid gap-3 md:hidden">
+      <div className="grid gap-3 md:hidden" data-testid="asset-opinion-cards">
         {opinions.map((opinion) => (
           <Button
             key={opinion.symbol}

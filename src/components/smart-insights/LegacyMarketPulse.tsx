@@ -12,7 +12,6 @@ import {
 } from "@/components/smart-insights/MacroQuantPulseTabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
-import type { MarketTickerResponse } from "@/lib/backend/types";
 import {
   fetchCryptoMarketPulse,
   type CryptoMarketPulseModel,
@@ -26,7 +25,6 @@ import type {
   RegimeModel,
 } from "@/lib/smart-insights-client";
 import { fetchParsed, kronosShadowSchema } from "@/lib/smart-insights-client";
-import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
 
 const SAMPLE_MARKET_METRICS = {
   crypto: ["ETF Flow", "On-chain Activity", "Stablecoin Liquidity"],
@@ -51,8 +49,7 @@ export function LegacyMarketPulse({
   macroPulseState: MacroPulseState;
   onMarketChange: (market: InsightMarket) => void;
 }) {
-  const { locale, t } = useI18n();
-  const [tickerSnapshot, setTickerSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));
+  const { locale } = useI18n();
   const [cryptoPulse, setCryptoPulse] = useState<CryptoMarketPulseModel | null>(null);
   const [cryptoPulseState, setCryptoPulseState] = useState<
     "idle" | "loading" | "loaded" | "failed"
@@ -61,25 +58,6 @@ export function LegacyMarketPulse({
   const [kronosShadowState, setKronosShadowState] = useState<
     "idle" | "loading" | "loaded" | "failed"
   >("idle");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(curatedTickerUrl(), {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Ticker API unavailable");
-        return response.json() as Promise<MarketTickerResponse[]>;
-      })
-      .then((rows) => {
-        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot(rows));
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setTickerSnapshot(resolveCuratedTickerSnapshot([]));
-      });
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     if (market !== "crypto") return;
@@ -181,45 +159,6 @@ export function LegacyMarketPulse({
           <MetricGrid market="gold" metrics={marketMetrics} locale={locale} />
         </TabsContent>
       </Tabs>
-
-      <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h3 className="font-semibold">{t("overview.market.trendingAssets")}</h3>
-          <DataStatusBadge status={tickerSnapshot.status} detail={tickerSnapshot.detail} />
-        </div>
-        <div className="flex gap-3 overflow-x-auto px-1 pb-2">
-          {tickerSnapshot.rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {locale === "vi"
-                ? "Chưa có dữ liệu cho danh sách blue-chip đã chọn."
-                : "No verified data for the selected blue-chip universe."}
-            </p>
-          ) : null}
-          {tickerSnapshot.rows.map((ticker) => (
-            <div
-              key={ticker.symbol}
-              className="min-w-[140px] shrink-0 rounded-xl border border-border bg-background/50 p-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-bold text-sm">{ticker.symbol}</span>
-                <span
-                  className={
-                    ticker.changePercent >= 0
-                      ? "text-xs font-semibold text-bull"
-                      : "text-xs font-semibold text-bear"
-                  }
-                >
-                  {ticker.changePercent >= 0 ? "+" : ""}
-                  {ticker.changePercent.toFixed(2)}%
-                </span>
-              </div>
-              <div className="mt-1 text-lg font-semibold tabular-nums">
-                {ticker.price.toLocaleString()}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </section>
   );
 }

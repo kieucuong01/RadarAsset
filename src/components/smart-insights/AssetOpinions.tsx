@@ -11,10 +11,12 @@ import type { AssetOpinionModel } from "@/lib/smart-insights-client";
 
 export function AssetOpinions({
   opinions,
+  portfolioState,
   locale,
   onEvidence,
 }: {
   opinions: AssetOpinionModel[];
+  portfolioState: "available" | "missing";
   locale: "vi" | "en";
   onEvidence: (id: string) => void;
 }) {
@@ -55,9 +57,9 @@ export function AssetOpinions({
                 <BrainCircuit aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <CardTitle id="asset-opinions-title">
+                <h2 id="asset-opinions-title" className="font-semibold leading-none tracking-tight">
                   {locale === "vi" ? "Quan điểm AI theo tài sản" : "AI asset opinions"}
-                </CardTitle>
+                </h2>
                 <CardDescription className="mt-1">
                   {locale === "vi"
                     ? "Định lượng quyết định quan điểm; AI chỉ diễn giải các số liệu đã vượt qua kiểm tra bằng chứng."
@@ -79,7 +81,12 @@ export function AssetOpinions({
           />
         </CardContent>
       </Card>
-      <AssetOpinionDetail opinion={selected} locale={locale} onEvidence={onEvidence} />
+      <AssetOpinionDetail
+        opinion={selected}
+        portfolioState={portfolioState}
+        locale={locale}
+        onEvidence={onEvidence}
+      />
     </section>
   );
 }

@@ -23,6 +23,21 @@ const MARKETS = new Set<InsightMarket>(["crypto", "macro", "gold"]);
 const IMPACTS = new Set(["high", "medium", "low"]);
 const HORIZONS = new Set(["INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
 const RISKS = new Set(["conservative", "moderate", "aggressive"]);
+const ASSET_STANCES = new Set([
+  "POSITIVE",
+  "CONSTRUCTIVE",
+  "NEUTRAL",
+  "CAUTIOUS",
+  "NEGATIVE",
+  "INSUFFICIENT_DATA",
+]);
+const ASSET_ACTIONS = new Set([
+  "HOLD",
+  "REVIEW_INCREASE",
+  "REVIEW_REDUCE_RISK",
+  "WAIT_CONFIRMATION",
+  "NO_ACTION_INSUFFICIENT_DATA",
+]);
 const ASSET = /^[A-Z0-9][A-Z0-9._-]{0,19}$/;
 const CURRENCY = /^[A-Z]{3}$/;
 
@@ -137,55 +152,35 @@ function briefingItem(row: {
   };
 }
 
-type AssetOpinionItemRow = {
-  id: string;
-  signalSnapshotId: string;
-  supportingEvidenceIds: Prisma.JsonValue;
-  contradictingEvidenceIds: Prisma.JsonValue;
-  affectedAssets: Prisma.JsonValue;
-  timeHorizon: string;
-  suggestedCheckTemplate: string;
-  explanationStatus: string;
-  confidence: unknown;
-  signalSnapshot: {
-    score: unknown;
-    label: string;
-    coverage: unknown;
-    inputs: Prisma.JsonValue;
-    asset: { symbol: string; name: string } | null;
-  };
-  aiInsight: {
-    title: string;
-    summary: string;
-    catalyst: string | null;
-    risk: string | null;
-  } | null;
-};
-
-type EvidenceRow = { id: string; excerpt: string };
-
 function finiteNumber(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function assetFreshness(value: unknown): FreshnessState {
-  return value === "fresh" || value === "stale" || value === "conflicting" ||
-    value === "partial" || value === "unavailable"
+  return value === "fresh" ||
+    value === "stale" ||
+    value === "conflicting" ||
+    value === "partial" ||
+    value === "unavailable"
     ? value
     : "unavailable";
 }
 
-function assetOpinionFallback(row: AssetOpinionItemRow): AssetOpinionReadModel {
-  const symbol = row.signalSnapshot.asset?.symbol ?? strings(row.affectedAssets)[0] ?? "UNKNOWN";
+function assetOpinionFallback(raw: unknown): AssetOpinionReadModel {
+  const row =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const symbol = typeof row.symbol === "string" && row.symbol ? row.symbol : "UNKNOWN";
   return {
     symbol,
-    assetName: row.signalSnapshot.asset?.name ?? symbol,
-    stance: row.signalSnapshot.label || "INSUFFICIENT_DATA",
-    quantScore: row.signalSnapshot.score == null ? null : decimal(row.signalSnapshot.score),
-    confidence: decimal(row.confidence),
-    horizon: row.timeHorizon,
+    assetName: typeof row.assetName === "string" && row.assetName ? row.assetName : symbol,
+    stance: "INSUFFICIENT_DATA",
+    quantScore: null,
+    confidence: "0",
+    horizon: "WEEKS_1_4",
     portfolioWeightPct: "0",
+    unrealizedReturn: null,
+    riskTolerance: "moderate",
     personalizedAction: "NO_ACTION_INSUFFICIENT_DATA",
     pillars: [],
     thesis: null,
@@ -194,118 +189,188 @@ function assetOpinionFallback(row: AssetOpinionItemRow): AssetOpinionReadModel {
     bearCase: null,
     invalidationConditions: [],
     evidence: [],
-    dataCoverage: decimal(row.signalSnapshot.coverage),
+    dataCoverage: "0",
     freshness: "unavailable",
     explanationStatus: "unavailable",
     failedGates: ["STORED_CONTRACT_INVALID"],
   };
 }
 
-function parseEvidence(
-  row: EvidenceRow,
-  supporting: Set<string>,
-  contradicting: Set<string>,
-): AssetOpinionEvidenceReadModel | null {
-  try {
-    const fact = JSON.parse(row.excerpt) as Record<string, unknown>;
-    const warnings = Array.isArray(fact.warnings) ? fact.warnings : [];
-    return {
-      id: row.id,
-      metricCode: String(fact.metric_code ?? ""),
-      displayValue: String(fact.display_value ?? fact.raw_value ?? ""),
-      delta: fact.delta == null ? null : String(fact.delta),
-      percentile: fact.percentile == null ? null : String(fact.percentile),
-      impact: supporting.has(row.id)
-        ? "supporting"
-        : contradicting.has(row.id)
-          ? "contradicting"
-          : "neutral",
-      sourceCode: String(fact.source_code ?? ""),
-      sourceUrl: String(fact.source_url ?? ""),
-      effectiveAt: String(fact.effective_end ?? fact.effective_start ?? ""),
-      observedAt: String(fact.observed_at ?? ""),
-      freshness: warnings.includes("STALE") ? "stale" : "fresh",
-    };
-  } catch {
-    return null;
-  }
+function requiredString(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== "string" || !value) throw new Error(`Invalid ${key}.`);
+  return value;
 }
 
-function assetOpinion(
-  row: AssetOpinionItemRow,
-  evidenceById: ReadonlyMap<string, EvidenceRow>,
-): AssetOpinionReadModel {
-  try {
-    const inputs = object(row.signalSnapshot.inputs);
-    if (!Array.isArray(inputs.pillars)) throw new Error("Invalid pillars.");
-    const gate = object(inputs.gate as Prisma.JsonValue);
-    const supportingIds = strings(row.supportingEvidenceIds);
-    const contradictingIds = strings(row.contradictingEvidenceIds);
-    const supporting = new Set(supportingIds);
-    const contradicting = new Set(contradictingIds);
-    const evidence = [...supportingIds, ...contradictingIds]
-      .filter((id, index, all) => all.indexOf(id) === index)
-      .flatMap((id) => {
-        const source = evidenceById.get(id);
-        if (!source) return [];
-        const parsed = parseEvidence(source, supporting, contradicting);
-        return parsed ? [parsed] : [];
-      });
-    const risk = row.aiInsight?.risk ? JSON.parse(row.aiInsight.risk) as Record<string, unknown> : {};
-    const pillars = inputs.pillars.map((raw) => {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid pillar.");
-      const item = raw as Record<string, unknown>;
-      if (!Array.isArray(item.fact_ids) || !Array.isArray(item.series)) {
-        throw new Error("Invalid pillar fields.");
-      }
-      return {
-        code: String(item.code ?? ""),
-        score: item.score == null ? null : String(item.score),
-        weight: String(item.configured_weight ?? "0"),
-        confidence: String(item.confidence ?? "0"),
-        factIds: item.fact_ids.filter((value): value is string => typeof value === "string"),
-        series: item.series.map((point) => {
-          if (!Array.isArray(point) || point.length !== 2) throw new Error("Invalid series point.");
-          const value = finiteNumber(point[1]);
-          if (value == null) throw new Error("Invalid series value.");
-          return { ts: String(point[0]), value };
-        }),
-      };
-    });
-    const symbol = row.signalSnapshot.asset?.symbol ?? strings(row.affectedAssets)[0];
-    if (!symbol) throw new Error("Missing asset symbol.");
-    const status = row.explanationStatus;
-    const explanationStatus: AssetOpinionReadModel["explanationStatus"] =
-      status === "accepted" || status === "quant_only" || status === "insufficient_data" ||
-      status === "unavailable"
-        ? status
-        : "unavailable";
-    return {
-      symbol,
-      assetName: String(inputs.assetName ?? row.signalSnapshot.asset?.name ?? symbol),
-      stance: row.signalSnapshot.label,
-      quantScore: row.signalSnapshot.score == null ? null : decimal(row.signalSnapshot.score),
-      confidence: decimal(row.confidence),
-      horizon: row.timeHorizon,
-      portfolioWeightPct: String(inputs.portfolioWeightPct ?? "0"),
-      personalizedAction: row.suggestedCheckTemplate,
-      pillars,
-      thesis: row.aiInsight?.title ?? null,
-      bullCase: row.aiInsight?.catalyst ?? null,
-      baseCase: row.aiInsight?.summary ?? null,
-      bearCase: risk.bearCase == null ? null : String(risk.bearCase),
-      invalidationConditions: Array.isArray(risk.invalidationConditions)
-        ? risk.invalidationConditions.filter((value): value is string => typeof value === "string")
-        : [],
-      evidence,
-      dataCoverage: decimal(row.signalSnapshot.coverage),
-      freshness: assetFreshness(inputs.freshness),
-      explanationStatus,
-      failedGates: strings(gate.failed_gates as Prisma.JsonValue),
-    };
-  } catch {
-    return assetOpinionFallback(row);
+function nullableString(value: unknown): string | null {
+  return value == null ? null : String(value);
+}
+
+function decimalString(value: unknown, key: string): string {
+  const parsed =
+    typeof value === "string" || typeof value === "number" ? Number(value) : Number.NaN;
+  if (
+    !Number.isFinite(parsed) ||
+    (typeof value === "string" && !/^-?(?:\d+|\d*\.\d+)$/.test(value))
+  ) {
+    throw new Error(`Invalid ${key}.`);
   }
+  return String(value);
+}
+
+function nullableDecimalString(value: unknown, key: string): string | null {
+  return value == null ? null : decimalString(value, key);
+}
+
+function enumString(value: unknown, values: ReadonlySet<string>, key: string): string {
+  if (typeof value !== "string" || !values.has(value)) throw new Error(`Invalid ${key}.`);
+  return value;
+}
+
+function timestampString(value: unknown, key: string): string {
+  const timestamp = requiredString({ [key]: value }, key);
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(timestamp) || Number.isNaN(Date.parse(timestamp))) {
+    throw new Error(`Invalid ${key}.`);
+  }
+  return timestamp;
+}
+
+function urlString(value: unknown, key: string): string {
+  const url = requiredString({ [key]: value }, key);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
+  } catch {
+    throw new Error(`Invalid ${key}.`);
+  }
+  return url;
+}
+
+function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("Invalid asset opinion.");
+  const row = raw as Record<string, unknown>;
+  if (!Array.isArray(row.pillars) || !Array.isArray(row.evidence)) {
+    throw new Error("Invalid asset opinion collections.");
+  }
+  const pillars = row.pillars.map((rawPillar) => {
+    if (!rawPillar || typeof rawPillar !== "object" || Array.isArray(rawPillar)) {
+      throw new Error("Invalid pillar.");
+    }
+    const pillar = rawPillar as Record<string, unknown>;
+    if (!Array.isArray(pillar.factIds) || !Array.isArray(pillar.series)) {
+      throw new Error("Invalid pillar fields.");
+    }
+    return {
+      code: requiredString(pillar, "code"),
+      score: nullableDecimalString(pillar.score, "pillar.score"),
+      weight: decimalString(pillar.weight, "pillar.weight"),
+      confidence: decimalString(pillar.confidence, "pillar.confidence"),
+      factIds: pillar.factIds.filter((value): value is string => typeof value === "string"),
+      series: pillar.series.map((rawPoint) => {
+        if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
+          throw new Error("Invalid series point.");
+        }
+        const point = rawPoint as Record<string, unknown>;
+        const value = finiteNumber(point.value);
+        if (value == null) throw new Error("Invalid series value.");
+        return { ts: timestampString(point.ts, "ts"), value };
+      }),
+    };
+  });
+  const evidence = row.evidence.map((rawEvidence): AssetOpinionEvidenceReadModel => {
+    if (!rawEvidence || typeof rawEvidence !== "object" || Array.isArray(rawEvidence)) {
+      throw new Error("Invalid evidence.");
+    }
+    const evidence = rawEvidence as Record<string, unknown>;
+    const impact = evidence.impact;
+    if (impact !== "supporting" && impact !== "contradicting" && impact !== "neutral") {
+      throw new Error("Invalid evidence impact.");
+    }
+    return {
+      id: requiredString(evidence, "id"),
+      metricCode: requiredString(evidence, "metricCode"),
+      displayValue: String(evidence.displayValue ?? ""),
+      delta: nullableDecimalString(evidence.delta, "evidence.delta"),
+      percentile: nullableDecimalString(evidence.percentile, "evidence.percentile"),
+      impact,
+      sourceCode: requiredString(evidence, "sourceCode"),
+      sourceUrl: urlString(evidence.sourceUrl, "sourceUrl"),
+      effectiveAt: timestampString(evidence.effectiveAt, "effectiveAt"),
+      observedAt: timestampString(evidence.observedAt, "observedAt"),
+      freshness: assetFreshness(evidence.freshness),
+    };
+  });
+  const explanationStatus = row.explanationStatus;
+  if (
+    explanationStatus !== "accepted" &&
+    explanationStatus !== "quant_only" &&
+    explanationStatus !== "insufficient_data" &&
+    explanationStatus !== "unavailable"
+  ) {
+    throw new Error("Invalid explanation status.");
+  }
+  const riskTolerance = enumString(row.riskTolerance, RISKS, "riskTolerance") as
+    | "conservative"
+    | "moderate"
+    | "aggressive";
+  const parsed: AssetOpinionReadModel = {
+    symbol: requiredString(row, "symbol"),
+    assetName: requiredString(row, "assetName"),
+    stance: enumString(row.stance, ASSET_STANCES, "stance"),
+    quantScore: nullableDecimalString(row.quantScore, "quantScore"),
+    confidence: decimalString(row.confidence, "confidence"),
+    horizon: enumString(row.horizon, HORIZONS, "horizon"),
+    portfolioWeightPct: decimalString(row.portfolioWeightPct, "portfolioWeightPct"),
+    unrealizedReturn: nullableDecimalString(row.unrealizedReturn, "unrealizedReturn"),
+    riskTolerance,
+    personalizedAction: enumString(row.personalizedAction, ASSET_ACTIONS, "personalizedAction"),
+    pillars,
+    thesis: nullableString(row.thesis),
+    bullCase: nullableString(row.bullCase),
+    baseCase: nullableString(row.baseCase),
+    bearCase: nullableString(row.bearCase),
+    invalidationConditions: Array.isArray(row.invalidationConditions)
+      ? row.invalidationConditions.filter((value): value is string => typeof value === "string")
+      : [],
+    evidence,
+    dataCoverage: decimalString(row.dataCoverage, "dataCoverage"),
+    freshness: assetFreshness(row.freshness),
+    explanationStatus,
+    failedGates: Array.isArray(row.failedGates)
+      ? row.failedGates.filter((value): value is string => typeof value === "string")
+      : [],
+  };
+  if (
+    parsed.explanationStatus === "accepted" &&
+    (parsed.freshness !== "fresh" ||
+      !parsed.thesis ||
+      !parsed.bullCase ||
+      !parsed.baseCase ||
+      !parsed.bearCase ||
+      parsed.invalidationConditions.length === 0 ||
+      parsed.evidence.length === 0)
+  ) {
+    throw new Error("Invalid accepted opinion state.");
+  }
+  if (
+    (parsed.explanationStatus === "insufficient_data" ||
+      parsed.explanationStatus === "unavailable") &&
+    parsed.personalizedAction !== "NO_ACTION_INSUFFICIENT_DATA"
+  ) {
+    throw new Error("Invalid insufficient-data action.");
+  }
+  if (
+    parsed.explanationStatus !== "accepted" &&
+    (parsed.thesis !== null ||
+      parsed.bullCase !== null ||
+      parsed.baseCase !== null ||
+      parsed.bearCase !== null ||
+      parsed.invalidationConditions.length > 0)
+  ) {
+    throw new Error("Non-accepted opinions cannot contain AI prose.");
+  }
+  return parsed;
 }
 
 export type BriefingEnvelope = { briefing: BriefingReadModel; fingerprint: string };
@@ -335,24 +400,11 @@ export async function loadBriefingEnvelope(
     },
   });
   if (!row) return null;
-  const legacyRows = row.items.filter((item) => item.section !== "asset_opinion");
-  const opinionRows = row.items.filter((item) => item.section === "asset_opinion");
-  const evidenceIds = opinionRows.flatMap((item) => [
-    ...strings(item.supportingEvidenceIds),
-    ...strings(item.contradictingEvidenceIds),
-  ]);
-  const evidenceRows = evidenceIds.length
-    ? await getPrisma().evidenceItem.findMany({
-        where: {
-          id: { in: [...new Set(evidenceIds)] },
-          researchRun: { organizationId: context.organizationId, userId: context.userId },
-        },
-        select: { id: true, excerpt: true },
-      })
-    : [];
-  const evidenceById = new Map(evidenceRows.map((item) => [item.id, item]));
+  const legacyRows = row.items.filter((item) => item.signalSnapshot.signalType !== "asset_opinion");
   const items = legacyRows.map(briefingItem);
   const portfolio = object(row.portfolioSnapshot);
+  const summary = object(row.marketSummary);
+  const storedOpinions = Array.isArray(summary.assetOpinions) ? summary.assetOpinions : [];
   const briefing: BriefingReadModel = {
     id: row.id,
     localDate: dateOnly(row.effectiveDate),
@@ -362,9 +414,21 @@ export async function loadBriefingEnvelope(
     status: row.status as BriefingReadModel["status"],
     overallDataConfidence: decimal(row.dataConfidence),
     portfolioState: portfolio.portfolioState === "available" ? "available" : "missing",
-    primary: items.filter((_, index) => legacyRows[index]?.section === "primary"),
-    riskAlerts: items.filter((_, index) => legacyRows[index]?.section === "risk"),
-    assetOpinions: opinionRows.map((item) => assetOpinion(item, evidenceById)),
+    primary: items.filter((_, index) => {
+      const section = legacyRows[index]?.section;
+      return section === "primary" || section === "primary_change";
+    }),
+    riskAlerts: items.filter((_, index) => {
+      const section = legacyRows[index]?.section;
+      return section === "risk" || section === "risk_alert";
+    }),
+    assetOpinions: storedOpinions.slice(0, 25).map((item) => {
+      try {
+        return storedAssetOpinion(item);
+      } catch {
+        return assetOpinionFallback(item);
+      }
+    }),
     sourceRunId: row.researchRunId,
   };
   return { briefing, fingerprint: row.fingerprint };

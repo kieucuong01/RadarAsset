@@ -136,3 +136,20 @@ def test_accepted_opinion_is_grounded_to_exactly_one_asset() -> None:
     assert all(row.explanation_status == "accepted" for row in drafts)
     assert all(row.evidence_bundle.affected_assets == (row.symbol,) for row in drafts)
     assert all(row.ai_output is not None for row in drafts)
+
+
+def test_one_ai_failure_degrades_only_that_asset_to_quant_only() -> None:
+    accepted = SpySynthesizer()
+
+    def fails_only_for_xau(evidence_bundle, **kwargs):
+        if evidence_bundle.affected_assets == ("XAU",):
+            raise TimeoutError("provider timeout")
+        return accepted(evidence_bundle, **kwargs)
+
+    drafts = build_asset_opinion_drafts(batch(), synthesizer=fails_only_for_xau)
+
+    assert tuple(row.symbol for row in drafts) == ("BTC", "XAU")
+    assert drafts[0].explanation_status == "accepted"
+    assert drafts[1].explanation_status == "quant_only"
+    assert drafts[1].ai_output is None
+    assert drafts[1].rejection_code == "AI_PROCESSING_FAILED"

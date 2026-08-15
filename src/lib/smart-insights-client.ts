@@ -1,8 +1,26 @@
 import { z } from "zod";
 
-const decimal = z.string();
+const decimal = z.string().regex(/^-?(?:\d+|\d*\.\d+)$/);
+const timestamp = z.string().datetime({ offset: true });
 const market = z.enum(["crypto", "macro", "gold"]);
 const freshness = z.enum(["fresh", "stale", "conflicting", "partial", "unavailable"]);
+const assetStance = z.enum([
+  "POSITIVE",
+  "CONSTRUCTIVE",
+  "NEUTRAL",
+  "CAUTIOUS",
+  "NEGATIVE",
+  "INSUFFICIENT_DATA",
+]);
+const assetHorizon = z.enum(["INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
+const assetAction = z.enum([
+  "HOLD",
+  "REVIEW_INCREASE",
+  "REVIEW_REDUCE_RISK",
+  "WAIT_CONFIRMATION",
+  "NO_ACTION_INSUFFICIENT_DATA",
+]);
+const riskTolerance = z.enum(["conservative", "moderate", "aggressive"]);
 
 const relevanceSchema = z.object({
   exposure: decimal,
@@ -35,65 +53,127 @@ const briefingItemSchema = z.object({
   riskScenarios: z.array(z.string()),
 });
 
-const assetOpinionSchema = z.object({
-  symbol: z.string(),
-  assetName: z.string(),
-  stance: z.string(),
-  quantScore: decimal.nullable(),
-  confidence: decimal,
-  horizon: z.string(),
-  portfolioWeightPct: decimal,
-  personalizedAction: z.string(),
-  pillars: z.array(
-    z.object({
-      code: z.string(),
-      score: decimal.nullable(),
-      weight: decimal,
-      confidence: decimal,
-      factIds: z.array(z.string()),
-      series: z.array(z.object({ ts: z.string(), value: z.number().finite() })),
-    }),
-  ),
-  thesis: z.string().nullable(),
-  bullCase: z.string().nullable(),
-  baseCase: z.string().nullable(),
-  bearCase: z.string().nullable(),
-  invalidationConditions: z.array(z.string()),
-  evidence: z.array(
-    z.object({
-      id: z.string(),
-      metricCode: z.string(),
-      displayValue: z.string(),
-      delta: decimal.nullable(),
-      percentile: decimal.nullable(),
-      impact: z.enum(["supporting", "contradicting", "neutral"]),
-      sourceCode: z.string(),
-      sourceUrl: z.string(),
-      effectiveAt: z.string(),
-      observedAt: z.string(),
-      freshness,
-    }),
-  ),
-  dataCoverage: decimal,
-  freshness,
-  explanationStatus: z.enum(["accepted", "quant_only", "insufficient_data", "unavailable"]),
-  failedGates: z.array(z.string()),
-});
+const assetOpinionSchema = z
+  .object({
+    symbol: z.string().min(1),
+    assetName: z.string().min(1),
+    stance: assetStance,
+    quantScore: decimal.nullable(),
+    confidence: decimal,
+    horizon: assetHorizon,
+    portfolioWeightPct: decimal,
+    unrealizedReturn: decimal.nullable(),
+    riskTolerance,
+    personalizedAction: assetAction,
+    pillars: z.array(
+      z
+        .object({
+          code: z.string().min(1),
+          score: decimal.nullable(),
+          weight: decimal,
+          confidence: decimal,
+          factIds: z.array(z.string().min(1)),
+          series: z.array(z.object({ ts: timestamp, value: z.number().finite() }).strict()),
+        })
+        .strict(),
+    ),
+    thesis: z.string().min(1).nullable(),
+    bullCase: z.string().min(1).nullable(),
+    baseCase: z.string().min(1).nullable(),
+    bearCase: z.string().min(1).nullable(),
+    invalidationConditions: z.array(z.string().min(1)),
+    evidence: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          metricCode: z.string().min(1),
+          displayValue: z.string(),
+          delta: decimal.nullable(),
+          percentile: decimal.nullable(),
+          impact: z.enum(["supporting", "contradicting", "neutral"]),
+          sourceCode: z.string().min(1),
+          sourceUrl: z.string().url(),
+          effectiveAt: timestamp,
+          observedAt: timestamp,
+          freshness,
+        })
+        .strict(),
+    ),
+    dataCoverage: decimal,
+    freshness,
+    explanationStatus: z.enum(["accepted", "quant_only", "insufficient_data", "unavailable"]),
+    failedGates: z.array(z.string().min(1)),
+  })
+  .strict()
+  .superRefine((opinion, context) => {
+    if (opinion.explanationStatus === "accepted") {
+      if (opinion.freshness !== "fresh") {
+        context.addIssue({
+          code: "custom",
+          path: ["freshness"],
+          message: "Accepted data must be fresh.",
+        });
+      }
+      for (const field of ["thesis", "bullCase", "baseCase", "bearCase"] as const) {
+        if (!opinion[field]) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Accepted AI prose is required.",
+          });
+        }
+      }
+      if (opinion.invalidationConditions.length === 0 || opinion.evidence.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["explanationStatus"],
+          message: "Accepted opinions require evidence and invalidation conditions.",
+        });
+      }
+    }
+    if (
+      (opinion.explanationStatus === "insufficient_data" ||
+        opinion.explanationStatus === "unavailable") &&
+      opinion.personalizedAction !== "NO_ACTION_INSUFFICIENT_DATA"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["personalizedAction"],
+        message: "Insufficient opinions cannot recommend an action.",
+      });
+    }
+    if (
+      opinion.explanationStatus !== "accepted" &&
+      (opinion.thesis !== null ||
+        opinion.bullCase !== null ||
+        opinion.baseCase !== null ||
+        opinion.bearCase !== null ||
+        opinion.invalidationConditions.length > 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["explanationStatus"],
+        message: "Non-accepted opinions cannot contain AI prose.",
+      });
+    }
+  });
 
-export const briefingSchema = z.object({
-  id: z.string(),
-  localDate: z.string(),
-  revision: z.number().int().positive(),
-  generatedAt: z.string(),
-  timezone: z.string(),
-  status: z.enum(["complete", "partial", "quant_only"]),
-  overallDataConfidence: decimal,
-  portfolioState: z.enum(["available", "missing"]),
-  primary: z.array(briefingItemSchema),
-  riskAlerts: z.array(briefingItemSchema),
-  assetOpinions: z.array(assetOpinionSchema),
-  sourceRunId: z.string(),
-}).strict();
+export const briefingSchema = z
+  .object({
+    id: z.string(),
+    localDate: z.string(),
+    revision: z.number().int().positive(),
+    generatedAt: z.string(),
+    timezone: z.string(),
+    status: z.enum(["complete", "partial", "quant_only"]),
+    overallDataConfidence: decimal,
+    portfolioState: z.enum(["available", "missing"]),
+    primary: z.array(briefingItemSchema),
+    riskAlerts: z.array(briefingItemSchema),
+    assetOpinions: z.array(assetOpinionSchema),
+    sourceRunId: z.string(),
+  })
+  .strict();
 
 const regimeGroupSchema = z.object({
   metricCode: z.string(),

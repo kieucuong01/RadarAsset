@@ -213,6 +213,7 @@ export function SmartInsights() {
       ) : null}
       <AssetOpinions
         opinions={briefing?.assetOpinions ?? []}
+        portfolioState={briefing?.portfolioState ?? "missing"}
         locale={locale}
         onEvidence={setEvidenceId}
       />
