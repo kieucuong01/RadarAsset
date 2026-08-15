@@ -609,7 +609,7 @@ def build_batch_collectors(
         overlap_days = _bounded_environment_int(
             "SMART_INSIGHTS_FRED_OVERLAP_DAYS", 14, minimum=1, maximum=365
         )
-        collector = FredCollector(api_key=os.getenv("FRED_API_KEY", ""))
+        collector = FredCollector(api_key=os.getenv("FRED_API_KEY"))
         batches = tuple(
             collector.collect(
                 series,

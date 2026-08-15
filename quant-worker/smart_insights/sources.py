@@ -269,7 +269,10 @@ SOURCE_ROWS = (
         "Federal Reserve Economic Data",
         Market.MACRO,
         CollectionMode.API,
-        ("https://api.stlouisfed.org/fred/series/observations",),
+        (
+            "https://api.stlouisfed.org/fred/series/observations",
+            "https://fred.stlouisfed.org/graph/fredgraph.csv",
+        ),
         "daily",
         "fred-v1",
         4_320,

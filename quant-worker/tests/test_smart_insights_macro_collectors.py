@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 import collect_smart_insights
-from collect_smart_insights import build_batch_collectors, run_live_smoke
+from collect_smart_insights import build_batch_collectors
 from smart_insights.collectors import CollectionBatch
 from smart_insights.collectors.cftc import CftcCollector
 from smart_insights.collectors.fred import FredCollector
@@ -85,9 +85,31 @@ def test_fred_collects_allow_listed_observations_and_skips_missing_dot() -> None
     assert "test" not in json.dumps(dict(batch.snapshot.metadata))
 
 
-def test_fred_rejects_unknown_series_and_requires_key() -> None:
-    with pytest.raises(ValueError, match="FRED_API_KEY"):
-        FredCollector(transport=FakeTransport("{}"), api_key="")
+def test_fred_uses_official_csv_when_api_key_is_not_configured() -> None:
+    transport = FakeTransport(
+        "observation_date,DGS10\n"
+        "2026-08-10,4.25\n"
+        "2026-08-11,.\n"
+        "2026-08-12,4.30\n"
+        "2026-08-13,4.32\n"
+    )
+
+    batch = FredCollector(
+        transport=transport, api_key=None, clock=lambda: NOW
+    ).collect(FRED_SERIES["DGS10"], date(2026, 8, 10), date(2026, 8, 13))
+
+    assert batch.error_code is None
+    assert [row.value for row in batch.observations] == [
+        Decimal("4.25"), Decimal("4.30"), Decimal("4.32")
+    ]
+    assert transport.calls[0][0] == (
+        "https://fred.stlouisfed.org/graph/fredgraph.csv?"
+        "id=DGS10&cosd=2026-08-10&coed=2026-08-13"
+    )
+    assert batch.snapshot.source_url == "https://fred.stlouisfed.org/graph/fredgraph.csv"
+
+
+def test_fred_rejects_unknown_series() -> None:
     unknown = FRED_SERIES["DGS10"].__class__(
         series_id="EVIL", metric_code="macro.evil", name="Evil", unit="x",
         frequency="daily", direction=1,
@@ -96,18 +118,6 @@ def test_fred_rejects_unknown_series_and_requires_key() -> None:
         FredCollector(
             transport=FakeTransport("{}"), api_key="test", clock=lambda: NOW
         ).collect(unknown, date(2026, 8, 10), date(2026, 8, 13))
-
-    missing = run_live_smoke(
-        "fred",
-        as_of=NOW,
-        batch_collectors={
-            "fred": lambda _as_of: FredCollector(api_key="").collect(
-                FRED_SERIES["DGS10"], date(2026, 8, 10), date(2026, 8, 13)
-            )
-        },
-    )
-    assert missing.error_code == "CONFIG_MISSING"
-
 
 def test_fred_builder_backfills_enough_m2_history_without_expanding_other_series(
     monkeypatch: pytest.MonkeyPatch,

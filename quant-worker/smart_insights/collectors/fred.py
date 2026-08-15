@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from io import StringIO
 import json
 from typing import Any
 from urllib.parse import urlencode
@@ -19,14 +21,12 @@ class FredCollector:
     def __init__(
         self,
         *,
-        api_key: str,
+        api_key: str | None,
         transport: Any | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
-        if not api_key:
-            raise ValueError("FRED_API_KEY is required for live collection.")
         self.source = source_for_code("fred")
-        self._api_key = api_key
+        self._api_key = api_key or None
         self._transport = transport or UrllibTransport()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -37,18 +37,29 @@ class FredCollector:
             raise ValueError("FRED series must be allow-listed.")
         if start > end:
             raise ValueError("FRED observation range is invalid.")
-        query = urlencode(
-            {
-                "series_id": series.series_id,
-                "api_key": self._api_key,
-                "file_type": "json",
-                "observation_start": start.isoformat(),
-                "observation_end": end.isoformat(),
-                "sort_order": "asc",
-                "limit": str(self.source.max_rows),
-            }
-        )
-        request_url = f"{self.source.urls[0]}?{query}"
+        if self._api_key is not None:
+            source_url = self.source.urls[0]
+            query = urlencode(
+                {
+                    "series_id": series.series_id,
+                    "api_key": self._api_key,
+                    "file_type": "json",
+                    "observation_start": start.isoformat(),
+                    "observation_end": end.isoformat(),
+                    "sort_order": "asc",
+                    "limit": str(self.source.max_rows),
+                }
+            )
+        else:
+            source_url = self.source.urls[1]
+            query = urlencode(
+                {
+                    "id": series.series_id,
+                    "cosd": start.isoformat(),
+                    "coed": end.isoformat(),
+                }
+            )
+        request_url = f"{source_url}?{query}"
         response = self._transport.fetch(
             request_url, timeout_seconds=30, max_bytes=10_000_000
         )
@@ -57,8 +68,8 @@ class FredCollector:
         observed_at = self._clock()
         snapshot = RawSnapshot(
             content=response.body,
-            content_type="application/json",
-            source_url=self.source.urls[0],
+            content_type=("application/json" if self._api_key is not None else "text/csv"),
+            source_url=source_url,
             effective_at=None,
             published_at=None,
             observed_at=observed_at,
@@ -69,13 +80,26 @@ class FredCollector:
                 "parser_version": self.source.parser_version,
             },
         )
-        try:
-            payload = json.loads(response.body)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return CollectionBatch(self.source, snapshot, (), "INVALID_RESPONSE")
-        raw_rows = payload.get("observations") if isinstance(payload, dict) else None
-        if not isinstance(raw_rows, list):
-            return CollectionBatch(self.source, snapshot, (), "SCHEMA_DRIFT")
+        if self._api_key is not None:
+            try:
+                payload = json.loads(response.body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return CollectionBatch(self.source, snapshot, (), "INVALID_RESPONSE")
+            raw_rows = payload.get("observations") if isinstance(payload, dict) else None
+            if not isinstance(raw_rows, list):
+                return CollectionBatch(self.source, snapshot, (), "SCHEMA_DRIFT")
+        else:
+            try:
+                decoded = response.body.decode("utf-8-sig")
+                reader = csv.DictReader(StringIO(decoded))
+                if reader.fieldnames != ["observation_date", series.series_id]:
+                    return CollectionBatch(self.source, snapshot, (), "SCHEMA_DRIFT")
+                raw_rows = [
+                    {"date": row.get("observation_date"), "value": row.get(series.series_id)}
+                    for row in reader
+                ]
+            except (UnicodeDecodeError, csv.Error):
+                return CollectionBatch(self.source, snapshot, (), "INVALID_RESPONSE")
         if len(raw_rows) > self.source.max_rows:
             return CollectionBatch(self.source, snapshot, (), "RESPONSE_TOO_LARGE")
         observations: list[ObservationInput] = []
