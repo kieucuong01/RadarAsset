@@ -8,6 +8,6 @@
   <Task name="RadarAsset Quant Ingestion Daily">
     <Trigger startBoundary="2026-08-14T01:15:00Z" repetitionInterval="P1D" />
     <Command>powershell.exe</Command>
-    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/run-market-ingestion.ps1 -Command daily</Arguments>
+    <Arguments>-NoProfile -ExecutionPolicy Bypass -File scripts/refresh-asset-opinions.ps1</Arguments>
   </Task>
 </QuantIngestionTasks>

@@ -166,6 +166,18 @@ panel displayed `bitinfocharts-top-addresses` as `validated` and `FRESH`. The se
 
 The repository provides commands but does not create OS scheduled tasks.
 
+For the daily asset-opinion path, use the composed fail-closed runner. It drains
+the daily market-data queue (including VNINDEX, FPT and XAU), runs enabled Smart
+Insights daily collectors and derived pipelines, then regenerates every member
+briefing only when both data stages succeed:
+
+```powershell
+powershell.exe -NoProfile -File scripts/refresh-asset-opinions.ps1
+```
+
+The Windows task installer uses this runner for the daily task while retaining
+the lightweight market-data-only runner for the hourly task.
+
 | Job                                            | Recommended trigger               | Command                                                             |
 | ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
 | Daily market collection and regime calculation | Daily after source-day close      | `scripts/run-smart-insights.ps1 -Schedule daily`                    |

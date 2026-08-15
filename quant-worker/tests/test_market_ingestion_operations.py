@@ -89,7 +89,7 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     )
 
     assert source.count("run-market-ingestion.ps1 -Command hourly") == 1
-    assert source.count("run-market-ingestion.ps1 -Command daily") == 1
+    assert source.count("refresh-asset-opinions.ps1") == 1
     assert "PT1H" in source
     assert "01:15:00Z" in source
 
@@ -105,6 +105,26 @@ def test_scheduler_artifact_has_exactly_one_hourly_and_one_daily_trigger() -> No
     assert '$PSNativeCommandUseErrorActionPreference = $true' in installer
     assert "if ($Verify)" in installer
     assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
+
+
+def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> None:
+    wrapper = (ROOT / "scripts" / "refresh-asset-opinions.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    market = wrapper.index('run-market-ingestion.ps1')
+    sources = wrapper.index('run-smart-insights.ps1')
+    briefing = wrapper.index('"briefing"')
+    assert market < sources < briefing
+    assert '"daily"' in wrapper
+    assert '-DrainRequests' in wrapper
+    assert '-AllMemberships' in wrapper
+    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 3
+
+    installer = (
+        ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1"
+    ).read_text(encoding="utf-8")
+    assert 'refresh-asset-opinions.ps1' in installer
 
 
 def test_scheduled_wrapper_enqueues_without_draining_the_full_universe() -> None:

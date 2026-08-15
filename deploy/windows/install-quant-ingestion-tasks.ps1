@@ -17,6 +17,10 @@ $wrapper = Join-Path $RepositoryRoot "scripts\run-market-ingestion.ps1"
 if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
     throw "Market ingestion wrapper was not found."
 }
+$dailyWrapper = Join-Path $RepositoryRoot "scripts\refresh-asset-opinions.ps1"
+if (-not (Test-Path -LiteralPath $dailyWrapper -PathType Leaf)) {
+    throw "Asset opinion refresh wrapper was not found."
+}
 
 if ($Verify) {
     $taskNames = @("RadarAsset Quant Ingestion Hourly", "RadarAsset Quant Ingestion Daily")
@@ -33,7 +37,7 @@ $hourlyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
     "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`" -Command hourly"
 )
 $dailyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
-    "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`" -Command daily"
+    "-NoProfile -ExecutionPolicy Bypass -File `"$dailyWrapper`""
 )
 
 $nextHourUtc = [DateTimeOffset]::UtcNow.AddHours(1)
