@@ -9,6 +9,7 @@ User=datavest
 Group=datavest
 WorkingDirectory=/opt/datavest/current/web
 EnvironmentFile=/opt/datavest/shared/.env
+EnvironmentFile=-/opt/datavest/shared/release.env
 Environment=NODE_ENV=production
 Environment=PORT=4200
 Environment=HOSTNAME=127.0.0.1

@@ -45,7 +45,6 @@ describe("DataVest production service configuration", () => {
       User: "datavest",
       Group: "datavest",
       WorkingDirectory: "/opt/datavest/current/web",
-      EnvironmentFile: "/opt/datavest/shared/.env",
       ExecStart: "/usr/bin/node /opt/datavest/current/web/server.js",
       MemoryMax: "600M",
       NoNewPrivileges: "true",
@@ -59,6 +58,10 @@ describe("DataVest production service configuration", () => {
       "NODE_ENV=production",
       "PORT=4200",
       "HOSTNAME=127.0.0.1",
+    ]);
+    expect(values(unit.Service.EnvironmentFile)).toEqual([
+      "/opt/datavest/shared/.env",
+      "-/opt/datavest/shared/release.env",
     ]);
   });
 
@@ -156,13 +159,16 @@ describe("DataVest production service configuration", () => {
       expect(unit.Service).toMatchObject({
         User: "datavest",
         Group: "datavest",
-        EnvironmentFile: "/opt/datavest/shared/.env",
         NoNewPrivileges: "true",
         PrivateTmp: "true",
         ProtectSystem: "strict",
         ProtectHome: "true",
         UMask: "0027",
       });
+      expect(values(unit.Service.EnvironmentFile)).toEqual([
+        "/opt/datavest/shared/.env",
+        "-/opt/datavest/shared/release.env",
+      ]);
     }
   });
 

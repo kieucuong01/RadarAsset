@@ -9,6 +9,7 @@ User=datavest
 Group=datavest
 WorkingDirectory=/opt/datavest/current/quant-worker
 EnvironmentFile=/opt/datavest/shared/.env
+EnvironmentFile=-/opt/datavest/shared/release.env
 ExecStart=/opt/datavest/shared/python-venv/bin/python -m uvicorn service:app --app-dir /opt/datavest/current/quant-worker --host 127.0.0.1 --port 8200
 Restart=on-failure
 RestartSec=5
