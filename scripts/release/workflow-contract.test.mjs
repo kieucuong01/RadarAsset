@@ -53,6 +53,7 @@ describe("production artifact workflow", () => {
       "python-version": "3.12",
     });
     expect(commands).toContain("npm ci");
+    expect(commands).toContain("npx prisma generate");
     expect(commands).toContain("python -m pip install -r quant-worker/requirements.txt");
     expect(commands).toContain("npm run check");
     expect(commands).toContain("npm run build");

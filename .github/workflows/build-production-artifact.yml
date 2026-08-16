@@ -42,6 +42,7 @@ jobs:
       - name: Install application dependencies
         run: |
           npm ci
+          npx prisma generate
           python -m pip install -r quant-worker/requirements.txt
 
       - name: Run repository checks
