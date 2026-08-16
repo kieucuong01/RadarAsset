@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BrainCircuit, LoaderCircle, RefreshCw } from "lucide-react";
 
 import { AssetOpinionDetail } from "./AssetOpinionDetail";
@@ -28,6 +28,7 @@ export function AssetOpinions({
   refreshPending?: boolean;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const activeOpinion = opinions.find((opinion) => opinion.symbol === activeSymbol) ?? null;
 
   if (!opinions.length) {
@@ -141,7 +142,14 @@ export function AssetOpinions({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <AssetOpinionList opinions={opinions} locale={locale} onSelect={setActiveSymbol} />
+          <AssetOpinionList
+            opinions={opinions}
+            locale={locale}
+            onSelect={(symbol, trigger) => {
+              returnFocusRef.current = trigger;
+              setActiveSymbol(symbol);
+            }}
+          />
         </CardContent>
       </Card>
       {activeOpinion ? (
@@ -149,7 +157,11 @@ export function AssetOpinions({
           opinion={activeOpinion}
           open
           onOpenChange={(open) => {
-            if (!open) setActiveSymbol(null);
+            if (!open) {
+              const returnFocusTo = returnFocusRef.current;
+              setActiveSymbol(null);
+              requestAnimationFrame(() => returnFocusTo?.focus());
+            }
           }}
           portfolioState={portfolioState}
           locale={locale}

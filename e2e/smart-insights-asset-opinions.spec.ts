@@ -479,45 +479,66 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   await expect(page.getByText("Tài sản nổi bật", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /USDT/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /USDC/ })).toHaveCount(0);
-  await expect(page.getByTestId("asset-opinion-detail")).toHaveCount(1);
+  const detail = page.getByTestId("asset-opinion-detail");
+  const openAsset = async (symbol: string, assetName: string) => {
+    const trigger = page.getByRole("button", {
+      name: `Xem phân tích ${symbol} ${assetName}`,
+      exact: true,
+    });
+    await trigger.click();
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText(`${symbol} · ${assetName}`);
+    return trigger;
+  };
+  const closeAsset = async () => {
+    await page.keyboard.press("Escape");
+    await expect(detail).toHaveCount(0);
+  };
 
-  await page.getByRole("button", { name: /BTC Bitcoin/ }).click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("BTC · Bitcoin");
+  await expect(detail).toHaveCount(0);
+  const btcTrigger = await openAsset("BTC", "Bitcoin");
   await expect(page.getByRole("heading", { name: /Quan điểm định lượng chung/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Quan điểm theo danh mục" })).toBeVisible();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("AI đã phân tích");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Vì các số liệu này");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Yếu tố phản biện");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Khẩu vị rủi ro");
-  await page.getByTestId("asset-opinion-detail").locator("summary").click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText(
-    "Điểm tài sản = Σ(điểm trụ cột × trọng số) ÷ độ phủ dữ liệu",
-  );
-  await expect(
-    page.getByTestId("asset-opinion-detail").locator("th", { hasText: "Điểm chuẩn hóa" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: /ETH Ethereum/ }).click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("ETH · Ethereum");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Xu hướng BTC");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Luân chuyển Altcoin");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Dòng tiền ETF");
+  await expect(detail).toContainText("AI đã phân tích");
+  await expect(detail).toContainText("Vì các số liệu này");
+  await expect(detail).toContainText("Yếu tố phản biện");
+  await expect(detail).toContainText("Khẩu vị rủi ro");
+  await expect(detail.getByTestId("asset-opinion-sources")).toHaveCount(0);
+  const sourceButton = detail.getByRole("button", { name: /Nguồn dữ liệu \(\d+\)/ });
+  await sourceButton.click();
+  await expect(detail.getByTestId("asset-opinion-sources")).toBeVisible();
 
-  await page.getByRole("button", { name: /ADA Cardano/ }).click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("ADA · Cardano");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Luân chuyển Altcoin");
-  await expect(page.getByTestId("asset-opinion-detail")).not.toContainText("Dòng tiền ETF");
+  await detail.getByRole("tab", { name: "Cách tính", exact: true }).click();
+  await expect(detail).toContainText("Điểm tài sản = Σ(điểm trụ cột × trọng số) ÷ độ phủ dữ liệu");
+  await expect(detail.locator("th", { hasText: "Điểm chuẩn hóa" })).toBeVisible();
+  await detail.getByRole("tab", { name: /Kịch bản/ }).click();
+  await expect(detail.getByText("Kịch bản cơ sở", { exact: true })).toBeVisible();
+  await closeAsset();
+  await expect(btcTrigger).toBeFocused();
 
-  await page.getByRole("button", { name: /SOL Solana/ }).click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("SOL · Solana");
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("Dòng tiền ETF");
+  await openAsset("ETH", "Ethereum");
+  await detail.getByRole("tab", { name: "Cách tính", exact: true }).click();
+  await expect(detail).toContainText("Xu hướng BTC");
+  await expect(detail).toContainText("Luân chuyển Altcoin");
+  await expect(detail).toContainText("Dòng tiền ETF");
+  await closeAsset();
 
-  await page.getByRole("button", { name: /XAU Gold Spot/ }).click();
-  await expect(page.getByTestId("asset-opinion-detail")).toContainText("XAU · Gold Spot");
+  await openAsset("ADA", "Cardano");
+  await detail.getByRole("tab", { name: "Cách tính", exact: true }).click();
+  await expect(detail).toContainText("Luân chuyển Altcoin");
+  await expect(detail).not.toContainText("Dòng tiền ETF");
+  await closeAsset();
+
+  await openAsset("SOL", "Solana");
+  await detail.getByRole("tab", { name: "Cách tính", exact: true }).click();
+  await expect(detail).toContainText("Dòng tiền ETF");
+  await closeAsset();
+
+  await openAsset("XAU", "Gold Spot");
+  await closeAsset();
 
   if (testInfo.project.name === "mobile") {
     await expect(page.getByTestId("asset-opinion-table")).toBeHidden();
     await expect(page.getByTestId("asset-opinion-cards")).toBeVisible();
-    await expect(page.getByText("Kịch bản cơ sở", { exact: true })).toBeVisible();
   } else {
     await expect(page.getByTestId("asset-opinion-table")).toBeVisible();
     await expect(page.getByTestId("asset-opinion-cards")).toBeHidden();

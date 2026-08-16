@@ -110,7 +110,7 @@ export function AssetOpinionList({
 }: {
   opinions: AssetOpinionModel[];
   locale: Locale;
-  onSelect: (symbol: string) => void;
+  onSelect: (symbol: string, trigger: HTMLElement) => void;
 }) {
   const evidenceValuesBySymbol = new Map(
     opinions.map((opinion) => {
@@ -159,8 +159,10 @@ export function AssetOpinionList({
                 tabIndex={0}
                 aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
                 className="group cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={() => onSelect(opinion.symbol)}
-                onKeyDown={(event) => activateOnKeyboard(event, () => onSelect(opinion.symbol))}
+                onClick={(event) => onSelect(opinion.symbol, event.currentTarget)}
+                onKeyDown={(event) =>
+                  activateOnKeyboard(event, () => onSelect(opinion.symbol, event.currentTarget))
+                }
               >
                 <TableCell>
                   <span>
@@ -212,7 +214,7 @@ export function AssetOpinionList({
             variant="outline"
             className="group h-auto min-h-28 w-full justify-start whitespace-normal p-4 text-left hover:border-primary/40 hover:bg-primary/5"
             aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
-            onClick={() => onSelect(opinion.symbol)}
+            onClick={(event) => onSelect(opinion.symbol, event.currentTarget)}
           >
             <span className="flex w-full min-w-0 flex-col gap-3">
               <span className="flex items-start justify-between gap-3">
