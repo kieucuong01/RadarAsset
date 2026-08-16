@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ import type {
 import {
   buildExecutionDateRequest,
   buildTransactionPreview,
+  formatTransactionPresetPrice,
   getTransactionValueError,
   isSellSelectionDisabled,
   toLocalDateInputValue,
@@ -57,6 +59,9 @@ export function PortfolioTransactionDialog({
   onSignalExecuted,
   triggerLabel,
   portfolioCurrency,
+  open: controlledOpen,
+  onOpenChange,
+  trigger,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
@@ -65,16 +70,20 @@ export function PortfolioTransactionDialog({
   preset?: {
     side: Side;
     symbol: string;
-    price: number;
+    price?: number | null;
     signalId?: string;
     assignmentId?: string;
   };
   onSignalExecuted?: (signalId: string) => void;
   triggerLabel?: string;
   portfolioCurrency?: string | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: ReactNode | null;
 }) {
   const { t, locale } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const [saving, setSaving] = useState(false);
   const [assets, setAssets] = useState<AssetOption[] | null>(null);
   const [assetsError, setAssetsError] = useState<string | null>(null);
@@ -90,7 +99,7 @@ export function PortfolioTransactionDialog({
     if (!open || !preset) return;
     setSide(preset.side);
     setSymbol(preset.symbol);
-    setPrice(String(preset.price));
+    setPrice(formatTransactionPresetPrice(preset.price));
     setQuantity((current) => current || "1");
     setFormError(null);
   }, [open, preset]);
@@ -188,7 +197,8 @@ export function PortfolioTransactionDialog({
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (saving) return;
-    setOpen(nextOpen);
+    if (controlledOpen === undefined) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
     if (!nextOpen) setFormError(null);
   };
 
@@ -240,7 +250,7 @@ export function PortfolioTransactionDialog({
       setPrice("");
       setFee("0");
       setDate(toLocalDateInputValue(new Date()));
-      setOpen(false);
+      handleOpenChange(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("transactionsDialog.saveError");
       setFormError(message);
@@ -252,11 +262,17 @@ export function PortfolioTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
-        <Plus data-icon="inline-start" />
-        {triggerLabel ??
-          (preset ? t("transactionsDialog.reviewSignal") : t("transactionsDialog.add"))}
-      </Button>
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button size="sm" disabled={disabled}>
+              <Plus data-icon="inline-start" />
+              {triggerLabel ??
+                (preset ? t("transactionsDialog.reviewSignal") : t("transactionsDialog.add"))}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>

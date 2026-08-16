@@ -31,6 +31,7 @@ vi.mock("@/components/ui/dialog", () => {
     DialogFooter: Container,
     DialogHeader: Container,
     DialogTitle: Container,
+    DialogTrigger: Container,
   };
 });
 
@@ -71,5 +72,24 @@ describe("PortfolioTransactionDialog", () => {
     expect(html).toContain("common.fee (USDT)");
     expect(html).toContain("200 USDT");
     expect(html).not.toContain("200 VND");
+  });
+
+  it("supports one externally controlled dialog without rendering a duplicate trigger", () => {
+    const html = renderToStaticMarkup(
+      <PortfolioTransactionDialog
+        open
+        onOpenChange={() => undefined}
+        trigger={null}
+        holdings={[]}
+        disabled={false}
+        timeframe="1M"
+        onRecorded={() => undefined}
+        preset={{ side: "buy", symbol: "XAU", price: null }}
+      />,
+    );
+
+    expect(html).toContain("transactionsDialog.title");
+    expect(html).not.toContain("transactionsDialog.add");
+    expect(html).not.toContain("transactionsDialog.reviewSignal");
   });
 });

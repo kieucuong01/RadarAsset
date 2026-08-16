@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildExecutionDateRequest,
   buildTransactionPreview,
+  formatTransactionPresetPrice,
   getTransactionValueError,
   isSellSelectionDisabled,
   toLocalDateInputValue,
@@ -23,6 +24,14 @@ describe("portfolio transaction preview", () => {
   it("allows a backdated Sell when the current portfolio is empty", () => {
     expect(isSellSelectionDisabled({ isBackdated: true, holdingsCount: 0 })).toBe(false);
     expect(isSellSelectionDisabled({ isBackdated: false, holdingsCount: 0 })).toBe(true);
+  });
+
+  it("leaves a missing or invalid preset quote blank", () => {
+    expect(formatTransactionPresetPrice(125_000)).toBe("125000");
+    expect(formatTransactionPresetPrice(null)).toBe("");
+    expect(formatTransactionPresetPrice(undefined)).toBe("");
+    expect(formatTransactionPresetPrice(0)).toBe("");
+    expect(formatTransactionPresetPrice(Number.NaN)).toBe("");
   });
 
   it("projects quantity, total cost, and weighted average for a Buy", () => {

@@ -31,6 +31,10 @@ export function isSellSelectionDisabled(input: { isBackdated: boolean; holdingsC
   return !input.isBackdated && input.holdingsCount === 0;
 }
 
+export function formatTransactionPresetPrice(price: number | null | undefined): string {
+  return typeof price === "number" && Number.isFinite(price) && price > 0 ? String(price) : "";
+}
+
 export function getTransactionValueError(input: { quantity: number; price: number; fee: number }) {
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return "Quantity must be greater than 0.";

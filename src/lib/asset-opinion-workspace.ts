@@ -10,7 +10,9 @@ const DEFAULT_REPRESENTATIVES = [
   { symbol: "VNINDEX", name: "VN-Index", currency: "VND" },
 ] as const;
 
-const DEFAULT_BY_SYMBOL = new Map(DEFAULT_REPRESENTATIVES.map((item) => [item.symbol, item]));
+const DEFAULT_BY_SYMBOL = new Map<string, (typeof DEFAULT_REPRESENTATIVES)[number]>(
+  DEFAULT_REPRESENTATIVES.map((item) => [item.symbol, item]),
+);
 
 export type AssetOpinionWorkspaceItem = {
   symbol: string;
