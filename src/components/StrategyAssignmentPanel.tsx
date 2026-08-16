@@ -14,6 +14,7 @@ import type {
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import { getStrategyCatalog, type StrategyCatalogItem } from "@/lib/backtest/client";
 import { useI18n } from "@/lib/i18n/context";
+import { formatNumber, formatPrice } from "@/lib/financial-format";
 import { updateStrategySignalStatusClient } from "@/lib/strategy-forward/client";
 
 function loadAssignments() {
@@ -30,18 +31,19 @@ export function StrategyAssignmentPanel({
   disabled,
   timeframe,
   onRecorded,
+  portfolioCurrency,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
+  portfolioCurrency?: string | null;
 }) {
   const { t, locale } = useI18n();
   const dateFormatter = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   });
-  const numberFormatter = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US");
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
   const [assignments, setAssignments] = useState<StrategyAssignmentResponse[]>([]);
   const [symbol, setSymbol] = useState(holdings[0]?.ticker ?? "BTC");
@@ -234,7 +236,10 @@ export function StrategyAssignmentPanel({
                     <p className="text-xs text-muted-foreground">
                       v{assignment.strategyVersion} ·{" "}
                       {Object.entries(assignment.parameters)
-                        .map(([key, value]) => `${key}=${value}`)
+                        .map(
+                          ([key, value]) =>
+                            `${key}=${typeof value === "number" ? formatNumber(value) : String(value)}`,
+                        )
                         .join(", ")}
                     </p>
                   </div>
@@ -267,7 +272,10 @@ export function StrategyAssignmentPanel({
                             {dateFormatter.format(new Date(signal.signalAt))} ·{" "}
                             {signal.signalPrice === null
                               ? "—"
-                              : numberFormatter.format(signal.signalPrice)}
+                              : formatPrice(signal.signalPrice, {
+                                  locale,
+                                  currency: portfolioCurrency,
+                                })}
                           </span>
                         </div>
                         {signal.status === "suggested" ? (
@@ -303,6 +311,7 @@ export function StrategyAssignmentPanel({
                                 assignmentId: assignment.id,
                               }}
                               onSignalExecuted={() => void refreshAssignments()}
+                              portfolioCurrency={portfolioCurrency}
                             />
                           </div>
                         ) : (

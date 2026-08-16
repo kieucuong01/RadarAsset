@@ -31,18 +31,21 @@ import {
   initialFavoriteState,
 } from "@/lib/favorite-assets/state";
 import { useI18n } from "@/lib/i18n/context";
+import { formatPercent, formatPrice } from "@/lib/financial-format";
 import { loadFavoriteAssets, removeFavoriteAsset } from "@/lib/watchlist-client";
 
 export function FavoriteAssetsPanel({
   holdings,
   timeframe,
   onRecorded,
+  portfolioCurrency,
 }: {
   holdings: PortfolioHoldingResponse[];
   timeframe: PortfolioTimeframe;
   onRecorded: (portfolio: PortfolioResponse) => void;
+  portfolioCurrency?: string | null;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [items, setItems] = useState<WatchlistItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -133,11 +136,10 @@ export function FavoriteAssetsPanel({
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <div>
                     <p className="text-lg font-semibold tabular-nums">
-                      {item.price.toLocaleString()}
+                      {formatPrice(item.price > 0 ? item.price : null, { locale })}
                     </p>
                     <p className={item.chg >= 0 ? "text-xs text-bull" : "text-xs text-bear"}>
-                      {item.chg >= 0 ? "+" : ""}
-                      {item.chg.toFixed(2)}%
+                      {formatPercent(item.chg, { sign: true })}
                     </p>
                   </div>
                   <p className="text-right text-xs text-muted-foreground">
@@ -162,6 +164,7 @@ export function FavoriteAssetsPanel({
                     timeframe={timeframe}
                     onRecorded={onRecorded}
                     preset={{ side: "buy", symbol: item.sym, price: item.price }}
+                    portfolioCurrency={portfolioCurrency}
                     triggerLabel={t("common.buy")}
                   />
                   <PortfolioTransactionDialog
@@ -172,6 +175,7 @@ export function FavoriteAssetsPanel({
                     timeframe={timeframe}
                     onRecorded={onRecorded}
                     preset={{ side: "sell", symbol: item.sym, price: item.price }}
+                    portfolioCurrency={portfolioCurrency}
                     triggerLabel={t("common.sell")}
                   />
                   <Button

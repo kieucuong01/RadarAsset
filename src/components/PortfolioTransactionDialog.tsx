@@ -30,6 +30,12 @@ import {
   toLocalDateInputValue,
 } from "@/lib/portfolio-transaction-preview";
 import { useI18n } from "@/lib/i18n/context";
+import {
+  defaultCurrency,
+  formatMetricValue,
+  formatMoney,
+  formatPrice,
+} from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 
 type AssetOption = {
@@ -42,14 +48,6 @@ type AssetOption = {
 
 type Side = "buy" | "sell";
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-}
-
 export function PortfolioTransactionDialog({
   holdings,
   disabled,
@@ -58,6 +56,7 @@ export function PortfolioTransactionDialog({
   preset,
   onSignalExecuted,
   triggerLabel,
+  portfolioCurrency,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
@@ -72,8 +71,9 @@ export function PortfolioTransactionDialog({
   };
   onSignalExecuted?: (signalId: string) => void;
   triggerLabel?: string;
+  portfolioCurrency?: string | null;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assets, setAssets] = useState<AssetOption[] | null>(null);
@@ -125,6 +125,9 @@ export function PortfolioTransactionDialog({
   }, [assets, open, t]);
 
   const selectedHolding = holdings.find((holding) => holding.ticker === symbol) ?? null;
+  const selectedAsset = assets?.find((asset) => asset.symbol === symbol) ?? null;
+  const currency =
+    selectedAsset?.currency?.trim() || portfolioCurrency?.trim() || defaultCurrency(locale);
   const numericQuantity = Number(quantity);
   const numericPrice = Number(price);
   const numericFee = Number(fee);
@@ -155,7 +158,7 @@ export function PortfolioTransactionDialog({
     symbol: holding.ticker,
     name: holding.name,
     assetClass: holding.category,
-    currency: "USD",
+    currency: portfolioCurrency?.trim() || defaultCurrency(locale),
   }));
   const buyOptions: AssetOption[] = assets ?? heldOptions;
   const options: AssetOption[] = side === "buy" || isBackdated ? buyOptions : heldOptions;
@@ -311,8 +314,16 @@ export function PortfolioTransactionDialog({
               ) : null}
               {side === "sell" && selectedHolding ? (
                 <p className="text-xs text-muted-foreground">
-                  {t("transactionsDialog.available")}: {selectedHolding.qty.toLocaleString()} @{" "}
-                  {t("transactionsDialog.averageCost")} {formatCurrency(selectedHolding.cost)}
+                  {t("transactionsDialog.available")}:{" "}
+                  {formatMetricValue(selectedHolding.qty, {
+                    locale,
+                    unit: selectedHolding.ticker,
+                  })}{" "}
+                  @ {t("transactionsDialog.averageCost")}{" "}
+                  {formatPrice(selectedHolding.cost, {
+                    locale,
+                    currency,
+                  })}
                 </p>
               ) : null}
             </div>
@@ -374,7 +385,9 @@ export function PortfolioTransactionDialog({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tx-fee">{t("common.fee")} (USD)</Label>
+              <Label htmlFor="tx-fee">
+                {t("common.fee")} ({currency})
+              </Label>
               <Input
                 id="tx-fee"
                 type="number"
@@ -399,7 +412,7 @@ export function PortfolioTransactionDialog({
                       ? t("transactionsDialog.totalCost")
                       : t("transactionsDialog.netProceeds")
                   }
-                  value={formatCurrency(backdatedTotal)}
+                  value={formatMoney(backdatedTotal, { locale, currency })}
                 />
               </div>
               <Alert>
@@ -418,23 +431,21 @@ export function PortfolioTransactionDialog({
                     ? t("transactionsDialog.totalCost")
                     : t("transactionsDialog.netProceeds")
                 }
-                value={formatCurrency(preview.total)}
+                value={formatMoney(preview.total, { locale, currency })}
               />
               <PreviewRow
                 label={t("transactionsDialog.projectedQuantity")}
-                value={preview.projectedQuantity.toLocaleString("en-US", {
-                  maximumFractionDigits: 8,
-                })}
+                value={formatMetricValue(preview.projectedQuantity, { locale, unit: symbol })}
               />
               {side === "buy" ? (
                 <PreviewRow
                   label={t("transactionsDialog.projectedAverageCost")}
-                  value={formatCurrency(preview.projectedAverageCost)}
+                  value={formatPrice(preview.projectedAverageCost, { locale, currency })}
                 />
               ) : (
                 <PreviewRow
                   label={t("transactionsDialog.estimatedRealizedPnl")}
-                  value={formatCurrency(preview.realizedPnL)}
+                  value={formatMoney(preview.realizedPnL, { locale, currency })}
                   tone={preview.realizedPnL >= 0 ? "bull" : "bear"}
                 />
               )}
@@ -444,7 +455,7 @@ export function PortfolioTransactionDialog({
                   value={
                     preview.projectedQuantity === 0
                       ? t("transactionsDialog.positionClosed")
-                      : formatCurrency(preview.projectedAverageCost)
+                      : formatPrice(preview.projectedAverageCost, { locale, currency })
                   }
                 />
               ) : null}
