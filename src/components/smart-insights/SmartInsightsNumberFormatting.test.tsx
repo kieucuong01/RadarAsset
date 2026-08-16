@@ -420,6 +420,69 @@ describe("Smart Insights number formatting", () => {
     expect(text).not.toContain("-0.0425return");
   });
 
+  it("limits a live Gold ratio metric to four decimals", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <GoldPanel
+            metrics={[
+              metric(
+                "gold-net-oi",
+                "gold",
+                "gold.cftc.managed_money_net_oi",
+                "0.12345678",
+                "ratio",
+              ),
+            ]}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("0.1235");
+    expect(text).not.toContain("0.12345678 ratio");
+  });
+
+  it("limits a live Macro z-score metric to four decimals", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <MacroPanel
+            metrics={[
+              metric(
+                "macro-growth-surprise",
+                "macro",
+                "macro.growth_surprise",
+                "-1.23456789",
+                "z_score",
+              ),
+            ]}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("−1.2346");
+    expect(text).not.toContain("−1.23456789 z_score");
+  });
+
+  it("limits a live Macro score metric to two decimals", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <MacroPanel
+            metrics={[
+              metric("macro-regime-score", "macro", "macro.regime.score", "38.125000", "score"),
+            ]}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("38.13");
+    expect(text).not.toContain("38.125 score");
+  });
+
   it("formats the active legacy Macro pulse route", () => {
     const text = textContent(
       renderToStaticMarkup(
