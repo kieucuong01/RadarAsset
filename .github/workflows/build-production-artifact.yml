@@ -64,6 +64,7 @@ jobs:
           npm install \
             --prefix dist/migration-tooling \
             --package-lock=false \
+            --no-bin-links \
             --no-audit \
             --no-fund \
             "prisma@${PRISMA_VERSION}"

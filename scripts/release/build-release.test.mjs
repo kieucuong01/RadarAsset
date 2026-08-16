@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, lstat, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -86,6 +86,70 @@ describe("production release assembler", () => {
     const metadata = JSON.parse(await readFile(path.join(outputRoot, "release.json"), "utf8"));
     expect(metadata.gitSha).toBe("a".repeat(40));
     expect(metadata.files.some((file) => file.path === "web/server.js")).toBe(true);
+  });
+
+  it("materializes Next.js traced package links only from repository node_modules", async () => {
+    const repoRoot = await fakeRepository();
+    const outputRoot = path.join(repoRoot, "dist", "release");
+    const packageRoot = path.join(repoRoot, "node_modules", "traced-runtime");
+    const tracedLink = path.join(
+      repoRoot,
+      ".next",
+      "standalone",
+      ".next",
+      "node_modules",
+      "traced-runtime",
+    );
+    await write(packageRoot, "index.js", "traced runtime");
+    await mkdir(path.dirname(tracedLink), { recursive: true });
+    try {
+      await symlink(packageRoot, tracedLink, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EPERM") return;
+      throw error;
+    }
+
+    await assembleRelease({
+      repoRoot,
+      outputRoot,
+      gitSha: "a".repeat(40),
+      builtAt: "2026-08-16T00:00:00.000Z",
+    });
+
+    const copied = path.join(outputRoot, "web", ".next", "node_modules", "traced-runtime");
+    expect((await lstat(copied)).isSymbolicLink()).toBe(false);
+    await expect(readFile(path.join(copied, "index.js"), "utf8")).resolves.toBe("traced runtime");
+  });
+
+  it("rejects a Next.js traced link outside repository node_modules", async () => {
+    const repoRoot = await fakeRepository();
+    const outputRoot = path.join(repoRoot, "dist", "release");
+    const outside = path.join(repoRoot, "private-runtime");
+    const tracedLink = path.join(
+      repoRoot,
+      ".next",
+      "standalone",
+      ".next",
+      "node_modules",
+      "outside",
+    );
+    await write(outside, "secret.txt", "do not copy");
+    await mkdir(path.dirname(tracedLink), { recursive: true });
+    try {
+      await symlink(outside, tracedLink, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EPERM") return;
+      throw error;
+    }
+
+    await expect(
+      assembleRelease({
+        repoRoot,
+        outputRoot,
+        gitSha: "a".repeat(40),
+        builtAt: "2026-08-16T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("outside the allowed release root");
   });
 
   it("fails before deleting output when the standalone server is missing", async () => {

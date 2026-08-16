@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, cp, lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,7 +10,7 @@ import {
   writeReleaseManifest,
 } from "./release-manifest.mjs";
 
-const SKIPPED_DIRECTORY_NAMES = new Set(["tests", "__pycache__", ".pytest_cache"]);
+const SKIPPED_DIRECTORY_NAMES = new Set(["tests", "__pycache__", ".pytest_cache", ".bin"]);
 
 async function pathExists(filePath) {
   try {
@@ -40,10 +40,19 @@ async function requireRegularFile(filePath, label) {
   if (!details.isFile() || details.isSymbolicLink()) throw new Error(`${label} is required.`);
 }
 
-async function copyTree(source, destination, { filter } = {}) {
+function isWithin(root, candidate) {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  );
+}
+
+async function copyTree(source, destination, { filter, allowedSymlinkRoot } = {}) {
   if (!(await pathExists(source))) return;
   await cp(source, destination, {
     recursive: true,
+    dereference: Boolean(allowedSymlinkRoot),
     errorOnExist: true,
     force: false,
     filter: async (entrySource) => {
@@ -53,7 +62,13 @@ async function copyTree(source, destination, { filter } = {}) {
       if (parts.some((part) => SKIPPED_DIRECTORY_NAMES.has(part))) return false;
       if (parts.some((part) => part === ".env" || part.startsWith(".env."))) return false;
       const details = await lstat(entrySource);
-      if (details.isSymbolicLink()) throw new Error("Symbolic links are not allowed in a release.");
+      if (details.isSymbolicLink()) {
+        const target = await realpath(entrySource);
+        if (!allowedSymlinkRoot || !isWithin(allowedSymlinkRoot, target)) {
+          throw new Error(`Symbolic link target is outside the allowed release root: ${relative}`);
+        }
+        return true;
+      }
       if (details.isDirectory()) return true;
       if (!details.isFile()) throw new Error("Unsupported release source entry.");
       if (entrySource.endsWith(".pyc")) return false;
@@ -67,6 +82,7 @@ async function hashTree(root) {
   async function visit(directory) {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
+      if (SKIPPED_DIRECTORY_NAMES.has(entry.name)) continue;
       const filePath = path.join(directory, entry.name);
       if (entry.isSymbolicLink()) throw new Error("Symbolic links are not allowed in tooling.");
       if (entry.isDirectory()) await visit(filePath);
@@ -106,7 +122,9 @@ export async function assembleRelease({ repoRoot, outputRoot, gitSha, builtAt })
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
 
-  await copyTree(path.join(root, ".next", "standalone"), path.join(output, "web"));
+  await copyTree(path.join(root, ".next", "standalone"), path.join(output, "web"), {
+    allowedSymlinkRoot: path.join(root, "node_modules"),
+  });
   await copyTree(path.join(root, ".next", "static"), path.join(output, "web", ".next", "static"));
   await copyTree(path.join(root, "public"), path.join(output, "web", "public"));
   await copyTree(path.join(root, "quant-worker"), path.join(output, "quant-worker"), {
