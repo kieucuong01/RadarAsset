@@ -246,7 +246,9 @@ export function AssetOpinions({
                   <RefreshCw
                     aria-hidden="true"
                     className={
-                      refreshPending || generationState === "generating" ? "animate-spin" : undefined
+                      refreshPending || generationState === "generating"
+                        ? "animate-spin"
+                        : undefined
                     }
                   />
                   {generationState === "failed"
