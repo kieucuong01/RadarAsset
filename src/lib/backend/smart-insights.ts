@@ -1,10 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import type { TenantContext } from "@/lib/auth/tenant-context";
 import { getPrisma } from "@/lib/db/prisma";
 
 import type {
   AssetOpinionEvidenceReadModel,
+  AssetOpinionPerformanceReadModel,
   AssetOpinionReadModel,
   BriefingItemReadModel,
   BriefingReadModel,
@@ -199,6 +200,7 @@ function assetOpinionFallback(raw: unknown): AssetOpinionReadModel {
     freshness: "unavailable",
     explanationStatus: "unavailable",
     failedGates: ["STORED_CONTRACT_INVALID"],
+    performance: { status: "accumulating", horizons: [] },
   };
 }
 
@@ -442,6 +444,64 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
 
 export type BriefingEnvelope = { briefing: BriefingReadModel; fingerprint: string };
 
+type AssetOpinionPerformanceRow = {
+  symbol: string;
+  horizonSessions: number;
+  sampleSize: number | bigint;
+  hitRate: unknown;
+  averageReturn: unknown;
+  averageExcessReturn: unknown;
+};
+
+function nullableDecimal(value: unknown): string | null {
+  return value == null ? null : decimal(value);
+}
+
+async function loadAssetOpinionPerformance(
+  context: TenantContext,
+): Promise<Map<string, AssetOpinionPerformanceReadModel>> {
+  const rows = await getPrisma().$queryRaw<AssetOpinionPerformanceRow[]>(Prisma.sql`
+    SELECT asset.symbol,
+           evaluation.horizon_sessions AS "horizonSessions",
+           COUNT(*)::int AS "sampleSize",
+           AVG(CASE WHEN evaluation.correct THEN 1.0 ELSE 0.0 END) AS "hitRate",
+           AVG(evaluation.asset_return) AS "averageReturn",
+           AVG(evaluation.excess_return) AS "averageExcessReturn"
+    FROM asset_opinion_evaluations AS evaluation
+    JOIN assets AS asset ON asset.id = evaluation.asset_id
+    WHERE evaluation.organization_id = ${context.organizationId}::uuid
+      AND evaluation.user_id = ${context.userId}::uuid
+    GROUP BY asset.symbol, evaluation.horizon_sessions
+    ORDER BY asset.symbol, evaluation.horizon_sessions
+  `);
+  const grouped = new Map<string, AssetOpinionPerformanceReadModel["horizons"]>();
+  for (const row of rows) {
+    if (row.horizonSessions !== 1 && row.horizonSessions !== 5 && row.horizonSessions !== 20)
+      continue;
+    const horizons = grouped.get(row.symbol) ?? [];
+    horizons.push({
+      horizonSessions: row.horizonSessions,
+      sampleSize: Number(row.sampleSize),
+      hitRate: nullableDecimal(row.hitRate),
+      averageReturn: nullableDecimal(row.averageReturn),
+      averageExcessReturn: nullableDecimal(row.averageExcessReturn),
+    });
+    grouped.set(row.symbol, horizons);
+  }
+  return new Map(
+    [...grouped.entries()].map(([symbol, horizons]) => {
+      const sampleSize = horizons.reduce((sum, row) => sum + row.sampleSize, 0);
+      return [
+        symbol,
+        {
+          status: sampleSize >= 20 ? "available" : "limited",
+          horizons: horizons.slice(0, 3),
+        },
+      ];
+    }),
+  );
+}
+
 export async function loadBriefingEnvelope(
   context: TenantContext,
   localDate?: string | null,
@@ -467,6 +527,7 @@ export async function loadBriefingEnvelope(
     },
   });
   if (!row) return null;
+  const performanceBySymbol = await loadAssetOpinionPerformance(context);
   const legacyRows = row.items.filter((item) => item.signalSnapshot.signalType !== "asset_opinion");
   const items = legacyRows.map(briefingItem);
   const portfolio = object(row.portfolioSnapshot);
@@ -490,11 +551,19 @@ export async function loadBriefingEnvelope(
       return section === "risk" || section === "risk_alert";
     }),
     assetOpinions: storedOpinions.slice(0, 25).map((item) => {
+      let opinion: AssetOpinionReadModel;
       try {
-        return storedAssetOpinion(item);
+        opinion = storedAssetOpinion(item);
       } catch {
-        return assetOpinionFallback(item);
+        opinion = assetOpinionFallback(item);
       }
+      return {
+        ...opinion,
+        performance: performanceBySymbol.get(opinion.symbol) ?? {
+          status: "accumulating",
+          horizons: [],
+        },
+      };
     }),
     sourceRunId: row.researchRunId,
   };

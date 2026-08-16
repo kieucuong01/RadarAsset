@@ -134,6 +134,25 @@ const assetOpinionSchema = z
     freshness,
     explanationStatus: z.enum(["accepted", "quant_only", "insufficient_data", "unavailable"]),
     failedGates: z.array(z.string().min(1)),
+    performance: z
+      .object({
+        status: z.enum(["accumulating", "limited", "available"]),
+        horizons: z
+          .array(
+            z
+              .object({
+                horizonSessions: z.union([z.literal(1), z.literal(5), z.literal(20)]),
+                sampleSize: z.number().int().nonnegative(),
+                hitRate: decimal.nullable(),
+                averageReturn: decimal.nullable(),
+                averageExcessReturn: decimal.nullable(),
+              })
+              .strict(),
+          )
+          .max(3),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((opinion, context) => {

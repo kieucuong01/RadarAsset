@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from inspect import getsource
+import json
 
 from smart_insights.asset_opinion_contracts import (
     AssetCandidate,
@@ -161,6 +162,13 @@ def test_persistence_writes_existing_models_and_exactly_one_asset() -> None:
     assert snapshot["pillars"][0]["availableInputWeight"] is not None
     assert snapshot["pillars"][0]["contribution"] is not None
     assert "kronos" not in str(snapshot).casefold()
+    signal_insert = next(
+        parameters for query, parameters in cursor.calls if "INSERT INTO signal_snapshots" in query
+    )
+    assert isinstance(signal_insert, tuple)
+    signal_inputs = json.loads(signal_insert[9])
+    assert signal_inputs["organizationId"] == "organization"
+    assert signal_inputs["userId"] == "user"
 
 
 def test_signal_loader_does_not_reconsume_asset_opinion_snapshots() -> None:

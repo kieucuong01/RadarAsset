@@ -916,6 +916,36 @@ model SignalSnapshot {
   @@map("signal_snapshots")
 }
 
+model AssetOpinionEvaluation {
+  id                        String   @id @default(uuid()) @db.Uuid
+  signalSnapshotId          String   @map("signal_snapshot_id") @db.Uuid
+  organizationId            String   @map("organization_id") @db.Uuid
+  userId                    String   @map("user_id") @db.Uuid
+  assetId                   String   @map("asset_id") @db.Uuid
+  benchmarkAssetId          String   @map("benchmark_asset_id") @db.Uuid
+  assetDatasetVersionId     String   @map("asset_dataset_version_id") @db.Uuid
+  benchmarkDatasetVersionId String   @map("benchmark_dataset_version_id") @db.Uuid
+  horizonSessions           Int      @map("horizon_sessions") @db.SmallInt
+  direction                 Int      @db.SmallInt
+  entryAt                   DateTime @map("entry_at") @db.Timestamptz(3)
+  entryClose                Decimal  @map("entry_close") @db.Decimal(20, 8)
+  targetAt                  DateTime @map("target_at") @db.Timestamptz(3)
+  targetClose               Decimal  @map("target_close") @db.Decimal(20, 8)
+  benchmarkEntryClose       Decimal  @map("benchmark_entry_close") @db.Decimal(20, 8)
+  benchmarkTargetClose      Decimal  @map("benchmark_target_close") @db.Decimal(20, 8)
+  assetReturn               Decimal  @map("asset_return") @db.Decimal(18, 10)
+  benchmarkReturn           Decimal  @map("benchmark_return") @db.Decimal(18, 10)
+  excessReturn              Decimal  @map("excess_return") @db.Decimal(18, 10)
+  correct                   Boolean
+  adjustmentPolicy          String   @map("adjustment_policy")
+  evaluatedAt               DateTime @default(now()) @map("evaluated_at") @db.Timestamptz(3)
+
+  @@unique([signalSnapshotId, horizonSessions])
+  @@index([organizationId, userId, assetId, horizonSessions])
+  @@index([targetAt])
+  @@map("asset_opinion_evaluations")
+}
+
 model UserInsightPreference {
   id                String       @id @default(uuid()) @db.Uuid
   organizationId    String       @map("organization_id") @db.Uuid

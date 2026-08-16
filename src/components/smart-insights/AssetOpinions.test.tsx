@@ -172,6 +172,35 @@ const portfolio: PortfolioResponse = {
 };
 
 describe("AssetOpinions", () => {
+  it("shows bounded realized shadow performance in the analysis modal", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinionDetailContent
+        opinion={opinion({
+          performance: {
+            status: "limited",
+            horizons: [
+              {
+                horizonSessions: 5,
+                sampleSize: 12,
+                hitRate: "0.5833",
+                averageReturn: "0.021",
+                averageExcessReturn: "0.008",
+              },
+            ],
+          },
+        })}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Hiệu quả lịch sử · Shadow");
+    expect(html).toContain("Mẫu còn ít");
+    expect(html).toContain("58.33%");
+    expect(html).toContain("Vượt benchmark");
+  });
+
   it("merges followed assets with opinion actions and protects holdings and representatives", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions

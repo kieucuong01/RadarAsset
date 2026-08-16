@@ -5,6 +5,7 @@ const { prisma } = vi.hoisted(() => ({
     metricObservation: { findMany: vi.fn() },
     dailyBriefing: { findFirst: vi.fn() },
     evidenceItem: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -23,6 +24,7 @@ describe("Smart Insights read bounds", () => {
     prisma.metricObservation.findMany.mockResolvedValue([]);
     prisma.dailyBriefing.findFirst.mockResolvedValue(null);
     prisma.evidenceItem.findMany.mockResolvedValue([]);
+    prisma.$queryRaw.mockResolvedValue([]);
   });
 
   it("loads 25 embedded asset opinions with one tenant-scoped briefing query", async () => {
@@ -111,6 +113,16 @@ describe("Smart Insights read bounds", () => {
       marketSummary: { assetOpinions: Array.from({ length: 25 }, () => storedOpinion) },
       items: [],
     });
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        symbol: "BTC",
+        horizonSessions: 5,
+        sampleSize: 24,
+        hitRate: { toString: () => "0.625" },
+        averageReturn: { toString: () => "0.031" },
+        averageExcessReturn: { toString: () => "0.012" },
+      },
+    ]);
 
     const result = await loadBriefingEnvelope(
       { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
@@ -141,9 +153,22 @@ describe("Smart Insights read bounds", () => {
           }),
         ],
         supportingEvidenceIds: ["e-support"],
+        performance: {
+          status: "available",
+          horizons: [
+            {
+              horizonSessions: 5,
+              sampleSize: 24,
+              hitRate: "0.625",
+              averageReturn: "0.031",
+              averageExcessReturn: "0.012",
+            },
+          ],
+        },
       }),
     );
     expect(prisma.dailyBriefing.findFirst).toHaveBeenCalledOnce();
+    expect(prisma.$queryRaw).toHaveBeenCalledOnce();
     expect(prisma.evidenceItem.findMany).not.toHaveBeenCalled();
   });
 

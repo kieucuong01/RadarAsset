@@ -11,6 +11,7 @@ $taskMarketIngestion = Join-Path $PSScriptRoot "run-market-ingestion.ps1"
 $taskEnvFile = Join-Path $taskRepositoryRoot ".env.local"
 $taskSmartInsights = Join-Path $PSScriptRoot "run-smart-insights.ps1"
 $taskDailyVerifier = Join-Path $taskRepositoryRoot "quant-worker\verify_daily_pipeline.py"
+$taskOpinionEvaluator = Join-Path $taskRepositoryRoot "quant-worker\evaluate_asset_opinions.py"
 $taskProjectPython = Join-Path $taskRepositoryRoot ".venv\Scripts\python.exe"
 $taskPython = if ($PythonExecutable -eq "python" -and (Test-Path -LiteralPath $taskProjectPython -PathType Leaf)) {
     $taskProjectPython
@@ -19,6 +20,9 @@ else {
     (Get-Command -Name $PythonExecutable -ErrorAction Stop).Source
 }
 & $taskMarketIngestion -Command "daily" -PythonExecutable $taskPython -DrainRequests -MaxRequestTotal 1000
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& $taskPython $taskOpinionEvaluator "--env-file" $taskEnvFile "--limit" "500"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $taskSmartInsights -Schedule "daily" -PythonExecutable $taskPython

@@ -202,6 +202,14 @@ every organization membership. Its bounded JSON output uses stable failure codes
 `DAILY_MARKET_RUN_MISSING`, `DAILY_MARKET_RUN_FAILED`, and
 `DAILY_BRIEFING_INCOMPLETE`.
 
+Before publishing the new daily briefing, the same runner executes
+`quant-worker/evaluate_asset_opinions.py`. It evaluates only directional, active
+`asset_opinion` snapshots with tenant attribution. Entry is the next closed daily
+session; immutable outcomes are recorded at 1, 5, and 20 sessions. VN assets prefer
+eligible total-return prices and fall back to raw daily prices; crypto uses BTC,
+Vietnam equities use VNINDEX, and gold uses XAU as benchmarks. Neutral,
+insufficient, and not-yet-mature opinions are never assigned synthetic returns.
+
 Install the tasks from an elevated PowerShell session, then verify their executable,
 action path, state, and last result:
 

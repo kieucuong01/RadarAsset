@@ -33,7 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
-import { formatPercent, formatScore } from "@/lib/financial-format";
+import { formatCount, formatPercent, formatScore } from "@/lib/financial-format";
 
 type Locale = "vi" | "en";
 
@@ -234,6 +234,94 @@ function Charts({ opinion, locale }: { opinion: AssetOpinionModel; locale: Local
         ) : null}
       </section>
     </div>
+  );
+}
+
+function HistoricalPerformance({
+  opinion,
+  locale,
+}: {
+  opinion: AssetOpinionModel;
+  locale: Locale;
+}) {
+  const performance = opinion.performance;
+  return (
+    <section className="rounded-xl border bg-background p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Hiệu quả lịch sử · Shadow" : "Historical performance · Shadow"}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {locale === "vi"
+              ? "Vào ở phiên kế tiếp; đo sau 1/5/20 phiên và so với benchmark. Không phải cam kết lợi nhuận."
+              : "Next-session entry, measured after 1/5/20 sessions versus the benchmark. Not a return promise."}
+          </p>
+        </div>
+        <Badge variant="secondary">
+          {performance?.status === "available"
+            ? locale === "vi"
+              ? "Đủ mẫu"
+              : "Established"
+            : performance?.status === "limited"
+              ? locale === "vi"
+                ? "Mẫu còn ít"
+                : "Limited sample"
+              : locale === "vi"
+                ? "Đang tích lũy"
+                : "Accumulating"}
+        </Badge>
+      </div>
+      {performance?.horizons.length ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {performance.horizons.map((row) => (
+            <article key={row.horizonSessions} className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {locale === "vi"
+                  ? `${row.horizonSessions} phiên`
+                  : `${row.horizonSessions} sessions`}
+              </p>
+              <p className="mt-2 font-mono text-lg font-semibold tabular-nums">
+                {formatPercent(row.hitRate, { multiplier: 100 })}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {locale === "vi" ? "Tỷ lệ đúng hướng" : "Directional hit rate"}
+              </p>
+              <dl className="mt-3 grid gap-1 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {locale === "vi" ? "Số mẫu" : "Samples"}
+                  </dt>
+                  <dd className="font-mono tabular-nums">{formatCount(row.sampleSize)}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {locale === "vi" ? "Lợi nhuận TB" : "Avg return"}
+                  </dt>
+                  <dd className="font-mono tabular-nums">
+                    {formatPercent(row.averageReturn, { multiplier: 100, sign: true })}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {locale === "vi" ? "Vượt benchmark" : "Excess return"}
+                  </dt>
+                  <dd className="font-mono tabular-nums">
+                    {formatPercent(row.averageExcessReturn, { multiplier: 100, sign: true })}
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted-foreground">
+          {locale === "vi"
+            ? "Chưa có quan điểm đủ tuổi để chấm điểm. Hệ thống sẽ tự cập nhật sau mỗi phiên daily."
+            : "No opinion has matured yet. This updates automatically after each daily session."}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -463,6 +551,8 @@ export function AssetOpinionDetailContent({
               <AlertDescription>{technicalLimitation}</AlertDescription>
             </Alert>
           ) : null}
+
+          <HistoricalPerformance opinion={opinion} locale={locale} />
 
           <AssetOpinionHighlights opinion={opinion} locale={locale} onEvidence={onEvidence} />
         </TabsContent>

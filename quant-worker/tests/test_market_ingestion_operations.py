@@ -142,17 +142,18 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
         encoding="utf-8"
     )
 
-    market = wrapper.index('run-market-ingestion.ps1')
-    sources = wrapper.index('run-smart-insights.ps1')
-    briefing = wrapper.index('"briefing"')
-    assert market < sources < briefing
+    market = wrapper.index('& $taskMarketIngestion')
+    evaluation = wrapper.index('& $taskPython $taskOpinionEvaluator')
+    sources = wrapper.index('& $taskSmartInsights -Schedule "daily"')
+    briefing = wrapper.index('& $taskSmartInsights -Schedule "briefing"')
+    assert market < evaluation < sources < briefing
     assert '$taskAssets = @(' not in wrapper
     assert '-Command "daily"' in wrapper
     assert '-DrainRequests' in wrapper
     assert '-AllMemberships' in wrapper
     assert '-Schedule "calendar-current"' in wrapper
     assert "verify_daily_pipeline.py" in wrapper
-    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 5
+    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 6
 
     installer = (
         ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1"

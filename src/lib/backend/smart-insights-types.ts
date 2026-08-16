@@ -84,6 +84,17 @@ export type AssetOpinionEvidenceReadModel = {
   usedInDecision: true;
 };
 
+export type AssetOpinionPerformanceReadModel = {
+  status: "accumulating" | "limited" | "available";
+  horizons: Array<{
+    horizonSessions: 1 | 5 | 20;
+    sampleSize: number;
+    hitRate: string | null;
+    averageReturn: string | null;
+    averageExcessReturn: string | null;
+  }>;
+};
+
 export type AssetOpinionReadModel = {
   symbol: string;
   assetName: string;
@@ -112,6 +123,7 @@ export type AssetOpinionReadModel = {
   freshness: FreshnessState;
   explanationStatus: "accepted" | "quant_only" | "insufficient_data" | "unavailable";
   failedGates: string[];
+  performance?: AssetOpinionPerformanceReadModel;
 };
 
 export type BriefingReadModel = {

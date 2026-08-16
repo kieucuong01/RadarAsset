@@ -182,6 +182,8 @@ def _persist_asset_opinion(
     ).hexdigest()
     signal_inputs = {
         "schemaVersion": "asset-opinion-v2",
+        "organizationId": organization_id,
+        "userId": user_id,
         "symbol": opinion.symbol,
         "assetName": opinion.quant.asset.name,
         "portfolioWeightPct": opinion.quant.asset.portfolio_weight * Decimal("100"),
