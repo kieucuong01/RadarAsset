@@ -39,6 +39,20 @@ remote length and checksum metadata match; otherwise the compressed spool file r
 the collector fails explicitly. Reads require the configured bucket/prefix and validate both gzip
 and the uncompressed SHA-256. S3 outage or integrity failure never falls back to invented evidence.
 
+After provisioning or rotating credentials, verify the private bucket with one reversible object:
+
+```bash
+/opt/datavest/shared/python-venv/bin/python \
+  /opt/datavest/current/deploy/linux/verify-s3-access.py \
+  --env-file /opt/datavest/shared/.env \
+  --bucket datavest
+```
+
+Success requires authenticated head/list/put/head/get/delete operations, confirmed post-delete
+absence, and denied anonymous read. The utility prints status names only and always attempts cleanup
+after a successful put. A failed command is not bucket evidence; inspect server-side logs without
+printing the environment file or provider exception body.
+
 Install and verify the pinned browser runtime once per worker environment:
 
 ```powershell
