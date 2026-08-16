@@ -278,7 +278,7 @@ export function PortfolioOptimizerWorkbench({
               {method === "risk_tolerance" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-risk-tolerance">
-                    {t("optimizer.riskTolerance", { value: markowitzRiskTolerance })}
+                    {t("optimizer.riskTolerance", { value: formatRatio(markowitzRiskTolerance) })}
                   </FieldLabel>
                   <Slider
                     value={[markowitzRiskTolerance]}
@@ -600,7 +600,6 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
               type="number"
               dataKey="volatilityPct"
               name={t("optimizer.volatility")}
-              unit="%"
               tickLine={false}
               axisLine={false}
               fontSize={11}
@@ -610,7 +609,6 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
               type="number"
               dataKey="expectedReturnPct"
               name={t("optimizer.expectedReturn")}
-              unit="%"
               tickLine={false}
               axisLine={false}
               width={48}

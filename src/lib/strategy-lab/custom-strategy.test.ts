@@ -84,8 +84,12 @@ describe("custom strategy rules", () => {
 
   it("formats strategy money, prices, percentages, and ratios with explicit units", () => {
     expect(describeCustomStrategy(vndDcaRule)).toContain("1,000,000 VND");
-    expect(describeCustomStrategy(priceRule, "en")).toContain("12.35% BTC");
-    expect(describeCustomStrategy(priceRule, "en")).toContain("56,200.25 USD");
+    expect(describeCustomStrategy(priceRule, "vi")).toBe(
+      "Mua 12.35% BTC khi giá cắt xuống 56,200.25 USD.",
+    );
+    expect(describeCustomStrategy(priceRule, "en")).toBe(
+      "Buy 12.35% BTC when price crosses below 56,200.25 USD.",
+    );
     expect(
       describeCustomStrategy(
         {
@@ -101,7 +105,7 @@ describe("custom strategy rules", () => {
         },
         "en",
       ),
-    ).toContain("4.1235");
+    ).toBe("Buy FPT when PB is less than 4.1235.");
   });
 
   it("round-trips valid local drafts and ignores malformed storage", () => {

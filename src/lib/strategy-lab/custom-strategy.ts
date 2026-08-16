@@ -110,12 +110,22 @@ export function normalizeCustomStrategy(input: unknown): CustomStrategy {
 }
 
 const OPERATOR_LABELS = {
-  crosses_above: "cắt lên",
-  crosses_below: "cắt xuống",
-  lt: "nhỏ hơn",
-  lte: "nhỏ hơn hoặc bằng",
-  gt: "lớn hơn",
-  gte: "lớn hơn hoặc bằng",
+  vi: {
+    crosses_above: "cắt lên",
+    crosses_below: "cắt xuống",
+    lt: "nhỏ hơn",
+    lte: "nhỏ hơn hoặc bằng",
+    gt: "lớn hơn",
+    gte: "lớn hơn hoặc bằng",
+  },
+  en: {
+    crosses_above: "crosses above",
+    crosses_below: "crosses below",
+    lt: "is less than",
+    lte: "is less than or equal to",
+    gt: "is greater than",
+    gte: "is greater than or equal to",
+  },
 } as const;
 
 export function describeCustomStrategy(
@@ -134,9 +144,9 @@ export function describeCustomStrategy(
   }
   if (rule.kind === "price_threshold") {
     const threshold = formatPrice(rule.value, { locale, currency: rule.currency });
-    return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${formatPercent(rule.sizePct)} ${rule.symbol} ${locale === "vi" ? "khi giá" : "when price"} ${OPERATOR_LABELS[rule.operator]} ${threshold}.`;
+    return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${formatPercent(rule.sizePct)} ${rule.symbol} ${locale === "vi" ? "khi giá" : "when price"} ${OPERATOR_LABELS[locale][rule.operator]} ${threshold}.`;
   }
-  return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${rule.symbol} ${locale === "vi" ? "khi" : "when"} ${rule.metric.toUpperCase()} ${OPERATOR_LABELS[rule.operator]} ${formatRatio(rule.value)}.`;
+  return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${rule.symbol} ${locale === "vi" ? "khi" : "when"} ${rule.metric.toUpperCase()} ${OPERATOR_LABELS[locale][rule.operator]} ${formatRatio(rule.value)}.`;
 }
 
 const storageSchema = z
