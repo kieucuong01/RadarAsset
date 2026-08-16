@@ -5,6 +5,7 @@ import { Bell } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { authClient } from "@/lib/auth-client";
 import {
   getNotifications,
   markNotificationReadClient,
@@ -12,16 +13,19 @@ import {
 } from "@/lib/strategy-forward/client";
 
 export function NotificationCenter() {
+  const { data: session } = authClient.useSession();
+  return session ? <AuthenticatedNotificationCenter /> : null;
+}
+
+function AuthenticatedNotificationCenter() {
   const [page, setPage] = useState<NotificationPage | null>(null);
-  const [disabled, setDisabled] = useState(false);
   const load = useCallback(async () => {
-    if (disabled) return;
     try {
       setPage(await getNotifications());
-    } catch (error) {
-      if (error instanceof Error && error.message === "AUTH_REQUIRED") setDisabled(true);
+    } catch {
+      setPage(null);
     }
-  }, [disabled]);
+  }, []);
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => {
@@ -29,7 +33,6 @@ export function NotificationCenter() {
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [load]);
-  if (disabled) return null;
   return (
     <Popover>
       <PopoverTrigger asChild>

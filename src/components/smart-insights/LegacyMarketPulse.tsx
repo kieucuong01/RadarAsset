@@ -34,6 +34,7 @@ const SAMPLE_MARKET_METRICS = {
 };
 
 export function LegacyMarketPulse({
+  authenticated = true,
   market,
   metrics,
   regimes,
@@ -42,6 +43,7 @@ export function LegacyMarketPulse({
   macroPulseState,
   onMarketChange,
 }: {
+  authenticated?: boolean;
   market: InsightMarket;
   metrics: MetricModel[];
   regimes: RegimeModel[];
@@ -61,7 +63,11 @@ export function LegacyMarketPulse({
   >("idle");
 
   useEffect(() => {
-    if (market !== "crypto") return;
+    if (!authenticated || market !== "crypto") {
+      setCryptoPulse(null);
+      setCryptoPulseState("idle");
+      return;
+    }
     const controller = new AbortController();
     setCryptoPulse(null);
     setCryptoPulseState("loading");
@@ -76,10 +82,14 @@ export function LegacyMarketPulse({
         if (!controller.signal.aborted) setCryptoPulseState("failed");
       });
     return () => controller.abort();
-  }, [market]);
+  }, [authenticated, market]);
 
   useEffect(() => {
-    if (market !== "crypto") return;
+    if (!authenticated || market !== "crypto") {
+      setKronosShadow(null);
+      setKronosShadowState("idle");
+      return;
+    }
     const controller = new AbortController();
     setKronosShadow(null);
     setKronosShadowState("loading");
@@ -98,7 +108,7 @@ export function LegacyMarketPulse({
         if (!controller.signal.aborted) setKronosShadowState("failed");
       });
     return () => controller.abort();
-  }, [market]);
+  }, [authenticated, market]);
 
   const marketMetrics = useMemo(
     () => metrics.filter((metric) => metric.market === market),

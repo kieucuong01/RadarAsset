@@ -11,6 +11,7 @@ import { LegacyMarketPulse } from "@/components/smart-insights/LegacyMarketPulse
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { authClient } from "@/lib/auth-client";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import type { PortfolioResponse, WatchlistItemResponse } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
@@ -50,6 +51,8 @@ function windowQuery(days: number): string {
 
 export function SmartInsights() {
   const { locale } = useI18n();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
+  const authenticatedUserId = session?.user.id ?? null;
   const [market, setMarket] = useState<InsightMarket>("crypto");
   const [impact, setImpact] = useState<"all" | "high" | "medium" | "low">("all");
   const [evidenceId, setEvidenceId] = useState<string | null>(null);
@@ -75,6 +78,27 @@ export function SmartInsights() {
   const [portfolioAvailable, setPortfolioAvailable] = useState(false);
 
   useEffect(() => {
+    if (sessionPending) return;
+    if (!authenticatedUserId) {
+      setBriefing(null);
+      setBriefingState("idle");
+      setRegimes([]);
+      setMetrics([]);
+      setEvents([]);
+      setPreferences(null);
+      setMacroEventRisk(null);
+      setEnergyPulse(null);
+      setMacroPulseState("idle");
+      setWatchlist([]);
+      setWatchlistAvailable(false);
+      setWatchlistError(null);
+      setPortfolio(null);
+      setPortfolioAvailable(false);
+      setEvidence(null);
+      setEvidenceId(null);
+      setState("ready");
+      return;
+    }
     const controller = new AbortController();
     setState("loading");
     Promise.allSettled([
@@ -94,9 +118,10 @@ export function SmartInsights() {
       setState(usable ? "ready" : "error");
     });
     return () => controller.abort();
-  }, [refresh]);
+  }, [authenticatedUserId, refresh, sessionPending]);
 
   useEffect(() => {
+    if (!authenticatedUserId) return;
     let active = true;
     void loadSmartInsightsWorkspaceData().then((result) => {
       if (!active) return;
@@ -109,10 +134,10 @@ export function SmartInsights() {
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, [authenticatedUserId, refresh]);
 
   useEffect(() => {
-    if (briefingState !== "generating") return;
+    if (!authenticatedUserId || briefingState !== "generating") return;
     const controller = new AbortController();
     let timer = 0;
     const poll = async () => {
@@ -130,7 +155,7 @@ export function SmartInsights() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [briefingState]);
+  }, [authenticatedUserId, briefingState]);
 
   async function refreshBriefing() {
     setBriefingRefreshPending(true);
@@ -164,6 +189,7 @@ export function SmartInsights() {
   }
 
   useEffect(() => {
+    if (!authenticatedUserId) return;
     const controller = new AbortController();
     fetchParsed(
       `/api/smart-insights/metrics?market=${market}&${windowQuery(31)}`,
@@ -175,10 +201,10 @@ export function SmartInsights() {
         if (!controller.signal.aborted) setMetrics([]);
       });
     return () => controller.abort();
-  }, [market, refresh]);
+  }, [authenticatedUserId, market, refresh]);
 
   useEffect(() => {
-    if (market !== "macro") return;
+    if (!authenticatedUserId || market !== "macro") return;
     const controller = new AbortController();
     setMacroPulseState("loading");
     Promise.all([
@@ -203,9 +229,10 @@ export function SmartInsights() {
         if (!controller.signal.aborted) setMacroPulseState("failed");
       });
     return () => controller.abort();
-  }, [market, refresh]);
+  }, [authenticatedUserId, market, refresh]);
 
   useEffect(() => {
+    if (!authenticatedUserId) return;
     const controller = new AbortController();
     const filter = impact === "all" ? "" : `&impact=${impact}`;
     fetchParsed(
@@ -218,10 +245,10 @@ export function SmartInsights() {
         if (!controller.signal.aborted) setEvents([]);
       });
     return () => controller.abort();
-  }, [impact, refresh]);
+  }, [authenticatedUserId, impact, refresh]);
 
   useEffect(() => {
-    if (!evidenceId) {
+    if (!authenticatedUserId || !evidenceId) {
       setEvidence(null);
       return;
     }
@@ -236,21 +263,22 @@ export function SmartInsights() {
         if (!controller.signal.aborted) setEvidence(null);
       });
     return () => controller.abort();
-  }, [evidenceId]);
+  }, [authenticatedUserId, evidenceId]);
 
   useEffect(() => {
-    if (!preferences?.canWrite || preferences.preference.locale === locale) return;
+    if (!authenticatedUserId || !preferences?.canWrite || preferences.preference.locale === locale)
+      return;
     putPreferences({ ...preferences.preference, locale })
       .then(setPreferences)
       .catch(() => undefined);
-  }, [locale, preferences]);
+  }, [authenticatedUserId, locale, preferences]);
 
   const marketMetrics = useMemo(
     () => metrics.filter((item) => item.market === market),
     [market, metrics],
   );
 
-  if (state === "loading") {
+  if (state === "loading" || sessionPending) {
     return (
       <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <Skeleton className="h-64 w-full rounded-xl" />
@@ -289,20 +317,21 @@ export function SmartInsights() {
         locale={locale}
         onEvidence={setEvidenceId}
         generationState={briefingState}
-        onRefresh={refreshBriefing}
+        onRefresh={authenticatedUserId ? refreshBriefing : undefined}
         refreshPending={briefingRefreshPending}
         watchlist={watchlist}
         watchlistAvailable={watchlistAvailable}
         watchlistError={watchlistError}
         portfolio={portfolio}
         portfolioAvailable={portfolioAvailable}
-        onWatchlistSaved={handleWatchlistSaved}
-        onRemoveTrackedAsset={handleRemoveTrackedAsset}
-        onPortfolioRecorded={handlePortfolioRecorded}
+        onWatchlistSaved={authenticatedUserId ? handleWatchlistSaved : undefined}
+        onRemoveTrackedAsset={authenticatedUserId ? handleRemoveTrackedAsset : undefined}
+        onPortfolioRecorded={authenticatedUserId ? handlePortfolioRecorded : undefined}
         portfolioChanges={briefing?.portfolioChanges ?? []}
         portfolioChangesStatus={briefing?.portfolioChangesStatus ?? "accumulating"}
       />
       <LegacyMarketPulse
+        authenticated={Boolean(authenticatedUserId)}
         market={market}
         metrics={marketMetrics}
         regimes={regimes}

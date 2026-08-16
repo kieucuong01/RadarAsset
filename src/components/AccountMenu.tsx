@@ -30,9 +30,7 @@ function userInitials(name: string | undefined, email: string): string {
 }
 
 export function AccountMenu() {
-  const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
-  const { data: organizations } = authClient.useListOrganizations();
 
   if (isPending) {
     return <Skeleton className="size-9 rounded-full" />;
@@ -45,6 +43,20 @@ export function AccountMenu() {
       </Button>
     );
   }
+
+  return <AuthenticatedAccountMenu session={session} />;
+}
+
+function AuthenticatedAccountMenu({
+  session,
+}: {
+  session: {
+    user: { name: string; email: string; image?: string | null };
+    session: { activeOrganizationId?: string | null };
+  };
+}) {
+  const router = useRouter();
+  const { data: organizations } = authClient.useListOrganizations();
 
   const organizationList = organizations ?? [];
   const activeOrganizationId = session.session.activeOrganizationId;

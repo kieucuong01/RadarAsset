@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
+from pathlib import PurePosixPath
 import re
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import psycopg
@@ -869,9 +871,50 @@ class PostgresInsightRepository:
         if (
             artifact.content_hash != expected_hash
             or artifact.byte_count != len(snapshot.content)
-            or not artifact.locator.startswith(f"{source.code}/")
+            or not PostgresInsightRepository._artifact_locator_matches(
+                artifact.locator,
+                source=source,
+                snapshot=snapshot,
+                expected_hash=expected_hash,
+            )
         ):
             raise ValueError("Stored artifact does not match the source snapshot.")
+
+    @staticmethod
+    def _artifact_locator_matches(
+        locator: str,
+        *,
+        source: SourceDefinition,
+        snapshot: RawSnapshot,
+        expected_hash: str,
+    ) -> bool:
+        parsed = urlsplit(locator)
+        if parsed.query or parsed.fragment:
+            return False
+        if parsed.scheme:
+            if (
+                parsed.scheme != "s3"
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.hostname != parsed.netloc
+            ):
+                return False
+            path = parsed.path.lstrip("/")
+        else:
+            if parsed.netloc:
+                return False
+            path = parsed.path
+        relative = PurePosixPath(path)
+        if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+            return False
+        expected_tail = (
+            source.code,
+            f"{snapshot.observed_at.year:04d}",
+            f"{snapshot.observed_at.month:02d}",
+            f"{expected_hash}.json.gz",
+        )
+        return len(relative.parts) >= len(expected_tail) and relative.parts[-4:] == expected_tail
 
     @staticmethod
     def _acquire_period_locks(
