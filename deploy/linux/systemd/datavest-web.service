@@ -1,0 +1,35 @@
+[Unit]
+Description=DataVest Next.js web application
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=datavest
+Group=datavest
+WorkingDirectory=/opt/datavest/current/web
+EnvironmentFile=/opt/datavest/shared/.env
+Environment=NODE_ENV=production
+Environment=PORT=4200
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node /opt/datavest/current/web/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+MemoryMax=600M
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/datavest/shared/spool
+RuntimeDirectory=datavest
+RuntimeDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target
