@@ -47,6 +47,7 @@ import { calculateFreshness } from "@/lib/market-data/health";
 import type { WorkerImportContext } from "./worker-context";
 import { resolveProviderInstrument } from "./provider-catalog";
 import { requestMarketIngestion } from "./ingestion-requests";
+import { numberFromDecimal, objectJson, stringArrayJson } from "./db-mappers";
 
 const TIMEFRAME_LIMITS = {
   "1W": 7,
@@ -79,15 +80,6 @@ const PUBLIC_MARKET_ERROR_CODES = new Set([
   "stale_run",
   "unsupported_timeframe",
 ]);
-
-function numberFromDecimal(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return Number(value);
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-  return 0;
-}
 
 function assertAssetClass(value: string): AssetClass {
   const known = ["crypto", "equity", "etf", "index", "fx", "commodity", "cash"];
@@ -154,18 +146,6 @@ function assertThesisStance(value: string): InvestmentThesisInput["stance"] {
     return value;
   }
   return "watch";
-}
-
-function objectJson(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function stringArrayJson(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
 }
 
 function relativeAge(date: Date): string {
