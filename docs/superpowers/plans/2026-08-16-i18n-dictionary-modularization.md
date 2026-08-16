@@ -13,7 +13,7 @@
 - Domain ownership:
   - common: `header`, `routes`, `dataStatus`, `common`
   - smart-insights: `overview`
-  - portfolio: `portfolio`
+  - portfolio: `portfolio`, `favorites`, `transactionsDialog`, `strategyAlerts`, `forwardTesting`
   - quant: `quant`, `optimizer`, `strategyLab`, `factorLab`, `backtestResults`, `backtest`
 - Keep the public dictionary type derived from the composed Vietnamese dictionary.
 
