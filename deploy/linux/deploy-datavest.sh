@@ -204,19 +204,32 @@ if [[ ! -d "${python_target}" ]]; then
     --find-links "${release_dir}/wheelhouse" \
     -r "${release_dir}/quant-worker/requirements.txt"
   "${python_stage}/bin/python" -c "import fastapi, psycopg, boto3"
+  chown -R root:datavest "${python_stage}"
+  chmod -R u+rwX,g+rX,o-rwx "${python_stage}"
   mv -T -- "${python_stage}" "${python_target}"
 fi
+chown -R root:datavest "${python_target}"
+chmod -R u+rwX,g+rX,o-rwx "${python_target}"
 
 if [[ ! -d "${migration_target}" ]]; then
   migration_stage="${shared_root}/dependencies/.migration-${migration_hash}.${BASHPID}"
   install -d -m 0750 "${migration_stage}"
   cp -a -- "${release_dir}/migration-tooling/." "${migration_stage}/"
   "${node_bin}" "${migration_stage}/node_modules/prisma/build/index.js" --version >/dev/null
+  chown -R root:datavest "${migration_stage}"
+  chmod -R u+rwX,g+rX,o-rwx "${migration_stage}"
   mv -T -- "${migration_stage}" "${migration_target}"
 fi
+chown -R root:datavest "${migration_target}"
+chmod -R u+rwX,g+rX,o-rwx "${migration_target}"
 
-old_python_target="$(readlink -f -- "${shared_root}/python-venv" 2>/dev/null || true)"
-old_migration_target="$(readlink -f -- "${shared_root}/migration-tooling" 2>/dev/null || true)"
+resolve_existing_link() {
+  local link="$1"
+  [[ -L "${link}" ]] || return 0
+  realpath -- "${link}"
+}
+old_python_target="$(resolve_existing_link "${shared_root}/python-venv")"
+old_migration_target="$(resolve_existing_link "${shared_root}/migration-tooling")"
 switch_link() {
   local target="$1" link="$2" temporary="${2}.next.${BASHPID}"
   ln -s -- "${target}" "${temporary}" && mv -Tf -- "${temporary}" "${link}"
@@ -250,7 +263,7 @@ DATABASE_URL="${database_url}" \
   migrate deploy --config "${release_dir}/deploy/linux/prisma-production.config.mjs"
 unset database_url
 
-old_current="$(readlink -f -- "${current_link}" 2>/dev/null || true)"
+old_current="$(resolve_existing_link "${current_link}")"
 old_release_sha=""
 if [[ -n "${old_current}" && -f "${old_current}/release.json" ]]; then
   old_release_sha="$("${node_bin}" -p "require(process.argv[1]).gitSha" "${old_current}/release.json")"

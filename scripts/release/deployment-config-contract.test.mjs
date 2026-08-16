@@ -63,6 +63,7 @@ describe("DataVest production service configuration", () => {
       "/opt/datavest/shared/.env",
       "-/opt/datavest/shared/release.env",
     ]);
+    expect(unit.Service.RuntimeDirectory).toBeUndefined();
   });
 
   it("exposes only the scheduled-job allowlist and fixed commands", () => {
@@ -169,6 +170,7 @@ describe("DataVest production service configuration", () => {
         "/opt/datavest/shared/.env",
         "-/opt/datavest/shared/release.env",
       ]);
+      expect(unit.Service.RuntimeDirectory).toBeUndefined();
     }
   });
 

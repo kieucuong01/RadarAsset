@@ -29,8 +29,6 @@ RestrictSUIDSGID=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/opt/datavest/shared/spool
-RuntimeDirectory=datavest
-RuntimeDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target
