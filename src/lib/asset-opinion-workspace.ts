@@ -6,8 +6,10 @@ const MAX_VISIBLE_ASSETS = 25;
 
 const DEFAULT_REPRESENTATIVES = [
   { symbol: "BTC", name: "Bitcoin", currency: "USDT" },
-  { symbol: "XAU", name: "Gold Spot", currency: "USD" },
+  { symbol: "ETH", name: "Ethereum", currency: "USDT" },
   { symbol: "VNINDEX", name: "VN-Index", currency: "VND" },
+  { symbol: "VN30", name: "VN30 Index", currency: "VND" },
+  { symbol: "XAU", name: "Gold Spot", currency: "USD" },
 ] as const;
 
 const DEFAULT_BY_SYMBOL = new Map<string, (typeof DEFAULT_REPRESENTATIVES)[number]>(
@@ -122,7 +124,7 @@ export function buildAssetOpinionWorkspace(
       currency: holding?.currency ?? watchlistItem?.currency ?? representative?.currency ?? null,
       datasetState: watchlistItem?.datasetState ?? null,
       isDefaultRepresentative: Boolean(representative),
-      canRemove: Boolean(input.watchlistAvailable && watchlistItem && !holding && !representative),
+      canRemove: Boolean(input.watchlistAvailable && watchlistItem && !holding),
       canSell: Boolean(input.portfolioAvailable && holding && holding.qty > 0),
       backtestHref,
     };

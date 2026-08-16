@@ -74,8 +74,8 @@ def test_ai_failure_keeps_quant_briefing_without_sample_prose() -> None:
     assert result.status == "quant_only"
     assert result.primary_signal_ids == ("signal",)
     assert result.ai_insight_count == 0
-    assert result.asset_opinion_count == 3
-    assert tuple(row.symbol for row in result.asset_opinions) == ("VNINDEX", "XAU", "BTC")
+    assert result.asset_opinion_count == 5
+    assert tuple(row.symbol for row in result.asset_opinions) == ("BTC", "ETH", "VNINDEX", "VN30", "XAU")
 
 
 def test_late_data_creates_revision_without_mutating_first() -> None:

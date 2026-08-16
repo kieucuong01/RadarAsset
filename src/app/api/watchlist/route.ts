@@ -13,7 +13,7 @@ const watchlistSchema = z
     providerCode: z.string().trim().min(1).max(40).optional(),
     providerSymbol: z.string().trim().min(1).max(80).optional(),
     requestedTimeframes: z
-      .array(z.enum(["1d", "1h"]))
+      .array(z.enum(["1d"]))
       .max(2)
       .optional(),
     alert: z.coerce.number().positive().optional().nullable(),

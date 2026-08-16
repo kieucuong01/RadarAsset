@@ -34,7 +34,7 @@ def request(provider_code: str = "binance-public") -> QueuedIngestionRequest:
         timezone_name="UTC",
         canonical_key="CRYPTO:BINANCE:ETHUSDT",
         maximum_leverage=Decimal("1"),
-        timeframe="1h",
+        timeframe="1d",
         worker_id="worker-a",
         attempt_count=1,
     )
@@ -45,7 +45,7 @@ def bars() -> list[Bar]:
         Bar(
             asset="ETH",
             timestamp=datetime(2026, 8, 11, 10, tzinfo=timezone.utc),
-            timeframe="1h",
+            timeframe="1d",
             open=Decimal("100"),
             high=Decimal("101"),
             low=Decimal("99"),
@@ -204,6 +204,16 @@ def test_request_worker_rejects_unapproved_provider() -> None:
 
     assert response["code"] == "PROVIDER_NOT_APPROVED"
     assert repository.failed == ("request-1", "PROVIDER_NOT_APPROVED")
+
+
+def test_request_worker_accepts_kbs_benchmark_provider() -> None:
+    repository = FakeRequestRepository(request("vnstock-kbs-free"))
+    provider = FakeProvider(bars())
+
+    response = process_next_ingestion_request(repository, lambda _code: provider, now=NOW)
+
+    assert response["status"] == "succeeded"
+    assert repository.completed == [("request-1", "eth-1h-version")]
 
 
 def test_request_worker_retries_sanitized_provider_failures() -> None:

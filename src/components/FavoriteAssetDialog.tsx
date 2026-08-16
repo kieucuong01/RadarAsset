@@ -30,7 +30,7 @@ const instrumentSchema = z
     market: z.enum(["vn_equity", "crypto_spot", "metal_spot"]),
     venue: z.string().nullable(),
     currency: z.string(),
-    supportedTimeframes: z.array(z.enum(["1d", "1h"])),
+    supportedTimeframes: z.array(z.enum(["1d"])),
   })
   .strict();
 

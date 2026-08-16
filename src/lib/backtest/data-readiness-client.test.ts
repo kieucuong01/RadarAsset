@@ -15,11 +15,11 @@ const validReadiness = {
   instrumentsByMarket: { vn_equity: 404, crypto_spot: 13, metal_spot: 1 },
   activeDatasetsByMarketTimeframe: [
     { market: "vn_equity", timeframe: "1d", count: 20 },
-    { market: "crypto_spot", timeframe: "1h", count: 13 },
+    { market: "crypto_spot", timeframe: "1d", count: 13 },
   ],
   ingestionRequestsByStatusTimeframe: [
     { status: "queued", timeframe: "1d", count: 398 },
-    { status: "running", timeframe: "1h", count: 2 },
+    { status: "running", timeframe: "1d", count: 2 },
   ],
   backlogCount: 400,
   dueBacklogCount: 398,
@@ -33,7 +33,7 @@ const validReadiness = {
   workerStatus: "active",
   lastSchedulerSuccessAt: "2026-08-14T10:30:00.000Z",
   latestSchedulerRun: {
-    command: "hourly",
+    command: "daily",
     status: "succeeded",
     startedAt: "2026-08-14T10:00:00.000Z",
     finishedAt: "2026-08-14T10:30:00.000Z",
@@ -112,7 +112,7 @@ describe("Quant data readiness client", () => {
         ...validReadiness,
         activeDatasetsByMarketTimeframe: [
           { market: "vn_equity", timeframe: "1d", count: 12_000 },
-          { market: "crypto_spot", timeframe: "1h", count: 450 },
+          { market: "crypto_spot", timeframe: "1d", count: 450 },
         ],
         backlogCount: 12_450,
       }),

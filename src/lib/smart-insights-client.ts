@@ -12,7 +12,7 @@ const assetStance = z.enum([
   "NEGATIVE",
   "INSUFFICIENT_DATA",
 ]);
-const assetHorizon = z.enum(["INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
+const assetHorizon = z.enum(["DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
 const assetAction = z.enum([
   "HOLD",
   "REVIEW_INCREASE",
@@ -360,7 +360,7 @@ export const preferencesSchema = z.object({
     assets: z.array(z.string()),
     locale: z.enum(["vi", "en"]),
     baseCurrency: z.string(),
-    investmentHorizon: z.enum(["INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]),
+    investmentHorizon: z.enum(["DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]),
     riskTolerance: z.enum(["conservative", "moderate", "aggressive"]),
     alertPreferences: z.object({ highImpact: z.boolean() }),
   }),

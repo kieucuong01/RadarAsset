@@ -46,8 +46,8 @@ def test_universe_prioritizes_portfolio_then_watchlist_then_representatives() ->
     result = build_asset_universe(
         portfolio,
         watchlist,
-        ("VNINDEX", "XAU", "BTC"),
-        limit=5,
+        ("BTC", "ETH", "VNINDEX", "VN30", "XAU"),
+        limit=6,
     )
 
     assert tuple(row.symbol for row in result.assets) == (
@@ -56,6 +56,7 @@ def test_universe_prioritizes_portfolio_then_watchlist_then_representatives() ->
         "XAU",
         "SOL",
         "VNINDEX",
+        "VN30",
     )
     assert result.excluded_representatives == ()
 
@@ -69,12 +70,12 @@ def test_universe_caps_at_25_and_reports_excluded_representatives() -> None:
     result = build_asset_universe(
         portfolio,
         (),
-        ("VNINDEX", "XAU", "BTC"),
+        ("BTC", "ETH", "VNINDEX", "VN30", "XAU"),
         limit=25,
     )
 
     assert len(result.assets) == 25
-    assert result.excluded_representatives == ("VNINDEX", "XAU", "BTC")
+    assert result.excluded_representatives == ("BTC", "ETH", "VNINDEX", "VN30", "XAU")
 
 
 def test_universe_deduplicates_aliases_before_applying_the_limit() -> None:

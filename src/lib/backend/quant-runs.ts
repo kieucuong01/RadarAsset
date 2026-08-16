@@ -487,7 +487,7 @@ function quantRunToResponse(run: QuantRunRecord): QuantRunResponse {
     strategyCode: run.strategyVersion?.code ?? null,
     strategyVersion: run.strategyVersion?.version ?? null,
     status: quantRunStatus(run.status),
-    timeframe: run.timeframe === "1h" ? "1h" : "1d",
+    timeframe: "1d",
     progress: run.progress ?? 0,
     strategyHash: run.strategyHash ?? null,
     datasetVersionIds: stringArray(run.datasetVersionIds),

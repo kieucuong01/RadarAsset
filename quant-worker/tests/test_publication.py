@@ -12,7 +12,7 @@ def bars() -> list[Bar]:
         Bar(
             asset="BTC",
             timestamp=datetime.fromisoformat(timestamp.replace("Z", "+00:00")),
-            timeframe="1h",
+            timeframe="1d",
             open=Decimal("100"),
             high=Decimal("102"),
             low=Decimal("99"),
@@ -22,8 +22,8 @@ def bars() -> list[Bar]:
         )
         for timestamp in (
             "2024-01-01T00:00:00Z",
-            "2024-01-01T01:00:00Z",
-            "2024-01-01T03:00:00Z",
+            "2024-01-02T00:00:00Z",
+            "2024-01-04T00:00:00Z",
         )
     ]
 
@@ -74,7 +74,7 @@ def test_prepare_and_publish_preserves_provenance_quality_and_checksum() -> None
     assert prepared.source_metadata["calendarVersion"] == "crypto-24x7-v1"
     assert prepared.issues[0].classification == "PROVIDER_GAP"
     assert prepared.issues[0].range_start == datetime.fromisoformat(
-        "2024-01-01T02:00:00+00:00"
+        "2024-01-03T00:00:00+00:00"
     )
 
     publisher = FakePublisher()

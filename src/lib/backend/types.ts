@@ -15,7 +15,7 @@ export type QuantRunStatus =
 
 export type MarketDataMarket = "crypto_spot" | "vn_equity" | "metal_spot";
 
-export type MarketDataTimeframe = "1h" | "1d";
+export type MarketDataTimeframe = "1d";
 
 export type MarketDataFreshness = "fresh" | "stale" | "unavailable" | "fixture";
 
@@ -106,7 +106,7 @@ export type QuantDataReadinessResponse = {
   workerStatus: "active" | "stale" | "unavailable";
   lastSchedulerSuccessAt: string | null;
   latestSchedulerRun: {
-    command: "hourly" | "daily" | "all";
+    command: "daily" | "all";
     status: "running" | "succeeded" | "failed";
     startedAt: string;
     finishedAt: string | null;
@@ -131,7 +131,7 @@ export type WatchlistMutationInput = {
   symbol?: string;
   providerCode?: string;
   providerSymbol?: string;
-  requestedTimeframes?: Array<"1d" | "1h">;
+  requestedTimeframes?: Array<"1d">;
   alert?: number | null;
 };
 
@@ -399,7 +399,7 @@ export type WatchlistItemResponse = {
   sentiment: "bull" | "bear" | "neutral";
   datasetState: "ready" | "stale" | "loading" | "unavailable";
   ingestionRequestId: string | null;
-  backtestableTimeframes: Array<"1d" | "1h">;
+  backtestableTimeframes: Array<"1d">;
   currency?: string;
   hasMarketQuote?: boolean;
 };
@@ -410,7 +410,7 @@ export type QuantRunResponse = {
   strategyCode: string | null;
   strategyVersion: string | null;
   status: QuantRunStatus;
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
   progress: number;
   strategyHash: string | null;
   datasetVersionIds: string[];

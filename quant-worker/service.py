@@ -17,7 +17,7 @@ class OptimizePayload(BaseModel):
 
     returnsBySymbol: dict[str, list[float]] = Field(min_length=1, max_length=10)
     marketBySymbol: dict[str, str]
-    timeframe: str = Field(pattern="^(1d|1h)$")
+    timeframe: str = Field(pattern="^1d$")
     method: str
     maxWeightBps: int = Field(ge=1, le=10_000)
     totalWeightBps: int = Field(ge=1, le=10_000)

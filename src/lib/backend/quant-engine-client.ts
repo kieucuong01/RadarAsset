@@ -11,7 +11,7 @@ export class QuantEngineError extends Error {
 export type QuantEngineOptimizeInput = {
   returnsBySymbol: Record<string, number[]>;
   marketBySymbol: Record<string, string>;
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
   method: string;
   maxWeightBps: number;
   totalWeightBps: number;

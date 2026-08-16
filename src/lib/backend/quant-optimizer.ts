@@ -23,7 +23,7 @@ export const quantOptimizerRequestSchema = z
   .object({
     symbols: z.array(backtestSymbolSchema).min(1).max(10),
     method: z.enum(OPTIMIZER_METHODS).default("risk_parity"),
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
     from: isoDateSchema,
     to: isoDateSchema,
     maxWeightBps: z.number().int().min(1).max(10_000),
@@ -45,7 +45,7 @@ export const quantOptimizerRequestSchema = z
       (new Date(`${value.to}T00:00:00.000Z`).valueOf() -
         new Date(`${value.from}T00:00:00.000Z`).valueOf()) /
       86_400_000;
-    const maximumDays = value.timeframe === "1h" ? 730 : 3_650;
+    const maximumDays = 3_650;
     if (durationDays > maximumDays) {
       context.addIssue({
         code: "custom",

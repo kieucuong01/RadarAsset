@@ -47,7 +47,7 @@ def test_quality_report_groups_deterministically_by_lineage_and_range() -> None:
     rows = [
         {
             "market": "crypto_spot",
-            "timeframe": "1h",
+            "timeframe": "1d",
             "provider_code": "binance-public",
             "classification": "PROVIDER_GAP",
             "range_start": datetime(2026, 8, 10, 1, tzinfo=timezone.utc),
@@ -56,7 +56,7 @@ def test_quality_report_groups_deterministically_by_lineage_and_range() -> None:
         },
         {
             "market": "crypto_spot",
-            "timeframe": "1h",
+            "timeframe": "1d",
             "provider_code": "binance-public",
             "classification": "PROVIDER_GAP",
             "range_start": datetime(2026, 8, 10, 1, tzinfo=timezone.utc),
@@ -83,7 +83,7 @@ def test_quality_report_groups_deterministically_by_lineage_and_range() -> None:
         "groups": [
             {
                 "market": "crypto_spot",
-                "timeframe": "1h",
+                "timeframe": "1d",
                 "providerCode": "binance-public",
                 "classification": "PROVIDER_GAP",
                 "rangeStart": "2026-08-10T01:00:00+00:00",

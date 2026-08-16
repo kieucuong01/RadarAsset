@@ -39,7 +39,6 @@ PROVIDERS = {
 
 
 FRESHNESS_TOLERANCE = {
-    "1h": timedelta(minutes=90),
     "1d": timedelta(hours=36),
 }
 
@@ -49,8 +48,7 @@ def _latest_closed_bar_open(market: str, timeframe: str, now: datetime) -> datet
         raise ValueError("Queue timestamp must be timezone-aware.")
     now = now.astimezone(timezone.utc)
     if market == "crypto_spot":
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        return current_hour - (timedelta(hours=1) if timeframe == "1h" else timedelta(days=1))
+        return now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
     if market == "vn_equity":
         local_day = now.astimezone(HOSE_TIMEZONE).date()
@@ -58,31 +56,18 @@ def _latest_closed_bar_open(market: str, timeframe: str, now: datetime) -> datet
             session_day = local_day - timedelta(days=day_offset)
             if not is_session_day(session_day, market):
                 continue
-            if timeframe == "1d":
-                session_close = datetime.combine(
-                    session_day, time(15), tzinfo=HOSE_TIMEZONE
-                ).astimezone(timezone.utc)
-                if session_close <= now:
-                    return datetime.combine(
-                        session_day, time(0), tzinfo=HOSE_TIMEZONE
-                    ).astimezone(timezone.utc)
-            else:
-                for hour in (7, 6, 4, 3, 2):
-                    candidate = datetime.combine(
-                        session_day, time(hour), tzinfo=timezone.utc
-                    )
-                    if candidate + timedelta(hours=1) <= now:
-                        return candidate
+            session_close = datetime.combine(
+                session_day, time(15), tzinfo=HOSE_TIMEZONE
+            ).astimezone(timezone.utc)
+            if session_close <= now:
+                return datetime.combine(session_day, time(0), tzinfo=HOSE_TIMEZONE).astimezone(
+                    timezone.utc
+                )
         raise ValueError("Unable to resolve the latest closed HOSE bar.")
 
-    candidate = (
-        now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
-        if timeframe == "1h"
-        else now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
-    )
-    step = timedelta(hours=1) if timeframe == "1h" else timedelta(days=1)
+    candidate = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     while not is_session_day(candidate.date(), market):
-        candidate -= step
+        candidate -= timedelta(days=1)
     return candidate
 
 
@@ -91,8 +76,8 @@ def market_timeframe_stale_cutoffs(now: datetime) -> dict[tuple[str, str], datet
         (market, timeframe): _latest_closed_bar_open(market, timeframe, now)
         - FRESHNESS_TOLERANCE[timeframe]
         for market, timeframes in {
-            "crypto_spot": ("1d", "1h"),
-            "vn_equity": ("1d", "1h"),
+            "crypto_spot": ("1d",),
+            "vn_equity": ("1d",),
             "metal_spot": ("1d",),
         }.items()
         for timeframe in timeframes
@@ -382,7 +367,8 @@ def sync_provider_instruments(
                   WHERE managed_instrument.asset_id = asset.id
                     AND managed_provider.code IN (
                       'binance-public', 'dukascopy-public',
-                      'vnstock-vci-free', 'msn-via-vnstock'
+                      'vnstock-kbs-free', 'vnstock-vci-free',
+                      'msn-via-vnstock'
                     )
                 )
                 """,
@@ -404,7 +390,8 @@ def sync_provider_instruments(
                 JOIN assets AS asset ON asset.id = instrument.asset_id
                 WHERE provider.code IN (
                   'binance-public', 'dukascopy-public',
-                  'vnstock-vci-free', 'msn-via-vnstock'
+                  'vnstock-kbs-free', 'vnstock-vci-free',
+                  'msn-via-vnstock'
                 )
                 ON CONFLICT (provider_code, asset_id, observed_at) DO UPDATE SET
                   provider_symbol = EXCLUDED.provider_symbol,
@@ -441,8 +428,6 @@ def queue_market_ingestion_requests(
     now: datetime | None = None,
     allowed_symbols: Sequence[str] | None = None,
 ) -> int:
-    if command == "hourly":
-        raise ValueError("Intraday market ingestion is retired.")
     if command not in {"all", "daily"}:
         raise ValueError("Unsupported bulk ingestion command.")
     cutoffs = market_timeframe_stale_cutoffs(now or datetime.now(timezone.utc))
@@ -493,7 +478,11 @@ def queue_market_ingestion_requests(
                   ) AS active_raw ON true
                   WHERE provider.status = 'active'
                     AND pi.is_active = true
-                    AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
+                    AND provider.code IN (
+                      'binance-public', 'dukascopy-public',
+                      'vnstock-kbs-free', 'vnstock-vci-free',
+                      'msn-via-vnstock'
+                    )
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
                     AND UPPER(asset.symbol) = ANY(%s)
                     AND (
@@ -543,7 +532,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Sync approved market-data provider catalogs.")
-    parser.add_argument("--queue-ingestion", choices=("all", "daily", "hourly"))
+    parser.add_argument("--queue-ingestion", choices=("all", "daily"))
     parser.add_argument("--env-file", default=".env.local")
     args = parser.parse_args(argv)
     try:

@@ -43,7 +43,7 @@ export type TenantStrategyCatalogItem = {
   parameterSchema: [];
   defaultParameters: Record<string, unknown>;
   supportedMarkets: string[];
-  supportedTimeframes: Array<"1d" | "1h">;
+  supportedTimeframes: Array<"1d">;
   implementationHash: string;
   sourceAttribution: null;
   modificationNotice: null;
@@ -160,7 +160,7 @@ async function createImmutableVersion(
       parameterSchema: [],
       defaultParameters: input.rule as Prisma.InputJsonValue,
       supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-      supportedTimeframes: ["1d", "1h"],
+      supportedTimeframes: ["1d"],
       implementationHash: hash,
       status: "active",
     },
@@ -290,7 +290,7 @@ export async function listTenantCustomStrategyCatalog(
   return versions.map((version) => {
     const defaultParameters = normalizeExecutableRule(version.defaultParameters);
     const supportedTimeframes = stringArray(version.supportedTimeframes).filter(
-      (timeframe): timeframe is "1d" | "1h" => timeframe === "1d" || timeframe === "1h",
+      (timeframe): timeframe is "1d" => timeframe === "1d",
     );
     if (version.status !== "active" || !Array.isArray(version.parameterSchema)) {
       throw new Error("Custom strategy execution registry is invalid.");

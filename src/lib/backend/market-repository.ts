@@ -24,7 +24,7 @@ const MARKET_DATA_SYMBOLS = [
   "BTC",
   "XAU",
 ] as const;
-const MARKET_DATA_TIMEFRAMES = ["1d", "1h"] as const;
+const MARKET_DATA_TIMEFRAMES = ["1d"] as const;
 const ELIGIBLE_DATASET_QUALITY = ["passed", "warning"] as const;
 const PUBLIC_MARKET_ERROR_CODES = new Set([
   "ingestion_failed",

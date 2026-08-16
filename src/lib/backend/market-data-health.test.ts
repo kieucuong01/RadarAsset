@@ -25,7 +25,7 @@ describe("market data health read model", () => {
         market: "crypto_spot",
         datasets: [
           {
-            timeframe: "1h",
+            timeframe: "1d",
             versions: [
               {
                 id: "btc-version-3",
@@ -50,7 +50,7 @@ describe("market data health read model", () => {
     prisma.marketIngestionRun.findMany.mockResolvedValue([
       {
         assetSymbol: "BTC",
-        timeframe: "1h",
+        timeframe: "1d",
         status: "failed",
         errorCode: "rate_limited",
         errorMessage: "must-not-be-selected",
@@ -58,13 +58,13 @@ describe("market data health read model", () => {
     ]);
 
     const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
-    const btcHourly = response.find((item) => item.symbol === "BTC" && item.timeframe === "1h");
+    const btcDaily = response.find((item) => item.symbol === "BTC" && item.timeframe === "1d");
 
-    expect(response).toHaveLength(18);
-    expect(btcHourly).toEqual({
+    expect(response).toHaveLength(9);
+    expect(btcDaily).toEqual({
       symbol: "BTC",
       market: "crypto_spot",
-      timeframe: "1h",
+      timeframe: "1d",
       providerCode: "binance-public",
       providerName: "Binance Public Spot",
       upstreamProvider: "binance",
@@ -99,21 +99,21 @@ describe("market data health read model", () => {
     expect(JSON.stringify(response)).not.toContain("secret");
   });
 
-  it("exposes the stable unsupported timeframe state without an active dataset", async () => {
+  it("exposes the stable unavailable state without an active dataset", async () => {
     prisma.marketIngestionRun.findMany.mockResolvedValue([
       {
         assetSymbol: "XAU",
-        timeframe: "1h",
+        timeframe: "1d",
         status: "unavailable",
         errorCode: "unsupported_timeframe",
       },
     ]);
 
     const response = await loadMarketDataHealth(new Date("2026-08-10T12:10:00Z"));
-    const xauHourly = response.find((item) => item.symbol === "XAU" && item.timeframe === "1h");
+    const xauDaily = response.find((item) => item.symbol === "XAU" && item.timeframe === "1d");
 
-    expect(xauHourly?.lastErrorCode).toBe("unsupported_timeframe");
-    expect(xauHourly?.datasetVersionId).toBeNull();
-    expect(xauHourly?.freshness).toBe("unavailable");
+    expect(xauDaily?.lastErrorCode).toBe("unsupported_timeframe");
+    expect(xauDaily?.datasetVersionId).toBeNull();
+    expect(xauDaily?.freshness).toBe("unavailable");
   });
 });

@@ -15,7 +15,7 @@ export class IngestionRateLimitError extends Error {
 type RequestInput = {
   providerCode: string;
   providerSymbol: string;
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
 };
 
 const include = {
@@ -49,7 +49,7 @@ function response(
     providerSymbol: row.providerInstrument.providerSymbol,
     symbol: row.providerInstrument.asset.symbol,
     name: row.providerInstrument.asset.name,
-    timeframe: row.timeframe === "1h" ? ("1h" as const) : ("1d" as const),
+    timeframe: "1d" as const,
     status:
       row.status === "running" || row.status === "succeeded" || row.status === "failed"
         ? row.status
@@ -133,7 +133,7 @@ export async function requestMarketIngestion(context: TenantContext, input: Requ
 
 export async function listMarketIngestionRequests(context: TenantContext) {
   const rows = await getPrisma().marketIngestionRequest.findMany({
-    where: { organizationId: context.organizationId, userId: context.userId },
+    where: { organizationId: context.organizationId, userId: context.userId, timeframe: "1d" },
     include,
     orderBy: { createdAt: "desc" },
     take: 100,

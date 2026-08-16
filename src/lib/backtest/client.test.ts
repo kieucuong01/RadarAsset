@@ -86,7 +86,7 @@ describe("backtest API client", () => {
             ],
             defaultParameters: { fastPeriod: 5 },
             supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-            supportedTimeframes: ["1d", "1h"],
+            supportedTimeframes: ["1d"],
             implementationHash: "a".repeat(64),
             sourceAttribution: "Apache License 2.0",
             modificationNotice: "Causal rewrite",

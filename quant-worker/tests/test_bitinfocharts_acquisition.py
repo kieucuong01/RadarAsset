@@ -15,6 +15,7 @@ from smart_insights.bitinfocharts_acquisition import (
     BitInfoChartsCrawler,
     BrowserHtmlResult,
     NodriverBitInfoChartsClient,
+    _bitinfocharts_ready,
     _default_browser_fetch,
     _fetch_with_nodriver,
     convert_bitinfocharts_html,
@@ -61,6 +62,16 @@ def _provider_html(*, row_count: int = 100) -> str:
     )
 
 
+def _provider_html_with_percent_column() -> str:
+    return _provider_html().replace(
+        "<th>Balance</th><th>First In</th><th>Last In</th>",
+        "<th>Balance</th><th>% of coins</th><th>First In</th><th>Last In</th>",
+    ).replace(
+        "<td>2020-01-01</td><td>2026-08-14</td>",
+        "<td>0.0100%</td><td>2020-01-01</td><td>2026-08-14</td>",
+    )
+
+
 def _snapshot(*, collector: str, html: str = "<html></html>") -> RawSnapshot:
     return RawSnapshot(
         content=json.dumps(
@@ -86,6 +97,20 @@ def test_normalizer_merges_split_tables_and_uses_full_address_href() -> None:
     assert _address(100) in normalized
     assert "truncated" not in normalized
     assert "Binance Cold Wallet" in normalized
+
+
+def test_normalizer_uses_named_date_columns_when_provider_adds_percent_column() -> None:
+    normalized = normalize_bitinfocharts_html(_provider_html_with_percent_column())
+
+    assert "0.0100%" not in normalized
+    assert "<td>2020-01-01</td><td>2026-08-14</td>" in normalized
+
+
+def test_bitinfocharts_ready_waits_for_the_complete_split_table() -> None:
+    partial = _provider_html(row_count=19)
+
+    assert not _bitinfocharts_ready(partial)
+    assert _bitinfocharts_ready(_provider_html())
 
 
 @pytest.mark.parametrize("row_count", (99, 101))

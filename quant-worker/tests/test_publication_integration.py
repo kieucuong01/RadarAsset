@@ -32,7 +32,7 @@ def test_publication_checksum_survives_a_non_utc_database_session() -> None:
         Bar(
             asset=symbol,
             timestamp=datetime(2024, 1, 1, hour, tzinfo=timezone.utc),
-            timeframe="1h",
+            timeframe="1d",
             open=Decimal("100.00000000"),
             high=Decimal("102.00000000"),
             low=Decimal("99.00000000"),
@@ -80,7 +80,7 @@ def test_publication_checksum_survives_a_non_utc_database_session() -> None:
             Bar(
                 asset=symbol,
                 timestamp=row["ts"].replace(tzinfo=row["ts"].tzinfo or timezone.utc),
-                timeframe="1h",
+                timeframe="1d",
                 open=Decimal(str(row["open"])),
                 high=Decimal(str(row["high"])),
                 low=Decimal(str(row["low"])),
@@ -123,7 +123,7 @@ def test_publish_if_changed_reuses_checksum_and_activates_only_a_correction() ->
             Bar(
                 asset=symbol,
                 timestamp=datetime(2026, 8, 10, hour, tzinfo=timezone.utc),
-                timeframe="1h",
+                timeframe="1d",
                 open=Decimal("100"),
                 high=Decimal("110"),
                 low=Decimal("90"),
@@ -165,7 +165,7 @@ def test_publish_if_changed_reuses_checksum_and_activates_only_a_correction() ->
         assert corrected.status == "succeeded"
         assert corrected.version == 2
 
-        active = publisher.load_active(symbol, "1h")
+        active = publisher.load_active(symbol, "1d")
         assert active is not None
         assert active.dataset_version_id == corrected.dataset_version_id
         assert active.version == 2
@@ -180,7 +180,7 @@ def test_publish_if_changed_reuses_checksum_and_activates_only_a_correction() ->
                 FROM dataset_versions dv
                 JOIN datasets d ON d.id = dv.dataset_id
                 JOIN assets a ON a.id = d.asset_id
-                WHERE a.symbol = %s AND d.timeframe = '1h'
+                WHERE a.symbol = %s AND d.timeframe = '1d'
                 """,
                 (symbol,),
             )
@@ -203,7 +203,7 @@ def test_publication_persists_bounded_provider_gap_lineage() -> None:
         Bar(
             asset=symbol,
             timestamp=datetime(2026, 8, 10, hour, tzinfo=timezone.utc),
-            timeframe="1h",
+            timeframe="1d",
             open=Decimal("100"),
             high=Decimal("101"),
             low=Decimal("99"),

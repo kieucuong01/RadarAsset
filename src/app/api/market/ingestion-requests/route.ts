@@ -15,7 +15,7 @@ const requestSchema = z
   .object({
     providerCode: z.string().trim().min(1).max(40),
     providerSymbol: z.string().trim().min(1).max(80),
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
   })
   .strict();
 

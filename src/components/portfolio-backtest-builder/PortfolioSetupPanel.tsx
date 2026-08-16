@@ -85,7 +85,7 @@ export function PortfolioSetupPanel({ state, dispatch, isSidebar }: PortfolioSet
               </FieldLabel>
               <Select
                 value={state.timeframe}
-                onValueChange={(value: "1d" | "1h") =>
+                onValueChange={(value: "1d") =>
                   dispatch({ type: "timeframeChanged", timeframe: value })
                 }
               >
@@ -95,7 +95,6 @@ export function PortfolioSetupPanel({ state, dispatch, isSidebar }: PortfolioSet
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="1d">{t("backtest.builder.day")}</SelectItem>
-                    <SelectItem value="1h">{t("backtest.builder.hour")}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

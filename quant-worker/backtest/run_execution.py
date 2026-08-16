@@ -73,7 +73,7 @@ def _engine_config(run: QueuedRun, datasets: list[DatasetInput]) -> EngineConfig
     else:
         raise ValueError("Backtest parameters do not match the allow-listed strategy contract.")
     timeframe = parameters.get("timeframe")
-    if timeframe not in {"1d", "1h"}:
+    if timeframe != "1d":
         raise ValueError("Unsupported timeframe.")
     legs = parameters.get("legs")
     if not isinstance(legs, list) or not 1 <= len(legs) <= 3:
@@ -260,7 +260,7 @@ def _process_portfolio_run(
     total_capital = _strict_decimal(parameters["totalCapital"], "totalCapital", "0.00000001", "100000000000")
     assumptions = _portfolio_assumptions(parameters)
     timeframe = parameters.get("timeframe")
-    if timeframe not in {"1d", "1h"}:
+    if timeframe != "1d":
         raise ValueError("Unsupported timeframe.")
     raw_legs = parameters.get("legs")
     if not isinstance(raw_legs, list) or not 1 <= len(raw_legs) <= 10:

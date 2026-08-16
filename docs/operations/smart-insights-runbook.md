@@ -124,8 +124,8 @@ powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 `
 Smoke the four crawled Crypto Pulse sources independently:
 
 ```powershell
-powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule four-hourly -Source coinglass-margin-borrow -LiveSmoke
-powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule four-hourly -Source coinglass-liquidation-maxpain -LiveSmoke
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source coinglass-margin-borrow -LiveSmoke
+powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source coinglass-liquidation-maxpain -LiveSmoke
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source blockchaincenter-altcoin-season -LiveSmoke
 powershell.exe -NoProfile -File scripts/run-smart-insights.ps1 -Schedule daily -Source cbbi-public -LiveSmoke
 ```
@@ -141,8 +141,8 @@ observations across BTC/ETH/SOL), BlockchainCenter Altcoin Season (three horizon
 CBBI (60 observations, latest provider day 2026-08-13). Production publication then succeeded for
 all four sources. Direct database read-back showed the latest provider run as `succeeded`, each raw
 snapshot as `validated`, and observation counts of 60, 21, 3, and 60 respectively. The web read
-model returned `system` for both CoinGlass sections and both cycle sections, including 20 hourly
-margin points, BTC/ETH/SOL max-pain rows, Altcoin Season 61/43/37, CBBI Confidence 31.34, and all nine
+model returned `system` for both CoinGlass sections and both cycle sections, including 20 margin
+points, BTC/ETH/SOL max-pain rows, Altcoin Season 61/43/37, CBBI Confidence 31.34, and all nine
 CBBI components. The worktree web listener returned HTTP 200 on port 3117; authenticated visual QA
 remained unavailable because the local env had no configured demo login password, so this evidence
 does not claim an authenticated browser pass.
@@ -186,15 +186,14 @@ daily scope is the curated decision universe plus assets currently present in a
 user's holdings or watchlist. It queues only `1d` datasets, then runs corporate-action
 and adjusted-data publication, enabled Smart Insights daily collectors and derived
 pipelines, and every member briefing. It does not pre-ingest the full discovered HOSE
-catalog. Historical `1h` versions remain immutable but are not queued and do not gate
+catalog. Historical intraday versions remain immutable but are not queued and do not gate
 daily readiness:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/refresh-asset-opinions.ps1
 ```
 
-The Windows task installer uses this runner for the daily task. The four-hourly task
-collects existing derivatives pressure metrics only; it does not ingest intraday price bars.
+The Windows task installer uses this runner for the daily task and disables legacy intraday tasks.
 After a manual or scheduled daily run, the runner executes
 `quant-worker/verify_daily_pipeline.py`. The verifier succeeds only when the current
 Bangkok day has a successful daily market scheduler run and a published briefing for
@@ -223,7 +222,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 | Job                                            | Recommended trigger               | Command                                                             |
 | ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
 | Daily market collection and regime calculation | Daily after source-day close      | `scripts/run-smart-insights.ps1 -Schedule daily`                    |
-| CoinGlass public pressure tables               | Every four hours                  | `scripts/run-smart-insights.ps1 -Schedule four-hourly`              |
+| CoinGlass public pressure tables               | Daily                             | `scripts/run-smart-insights.ps1 -Schedule daily`                    |
 | Weekly flows and positioning                   | Weekly after provider publication | `scripts/run-smart-insights.ps1 -Schedule weekly`                   |
 | CryptoCraft current week                       | Every 15 minutes                  | `scripts/run-smart-insights.ps1 -Schedule calendar-current`         |
 | CryptoCraft next week                          | Every 12 hours                    | `scripts/run-smart-insights.ps1 -Schedule calendar-next`            |

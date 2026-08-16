@@ -22,7 +22,7 @@ const context = { userId: "user-a", organizationId: "org-a", role: "editor" as c
 const active = {
   id: "request-a",
   status: "queued",
-  timeframe: "1h",
+  timeframe: "1d",
   attemptCount: 0,
   datasetVersionId: null,
   errorCode: null,
@@ -53,7 +53,7 @@ describe("tenant market ingestion request queue", () => {
       requestMarketIngestion(context, {
         providerCode: "binance-public",
         providerSymbol: "ETHUSDT",
-        timeframe: "1h",
+        timeframe: "1d",
       }),
     ).resolves.toMatchObject({ id: "request-a", created: false, symbol: "ETH" });
     expect(prisma.marketIngestionRequest.create).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe("tenant market ingestion request queue", () => {
       requestMarketIngestion(context, {
         providerCode: "binance-public",
         providerSymbol: "ETHUSDT",
-        timeframe: "1h",
+        timeframe: "1d",
       }),
     ).resolves.toMatchObject({ id: "request-a", created: true });
     expect(prisma.marketIngestionRequest.count).toHaveBeenNthCalledWith(1, {
@@ -79,7 +79,7 @@ describe("tenant market ingestion request queue", () => {
           organizationId: "org-a",
           userId: "user-a",
           providerInstrumentId: "instrument-eth",
-          timeframe: "1h",
+          timeframe: "1d",
         }),
       }),
     );
@@ -93,7 +93,7 @@ describe("tenant market ingestion request queue", () => {
       requestMarketIngestion(context, {
         providerCode: "binance-public",
         providerSymbol: "ETHUSDT",
-        timeframe: "1h",
+        timeframe: "1d",
       }),
     ).rejects.toBeInstanceOf(IngestionRateLimitError);
     expect(prisma.marketIngestionRequest.create).not.toHaveBeenCalled();

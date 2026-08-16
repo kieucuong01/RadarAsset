@@ -11,7 +11,7 @@ from smart_insights.evidence import EvidenceBundle
 from smart_insights.asset_opinion_contracts import AssetOpinionAiOutput
 
 
-ALLOWED_HORIZONS = ("INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3")
+ALLOWED_HORIZONS = ("DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3")
 ALLOWED_CHECKS = (
     "MONITOR", "REVIEW_ALLOCATION", "CHECK_DRAWDOWN_OR_STOP_POLICY",
     "REDUCE_EVENT_RISK_FOR_REVIEW", "WAIT_FOR_CONFIRMATION",

@@ -17,7 +17,7 @@ from .snapshots import ActiveSnapshot, merge_snapshot
 
 
 AssetSymbol = str
-Timeframe = Literal["1h", "1d"]
+Timeframe = Literal["1d"]
 IngestionStatus = Literal[
     "succeeded", "unchanged", "skipped", "failed", "unavailable"
 ]
@@ -113,11 +113,7 @@ def ingestion_window(
             HOSE_VERIFIED_FROM, datetime.min.time(), tzinfo=timezone.utc
         )
     elif market == "metal_spot":
-        initial_start = (
-            datetime(2003, 5, 5, tzinfo=timezone.utc)
-            if timeframe == "1h"
-            else datetime(1999, 6, 3, tzinfo=timezone.utc)
-        )
+        initial_start = datetime(1999, 6, 3, tzinfo=timezone.utc)
     else:
         initial_start = now - timedelta(days=3653)
     history_is_truncated = bool(
@@ -133,7 +129,7 @@ def ingestion_window(
             overlap_start=fetch_start,
         )
 
-    default_overlap = now - timedelta(days=10 if timeframe == "1d" else 3)
+    default_overlap = now - timedelta(days=10)
     if active.rows:
         catchup_start = active.rows[-1].timestamp - INTERVALS[timeframe]
         fetch_start = min(default_overlap, catchup_start)

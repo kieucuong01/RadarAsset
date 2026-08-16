@@ -6,6 +6,7 @@ export const APPROVED_PROVIDER_CODES = [
   "binance-public",
   "dukascopy-public",
   "msn-via-vnstock",
+  "vnstock-kbs-free",
   "vnstock-vci-free",
 ] as const;
 
@@ -30,7 +31,7 @@ export type ProviderInstrumentResult = {
   market: ProviderMarket;
   venue: string | null;
   currency: string;
-  supportedTimeframes: Array<"1d" | "1h">;
+  supportedTimeframes: Array<"1d">;
 };
 
 const include = {
@@ -92,7 +93,7 @@ function mapRow(row: {
     market: mappedMarket,
     venue: row.asset.venue,
     currency: row.asset.currency,
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
   };
 }
 

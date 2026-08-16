@@ -73,11 +73,8 @@ _XAU_FULL_SESSION_HOLIDAYS = frozenset(
 
 _ANNUALIZATION = {
     ("vn_equity", "1d"): 252,
-    ("vn_equity", "1h"): 1_260,
     ("crypto_spot", "1d"): 365,
-    ("crypto_spot", "1h"): 8_760,
     ("metal_spot", "1d"): 260,
-    ("metal_spot", "1h"): 6_240,
 }
 
 MARKET_CALENDARS = {
@@ -89,7 +86,6 @@ MARKET_CALENDARS = {
         certified_from=HOSE_VERIFIED_FROM,
         certified_to=HOSE_VERIFIED_TO,
         weekdays=frozenset(range(5)),
-        hourly_opens_utc=(2, 3, 4, 6, 7),
         closure_dates=frozenset(_VN_HOLIDAYS),
     ),
     "crypto_spot": MarketCalendarContract(
@@ -153,21 +149,8 @@ def expected_bar_timestamps(
     end = end.astimezone(timezone.utc)
     if end < start:
         return set()
-    if timeframe not in {"1d", "1h"}:
+    if timeframe != "1d":
         raise ValueError(f"Unsupported timeframe: {timeframe}.")
-
-    if timeframe == "1h" and market == "vn_equity":
-        contract = MARKET_CALENDARS[market]
-        result: set[datetime] = set()
-        current = start.date()
-        while current <= end.date():
-            if is_session_day(current, market):
-                for hour in contract.hourly_opens_utc:
-                    candidate = datetime.combine(current, time(hour), tzinfo=timezone.utc)
-                    if start <= candidate <= end:
-                        result.add(candidate)
-            current += timedelta(days=1)
-        return result
 
     if timeframe == "1d" and market == "vn_equity":
         result: set[datetime] = set()
@@ -185,16 +168,11 @@ def expected_bar_timestamps(
             current += timedelta(days=1)
         return result
 
-    step = timedelta(hours=1) if timeframe == "1h" else timedelta(days=1)
+    step = timedelta(days=1)
     candidate = start
     result = set()
     while candidate <= end:
-        is_rollover = (
-            market == "metal_spot"
-            and timeframe == "1h"
-            and candidate.hour == MARKET_CALENDARS[market].rollover_utc_hour
-        )
-        if is_session_day(candidate.date(), market) and not is_rollover:
+        if is_session_day(candidate.date(), market):
             result.add(candidate)
         candidate += step
     return result

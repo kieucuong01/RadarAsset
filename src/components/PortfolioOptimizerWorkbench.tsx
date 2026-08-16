@@ -22,7 +22,7 @@ export function PortfolioOptimizerWorkbench({
 }) {
   const { t } = useI18n();
   const range = useRef(createRollingBacktestRange()).current;
-  const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
+  const [timeframe, setTimeframe] = useState<"1d">("1d");
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
   const [assets, setAssets] = useState<QuantAssetCatalogItem[]>([]);

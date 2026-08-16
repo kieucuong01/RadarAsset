@@ -40,6 +40,10 @@ describe("approved provider instrument catalog", () => {
     expect(APPROVED_PROVIDER_CODES).toContain("dukascopy-public");
   });
 
+  it("approves the KBS provider used by VNINDEX and VN30 benchmarks", () => {
+    expect(APPROVED_PROVIDER_CODES).toContain("vnstock-kbs-free");
+  });
+
   it("searches only active approved provider instruments with a bounded limit", async () => {
     prisma.providerInstrument.findMany.mockResolvedValue([row]);
 
@@ -50,7 +54,7 @@ describe("approved provider instrument catalog", () => {
           providerSymbol: "VNM",
           symbol: "VNM",
           market: "vn_equity",
-          supportedTimeframes: ["1d", "1h"],
+          supportedTimeframes: ["1d"],
         }),
       ],
     });
@@ -60,7 +64,13 @@ describe("approved provider instrument catalog", () => {
           provider: {
             status: "active",
             code: {
-              in: ["binance-public", "dukascopy-public", "msn-via-vnstock", "vnstock-vci-free"],
+              in: [
+                "binance-public",
+                "dukascopy-public",
+                "msn-via-vnstock",
+                "vnstock-kbs-free",
+                "vnstock-vci-free",
+              ],
             },
           },
           OR: [

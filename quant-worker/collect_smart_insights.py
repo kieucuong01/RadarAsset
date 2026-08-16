@@ -85,7 +85,6 @@ from smart_insights.validation import validate_observations
 
 SCHEDULES = (
     "daily",
-    "four-hourly",
     "weekly",
     "calendar-current",
     "calendar-next",
@@ -100,7 +99,6 @@ EVENT_SOURCE_CODES = frozenset(
 ENERGY_SOURCE_CODES = frozenset({"eia-energy", "bis-statistics"})
 _SOURCE_SCHEDULE = {
     "daily": "daily",
-    "four-hourly": "four-hourly",
     "weekly": "weekly",
     "calendar-current": "calendar",
     "calendar-next": "calendar",
@@ -196,7 +194,11 @@ def run_collection(
         except Exception:
             outcomes.append(CollectionOutcome(source.code, "failed", 0, "INTERNAL_ERROR"))
     succeeded = {"succeeded", "unchanged", "not_due", "dry_run"}
-    return outcomes, 0 if all(outcome.status in succeeded for outcome in outcomes) else 1
+    if all(outcome.status in succeeded for outcome in outcomes):
+        return outcomes, 0
+    if source_code is None and any(outcome.status in succeeded for outcome in outcomes):
+        return outcomes, 0
+    return outcomes, 1
 
 
 def run_calendar_schedule(

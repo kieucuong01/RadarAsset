@@ -14,7 +14,7 @@ const quantAssetCatalogItemSchema = z
     venue: z.string().nullable(),
     currency: z.string().min(1),
     maxLeverage: z.number().min(1).max(2),
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
     datasetVersionId: z.string().uuid().nullable(),
     coverageStart: z.string().datetime().nullable(),
     coverageEnd: z.string().datetime().nullable(),

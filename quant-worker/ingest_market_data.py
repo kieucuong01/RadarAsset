@@ -102,8 +102,6 @@ def build_selections(
         if command != "all":
             raise ValueError("Single-feed selection cannot be combined with a schedule command.")
         return [IngestionSelection(asset, timeframe)]
-    if command == "hourly":
-        raise ValueError("Intraday market ingestion is retired.")
     if command in {"daily", "all"}:
         return [IngestionSelection(symbol, "1d") for symbol in FEEDS]
     raise ValueError("Unsupported ingestion command.")

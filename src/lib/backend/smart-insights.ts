@@ -23,7 +23,7 @@ import type {
 
 const MARKETS = new Set<InsightMarket>(["crypto", "macro", "gold"]);
 const IMPACTS = new Set(["high", "medium", "low"]);
-const HORIZONS = new Set(["INTRADAY", "DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
+const HORIZONS = new Set(["DAYS_1_7", "WEEKS_1_4", "MONTHS_1_3"]);
 const RISKS = new Set(["conservative", "moderate", "aggressive"]);
 const ASSET_STANCES = new Set([
   "POSITIVE",

@@ -28,7 +28,13 @@ from ingest_market_data import (
 
 
 APPROVED_PROVIDER_CODES = frozenset(
-    {"binance-public", "dukascopy-public", "msn-via-vnstock", "vnstock-vci-free"}
+    {
+        "binance-public",
+        "dukascopy-public",
+        "msn-via-vnstock",
+        "vnstock-kbs-free",
+        "vnstock-vci-free",
+    }
 )
 
 
@@ -102,7 +108,7 @@ def _prepare_request_dataset(
     provider_factory: Callable[[str], Any],
     now: datetime,
 ) -> PreparedDatasetPublication:
-    if request.timeframe not in {"1h", "1d"}:
+    if request.timeframe != "1d":
         raise ValueError("Unsupported ingestion timeframe.")
     active = repository.load_active(request)
     window = ingestion_window(

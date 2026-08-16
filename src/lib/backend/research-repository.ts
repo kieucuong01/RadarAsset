@@ -246,7 +246,7 @@ export async function loadWatchlist(context: TenantContext) {
     const backtestableTimeframes = item.asset.datasets
       .filter((dataset) => dataset.versions.length > 0)
       .map((dataset) => dataset.timeframe)
-      .filter((timeframe): timeframe is "1d" | "1h" => timeframe === "1d" || timeframe === "1h")
+      .filter((timeframe): timeframe is "1d" => timeframe === "1d")
       .sort();
     const activeRequest = activeRequestByAsset.get(item.asset.id);
     const datasetState = activeRequest

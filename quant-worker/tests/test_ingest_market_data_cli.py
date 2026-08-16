@@ -34,7 +34,7 @@ def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
         (symbol, "1d") for symbol in FEEDS
     ]
 
-    with pytest.raises(ValueError, match="retired"):
+    with pytest.raises(ValueError, match="Unsupported"):
         build_selections("hourly", asset=None, timeframe=None)
 
     with pytest.raises(ValueError, match="retired"):

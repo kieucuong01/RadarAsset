@@ -100,8 +100,7 @@ Live ingestion supports the selected Binance USDT spot universe
 (`BTC`, `ETH`, `XRP`, `SOL`, `BNB`, `ADA`, `LINK`, `LTC`, `AVAX`, `TRX`, `ZEC`, `XMR`, `XLM`),
 Vnstock-listed HOSE equities discovered from the current provider catalog, and Dukascopy
 XAU/USD candles. HOSE daily backfills target ten years; crypto and XAU request the longest
-approved free-provider history the adapter can fetch. XAU/USD uses genuine daily and hourly
-bid candles instead of resampling daily data.
+approved free-provider daily history the adapter can fetch.
 Successful feeds publish immutable dataset versions; an upstream failure leaves the last
 known-good version active and never substitutes a fixture. Quant Lab shows provider, coverage,
 version, row count, and `LIVE DATA` / `STALE` / `UNAVAILABLE` / `FIXTURE` state from
@@ -131,10 +130,9 @@ for the full universe. Daily runs also synchronize corporate actions and publish
 datasets. Use `-DrainRequests` only for a bounded manual recovery:
 
 ```text
-Hourly at minute 10: powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command hourly
-Daily at 01:15 UTC:   powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
+Daily at 01:15 UTC:    powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command daily
 Manual bounded drain:  powershell.exe -NoProfile -File scripts/run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
-Start in:             <repository root>
+Start in:              <repository root>
 ```
 
 Install the two Windows Task Scheduler jobs explicitly in the selected deployment environment:
@@ -144,7 +142,7 @@ powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1
 powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Verify
 ```
 
-The installer registers exactly one hourly and one daily task, ignores overlapping instances, and
+The installer registers the daily and weekly intelligence tasks, ignores overlapping instances, and
 restarts failed tasks up to three times. `-Verify` is read-only. Quant Lab reports missing/stale
 datasets, missing bars, backlog age, grouped provider failures, and the latest scheduler terminal
 result. `readyForBacktest` is intentionally strict: missing/stale datasets, an over-age backlog,

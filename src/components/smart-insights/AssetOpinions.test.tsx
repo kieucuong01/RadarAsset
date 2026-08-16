@@ -229,7 +229,7 @@ describe("AssetOpinions", () => {
     expect(html).toContain('aria-label="Bán FPT"');
     expect(html).not.toContain('aria-label="Xóa FPT"');
     expect(html).not.toContain('aria-label="Xóa BTC"');
-    expect(html).toContain("Đang chuẩn bị phân tích");
+    expect(html).toContain("Chưa có quan điểm hôm nay");
   });
 
   it("advertises row and card analysis while keeping details closed by default", () => {
@@ -489,7 +489,7 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Dòng tiền ETF ETH chuyển sang âm");
   });
 
-  it("renders a useful empty state without fetching", () => {
+  it("renders default representative assets for guests without fetching", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions
         opinions={[]}
@@ -500,8 +500,13 @@ describe("AssetOpinions", () => {
         onRefresh={() => undefined}
       />,
     );
-    expect(html).toContain("Chưa tạo quan điểm theo tài sản");
-    expect(html).toContain("Tạo quan điểm AI");
+    expect(html).toContain("Quan điểm AI theo tài sản");
+    expect(html).toContain("BTC");
+    expect(html).toContain("ETH");
+    expect(html).toContain("VNINDEX");
+    expect(html).toContain("VN30");
+    expect(html).toContain("XAU");
+    expect(html).toContain("Chưa có quan điểm hôm nay");
   });
 
   it("explains generating and failed states with a retry action", () => {

@@ -873,7 +873,7 @@ def generate_briefing(
     universe = build_asset_universe(
         portfolio_candidates,
         watchlist_candidates,
-        ("VNINDEX", "XAU", "BTC"),
+        ("BTC", "ETH", "VNINDEX", "VN30", "XAU"),
         limit=25,
     )
     benchmark_symbols = tuple(

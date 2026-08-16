@@ -9,6 +9,7 @@ CORE_DAILY_SYMBOLS = tuple(sorted(FEEDS))
 APPROVED_DAILY_PROVIDER_CODES = (
     "binance-public",
     "dukascopy-public",
+    "vnstock-kbs-free",
     "vnstock-vci-free",
 )
 
@@ -25,7 +26,8 @@ def load_daily_scope_symbols(connection: Any) -> tuple[str, ...]:
             WHERE instrument.is_active = true
               AND provider.status = 'active'
               AND provider.code IN (
-                'binance-public', 'dukascopy-public', 'vnstock-vci-free'
+                'binance-public', 'dukascopy-public',
+                'vnstock-kbs-free', 'vnstock-vci-free'
               )
               AND asset.market IN ('vn_equity', 'crypto_spot', 'metal_spot')
               AND (
@@ -57,4 +59,3 @@ def load_daily_scope_symbols(connection: Any) -> tuple[str, ...]:
             }
         )
     )
-

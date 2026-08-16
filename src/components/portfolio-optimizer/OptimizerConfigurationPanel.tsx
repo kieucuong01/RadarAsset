@@ -31,7 +31,7 @@ import { formatCount, formatNumber, formatRatio } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type OptimizerConfigurationPanelProps = {
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
   from: string;
   to: string;
   method: OptimizerMethod;
@@ -41,7 +41,7 @@ type OptimizerConfigurationPanelProps = {
   maxWeightPct: number;
   assets: QuantAssetCatalogItem[];
   loading: boolean;
-  onTimeframeChange: (value: "1d" | "1h") => void;
+  onTimeframeChange: (value: "1d") => void;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
   onMethodChange: (value: OptimizerMethod) => void;
@@ -97,7 +97,6 @@ export function OptimizerConfigurationPanel({
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="1d">{t("optimizer.day")}</SelectItem>
-                    <SelectItem value="1h">{t("optimizer.hour")}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

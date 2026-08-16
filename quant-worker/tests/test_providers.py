@@ -102,10 +102,10 @@ def test_ccxt_fallback_is_used_only_after_primary_failure() -> None:
     rows = provider.fetch(
         symbol="BTCUSDT",
         asset="BTC",
-        timeframe="1h",
+        timeframe="1d",
         start=utc(2025, 1, 1),
-        end=utc(2025, 1, 1, 2),
-        now=utc(2025, 1, 1, 3),
+        end=utc(2025, 1, 2),
+        now=utc(2025, 1, 3),
     )
 
     assert len(rows) == 1
@@ -125,7 +125,7 @@ def kline(open_time_ms: int) -> list[Any]:
         "41900.3",
         "42400.4",
         "123.45",
-        open_time_ms + 3_599_999,
+        open_time_ms + 86_399_999,
         "5200000.00",
         1234,
         "60.00",
@@ -206,7 +206,7 @@ class FakeMarket:
 
 
 def test_binance_adapter_maps_the_complete_public_kline_shape() -> None:
-    rows = BinanceSpotAdapter.parse_klines([kline(1_704_067_200_000)], asset="BTC", timeframe="1h")
+    rows = BinanceSpotAdapter.parse_klines([kline(1_704_067_200_000)], asset="BTC", timeframe="1d")
 
     assert len(rows) == 1
     assert rows[0].timestamp == utc(2024, 1, 1)
@@ -223,21 +223,21 @@ def test_binance_adapter_maps_the_complete_public_kline_shape() -> None:
 def test_binance_paginates_and_drops_the_open_bar() -> None:
     transport = SequenceTransport(
         [
-            HttpJsonResponse(200, {}, [kline(0), kline(3_600_000)]),
-            HttpJsonResponse(200, {}, [kline(7_200_000)]),
+            HttpJsonResponse(200, {}, [kline(0), kline(86_400_000)]),
+            HttpJsonResponse(200, {}, [kline(172_800_000)]),
         ]
     )
 
     rows = BinanceSpotAdapter(transport=transport, max_pages=3).fetch(
         symbol="BTCUSDT",
         asset="BTC",
-        timeframe="1h",
+        timeframe="1d",
         start=utc(1970, 1, 1),
-        end=utc(1970, 1, 1, 3),
-        now=utc(1970, 1, 1, 2, 30),
+        end=utc(1970, 1, 4),
+        now=utc(1970, 1, 3, 12),
     )
 
-    assert [row.timestamp.hour for row in rows] == [0, 1]
+    assert [row.timestamp.date().isoformat() for row in rows] == ["1970-01-01", "1970-01-02"]
     assert len(transport.urls) == 2
     assert "data-api.binance.vision/api/v3/klines" in transport.urls[0]
 
@@ -258,10 +258,10 @@ def test_binance_honors_retry_after_before_success() -> None:
     ).fetch(
         symbol="BTCUSDT",
         asset="BTC",
-        timeframe="1h",
+        timeframe="1d",
         start=utc(1970, 1, 1),
-        end=utc(1970, 1, 1, 1),
-        now=utc(1970, 1, 1, 2),
+        end=utc(1970, 1, 2),
+        now=utc(1970, 1, 3),
     )
 
     assert len(rows) == 1
@@ -277,10 +277,10 @@ def test_binance_rejects_a_non_monotonic_page() -> None:
         BinanceSpotAdapter(transport=transport).fetch(
             symbol="BTCUSDT",
             asset="BTC",
-            timeframe="1h",
+            timeframe="1d",
             start=utc(1970, 1, 1),
-            end=utc(1970, 1, 1, 2),
-            now=utc(1970, 1, 1, 3),
+            end=utc(1970, 1, 3),
+            now=utc(1970, 1, 4),
         )
 
     assert raised.value.code == "invalid_response"
@@ -304,7 +304,7 @@ def test_binance_stops_after_three_transient_failures() -> None:
         ).fetch(
             symbol="BTCUSDT",
             asset="BTC",
-            timeframe="1h",
+            timeframe="1d",
             start=utc(1970, 1, 1),
             end=utc(1970, 1, 1, 1),
             now=utc(1970, 1, 1, 2),
@@ -322,10 +322,10 @@ def test_binance_enforces_the_page_limit() -> None:
         BinanceSpotAdapter(transport=transport, max_pages=1).fetch(
             symbol="BTCUSDT",
             asset="BTC",
-            timeframe="1h",
+            timeframe="1d",
             start=utc(1970, 1, 1),
-            end=utc(1970, 1, 1, 2),
-            now=utc(1970, 1, 1, 3),
+            end=utc(1970, 1, 3),
+            now=utc(1970, 1, 4),
         )
 
     assert raised.value.code == "response_limit"
@@ -340,7 +340,7 @@ def test_binance_rejects_redirect_responses() -> None:
         BinanceSpotAdapter(transport=transport).fetch(
             symbol="BTCUSDT",
             asset="BTC",
-            timeframe="1h",
+            timeframe="1d",
             start=utc(1970, 1, 1),
             end=utc(1970, 1, 1, 1),
             now=utc(1970, 1, 1, 2),
@@ -364,7 +364,7 @@ def test_vnstock_adapter_normalizes_vietnam_time_to_utc() -> None:
     rows = VnstockAdapter.parse_records(
         records,
         asset="FPT",
-        timeframe="1h",
+        timeframe="1d",
         source="vnstock-vci-free",
         naive_timezone="Asia/Ho_Chi_Minh",
     )
@@ -425,10 +425,10 @@ def test_vnstock_routes_xauusd_and_uses_utc_for_naive_commodity_time() -> None:
     assert rows[0].source == "msn-via-vnstock"
 
 
-def test_vnstock_rejects_xau_hourly_instead_of_resampling_daily_msn_data() -> None:
+def test_vnstock_rejects_xau_intraday_instead_of_resampling_daily_msn_data() -> None:
     market = FakeMarket([])
 
-    with pytest.raises(ProviderUnavailableError) as raised:
+    with pytest.raises(ValueError, match="Unsupported Vnstock timeframe"):
         VnstockAdapter(market_factory=lambda: market).fetch(
             symbol="XAUUSD",
             asset="XAU",
@@ -438,11 +438,10 @@ def test_vnstock_rejects_xau_hourly_instead_of_resampling_daily_msn_data() -> No
             now=utc(2026, 8, 11),
         )
 
-    assert raised.value.code == "unsupported_timeframe"
     assert market.commodity_calls == []
 
 
-def test_dukascopy_xau_adapter_supports_real_daily_and_hourly_bars() -> None:
+def test_dukascopy_xau_adapter_supports_real_daily_bars() -> None:
     calls: list[dict[str, Any]] = []
 
     def fetcher(**kwargs: Any) -> FakeDukascopyFrame:
@@ -459,22 +458,10 @@ def test_dukascopy_xau_adapter_supports_real_daily_and_hourly_bars() -> None:
         end=utc(2026, 8, 11),
         now=utc(2026, 8, 12),
     )
-    hourly = adapter.fetch(
-        symbol="XAUUSD",
-        asset="XAU",
-        timeframe="1h",
-        start=utc(2026, 8, 10),
-        end=utc(2026, 8, 11),
-        now=utc(2026, 8, 12),
-    )
 
-    assert [row.source for row in daily + hourly] == [
-        "dukascopy-public-bid",
-        "dukascopy-public-bid",
-    ]
+    assert [row.source for row in daily] == ["dukascopy-public-bid"]
     assert calls[0]["instrument"] == "XAU/USD"
     assert calls[0]["interval"] == "1DAY"
-    assert calls[1]["interval"] == "1HOUR"
 
 
 def test_dukascopy_xau_adapter_maps_dependency_errors_to_sanitized_failure() -> None:
@@ -519,7 +506,7 @@ def test_vnstock_routes_fpt_through_vci() -> None:
     VnstockAdapter(market_factory=lambda: market).fetch(
         symbol="FPT",
         asset="FPT",
-        timeframe="1h",
+        timeframe="1d",
         start=utc(2026, 8, 10),
         end=utc(2026, 8, 11),
         now=utc(2026, 8, 11),
@@ -660,7 +647,7 @@ def test_vnstock_rejects_missing_required_columns() -> None:
         VnstockAdapter(market_factory=lambda: market).fetch(
             symbol="FPT",
             asset="FPT",
-            timeframe="1h",
+            timeframe="1d",
             start=utc(2026, 8, 10),
             end=utc(2026, 8, 11),
             now=utc(2026, 8, 11),

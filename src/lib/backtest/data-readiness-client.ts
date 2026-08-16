@@ -7,7 +7,7 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 const QUANT_DATA_READINESS_CACHE_KEY = "quant:data-readiness";
 
 const marketSchema = z.enum(["vn_equity", "crypto_spot", "metal_spot"]);
-const timeframeSchema = z.enum(["1d", "1h"]);
+const timeframeSchema = z.enum(["1d"]);
 
 const quantDataReadinessSchema = z
   .object({
@@ -48,7 +48,7 @@ const quantDataReadinessSchema = z
     lastSchedulerSuccessAt: z.string().datetime().nullable(),
     latestSchedulerRun: z
       .object({
-        command: z.enum(["hourly", "daily", "all"]),
+        command: z.enum(["daily", "all"]),
         status: z.enum(["running", "succeeded", "failed"]),
         startedAt: z.string().datetime(),
         finishedAt: z.string().datetime().nullable(),

@@ -63,8 +63,8 @@ function EmptyOpinions({
           title: locale === "vi" ? "Đang tổng hợp dữ liệu định lượng" : "Generating quant opinions",
           detail:
             locale === "vi"
-              ? "Hệ thống đang kiểm tra dữ liệu danh mục, mã đang theo dõi và BTC/XAU/VNINDEX."
-              : "The system is checking portfolio, tracked assets, and BTC/XAU/VNINDEX data.",
+              ? "Hệ thống đang kiểm tra dữ liệu danh mục, mã đang theo dõi và BTC/ETH/VNINDEX/VN30/XAU."
+              : "The system is checking portfolio, tracked assets, and BTC/ETH/VNINDEX/VN30/XAU data.",
         }
       : state === "failed"
         ? {
@@ -87,8 +87,8 @@ function EmptyOpinions({
                 locale === "vi" ? "Chưa tạo quan điểm theo tài sản" : "No asset opinions generated",
               detail:
                 locale === "vi"
-                  ? "Tạo phân tích cho danh mục, mã đang theo dõi và các tài sản đại diện BTC/XAU/VNINDEX."
-                  : "Analyze the portfolio, tracked assets, and representative BTC/XAU/VNINDEX assets.",
+                  ? "Tạo phân tích cho danh mục, mã đang theo dõi và các tài sản đại diện BTC/ETH/VNINDEX/VN30/XAU."
+                  : "Analyze the portfolio, tracked assets, and representative BTC/ETH/VNINDEX/VN30/XAU assets.",
             };
 
   return (
@@ -97,8 +97,8 @@ function EmptyOpinions({
         <CardTitle>{locale === "vi" ? "Quan điểm AI theo tài sản" : "AI asset opinions"}</CardTitle>
         <CardDescription>
           {locale === "vi"
-            ? "Phân tích danh mục, mã đang theo dõi và BTC/XAU/VNINDEX dựa trên dữ liệu định lượng."
-            : "Quant analysis for your portfolio, tracked assets, and BTC/XAU/VNINDEX."}
+            ? "Phân tích danh mục, mã đang theo dõi và BTC/ETH/VNINDEX/VN30/XAU dựa trên dữ liệu định lượng."
+            : "Quant analysis for your portfolio, tracked assets, and BTC/ETH/VNINDEX/VN30/XAU."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -156,7 +156,6 @@ export function AssetOpinions({
   portfolioChanges = [],
   portfolioChangesStatus = "accumulating",
 }: Props) {
-  const workspaceEnabled = watchlist !== undefined || portfolio !== null || portfolioAvailable;
   const items = useMemo(
     () =>
       buildAssetOpinionWorkspace({
@@ -178,17 +177,6 @@ export function AssetOpinions({
   const [removing, setRemoving] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const activeOpinion = items.find((item) => item.symbol === activeSymbol)?.opinion ?? null;
-
-  if (!workspaceEnabled && !opinions.length) {
-    return (
-      <EmptyOpinions
-        locale={locale}
-        generationState={generationState}
-        onRefresh={onRefresh}
-        refreshPending={refreshPending}
-      />
-    );
-  }
 
   async function confirmRemove() {
     const candidate = removeCandidate;
@@ -248,6 +236,28 @@ export function AssetOpinions({
               <Badge variant="secondary">
                 {items.length} {locale === "vi" ? "tài sản" : "assets"}
               </Badge>
+              {onRefresh ? (
+                <Button
+                  size="sm"
+                  variant={generationState === "failed" ? "outline" : "secondary"}
+                  onClick={onRefresh}
+                  disabled={refreshPending || generationState === "generating"}
+                >
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={
+                      refreshPending || generationState === "generating" ? "animate-spin" : undefined
+                    }
+                  />
+                  {generationState === "failed"
+                    ? locale === "vi"
+                      ? "Thử lại"
+                      : "Retry"
+                    : locale === "vi"
+                      ? "Cập nhật AI"
+                      : "Update AI"}
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 onClick={() => setAddOpen(true)}
@@ -275,8 +285,15 @@ export function AssetOpinions({
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <LoaderCircle className="size-3.5 animate-spin" />
               {locale === "vi"
-                ? "Đang cập nhật quan điểm cho các mã mới…"
-                : "Updating opinions for new symbols…"}
+                ? "Đang tổng hợp dữ liệu định lượng cho các mã mới…"
+                : "Generating quant opinions for new symbols…"}
+            </p>
+          ) : null}
+          {generationState === "failed" ? (
+            <p className="text-xs text-bear">
+              {locale === "vi"
+                ? "Không thể tạo quan điểm. Dữ liệu hiện có vẫn được giữ nguyên."
+                : "Opinion generation failed. Existing data remains unchanged."}
             </p>
           ) : null}
         </CardHeader>

@@ -9,7 +9,7 @@ const nullableDateTime = z.string().datetime().nullable();
 const marketDataHealthItemSchema = z.object({
   symbol: z.string().trim().min(1).max(20),
   market: z.enum(["vn_equity", "crypto_spot", "metal_spot"]),
-  timeframe: z.enum(["1h", "1d"]),
+  timeframe: z.enum(["1d"]),
   providerCode: z.string().max(80).nullable(),
   providerName: z.string().max(120).nullable(),
   upstreamProvider: z.string().max(80).nullable(),

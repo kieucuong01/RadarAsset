@@ -28,6 +28,7 @@ _CHALLENGE_MARKERS = (
     "just a moment",
     "verify you are human",
 )
+_SOURCE_URL = "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html"
 
 
 def _cell_text(cell: Tag) -> str:
@@ -87,7 +88,7 @@ def _address_from_cell(cell: Tag, source_url: str) -> tuple[str, str]:
 def normalize_bitinfocharts_html(
     html: str,
     *,
-    source_url: str = "https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html",
+    source_url: str = _SOURCE_URL,
     max_html_bytes: int = 20_000_000,
 ) -> str:
     if not isinstance(html, str) or not html.strip():
@@ -104,7 +105,7 @@ def normalize_bitinfocharts_html(
         len(row.find_all(("td", "th"), recursive=False)) > 100 for row in rows
     ):
         raise SourceFetchError("SCHEMA_DRIFT")
-    primary: list[Tag] = []
+    primary: list[tuple[Tag, dict[str, int]]] = []
     for table in tables:
         first_row = table.find("tr")
         headers = (
@@ -116,15 +117,18 @@ def normalize_bitinfocharts_html(
             else ()
         )
         if all(required in headers for required in _REQUIRED_HEADERS):
-            primary.append(table)
+            primary.append(
+                (table, {header: index for index, header in enumerate(headers)})
+            )
     if len(primary) != 1:
         raise SourceFetchError("SCHEMA_DRIFT")
 
-    primary_rows = _ranked_rows(primary[0], skip_header=True)
+    primary_table, column_index = primary[0]
+    primary_rows = _ranked_rows(primary_table, skip_header=True)
     continuation = [
         rows
         for table in tables
-        if table is not primary[0]
+        if table is not primary_table
         if (rows := _ranked_rows(table, skip_header=False))
         if 20 in {rank for rank, _cells in rows}
         and 100 in {rank for rank, _cells in rows}
@@ -144,16 +148,19 @@ def normalize_bitinfocharts_html(
         "<table><thead><tr><th></th><th>Address</th><th>Balance</th>",
         "<th>First In</th><th>Last In</th></tr></thead><tbody>",
     ]
+    required_indexes = tuple(column_index[header] for header in _REQUIRED_HEADERS)
     for rank in range(1, 101):
         cells = ranked[rank]
-        address, suffix = _address_from_cell(cells[1], source_url)
+        if max(required_indexes) >= len(cells):
+            raise SourceFetchError("SCHEMA_DRIFT")
+        address, suffix = _address_from_cell(cells[column_index["Address"]], source_url)
         address_text = f"{address} {suffix}".strip()
         values = (
             str(rank),
             address_text,
-            _cell_text(cells[2]),
-            _cell_text(cells[3]),
-            _cell_text(cells[4]),
+            _cell_text(cells[column_index["Balance"]]),
+            _cell_text(cells[column_index["First In"]]),
+            _cell_text(cells[column_index["Last In"]]),
         )
         output.append(
             "<tr>" + "".join(f"<td>{escape(value)}</td>" for value in values) + "</tr>"
@@ -222,11 +229,13 @@ async def poll_bitinfocharts_html(
 
 def _bitinfocharts_ready(html: str) -> bool:
     lowered = html.casefold()
-    return (
-        "/bitcoin/address/" in html
-        and all(header.casefold() in lowered for header in _REQUIRED_HEADERS)
-        and not any(marker in lowered for marker in _CHALLENGE_MARKERS)
-    )
+    if any(marker in lowered for marker in _CHALLENGE_MARKERS):
+        return False
+    try:
+        normalize_bitinfocharts_html(html, source_url=_SOURCE_URL)
+    except SourceFetchError:
+        return False
+    return True
 
 
 async def _fetch_with_nodriver(

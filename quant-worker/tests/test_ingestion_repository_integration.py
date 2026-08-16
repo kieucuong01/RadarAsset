@@ -107,7 +107,7 @@ def _cleanup(connection: psycopg.Connection, *, symbol: str, provider_code: str)
 
 
 def test_repository_advisory_lock_excludes_the_same_feed() -> None:
-    selection = IngestionSelection("BTC", "1h")
+    selection = IngestionSelection("BTC", "1d")
     first_connection = psycopg.connect(_test_database_url(), autocommit=True)
     second_connection = psycopg.connect(_test_database_url(), autocommit=True)
     try:
@@ -128,7 +128,7 @@ def test_publish_and_finish_commits_dataset_and_terminal_run_together() -> None:
     suffix = uuid4().hex[:8]
     symbol = f"QAIR{suffix}"
     provider_code = f"qa-ingestion-{suffix}"
-    selection = IngestionSelection("BTC", "1h")
+    selection = IngestionSelection("BTC", "1d")
     connection = psycopg.connect(
         _test_database_url(), autocommit=True, row_factory=dict_row
     )

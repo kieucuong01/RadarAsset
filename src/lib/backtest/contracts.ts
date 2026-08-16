@@ -151,7 +151,7 @@ function validateRangeAndUniqueLegs(
 
 export const canonicalBacktestSubmissionSchema = z
   .object({
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
     from: isoDateSchema,
     to: isoDateSchema,
     totalCapital: z.number().positive().max(100_000_000_000),
@@ -193,7 +193,7 @@ const legacyLegSchema = z
   .strict();
 
 const legacyCommonFields = {
-  timeframe: z.enum(["1d", "1h"]),
+  timeframe: z.enum(["1d"]),
   initialCapital: z.number().positive().max(100_000_000_000),
   feeBps: z.number().min(0).max(100),
   slippageBps: z.number().min(0).max(200),

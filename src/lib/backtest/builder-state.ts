@@ -21,7 +21,7 @@ export type BuilderStrategyInput = Pick<
 > & {
   parameterSchema: readonly StrategyCatalogItem["parameterSchema"][number][];
   supportedMarkets: readonly string[];
-  supportedTimeframes: readonly ("1d" | "1h")[];
+  supportedTimeframes: readonly "1d"[];
 };
 
 export type DraftBacktestLeg = QuantAssetCatalogItem & {
@@ -33,13 +33,13 @@ export type DraftBacktestLeg = QuantAssetCatalogItem & {
   strategyParameters: Record<string, unknown>;
   strategyParameterSchema: StrategyCatalogItem["parameterSchema"];
   supportedMarkets: string[];
-  supportedTimeframes: Array<"1d" | "1h">;
+  supportedTimeframes: Array<"1d">;
 };
 
 export type BuilderState = {
   totalCapital: number;
   allocationMode: AllocationMode;
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
   from: string;
   to: string;
   feeBps: number;
@@ -60,7 +60,7 @@ export type BuilderAction =
   | { type: "strategyParameterEdited"; symbol: string; parameter: string; value: number }
   | { type: "leverageEdited"; symbol: string; leverage: number }
   | { type: "totalCapitalEdited"; totalCapital: number }
-  | { type: "timeframeChanged"; timeframe: "1d" | "1h" }
+  | { type: "timeframeChanged"; timeframe: "1d" }
   | { type: "rangeChanged"; from: string; to: string }
   | {
       type: "assumptionEdited";

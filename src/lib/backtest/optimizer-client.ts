@@ -9,7 +9,7 @@ const optimizerRequestSchema = z
   .object({
     symbols: z.array(backtestSymbolSchema).min(1).max(10),
     method: z.enum(OPTIMIZER_METHODS),
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
     from: z.string(),
     to: z.string(),
     maxWeightBps: z.number().int().min(1).max(10_000),

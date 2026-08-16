@@ -100,16 +100,16 @@ def test_scheduler_wrapper_keeps_bounded_manual_retry_and_drain_mode() -> None:
     assert '"--processed-count"' in source
 
 
-def test_scheduler_artifact_has_bounded_four_hourly_daily_and_weekly_triggers() -> None:
+def test_scheduler_artifact_has_bounded_daily_and_weekly_triggers() -> None:
     source = (ROOT / "deploy" / "windows" / "quant-ingestion-tasks.xml").read_text(
         encoding="utf-8"
     )
 
     assert "run-market-ingestion.ps1 -Command hourly" not in source
-    assert source.count("run-smart-insights.ps1 -Schedule four-hourly") == 1
+    assert "run-smart-insights.ps1 -Schedule four-hourly" not in source
     assert source.count("refresh-asset-opinions.ps1") == 1
     assert source.count("run-smart-insights.ps1 -Schedule weekly") == 1
-    assert "PT4H" in source
+    assert "PT4H" not in source
     assert "01:15:00Z" in source
     assert "P1W" in source
 
@@ -118,7 +118,8 @@ def test_scheduler_artifact_has_bounded_four_hourly_daily_and_weekly_triggers() 
     )
     assert "[switch]$Install" in installer
     assert "Register-ScheduledTask" in installer
-    assert installer.count("New-ScheduledTaskTrigger") == 3
+    assert installer.count("New-ScheduledTaskTrigger") == 2
+    assert '"RadarAsset Smart Insights Four Hourly"' in installer
     assert "[switch]$Verify" in installer
     assert "RestartCount" in installer
     assert "-RunLevel Limited" in installer

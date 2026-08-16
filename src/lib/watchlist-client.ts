@@ -15,7 +15,7 @@ const favoriteSchema = z
     sentiment: z.enum(["bull", "bear", "neutral"]),
     datasetState: z.enum(["ready", "stale", "loading", "unavailable"]),
     ingestionRequestId: z.string().nullable(),
-    backtestableTimeframes: z.array(z.enum(["1d", "1h"])),
+    backtestableTimeframes: z.array(z.enum(["1d"])),
     currency: z.string().min(1).optional(),
     hasMarketQuote: z.boolean().optional(),
   })
@@ -64,7 +64,7 @@ export async function addFavoriteAsset(
     providerCode: string;
     providerSymbol: string;
     alert?: number | null;
-    requestedTimeframes?: Array<"1d" | "1h">;
+    requestedTimeframes?: Array<"1d">;
   },
   request: FetchLike = fetch,
 ) {
@@ -75,7 +75,7 @@ export async function addFavoriteAsset(
       providerCode: input.providerCode,
       providerSymbol: input.providerSymbol,
       alert: input.alert ?? null,
-      requestedTimeframes: input.requestedTimeframes ?? ["1d", "1h"],
+      requestedTimeframes: input.requestedTimeframes ?? ["1d"],
     }),
   });
   const body = await responseBody(response);

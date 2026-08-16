@@ -229,7 +229,7 @@ export type InsightPreferences = {
   assets: string[];
   locale: "vi" | "en";
   baseCurrency: string;
-  investmentHorizon: "INTRADAY" | "DAYS_1_7" | "WEEKS_1_4" | "MONTHS_1_3";
+  investmentHorizon: "DAYS_1_7" | "WEEKS_1_4" | "MONTHS_1_3";
   riskTolerance: "conservative" | "moderate" | "aggressive";
   alertPreferences: { highImpact: boolean };
 };

@@ -31,7 +31,7 @@ def bar(
     return Bar(
         asset=asset,
         timestamp=datetime(2026, 8, day, hour, tzinfo=timezone.utc),
-        timeframe="1h",
+        timeframe="1d",
         open=Decimal("100"),
         high=Decimal("101"),
         low=Decimal("99"),
@@ -156,7 +156,7 @@ class FakeRepository:
         )
 
 
-def selection(asset: str, timeframe: str = "1h") -> IngestionSelection:
+def selection(asset: str, timeframe: str = "1d") -> IngestionSelection:
     return IngestionSelection(asset=asset, timeframe=timeframe)
 
 
@@ -191,7 +191,7 @@ def test_vn_daily_publication_keeps_only_calendar_certified_active_history() -> 
 
 
 def test_provider_failure_preserves_active_version_and_other_feed_succeeds() -> None:
-    repository = FakeRepository(active={("BTC", "1h"): snapshot("BTC")})
+    repository = FakeRepository(active={("BTC", "1d"): snapshot("BTC")})
     providers = FakeProviderFactory(
         {
             "BTC": FakeProvider(
@@ -210,7 +210,7 @@ def test_provider_failure_preserves_active_version_and_other_feed_succeeds() -> 
 
     assert [item.status for item in outcomes] == ["unavailable", "succeeded"]
     assert exit_code == 2
-    assert repository.active[("BTC", "1h")].dataset_version_id == "version-BTC-old"
+    assert repository.active[("BTC", "1d")].dataset_version_id == "version-BTC-old"
     assert [prepared.asset for prepared in repository.prepared] == ["XAU"]
     assert repository.finished[0]["error_code"] == "rate_limited"
 
@@ -235,7 +235,7 @@ def test_busy_advisory_lock_skips_without_fetching() -> None:
 def test_fixture_snapshot_is_replaced_by_live_backfill_without_mixing_rows() -> None:
     repository = FakeRepository(
         active={
-            ("BTC", "1h"): snapshot(
+            ("BTC", "1d"): snapshot(
                 "BTC", source="research_fixture", mode="fixture", day=1
             )
         }
@@ -342,22 +342,18 @@ def test_live_run_marks_stale_rows_once_before_processing() -> None:
 
 def test_ingestion_windows_use_initial_backfill_and_incremental_overlap() -> None:
     initial = ingestion_window("1d", now=NOW, active=None, market="vn_equity")
-    crypto_initial = ingestion_window("1h", now=NOW, active=None, market="crypto_spot")
+    crypto_initial = ingestion_window("1d", now=NOW, active=None, market="crypto_spot")
     metal_daily_initial = ingestion_window(
         "1d", now=NOW, active=None, market="metal_spot"
     )
-    metal_hourly_initial = ingestion_window(
-        "1h", now=NOW, active=None, market="metal_spot"
-    )
-    incremental = ingestion_window("1h", now=NOW, active=snapshot("BTC"))
+    incremental = ingestion_window("1d", now=NOW, active=snapshot("BTC"))
 
     assert initial.fetch_start == datetime(2024, 1, 1, tzinfo=timezone.utc)
     assert initial.overlap_start == initial.fetch_start
     assert crypto_initial.fetch_start == datetime(2017, 1, 1, tzinfo=timezone.utc)
     assert metal_daily_initial.fetch_start == datetime(1999, 6, 3, tzinfo=timezone.utc)
-    assert metal_hourly_initial.fetch_start == datetime(2003, 5, 5, tzinfo=timezone.utc)
-    assert incremental.fetch_start == NOW - timedelta(days=3)
-    assert incremental.overlap_start == NOW - timedelta(days=3)
+    assert incremental.fetch_start == NOW - timedelta(days=10)
+    assert incremental.overlap_start == NOW - timedelta(days=10)
 
 
 def test_ingestion_window_restarts_backfill_when_active_history_is_truncated() -> None:
@@ -371,7 +367,7 @@ def test_ingestion_window_restarts_backfill_when_active_history_is_truncated() -
         rows=(bar("BTC", 9, day=1), bar("BTC", 9, day=10)),
     )
 
-    window = ingestion_window("1h", now=NOW, active=truncated)
+    window = ingestion_window("1d", now=NOW, active=truncated)
 
     assert window.fetch_start == NOW - timedelta(days=3653)
     assert window.overlap_start == window.fetch_start

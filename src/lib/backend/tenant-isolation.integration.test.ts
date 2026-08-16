@@ -585,7 +585,7 @@ describe("database tenant isolation", () => {
         ) VALUES (
           ${strategyId}::uuid, ${strategyCode}, '1.0.0', 'MA Crossover', 'rule_based', 'active',
           '{"type":"object"}'::jsonb, '{"fastPeriod":5,"slowPeriod":20}'::jsonb,
-          '["vn_equity","crypto_spot","metal_spot"]'::jsonb, '["1d","1h"]'::jsonb,
+          '["vn_equity","crypto_spot","metal_spot"]'::jsonb, '["1d"]'::jsonb,
           ${"a".repeat(64)}, NOW()
         )
       `;
@@ -781,12 +781,12 @@ describe("database tenant isolation", () => {
         requestMarketIngestion(contextA, {
           providerCode: "binance-public",
           providerSymbol: `${fixtures.assetSymbol}USDT`,
-          timeframe: "1h",
+          timeframe: "1d",
         }),
         requestMarketIngestion(contextB, {
           providerCode: "binance-public",
           providerSymbol: `${fixtures.assetSymbol}USDT`,
-          timeframe: "1h",
+          timeframe: "1d",
         }),
       ]);
       const [visibleA, visibleB] = await Promise.all([

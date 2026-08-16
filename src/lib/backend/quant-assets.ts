@@ -56,7 +56,7 @@ export const quantAssetQuerySchema = z
       .string()
       .default("")
       .transform((value) => value.trim().slice(0, 40)),
-    timeframe: z.enum(["1d", "1h"]),
+    timeframe: z.enum(["1d"]),
     from: isoDateSchema,
     to: isoDateSchema,
   })
@@ -294,7 +294,7 @@ export async function loadQuantDataReadiness(
     prisma.dataset.findMany({
       where: {
         adjustmentPolicy: "raw",
-        timeframe: { in: ["1d", "1h"] },
+        timeframe: { in: ["1d"] },
         asset: { market: { in: [...SUPPORTED_MARKETS] }, listingStatus: "active" },
         versions: {
           some: { isActive: true, qualityStatus: { in: [...ELIGIBLE_DATASET_QUALITY] } },
@@ -442,7 +442,7 @@ export async function loadQuantDataReadiness(
   const latestScheduler = schedulerRows[0] ?? null;
   const latestSchedulerRun = latestScheduler
     ? {
-        command: latestScheduler.command as "hourly" | "daily" | "all",
+        command: latestScheduler.command as "daily" | "all",
         status: latestScheduler.status as "running" | "succeeded" | "failed",
         startedAt: latestScheduler.started_at.toISOString(),
         finishedAt: latestScheduler.finished_at?.toISOString() ?? null,

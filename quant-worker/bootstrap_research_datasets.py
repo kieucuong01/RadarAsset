@@ -84,7 +84,7 @@ def fixture_bars(asset: str, timeframe: str, count: int) -> list[Bar]:
 
 def live_bars(asset: str, timeframe: str) -> list[Bar]:
     end = datetime.now(timezone.utc)
-    start = end - (timedelta(days=730) if timeframe == "1d" else timedelta(days=60))
+    start = end - timedelta(days=730)
     feed = FEEDS[asset]
     if asset == "BTC":
         return BinanceSpotAdapter().fetch(
@@ -107,12 +107,12 @@ def bootstrap(mode: str) -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
     with psycopg.connect(database_url(), autocommit=False) as connection:
         publisher = PostgresDatasetPublisher(connection)
-        for timeframe in ("1d", "1h"):
+        for timeframe in ("1d",):
             for asset, feed in FEEDS.items():
                 rows = live_bars(asset, timeframe) if mode == "live" else fixture_bars(
                     asset,
                     timeframe,
-                    260 if timeframe == "1d" else 600,
+                    260,
                 )
                 prepared = prepare_dataset_publication(
                     rows,

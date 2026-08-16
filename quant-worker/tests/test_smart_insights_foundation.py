@@ -48,13 +48,14 @@ def test_active_schedules_have_no_retired_wgc_source_period_job() -> None:
     assert "monthly" not in SCHEDULES
 
 
-def test_four_hourly_is_a_cli_and_wrapper_schedule() -> None:
-    assert "four-hourly" in SCHEDULES
-    assert collect_smart_insights._SOURCE_SCHEDULE["four-hourly"] == "four-hourly"
+def test_daily_is_the_crypto_cli_and_wrapper_schedule() -> None:
+    assert "daily" in SCHEDULES
+    assert "four-hourly" not in SCHEDULES
     wrapper = (REPO_ROOT / "scripts" / "run-smart-insights.ps1").read_text(
         encoding="utf-8"
     )
-    assert '"four-hourly"' in wrapper
+    assert '"four-hourly"' not in wrapper
+    assert '"daily"' in wrapper
     assert '"--cbbi-backfill"' in wrapper
 
 
@@ -251,6 +252,8 @@ def test_registry_is_code_owned_live_smoked_and_quality_weighted() -> None:
         "bitinfocharts-top-addresses",
         "blockchaincenter-altcoin-season",
         "cbbi-public",
+        "coinglass-liquidation-maxpain",
+        "coinglass-margin-borrow",
         "coinmetrics-community",
         "defillama-chains",
         "defillama-stablecoins",
@@ -282,8 +285,8 @@ def test_event_api_urls_are_strictly_allow_listed() -> None:
 
 def test_cycle_and_coinglass_sources_are_enabled_after_independent_live_smokes() -> None:
     expected = {
-        "coinglass-margin-borrow": ("four-hourly", 480),
-        "coinglass-liquidation-maxpain": ("four-hourly", 480),
+        "coinglass-margin-borrow": ("daily", 2_880),
+        "coinglass-liquidation-maxpain": ("daily", 2_880),
         "blockchaincenter-altcoin-season": ("daily", 2_880),
         "cbbi-public": ("daily", 2_880),
     }
@@ -837,7 +840,7 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
     )
 
     assert exit_code == 0
-    assert len(outcomes) == 19
+    assert len(outcomes) == 21
     assert {
         outcome.source_code
         for outcome in outcomes
@@ -849,3 +852,60 @@ def test_cli_dry_run_lists_disabled_registered_sources_without_collecting() -> N
         for outcome in outcomes
     )
     assert all(outcome.status == "dry_run" for outcome in outcomes)
+
+
+def test_scheduled_multi_source_collection_continues_after_partial_source_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sources = (source_for_code("alternative-fng"), source_for_code("bitinfocharts-top-addresses"))
+    monkeypatch.setattr(collect_smart_insights, "select_sources", lambda *_args, **_kwargs: sources)
+
+    def ok(_source: SourceDefinition) -> SourceRunResult:
+        return SourceRunResult(
+            source_code="alternative-fng",
+            status="succeeded",
+            records_fetched=1,
+            error_code=None,
+            retry_count=0,
+            started_at=NOW,
+            finished_at=NOW,
+        )
+
+    def fail(_source: SourceDefinition) -> SourceRunResult:
+        raise SourceFetchError("SCHEMA_DRIFT", status_code=403)
+
+    outcomes, exit_code = run_collection(
+        "daily",
+        source_code=None,
+        dry_run=False,
+        collectors={
+            "alternative-fng": ok,
+            "bitinfocharts-top-addresses": fail,
+        },
+    )
+
+    assert [outcome.status for outcome in outcomes] == ["succeeded", "failed"]
+    assert exit_code == 0
+
+
+def test_scheduled_multi_source_collection_fails_when_every_source_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sources = (source_for_code("alternative-fng"), source_for_code("bitinfocharts-top-addresses"))
+    monkeypatch.setattr(collect_smart_insights, "select_sources", lambda *_args, **_kwargs: sources)
+
+    def fail(_source: SourceDefinition) -> SourceRunResult:
+        raise SourceFetchError("SCHEMA_DRIFT", status_code=403)
+
+    outcomes, exit_code = run_collection(
+        "daily",
+        source_code=None,
+        dry_run=False,
+        collectors={
+            "alternative-fng": fail,
+            "bitinfocharts-top-addresses": fail,
+        },
+    )
+
+    assert [outcome.status for outcome in outcomes] == ["failed", "failed"]
+    assert exit_code == 1

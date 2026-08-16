@@ -22,7 +22,7 @@ const IMPLEMENTATION_HASHES: Record<string, string> = {
 };
 
 type StrategyMarket = "vn_equity" | "crypto_spot" | "metal_spot";
-type StrategyTimeframe = "1d" | "1h";
+type StrategyTimeframe = "1d";
 type StrategyParameterDescriptor = {
   name: string;
   label: string;
@@ -62,7 +62,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "MA Crossover",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "slowPeriod",
     parameterSchema: [
       { name: "fastPeriod", label: "Fast SMA", type: "integer", min: 2, max: 200, default: 5 },
@@ -91,7 +91,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "Turtle Breakout",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "max(entryPeriod, exitPeriod) + 1",
     parameterSchema: [
       {
@@ -125,7 +125,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "Signal Rolling Reversal",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "confirmationBars + 1",
     parameterSchema: [
       {
@@ -146,7 +146,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "ABCD Causal Pattern",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "pivotLeftBars + pivotRightBars + 4",
     parameterSchema: [
       {
@@ -239,7 +239,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "EMA Trend",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "slowPeriod + 1",
     parameterSchema: [
       { name: "fastPeriod", label: "Fast EMA", type: "integer", min: 2, max: 100, default: 12 },
@@ -264,7 +264,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "RSI Mean Reversion",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "period + 1",
     parameterSchema: [
       { name: "period", label: "RSI period", type: "integer", min: 2, max: 100, default: 14 },
@@ -291,7 +291,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "Bollinger Mean Reversion",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "period",
     parameterSchema: [
       { name: "period", label: "Band period", type: "integer", min: 2, max: 200, default: 20 },
@@ -320,7 +320,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "MACD Momentum",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "slowPeriod + signalPeriod",
     parameterSchema: [
       { name: "fastPeriod", label: "Fast EMA", type: "integer", min: 2, max: 100, default: 12 },
@@ -347,7 +347,7 @@ export const STRATEGY_CATALOG: readonly StrategyDefinition[] = [
     name: "ATR Breakout",
     category: "rule_based",
     supportedMarkets: ["vn_equity", "crypto_spot", "metal_spot"],
-    supportedTimeframes: ["1d", "1h"],
+    supportedTimeframes: ["1d"],
     requiredWarmup: "max(atrPeriod, breakoutPeriod, exitPeriod)",
     parameterSchema: [
       { name: "atrPeriod", label: "ATR period", type: "integer", min: 2, max: 100, default: 14 },

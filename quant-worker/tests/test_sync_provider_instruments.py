@@ -111,6 +111,19 @@ def test_bulk_queue_selects_only_daily_assets_in_the_decision_scope() -> None:
     assert "UPPER(asset.symbol) = ANY(%s)" in query
 
 
+def test_bulk_queue_includes_kbs_benchmark_provider_for_vnindex_and_vn30() -> None:
+    connection = FakeConnection()
+
+    queue_market_ingestion_requests(
+        connection,
+        command="daily",
+        allowed_symbols=("VNINDEX", "VN30"),
+    )
+
+    query, _params = connection.cursor_instance.queries[0]
+    assert "vnstock-kbs-free" in query
+
+
 def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() -> None:
     connection = FakeConnection()
     descriptor = ProviderInstrumentDescriptor(
@@ -234,12 +247,8 @@ def test_due_cutoffs_follow_closed_crypto_and_hose_sessions() -> None:
 
     cutoffs = market_timeframe_stale_cutoffs(now)
 
-    assert cutoffs[("crypto_spot", "1h")] == datetime(
-        2026, 8, 14, 6, 30, tzinfo=timezone.utc
-    )
-    assert cutoffs[("vn_equity", "1h")] == datetime(
-        2026, 8, 14, 5, 30, tzinfo=timezone.utc
-    )
+    assert ("crypto_spot", "1h") not in cutoffs
+    assert ("vn_equity", "1h") not in cutoffs
     assert cutoffs[("vn_equity", "1d")] == datetime(
         2026, 8, 12, 5, 0, tzinfo=timezone.utc
     )
@@ -250,8 +259,9 @@ def test_due_cutoffs_use_previous_hose_session_on_market_holiday() -> None:
 
     cutoffs = market_timeframe_stale_cutoffs(now)
 
-    assert cutoffs[("vn_equity", "1h")] == datetime(
-        2026, 8, 31, 5, 30, tzinfo=timezone.utc
+    assert ("vn_equity", "1h") not in cutoffs
+    assert cutoffs[("vn_equity", "1d")] == datetime(
+        2026, 8, 29, 5, 0, tzinfo=timezone.utc
     )
 
 
@@ -265,7 +275,7 @@ def test_bulk_queue_rejects_retired_hourly_schedule() -> None:
             now=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
         )
     except ValueError as error:
-        assert str(error) == "Intraday market ingestion is retired."
+        assert str(error) == "Unsupported bulk ingestion command."
     else:
         raise AssertionError("hourly queue must be retired")
 

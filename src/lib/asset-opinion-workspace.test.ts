@@ -86,7 +86,14 @@ describe("buildAssetOpinionWorkspace", () => {
       portfolioAvailable: true,
     });
 
-    expect(result.map((item) => item.symbol)).toEqual(["FPT", "ETH", "BTC", "XAU", "VNINDEX"]);
+    expect(result.map((item) => item.symbol)).toEqual([
+      "FPT",
+      "ETH",
+      "BTC",
+      "VNINDEX",
+      "VN30",
+      "XAU",
+    ]);
     expect(result.find((item) => item.symbol === "FPT")).toMatchObject({
       name: "FPT holding",
       canRemove: false,
@@ -111,7 +118,14 @@ describe("buildAssetOpinionWorkspace", () => {
       portfolioAvailable: true,
     });
 
-    expect(result.map((item) => item.symbol)).toEqual(["BTC", "XAU", "VNINDEX", "SOL"]);
+    expect(result.map((item) => item.symbol)).toEqual([
+      "BTC",
+      "ETH",
+      "VNINDEX",
+      "VN30",
+      "XAU",
+      "SOL",
+    ]);
     expect(result.at(-1)).toMatchObject({ name: "Solana", opinion: { symbol: "SOL" } });
   });
 
@@ -154,6 +168,12 @@ describe("buildAssetOpinionWorkspace", () => {
 
     expect(result).toHaveLength(25);
     expect(result[0]?.symbol).toBe("A0");
-    expect(result.slice(-3).map((item) => item.symbol)).toEqual(["BTC", "XAU", "VNINDEX"]);
+    expect(result.slice(-5).map((item) => item.symbol)).toEqual([
+      "BTC",
+      "ETH",
+      "VNINDEX",
+      "VN30",
+      "XAU",
+    ]);
   });
 });

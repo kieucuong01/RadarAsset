@@ -20,7 +20,7 @@ def bar(
     return Bar(
         asset=asset,
         timestamp=datetime(2026, 8, 10, hour, tzinfo=timezone.utc),
-        timeframe="1h",
+        timeframe="1d",
         open=close_value,
         high=close_value + 1,
         low=close_value - 1,

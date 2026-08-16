@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 type BacktestLegCardProps = {
   leg: DraftBacktestLeg;
   strategies: StrategyCatalogItem[];
-  timeframe: "1d" | "1h";
+  timeframe: "1d";
   totalCapital: number;
   baseCurrency: "USD" | "VND";
   compact?: boolean;

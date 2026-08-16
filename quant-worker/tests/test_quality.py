@@ -7,7 +7,7 @@ from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum, normalize_bars, validate_bars
 
 
-def bar(ts: str, *, asset: str = "BTC", timeframe: str = "1h", close: str = "101") -> Bar:
+def bar(ts: str, *, asset: str = "BTC", timeframe: str = "1d", close: str = "101") -> Bar:
     return Bar(
         asset=asset,
         timestamp=datetime.fromisoformat(ts.replace("Z", "+00:00")),
@@ -33,39 +33,37 @@ def test_normalize_bars_sorts_utc_rows_and_checksum_is_order_independent() -> No
     ]
     assert canonical_bar_checksum(normalized) == canonical_bar_checksum([earlier, later])
     assert canonical_bar_checksum(normalized) == (
-        "d5340176a8e9e00ddf246a1defd42f117b2141d47b812b2f4f9d31d280e333a8"
+        "58bb07433ae7e8cce7ddcc28037243005839374e23a2cb23202db97d3ece5f40"
     )
 
 
-def test_crypto_hourly_quality_reports_the_exact_missing_bar() -> None:
+def test_crypto_daily_quality_reports_the_exact_missing_bar() -> None:
     report = validate_bars(
         [
             bar("2024-01-01T00:00:00Z"),
-            bar("2024-01-01T01:00:00Z"),
-            bar("2024-01-01T03:00:00Z"),
+            bar("2024-01-02T00:00:00Z"),
+            bar("2024-01-04T00:00:00Z"),
         ],
         market="crypto_spot",
     )
 
     assert report.missing_bar_count == 1
     assert [(issue.code, issue.severity, issue.timestamp.isoformat()) for issue in report.issues] == [
-        ("MISSING_BAR", "warning", "2024-01-01T02:00:00+00:00")
+        ("MISSING_BAR", "warning", "2024-01-03T00:00:00+00:00")
     ]
     assert report.status == "warning"
 
 
-def test_vietnam_hourly_quality_understands_trading_sessions_and_lunch_break() -> None:
+def test_vietnam_daily_quality_understands_trading_sessions() -> None:
     rows = [
-        bar("2024-01-02T02:00:00Z", asset="FPT"),
-        bar("2024-01-02T04:00:00Z", asset="FPT"),
-        bar("2024-01-02T06:00:00Z", asset="FPT"),
-        bar("2024-01-02T07:00:00Z", asset="FPT"),
+        bar("2024-01-01T17:00:00Z", asset="FPT"),
+        bar("2024-01-03T17:00:00Z", asset="FPT"),
     ]
 
     report = validate_bars(rows, market="vn_equity")
 
     assert report.missing_bar_count == 1
-    assert report.issues[0].timestamp == datetime(2024, 1, 2, 3, tzinfo=timezone.utc)
+    assert report.issues[0].timestamp == datetime(2024, 1, 2, 17, tzinfo=timezone.utc)
 
 
 def test_vietnam_daily_quality_does_not_flag_tet_holiday() -> None:
@@ -156,7 +154,7 @@ def test_adjacent_provider_gaps_collapse_into_one_bounded_range() -> None:
     report = validate_bars(
         [
             bar("2024-01-01T00:00:00Z"),
-            bar("2024-01-01T04:00:00Z"),
+            bar("2024-01-05T00:00:00Z"),
         ],
         market="crypto_spot",
     )
@@ -165,8 +163,8 @@ def test_adjacent_provider_gaps_collapse_into_one_bounded_range() -> None:
     assert len(report.issues) == 1
     issue = report.issues[0]
     assert issue.classification == "PROVIDER_GAP"
-    assert issue.range_start == datetime(2024, 1, 1, 1, tzinfo=timezone.utc)
-    assert issue.range_end == datetime(2024, 1, 1, 3, tzinfo=timezone.utc)
+    assert issue.range_start == datetime(2024, 1, 2, tzinfo=timezone.utc)
+    assert issue.range_end == datetime(2024, 1, 4, tzinfo=timezone.utc)
     assert issue.details["missingCount"] == 3
 
 

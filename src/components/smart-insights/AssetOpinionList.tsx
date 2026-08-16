@@ -116,12 +116,12 @@ function PendingOpinion({ locale }: { locale: Locale }) {
   return (
     <div>
       <Badge variant="secondary">
-        {locale === "vi" ? "Đang chuẩn bị phân tích" : "Preparing analysis"}
+        {locale === "vi" ? "Chưa có quan điểm hôm nay" : "No opinion today"}
       </Badge>
       <p className="mt-1 text-xs text-muted-foreground">
         {locale === "vi"
-          ? "Mã đã được theo dõi; đang chờ dữ liệu định lượng."
-          : "Tracked; awaiting quant data."}
+          ? "Sẽ có phân tích sau khi pipeline daily tạo đủ bằng chứng."
+          : "Analysis appears after the daily pipeline produces enough evidence."}
       </p>
     </div>
   );

@@ -49,7 +49,7 @@ The live ingestion CLIs publish immutable, research-only datasets independently 
   `ADAUSDT`, `LINKUSDT`, `LTCUSDT`, `AVAXUSDT`, `TRXUSDT`, `ZECUSDT`, `XMRUSDT`, and
   `XLMUSDT` when the pair is currently trading.
 - Vnstock VCI: current HOSE equities discovered from the provider listing catalog.
-- Dukascopy public datafeed: `XAUUSD` daily and hourly bid candles.
+- Dukascopy public datafeed: `XAUUSD` daily bid candles.
 
 Run a provider-only smoke without database writes:
 
@@ -57,13 +57,12 @@ Run a provider-only smoke without database writes:
 python quant-worker\ingest_market_data.py all --dry-run --env-file .env.local
 ```
 
-Publish all feeds, an hourly/daily schedule group, or one allow-listed feed:
+Publish all daily feeds or one allow-listed daily feed:
 
 ```powershell
 python quant-worker\ingest_market_data.py all --env-file .env.local
-python quant-worker\ingest_market_data.py hourly --env-file .env.local
 python quant-worker\ingest_market_data.py daily --env-file .env.local
-python quant-worker\ingest_market_data.py all --asset BTC --timeframe 1h --env-file .env.local
+python quant-worker\ingest_market_data.py all --asset BTC --timeframe 1d --env-file .env.local
 ```
 
 For the broad universe, sync provider instruments and queue idempotent ingestion requests:
@@ -83,8 +82,7 @@ python quant-worker\process_ingestion_requests.py --retry-failed --retry-limit 5
 ```
 
 Initial backfills target ten years for HOSE, the longest configured free-provider crypto history
-from `2017-01-01`. XAU daily requests start at the provider's `1999-06-03` boundary and hourly
-requests at `2003-05-05`; the current public feed's first returned XAU bar is in May 2003.
+from `2017-01-01`, and XAU daily requests from the provider's `1999-06-03` boundary.
 Incremental runs merge only a recent overlap.
 
 Exit code `0` means every selected feed succeeded, was unchanged, or was already locked. Exit `2`
@@ -99,16 +97,14 @@ universe or print `.env.local`. Daily/all runs additionally refresh corporate ac
 adjusted datasets:
 
 ```powershell
-powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command hourly
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command all -DrainRequests -MaxRequestTotal 500
 ```
 
-For Windows Task Scheduler, trigger `hourly` at minute `10` of each hour and `daily` at `01:15 UTC`.
-Set **Start in** to the repository root. If `python` is not on the task account's PATH, add
+For Windows Task Scheduler, trigger `daily` at `01:15 UTC`. Set **Start in** to the repository root. If `python` is not on the task account's PATH, add
 `-PythonExecutable C:\path\to\python.exe`. Do not register duplicate tasks for the same environment;
 PostgreSQL advisory locks are a final overlap guard, not a substitute for clean scheduling.
-On a Windows deployment host, register the two versioned tasks explicitly:
+On a Windows deployment host, register the versioned tasks explicitly:
 
 ```powershell
 powershell.exe -NoProfile -File deploy\windows\install-quant-ingestion-tasks.ps1 -Install

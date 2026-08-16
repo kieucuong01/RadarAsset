@@ -29,8 +29,10 @@ ALIASES = {
 
 REPRESENTATIVE_MARKETS = {
     "BTC": "crypto",
+    "ETH": "crypto",
     "XAU": "gold",
     "VNINDEX": "equity",
+    "VN30": "equity",
 }
 
 CONCENTRATION_LIMITS = {

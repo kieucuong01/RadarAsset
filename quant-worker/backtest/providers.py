@@ -20,8 +20,8 @@ from .models import Bar
 from .quality import normalize_bars
 
 
-INTERVALS = {"1h": timedelta(hours=1), "1d": timedelta(days=1)}
-INTERVAL_MILLISECONDS = {"1h": 3_600_000, "1d": 86_400_000}
+INTERVALS = {"1d": timedelta(days=1)}
+INTERVAL_MILLISECONDS = {"1d": 86_400_000}
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -473,7 +473,7 @@ def _default_dukascopy_fetcher(**kwargs: Any) -> Any:
 
 
 class DukascopyXauAdapter:
-    intervals = {"1d": "1DAY", "1h": "1HOUR"}
+    intervals = {"1d": "1DAY"}
 
     def __init__(
         self,
@@ -513,7 +513,7 @@ class DukascopyXauAdapter:
         if start.tzinfo is None or end.tzinfo is None or start >= end:
             raise ValueError("Dukascopy fetch requires an ordered timezone-aware range.")
 
-        chunk_days = 365 if timeframe == "1h" else 3653
+        chunk_days = 3653
         cursor = start.astimezone(timezone.utc)
         end_utc = end.astimezone(timezone.utc)
         rows: list[Bar] = []
@@ -793,11 +793,6 @@ class VnstockAdapter:
             raise ValueError("Unsupported Vnstock timeframe.")
         is_metal = asset == "XAU" and symbol == "XAUUSD"
         is_index = asset == "VNINDEX" and symbol == "VNINDEX"
-        if is_metal and timeframe == "1h":
-            raise ProviderUnavailableError(
-                "unsupported_timeframe",
-                "The free XAU/USD provider does not supply hourly candles.",
-            )
         if is_index and timeframe != "1d":
             raise ProviderUnavailableError(
                 "unsupported_timeframe",

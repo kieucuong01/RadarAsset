@@ -27,7 +27,7 @@ FROM provider_instruments instrument
   JOIN data_providers provider ON provider.id = instrument.provider_id
   JOIN assets asset ON asset.id = instrument.asset_id
   WHERE instrument.is_active = true AND provider.status = 'active'
-    AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free')
+    AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-kbs-free', 'vnstock-vci-free')
     AND UPPER(asset.symbol) = ANY(%s)
 ), expected AS (
   SELECT asset_id, '1d'::text AS timeframe FROM scope

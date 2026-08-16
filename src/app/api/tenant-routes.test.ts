@@ -367,7 +367,7 @@ describe("tenant API authorization", () => {
         body: JSON.stringify({
           providerCode: "binance-public",
           providerSymbol: "ETHUSDT",
-          timeframe: "1h",
+          timeframe: "1d",
         }),
       }),
     );
@@ -377,7 +377,7 @@ describe("tenant API authorization", () => {
     expect(mocks.requestMarketIngestion).toHaveBeenCalledWith(editorContext, {
       providerCode: "binance-public",
       providerSymbol: "ETHUSDT",
-      timeframe: "1h",
+      timeframe: "1d",
     });
     await expect(ingestionRequestsGet()).resolves.toMatchObject({ status: 200 });
   });

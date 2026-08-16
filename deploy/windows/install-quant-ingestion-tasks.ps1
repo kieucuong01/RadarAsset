@@ -27,12 +27,17 @@ if (-not (Test-Path -LiteralPath $smartInsightsWrapper -PathType Leaf)) {
 }
 
 if ($Verify) {
-    $legacyHourly = Get-ScheduledTask -TaskName "RadarAsset Market Ingestion Hourly" -ErrorAction SilentlyContinue
-    if ($null -ne $legacyHourly -and $legacyHourly.State -ne "Disabled") {
-        throw "Legacy intraday task is still enabled."
+    $legacyTaskNames = @(
+        "RadarAsset Market Ingestion Hourly",
+        "RadarAsset Smart Insights Four Hourly"
+    )
+    foreach ($legacyTaskName in $legacyTaskNames) {
+        $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
+        if ($null -ne $legacyTask -and $legacyTask.State -ne "Disabled") {
+            throw "Legacy intraday task '$legacyTaskName' is still enabled."
+        }
     }
     $expectedTasks = @(
-        @{ Name = "RadarAsset Smart Insights Four Hourly"; Argument = "run-smart-insights.ps1"; Schedule = "four-hourly" },
         @{ Name = "RadarAsset Intelligence Daily"; Argument = "refresh-asset-opinions.ps1"; Schedule = $null },
         @{ Name = "RadarAsset Intelligence Weekly"; Argument = "run-smart-insights.ps1"; Schedule = "weekly" }
     )
@@ -67,7 +72,8 @@ if ($Verify) {
 
 $legacyTaskNames = @(
     "RadarAsset Market Ingestion Hourly",
-    "RadarAsset Market Ingestion Daily"
+    "RadarAsset Market Ingestion Daily",
+    "RadarAsset Smart Insights Four Hourly"
 )
 foreach ($legacyTaskName in $legacyTaskNames) {
     $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
@@ -78,9 +84,6 @@ foreach ($legacyTaskName in $legacyTaskNames) {
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)
 $principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Limited
-$fourHourlyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
-    "-NoProfile -ExecutionPolicy Bypass -File `"$smartInsightsWrapper`" -Schedule four-hourly"
-)
 $dailyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
     "-NoProfile -ExecutionPolicy Bypass -File `"$dailyWrapper`""
 )
@@ -88,11 +91,6 @@ $weeklyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
     "-NoProfile -ExecutionPolicy Bypass -File `"$smartInsightsWrapper`" -Schedule weekly"
 )
 
-$nextHourUtc = [DateTimeOffset]::UtcNow.AddHours(1)
-$hourlyStart = [DateTimeOffset]::new(
-    $nextHourUtc.Year, $nextHourUtc.Month, $nextHourUtc.Day,
-    $nextHourUtc.Hour, 10, 0, [TimeSpan]::Zero
-).ToLocalTime().DateTime
 $dailyUtc = [DateTimeOffset]::new(
     [DateTimeOffset]::UtcNow.Year, [DateTimeOffset]::UtcNow.Month,
     [DateTimeOffset]::UtcNow.Day, 1, 15, 0, [TimeSpan]::Zero
@@ -100,13 +98,11 @@ $dailyUtc = [DateTimeOffset]::new(
 if ($dailyUtc -le [DateTimeOffset]::UtcNow) { $dailyUtc = $dailyUtc.AddDays(1) }
 $dailyStart = $dailyUtc.ToLocalTime().DateTime
 
-$fourHourlyTrigger = New-ScheduledTaskTrigger -Once -At $hourlyStart -RepetitionInterval (New-TimeSpan -Hours 4)
 $dailyTrigger = New-ScheduledTaskTrigger -Daily -At $dailyStart
 $weeklyTrigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday -At $dailyStart
 
-Register-ScheduledTask -TaskName "RadarAsset Smart Insights Four Hourly" -Action $fourHourlyAction -Trigger $fourHourlyTrigger -Settings $settings -Principal $principal -Force | Out-Null
 Register-ScheduledTask -TaskName "RadarAsset Intelligence Daily" -Action $dailyAction -Trigger $dailyTrigger -Settings $settings -Principal $principal -Force | Out-Null
 Register-ScheduledTask -TaskName "RadarAsset Intelligence Weekly" -Action $weeklyAction -Trigger $weeklyTrigger -Settings $settings -Principal $principal -Force | Out-Null
 
-Get-ScheduledTask -TaskName "RadarAsset Smart Insights Four Hourly", "RadarAsset Intelligence Daily", "RadarAsset Intelligence Weekly" |
+Get-ScheduledTask -TaskName "RadarAsset Intelligence Daily", "RadarAsset Intelligence Weekly" |
     Select-Object TaskName, State
