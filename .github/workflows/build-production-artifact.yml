@@ -2,6 +2,9 @@ name: Build production artifact
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -87,6 +90,7 @@ jobs:
           retention-days: 14
 
   deploy:
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 20

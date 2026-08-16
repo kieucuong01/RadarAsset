@@ -30,8 +30,10 @@ describe("DataVest edge and production delivery", () => {
     const workflow = yaml.load(source);
     const deploy = workflow.jobs.deploy;
     expect(workflow.on).toHaveProperty("workflow_dispatch");
+    expect(workflow.on.push.branches).toEqual(["main"]);
     expect(deploy.needs).toBe("build");
     expect(deploy.environment).toBe("production");
+    expect(deploy.if).toBe("github.event_name == 'workflow_dispatch'");
     expect(deploy.steps.some((step) => step.uses === "actions/download-artifact@v4")).toBe(true);
     const commands = deploy.steps
       .filter((step) => typeof step.run === "string")

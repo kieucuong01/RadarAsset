@@ -14,10 +14,13 @@ async function loadWorkflow() {
 }
 
 describe("production artifact workflow", () => {
-  it("parses as YAML and exposes only a manual, read-only build", async () => {
+  it("parses as YAML and builds read-only artifacts on main or manual dispatch", async () => {
     const { workflow } = await loadWorkflow();
 
-    expect(workflow.on).toEqual({ workflow_dispatch: null });
+    expect(workflow.on).toEqual({
+      workflow_dispatch: null,
+      push: { branches: ["main"] },
+    });
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.concurrency).toEqual({
       group: "datavest-production-artifact",
