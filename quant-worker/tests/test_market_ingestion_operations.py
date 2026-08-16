@@ -332,10 +332,13 @@ def test_quant_lab_mounts_bilingual_ingestion_health_dashboard() -> None:
     panel = (ROOT / "src" / "components" / "MarketDataHealthPanel.tsx").read_text(
         encoding="utf-8"
     )
-    dictionary = (ROOT / "src" / "lib" / "i18n" / "dictionary.ts").read_text(
-        encoding="utf-8"
-    )
+    dictionaries = [
+        (ROOT / "src" / "lib" / "i18n" / "dictionaries" / locale / "quant.ts").read_text(
+            encoding="utf-8"
+        )
+        for locale in ("vi", "en")
+    ]
 
     assert "<MarketDataHealthPanel />" in quant_lab
     assert 't("quant.dataHealth.title")' in panel
-    assert dictionary.count("dataHealth: {") == 2
+    assert all(dictionary.count("dataHealth: {") == 1 for dictionary in dictionaries)
