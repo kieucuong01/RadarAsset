@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_LOCALE, LOCALES, normalizeLocale, translate } from "./dictionary";
+import { DEFAULT_LOCALE, LOCALES, dictionaries, normalizeLocale, translate } from "./dictionary";
+
+function leafKeys(value: unknown, prefix = ""): string[] {
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, child]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return typeof child === "string" ? [path] : leafKeys(child, path);
+  });
+}
 
 describe("i18n dictionary", () => {
+  it("keeps Vietnamese and English key shapes identical", () => {
+    expect(leafKeys(dictionaries.en).sort()).toEqual(leafKeys(dictionaries.vi).sort());
+  });
   it("normalizes supported locales and defaults to Vietnamese", () => {
     expect(DEFAULT_LOCALE).toBe("vi");
     expect(LOCALES.map((locale) => locale.code)).toEqual(["vi", "en"]);
