@@ -75,6 +75,16 @@ def _prepare_spool(spool_root: Path) -> Path:
     return work_directory
 
 
+def _grant_postgres_restore_access(work_directory: Path, plaintext: Path) -> None:
+    import grp
+
+    postgres_gid = grp.getgrnam("postgres").gr_gid
+    os.chown(work_directory, -1, postgres_gid)
+    work_directory.chmod(0o750)
+    os.chown(plaintext, -1, postgres_gid)
+    plaintext.chmod(0o640)
+
+
 def _prune_encrypted_retries(spool_root: Path, *, keep: int = 3) -> None:
     encrypted = sorted(
         spool_root.glob("postgres-*/*.dump.enc"),
@@ -272,6 +282,7 @@ def restore_drill(
             ],
             env=_command_environment(DATAVEST_BACKUP_PASSPHRASE=encryption_secret),
         )
+        _grant_postgres_restore_access(work_directory, plaintext)
         runner.run(ADMIN_PREFIX + ["dropdb", "--if-exists", RESTORE_DATABASE])
         runner.run(ADMIN_PREFIX + ["createdb", RESTORE_DATABASE])
         try:

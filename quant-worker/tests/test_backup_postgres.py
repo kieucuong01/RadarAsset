@@ -184,7 +184,9 @@ def test_create_removes_partial_ciphertext_when_encryption_fails(tmp_path: Path)
     assert list(tmp_path.rglob("*.dump*")) == []
 
 
-def test_restore_drill_uses_exact_isolated_database_and_drops_it(tmp_path: Path) -> None:
+def test_restore_drill_uses_exact_isolated_database_and_drops_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     runner = FakeRunner()
     s3 = FakeS3()
     key = "operations/backups/postgres/2026/08/20260817T010203Z.dump.enc"
@@ -193,6 +195,12 @@ def test_restore_drill_uses_exact_isolated_database_and_drops_it(tmp_path: Path)
     s3.objects[("datavest", key)] = (
         payload,
         {"sha256": checksum, "database": "datavest"},
+    )
+    access_grants: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(
+        backup_postgres,
+        "_grant_postgres_restore_access",
+        lambda work_directory, plaintext: access_grants.append((work_directory, plaintext)),
     )
 
     backup_postgres.restore_drill(
@@ -223,6 +231,8 @@ def test_restore_drill_uses_exact_isolated_database_and_drops_it(tmp_path: Path)
         "--if-exists",
         "datavest_restore_test",
     ]
+    assert len(access_grants) == 1
+    assert access_grants[0][1].name == "restore.dump"
     assert list(tmp_path.rglob("*.dump*")) == []
 
 
