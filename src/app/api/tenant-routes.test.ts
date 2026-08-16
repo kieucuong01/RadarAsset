@@ -299,7 +299,7 @@ describe("tenant API authorization", () => {
     expect(mocks.loadEvidence).toHaveBeenCalledWith(viewerContext, "e-a");
   });
 
-  it("returns a private ETag and short-circuits an unchanged briefing", async () => {
+  it("does not cache a personalized briefing with independently derived metrics", async () => {
     mocks.loadBriefingEnvelope.mockResolvedValue({
       fingerprint: "fingerprint-a",
       briefing: { id: "briefing-a", assetOpinions: [] },
@@ -314,10 +314,10 @@ describe("tenant API authorization", () => {
     );
 
     expect(first.status).toBe(200);
-    expect(first.headers.get("etag")).toBe('"fingerprint-a"');
-    expect(first.headers.get("cache-control")).toBe("private, no-cache");
-    expect(unchanged.status).toBe(304);
-    expect(await unchanged.text()).toBe("");
+    expect(first.headers.get("etag")).toBeNull();
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+    expect(unchanged.status).toBe(200);
+    await expect(unchanged.json()).resolves.toEqual({ id: "briefing-a", assetOpinions: [] });
   });
 
   it("rejects metric and calendar windows over 31 days", async () => {
