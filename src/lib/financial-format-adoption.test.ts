@@ -6,8 +6,10 @@ const migratedFiles = [
   "src/components/MockPortfolio.tsx",
   "src/components/PortfolioTransactionDialog.tsx",
   "src/components/TickerTape.tsx",
+  "src/components/FactorLab.tsx",
   "src/components/smart-insights/AssetOpinionCalculation.tsx",
   "src/components/smart-insights/CryptoQuantPulseTabs.tsx",
+  "src/components/smart-insights/EventRiskPanel.tsx",
   "src/components/backtest-results/BacktestTradeList.tsx",
 ];
 
@@ -21,5 +23,6 @@ describe("financial formatter adoption", () => {
 
     expect(source).not.toMatch(/new Intl\.NumberFormat/);
     expect(sourceWithoutDateTime).not.toMatch(/\.toLocaleString\(/);
+    expect(source).not.toMatch(/\.toFixed\(/);
   });
 });

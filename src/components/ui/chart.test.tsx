@@ -14,7 +14,10 @@ vi.mock("recharts", () => {
 
 import { ChartContainer, ChartTooltipContent } from "./chart";
 
-function renderTooltip(formatter?: (value: number) => ReactNode): string {
+function renderTooltip(
+  value: number | string = 12_345.67891,
+  formatter?: (value: number) => ReactNode,
+): string {
   return renderToStaticMarkup(
     <ChartContainer config={{ revenue: { label: "Revenue" } }}>
       <ChartTooltipContent
@@ -25,7 +28,7 @@ function renderTooltip(formatter?: (value: number) => ReactNode): string {
             {
               dataKey: "revenue",
               name: "Revenue",
-              value: 12_345.67891,
+              value,
               type: "line",
               payload: {},
             },
@@ -41,7 +44,15 @@ describe("ChartTooltipContent", () => {
     expect(renderTooltip()).toContain("12,345.6789");
   });
 
+  it("preserves zero in the numeric fallback", () => {
+    expect(renderTooltip(0)).toContain(">0<");
+  });
+
+  it("preserves string and date-like fallback values", () => {
+    expect(renderTooltip("2026-08-16")).toContain("2026-08-16");
+  });
+
   it("keeps a consumer formatter authoritative", () => {
-    expect(renderTooltip(() => "Consumer value")).toContain("Consumer value");
+    expect(renderTooltip(12_345.67891, () => "Consumer value")).toContain("Consumer value");
   });
 });
