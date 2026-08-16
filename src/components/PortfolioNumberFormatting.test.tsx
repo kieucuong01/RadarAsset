@@ -35,18 +35,38 @@ vi.mock("react", async (importOriginal) => {
 
 vi.mock("recharts", () => {
   const Container = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  const YAxis = ({ tickFormatter }: { tickFormatter?: (value: number) => string }) => (
+    <span>axis:{tickFormatter?.(100)}</span>
+  );
+  const Tooltip = ({ formatter }: { formatter?: (value: number) => unknown }) => (
+    <span>tooltip:{String(formatter?.(102))}</span>
+  );
+  const AreaChart = ({ children }: { children?: React.ReactNode }) => {
+    const items = Array.isArray(children) ? children : [children];
+    return (
+      <div>
+        {items.filter(
+          (child) =>
+            child &&
+            typeof child === "object" &&
+            "type" in child &&
+            (child.type === YAxis || child.type === Tooltip),
+        )}
+      </div>
+    );
+  };
   return {
     Area: Container,
-    AreaChart: Container,
+    AreaChart,
     CartesianGrid: Container,
     Cell: Container,
     Legend: Container,
     Pie: Container,
     PieChart: Container,
-    ResponsiveContainer: () => null,
-    Tooltip: Container,
+    ResponsiveContainer: Container,
+    Tooltip,
     XAxis: Container,
-    YAxis: Container,
+    YAxis,
   };
 });
 
@@ -102,9 +122,29 @@ function portfolio(baseCurrency: string): PortfolioResponse {
         alloc: 100,
         sentiment: "Bullish",
         category: "Crypto",
+        currency: "USDT",
       },
     ],
-    transactions: [],
+    transactions: [
+      {
+        id: "transaction-btc",
+        createdAt: "2026-08-16T00:00:00.000Z",
+        type: "buy",
+        assetId: "asset-btc",
+        symbol: "BTC",
+        quantity: 1,
+        price: 56_200_000,
+        fee: 0,
+        executedAt: "2026-08-16T00:00:00.000Z",
+        note: null,
+        grossAmount: 56_200_000,
+        netAmount: -56_200_000,
+        releasedCostBasis: 0,
+        realizedPnL: 0,
+        remainingQuantity: 1,
+        currency: "USDT",
+      },
+    ],
     performance: [],
     riskMetrics: [
       {
@@ -154,21 +194,23 @@ describe("Portfolio number formatting", () => {
 
     expect(text).toContain("1,250,000 VND");
     expect(text).toContain("12,345.6789 BTC");
-    expect(text).toContain("56,200,000 VND");
+    expect(text).toContain("56,200,000 USDT");
     expect(text).toContain("1,234,567 VND");
+    expect(text).toContain("0 USDT");
+    expect(text).not.toContain("common.fee-");
     expect(text).not.toContain("$1,250,000.00");
   });
 
   it("preserves an explicit USD portfolio when the UI locale is Vietnamese", () => {
     const text = renderPortfolio("USD");
 
-    expect(text).toContain("56,200,000 USD");
+    expect(text).toContain("56,200,000 USDT");
     expect(text).toContain("+12.34%");
     expect(text).toContain("1.2346");
     expect(text).not.toContain("56.200.000");
   });
 
-  it("formats unspecified favorite prices with the Vietnamese monetary default", () => {
+  it("formats favorite prices with explicit quote currencies and missing quotes as unavailable", () => {
     state.arrayQueue = [
       [
         {
@@ -182,6 +224,50 @@ describe("Portfolio number formatting", () => {
           datasetState: "ready",
           ingestionRequestId: null,
           backtestableTimeframes: ["1d"],
+          currency: "USDT",
+          hasMarketQuote: true,
+        },
+        {
+          id: "favorite-fpt",
+          sym: "FPT",
+          name: "FPT",
+          price: 125_000,
+          chg: -1.25,
+          alert: 0,
+          sentiment: "neutral",
+          datasetState: "ready",
+          ingestionRequestId: null,
+          backtestableTimeframes: ["1d"],
+          currency: "VND",
+          hasMarketQuote: true,
+        },
+        {
+          id: "favorite-xau",
+          sym: "XAU",
+          name: "Gold",
+          price: 4_550.5,
+          chg: 0.5,
+          alert: 0,
+          sentiment: "bull",
+          datasetState: "ready",
+          ingestionRequestId: null,
+          backtestableTimeframes: ["1d"],
+          currency: "USD",
+          hasMarketQuote: true,
+        },
+        {
+          id: "favorite-missing",
+          sym: "ETH",
+          name: "Ethereum",
+          price: 0,
+          chg: 0,
+          alert: 0,
+          sentiment: "neutral",
+          datasetState: "stale",
+          ingestionRequestId: null,
+          backtestableTimeframes: [],
+          currency: "USDT",
+          hasMarketQuote: false,
         },
       ],
     ];
@@ -196,11 +282,14 @@ describe("Portfolio number formatting", () => {
       ),
     );
 
-    expect(text).toContain("56,200,000 VND");
+    expect(text).toContain("56,200,000 USDT");
+    expect(text).toContain("125,000 VND");
+    expect(text).toContain("4,550.5 USD");
     expect(text).toContain("+12.34%");
+    expect(text).toContain("EthereumStale——");
   });
 
-  it("formats strategy forward-test money with the explicit portfolio currency", () => {
+  it("formats strategy forward-test money with the explicit assignment currency", () => {
     state.arrayQueue = [
       [
         {
@@ -214,6 +303,7 @@ describe("Portfolio number formatting", () => {
           lastEvaluatedBarAt: null,
           latestSignal: null,
           backtestBaseline: null,
+          currency: "USDT",
           snapshots: [
             {
               timestamp: "2026-08-16T00:00:00.000Z",
@@ -223,6 +313,14 @@ describe("Portfolio number formatting", () => {
               cumulativeContributions: 500_000,
               cumulativeFees: 25,
             },
+            {
+              timestamp: "2026-08-17T00:00:00.000Z",
+              equity: 2_550_000,
+              benchmarkEquity: 2_424_000,
+              pnlExcludingContributions: 1_300_000,
+              cumulativeContributions: 500_000,
+              cumulativeFees: 30,
+            },
           ],
         },
       ],
@@ -231,8 +329,39 @@ describe("Portfolio number formatting", () => {
       renderToStaticMarkup(<PortfolioStrategyForwardTests currency="USD" />),
     );
 
-    expect(text).toContain("1,250,000 USD");
+    expect(text).toContain("1,300,000 USDT");
     expect(text).not.toContain("$1,250,000.00");
+    expect(text).toContain("axis:100");
+    expect(text).toContain("tooltip:102");
+    expect(text).not.toContain("axis:100 USD");
+    expect(text).not.toContain("tooltip:102 USD");
+  });
+
+  it("does not fabricate zero-valued forward metrics before the first snapshot", () => {
+    state.arrayQueue = [
+      [
+        {
+          assignmentId: "assignment-empty",
+          portfolioId: "portfolio-formatting",
+          symbol: "BTC",
+          currency: "USDT",
+          strategy: { code: "ma", version: "1", name: "MA", kind: "system" },
+          status: "active",
+          activatedAt: "2026-08-15T00:00:00.000Z",
+          lastEvaluatedAt: null,
+          lastEvaluatedBarAt: null,
+          latestSignal: null,
+          backtestBaseline: null,
+          snapshots: [],
+        },
+      ],
+    ];
+    const text = textContent(renderToStaticMarkup(<PortfolioStrategyForwardTests />));
+
+    expect(text).toContain("forwardTesting.pnlExContributions—");
+    expect(text).toContain("forwardTesting.contributions—");
+    expect(text).toContain("forwardTesting.fees—");
+    expect(text).not.toContain("0 USDT");
   });
 
   it("formats strategy signal prices with the explicit portfolio currency", () => {
@@ -247,6 +376,7 @@ describe("Portfolio number formatting", () => {
           strategyVersion: "1",
           strategyName: "MA",
           parameters: {},
+          currency: "USDT",
           status: "active",
           signals: [
             {
@@ -280,7 +410,7 @@ describe("Portfolio number formatting", () => {
       ),
     );
 
-    expect(text).toContain("56,200,000 USD");
+    expect(text).toContain("56,200,000 USDT");
     expect(text).not.toContain("56.200.000");
   });
 });

@@ -274,7 +274,7 @@ export function StrategyAssignmentPanel({
                               ? "—"
                               : formatPrice(signal.signalPrice, {
                                   locale,
-                                  currency: portfolioCurrency,
+                                  currency: assignment.currency ?? portfolioCurrency,
                                 })}
                           </span>
                         </div>
@@ -311,7 +311,7 @@ export function StrategyAssignmentPanel({
                                 assignmentId: assignment.id,
                               }}
                               onSignalExecuted={() => void refreshAssignments()}
-                              portfolioCurrency={portfolioCurrency}
+                              portfolioCurrency={assignment.currency ?? portfolioCurrency}
                             />
                           </div>
                         ) : (

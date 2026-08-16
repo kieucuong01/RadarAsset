@@ -347,6 +347,7 @@ describe("organization-scoped database services", () => {
           id: "asset-eth",
           symbol: "ETH",
           name: "Ethereum",
+          currency: "USDT",
           datasets: [
             { timeframe: "1d", versions: [{ id: "eth-1d" }] },
             { timeframe: "1h", versions: [] },
@@ -369,6 +370,8 @@ describe("organization-scoped database services", () => {
         datasetState: "loading",
         ingestionRequestId: "request-eth-1h",
         backtestableTimeframes: ["1d"],
+        currency: "USDT",
+        hasMarketQuote: false,
       }),
     ]);
   });
@@ -574,7 +577,7 @@ describe("organization-scoped database services", () => {
 
   it("upserts one tenant-scoped strategy assignment per portfolio asset", async () => {
     prisma.portfolio.findFirst.mockResolvedValue({ id: "portfolio-a", organizationId: "org-a" });
-    prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc", symbol: "BTC" });
+    prisma.asset.findUnique.mockResolvedValue({ id: "asset-btc", symbol: "BTC", currency: "USDT" });
     prisma.strategyVersion.findUnique.mockResolvedValue({
       id: "strategy-version-turtle",
       code: "turtle_breakout",
@@ -588,7 +591,7 @@ describe("organization-scoped database services", () => {
       assetId: "asset-btc",
       parameters: { entryPeriod: 20, exitPeriod: 10 },
       status: "active",
-      asset: { symbol: "BTC" },
+      asset: { symbol: "BTC", currency: "USDT" },
       strategyVersion: {
         code: "turtle_breakout",
         version: "1.0.0",
@@ -610,6 +613,7 @@ describe("organization-scoped database services", () => {
     expect(response).toMatchObject({
       id: "assignment-1",
       symbol: "BTC",
+      currency: "USDT",
       strategyCode: "turtle_breakout",
       status: "active",
     });

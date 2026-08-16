@@ -30,6 +30,7 @@ export const forwardTestSchema = z
     assignmentId: z.string(),
     portfolioId: z.string(),
     symbol: z.string(),
+    currency: z.string().min(1).optional(),
     strategy: z
       .object({ code: z.string(), version: z.string(), name: z.string(), kind: z.string() })
       .strict(),

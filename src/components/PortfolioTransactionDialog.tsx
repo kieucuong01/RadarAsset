@@ -127,7 +127,10 @@ export function PortfolioTransactionDialog({
   const selectedHolding = holdings.find((holding) => holding.ticker === symbol) ?? null;
   const selectedAsset = assets?.find((asset) => asset.symbol === symbol) ?? null;
   const currency =
-    selectedAsset?.currency?.trim() || portfolioCurrency?.trim() || defaultCurrency(locale);
+    selectedAsset?.currency?.trim() ||
+    selectedHolding?.currency?.trim() ||
+    portfolioCurrency?.trim() ||
+    defaultCurrency(locale);
   const numericQuantity = Number(quantity);
   const numericPrice = Number(price);
   const numericFee = Number(fee);

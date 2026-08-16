@@ -154,7 +154,7 @@ describe("strategy forward activation", () => {
         activatedAt: new Date("2026-08-01T00:00:00Z"),
         lastEvaluatedAt: new Date("2026-08-12T00:00:00Z"),
         lastEvaluatedBarAt: new Date("2026-08-11T00:00:00Z"),
-        asset: { symbol: "BTC" },
+        asset: { symbol: "BTC", currency: "USDT" },
         strategyVersion: {
           code: input.strategyCode,
           version: "1.0.0",
@@ -188,6 +188,7 @@ describe("strategy forward activation", () => {
     expect(result[0]).toMatchObject({
       assignmentId: "assignment-a",
       symbol: "BTC",
+      currency: "USDT",
       status: "active",
       backtestBaseline: {
         runId: input.backtestRunId,

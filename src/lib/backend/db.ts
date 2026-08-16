@@ -358,6 +358,7 @@ export async function loadPortfolioResponse(
     fee: numberFromDecimal(transaction.fee),
     executedAt: transaction.executedAt.toISOString(),
     note: transaction.note,
+    currency: transaction.asset.currency,
   }));
 
   const latestTransactionPrices = new Map<string, number>();
@@ -374,6 +375,7 @@ export async function loadPortfolioResponse(
       name: asset.name,
       assetClass: assertAssetClass(asset.assetClass),
       latestPrice: latestBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
+      currency: asset.currency,
     }),
   );
   const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });
@@ -876,6 +878,8 @@ export async function loadWatchlist(context: TenantContext) {
       datasetState,
       ingestionRequestId: activeRequest?.id ?? null,
       backtestableTimeframes,
+      currency: item.asset.currency,
+      hasMarketQuote: Boolean(ticker),
     };
   });
 }
@@ -1241,7 +1245,7 @@ function strategyAssignmentToResponse(assignment: {
   portfolioId: string;
   parameters: unknown;
   status: string;
-  asset: { symbol: string };
+  asset: { symbol: string; currency?: string };
   strategyVersion: { code: string; version: string; name: string };
   signals: Array<Parameters<typeof strategySignalToResponse>[0]>;
 }): StrategyAssignmentResponse {
@@ -1249,6 +1253,7 @@ function strategyAssignmentToResponse(assignment: {
     id: assignment.id,
     portfolioId: assignment.portfolioId,
     symbol: assignment.asset.symbol,
+    ...(assignment.asset.currency ? { currency: assignment.asset.currency } : {}),
     strategyCode: assignment.strategyVersion.code,
     strategyVersion: assignment.strategyVersion.version,
     strategyName: assignment.strategyVersion.name,

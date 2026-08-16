@@ -118,6 +118,7 @@ export function FavoriteAssetsPanel({
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => {
             const action = favoriteActionState(item);
+            const hasMarketQuote = item.hasMarketQuote ?? item.price > 0;
             const badgeVariant =
               item.datasetState === "ready"
                 ? "default"
@@ -136,10 +137,21 @@ export function FavoriteAssetsPanel({
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <div>
                     <p className="text-lg font-semibold tabular-nums">
-                      {formatPrice(item.price > 0 ? item.price : null, { locale })}
+                      {formatPrice(hasMarketQuote ? item.price : null, {
+                        locale,
+                        currency: item.currency,
+                      })}
                     </p>
-                    <p className={item.chg >= 0 ? "text-xs text-bull" : "text-xs text-bear"}>
-                      {formatPercent(item.chg, { sign: true })}
+                    <p
+                      className={
+                        !hasMarketQuote
+                          ? "text-xs text-muted-foreground"
+                          : item.chg >= 0
+                            ? "text-xs text-bull"
+                            : "text-xs text-bear"
+                      }
+                    >
+                      {formatPercent(hasMarketQuote ? item.chg : null, { sign: true })}
                     </p>
                   </div>
                   <p className="text-right text-xs text-muted-foreground">

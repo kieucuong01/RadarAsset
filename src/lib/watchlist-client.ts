@@ -16,6 +16,8 @@ const favoriteSchema = z
     datasetState: z.enum(["ready", "stale", "loading", "unavailable"]),
     ingestionRequestId: z.string().nullable(),
     backtestableTimeframes: z.array(z.enum(["1d", "1h"])),
+    currency: z.string().min(1).optional(),
+    hasMarketQuote: z.boolean().optional(),
   })
   .strict();
 

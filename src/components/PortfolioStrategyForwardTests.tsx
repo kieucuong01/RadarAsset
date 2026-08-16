@@ -13,7 +13,7 @@ import {
 import { getStrategyForwardTests, type ForwardTest } from "@/lib/strategy-forward/client";
 import { buildForwardChart, buildForwardComparison } from "@/lib/strategy-forward/presentation";
 import { useI18n } from "@/lib/i18n/context";
-import { formatMoney, formatPercent } from "@/lib/financial-format";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 
 export function PortfolioStrategyForwardTests({ currency }: { currency?: string | null } = {}) {
   const { t } = useI18n();
@@ -48,7 +48,7 @@ export function PortfolioStrategyForwardTests({ currency }: { currency?: string 
         <p className="text-sm text-muted-foreground">{t("forwardTesting.description")}</p>
       </div>
       {items.map((item) => (
-        <ForwardCard key={item.assignmentId} item={item} currency={currency} />
+        <ForwardCard key={item.assignmentId} item={item} currency={item.currency ?? currency} />
       ))}
     </section>
   );
@@ -88,17 +88,17 @@ function ForwardCard({ item, currency }: { item: ForwardTest; currency?: string 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Metric
           label={t("forwardTesting.pnlExContributions")}
-          value={latest ? latest.pnlExcludingContributions : 0}
+          value={latest?.pnlExcludingContributions ?? null}
           currency={currency}
         />
         <Metric
           label={t("forwardTesting.contributions")}
-          value={latest ? latest.cumulativeContributions : 0}
+          value={latest?.cumulativeContributions ?? null}
           currency={currency}
         />
         <Metric
           label={t("forwardTesting.fees")}
-          value={latest ? latest.cumulativeFees : 0}
+          value={latest?.cumulativeFees ?? null}
           currency={currency}
         />
       </div>
@@ -127,9 +127,9 @@ function ForwardCard({ item, currency }: { item: ForwardTest; currency?: string 
               <YAxis
                 domain={["auto", "auto"]}
                 width={70}
-                tickFormatter={(value: number) => formatMoney(value, { locale, currency })}
+                tickFormatter={(value: number) => formatNumber(value)}
               />
-              <Tooltip formatter={(value) => formatMoney(Number(value), { locale, currency })} />
+              <Tooltip formatter={(value) => formatNumber(Number(value))} />
               <Area
                 dataKey="strategy"
                 name={t("forwardTesting.strategy")}
@@ -172,7 +172,7 @@ function Metric({
   currency,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   currency?: string | null;
 }) {
   const { locale } = useI18n();

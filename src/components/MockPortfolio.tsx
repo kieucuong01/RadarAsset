@@ -81,6 +81,7 @@ type Tx = {
   fee: number;
   netAmount: number;
   realizedPnL: number;
+  currency?: string;
 };
 
 export function MockPortfolio() {
@@ -541,6 +542,7 @@ function HoldingsTable({
             )}
             {holdings.map((holding) => {
               const up = holding.pnl >= 0;
+              const holdingCurrency = holding.currency ?? currency;
               return (
                 <tr
                   key={holding.ticker}
@@ -561,13 +563,13 @@ function HoldingsTable({
                     {formatMetricValue(holding.qty, { locale, unit: holding.ticker })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {formatPrice(holding.cost, { locale, currency })}
+                    {formatPrice(holding.cost, { locale, currency: holdingCurrency })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {formatPrice(holding.price, { locale, currency })}
+                    {formatPrice(holding.price, { locale, currency: holdingCurrency })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4 font-medium">
-                    {formatMoney(holding.value, { locale, currency })}
+                    {formatMoney(holding.value, { locale, currency: holdingCurrency })}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -585,7 +587,7 @@ function HoldingsTable({
                   <td className="text-right px-5 py-4">
                     <div className={`font-semibold tabular-nums ${up ? "text-bull" : "text-bear"}`}>
                       {holding.pnl > 0 ? "+" : ""}
-                      {formatMoney(holding.pnl, { locale, currency })}
+                      {formatMoney(holding.pnl, { locale, currency: holdingCurrency })}
                     </div>
                     <div className={`text-xs tabular-nums ${up ? "text-bull" : "text-bear"}`}>
                       {formatPercent(holding.pnlPct, { sign: true })}
@@ -705,6 +707,7 @@ function TransactionLog({
         fee: transaction.fee,
         netAmount: transaction.netAmount,
         realizedPnL: transaction.realizedPnL,
+        currency: transaction.currency,
       })),
     [transactions],
   );
@@ -789,14 +792,14 @@ function TransactionLog({
                     {formatNumber(tx.qty, { maximumFractionDigits: 8 })}
                   </td>
                   <td className="px-5 py-3 text-right tabular-nums">
-                    {formatPrice(tx.price, { locale, currency })}
+                    {formatPrice(tx.price, { locale, currency: tx.currency ?? currency })}
                   </td>
                   <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">
-                    {tx.fee ? formatMoney(tx.fee, { locale, currency }) : "-"}
+                    {formatMoney(tx.fee, { locale, currency: tx.currency ?? currency })}
                   </td>
                   <td className="px-5 py-3 text-right tabular-nums font-semibold">
                     {tx.netAmount > 0 ? "+" : ""}
-                    {formatMoney(tx.netAmount, { locale, currency })}
+                    {formatMoney(tx.netAmount, { locale, currency: tx.currency ?? currency })}
                   </td>
                   <td
                     className={`px-5 py-3 text-right tabular-nums font-semibold ${
@@ -807,7 +810,7 @@ function TransactionLog({
                       ? "–"
                       : `${tx.realizedPnL > 0 ? "+" : ""}${formatMoney(tx.realizedPnL, {
                           locale,
-                          currency,
+                          currency: tx.currency ?? currency,
                         })}`}
                   </td>
                 </tr>

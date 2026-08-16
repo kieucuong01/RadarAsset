@@ -22,6 +22,8 @@ describe("watchlist client", () => {
             datasetState: "ready",
             ingestionRequestId: null,
             backtestableTimeframes: ["1d", "1h"],
+            currency: "USDT",
+            hasMarketQuote: true,
           },
         ]),
         { status: 201, headers: { "content-type": "application/json" } },
@@ -48,6 +50,8 @@ describe("watchlist client", () => {
         datasetState: "ready",
         ingestionRequestId: null,
         backtestableTimeframes: ["1d", "1h"],
+        currency: "USDT",
+        hasMarketQuote: true,
       },
     ]);
   });

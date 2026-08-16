@@ -7,8 +7,22 @@ import {
 
 describe("strategy-forward client", () => {
   it("parses bounded strict forward responses", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
-    await expect(getStrategyForwardTests(fetcher)).resolves.toEqual([]);
+    const response = {
+      assignmentId: "assignment-a",
+      portfolioId: "portfolio-a",
+      symbol: "BTC",
+      currency: "USDT",
+      strategy: { code: "threshold", version: "1.0.0", name: "Threshold", kind: "custom_rule" },
+      status: "active",
+      activatedAt: "2026-08-01T00:00:00.000Z",
+      lastEvaluatedAt: null,
+      lastEvaluatedBarAt: null,
+      latestSignal: null,
+      backtestBaseline: null,
+      snapshots: [],
+    };
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => [response] });
+    await expect(getStrategyForwardTests(fetcher)).resolves.toEqual([response]);
     expect(fetcher).toHaveBeenCalledWith("/api/portfolio/strategy-forward-tests", {
       cache: "no-store",
     });

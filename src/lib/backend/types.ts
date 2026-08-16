@@ -162,6 +162,7 @@ export type StrategyAssignmentResponse = {
   id: string;
   portfolioId: string;
   symbol: string;
+  currency?: string;
   strategyCode: string;
   strategyVersion: string;
   strategyName: string;
@@ -174,6 +175,7 @@ export type StrategyForwardTestResponse = {
   assignmentId: string;
   portfolioId: string;
   symbol: string;
+  currency?: string;
   strategy: { code: string; version: string; name: string; kind: string };
   status: "active" | "paused" | "evaluation_failed";
   activatedAt: string;
@@ -265,6 +267,7 @@ export type PortfolioPositionInput = {
   quantity: number;
   averageCost: number;
   latestPrice: number;
+  currency?: string;
 };
 
 export type PortfolioTransactionInput = {
@@ -277,6 +280,7 @@ export type PortfolioTransactionInput = {
   fee: number;
   executedAt: string;
   note?: string | null;
+  currency?: string;
 };
 
 export type PortfolioLedgerAsset = {
@@ -285,6 +289,7 @@ export type PortfolioLedgerAsset = {
   name: string;
   assetClass: AssetClass;
   latestPrice: number;
+  currency?: string;
 };
 
 export type PortfolioLedgerTransaction = PortfolioTransactionInput & {
@@ -332,6 +337,7 @@ export type PortfolioHoldingResponse = {
   alloc: number;
   sentiment: "Bullish" | "Bearish" | "Neutral";
   category: "Crypto" | "Stocks" | "Cash";
+  currency?: string;
 };
 
 export type PortfolioResponse = {
@@ -394,6 +400,8 @@ export type WatchlistItemResponse = {
   datasetState: "ready" | "stale" | "loading" | "unavailable";
   ingestionRequestId: string | null;
   backtestableTimeframes: Array<"1d" | "1h">;
+  currency?: string;
+  hasMarketQuote?: boolean;
 };
 
 export type QuantRunResponse = {

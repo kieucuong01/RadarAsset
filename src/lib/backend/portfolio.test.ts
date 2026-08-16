@@ -224,6 +224,7 @@ describe("portfolio backend domain", () => {
         name: "Bitcoin",
         assetClass: "crypto",
         latestPrice: 62000,
+        currency: "USDT",
       },
     ];
 
@@ -279,7 +280,9 @@ describe("portfolio backend domain", () => {
         grossAmount: 31000,
         netAmount: 30990,
         remainingQuantity: 1,
+        currency: "USDT",
       });
+      expect(result.positions[0]).toMatchObject({ currency: "USDT" });
       expect(result.transactions.at(-1)?.releasedCostBasis).toBeCloseTo(28336.666666666668, 8);
       expect(result.transactions.at(-1)?.realizedPnL).toBeCloseTo(2653.333333333332, 8);
       expect(result.realizedPnL).toBeCloseTo(2653.333333333332, 8);
