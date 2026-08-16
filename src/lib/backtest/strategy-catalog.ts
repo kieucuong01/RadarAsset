@@ -3,7 +3,7 @@ import { z } from "zod";
 const SOURCE_ATTRIBUTION =
   "Adapted from Stock-Prediction-Models agent notebooks (Apache License 2.0).";
 const MODIFICATION_NOTICE =
-  "Logic was rewritten for causal, long-only, next-bar execution in RadarAsset.";
+  "Logic was rewritten for causal, long-only, next-bar execution in DataVest.";
 
 // Generated from canonicalDescriptor() with SHA-256. Keeping the catalog module
 // browser-safe allows the Backtest UI to render the same immutable catalog.

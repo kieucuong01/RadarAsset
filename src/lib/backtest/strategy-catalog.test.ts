@@ -55,6 +55,8 @@ describe("strategy catalog", () => {
     expect(first).toEqual(second);
     expect(first.implementationHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.sourceAttribution).toContain("Apache License 2.0");
+    expect(first.modificationNotice).toContain("DataVest");
+    expect(first.modificationNotice).not.toContain("RadarAsset");
   });
 
   it("exposes a JSON-safe catalog without executable validators", () => {
