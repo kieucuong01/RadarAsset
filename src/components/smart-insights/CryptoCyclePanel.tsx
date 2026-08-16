@@ -168,7 +168,7 @@ export function CryptoCyclePanel({
                 {formatPercent(cbbi.confidence)}
               </p>
             </div>
-            {visible!.cbbi.series.length > 1 ? (
+            {visible!.cbbi.series.length > 0 ? (
               <div className="h-64 min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
@@ -202,10 +202,21 @@ export function CryptoCyclePanel({
                     <Line
                       type="monotone"
                       dataKey="confidence"
-                      stroke="hsl(var(--primary))"
+                      stroke="var(--chart-1)"
                       strokeWidth={2.5}
-                      dot={false}
+                      dot={
+                        visible!.cbbi.series.length === 1
+                          ? {
+                              r: 3,
+                              fill: "var(--chart-1)",
+                              stroke: "var(--background)",
+                              strokeWidth: 2,
+                            }
+                          : false
+                      }
+                      activeDot={{ r: 4, fill: "var(--chart-1)" }}
                       connectNulls={false}
+                      isAnimationActive={false}
                     />
                   </LineChart>
                 </ResponsiveContainer>

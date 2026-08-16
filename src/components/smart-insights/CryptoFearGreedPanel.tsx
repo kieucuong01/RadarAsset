@@ -131,10 +131,20 @@ export function CryptoFearGreedPanel({
               <Line
                 type="monotone"
                 dataKey="value"
-                stroke="hsl(var(--primary))"
+                stroke="var(--chart-1)"
                 strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 4 }}
+                dot={
+                  visible.series.length === 1
+                    ? {
+                        r: 3,
+                        fill: "var(--chart-1)",
+                        stroke: "var(--background)",
+                        strokeWidth: 2,
+                      }
+                    : false
+                }
+                activeDot={{ r: 4, fill: "var(--chart-1)" }}
+                isAnimationActive={false}
               />
             </LineChart>
           </ResponsiveContainer>

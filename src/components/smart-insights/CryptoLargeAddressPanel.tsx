@@ -291,16 +291,17 @@ export function CryptoLargeAddressPanel({
                   labelFormatter={(value) => dateLabel(String(value), locale)}
                   formatter={(value, name) => [formatBtc(Number(value), locale), String(name)]}
                 />
-                <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                <ReferenceLine y={0} stroke="var(--border)" />
                 <Bar dataKey="toExchangeBtc" name="Nạp sàn" fill="#ef4444" fillOpacity={0.62} />
                 <Bar dataKey="fromExchangeBtc" name="Rút sàn" fill="#22c55e" fillOpacity={0.62} />
                 <Line
                   type="monotone"
                   dataKey="pressureBtc"
                   name="Áp lực ròng"
-                  stroke="hsl(var(--primary))"
+                  stroke="var(--chart-1)"
                   strokeWidth={2.25}
                   dot={false}
+                  isAnimationActive={false}
                 />
               </ComposedChart>
             </ResponsiveContainer>

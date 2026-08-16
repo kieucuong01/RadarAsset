@@ -137,10 +137,11 @@ export function CryptoDerivativesPressurePanel({
                   <Line
                     type="monotone"
                     dataKey="annualizedRate"
-                    stroke="hsl(var(--primary))"
+                    stroke="var(--chart-1)"
                     strokeWidth={2.5}
                     dot={false}
                     connectNulls={false}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>

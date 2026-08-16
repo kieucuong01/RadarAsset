@@ -146,7 +146,7 @@ export function CryptoFundFlowPanel({
               labelFormatter={(value) => dateLabel(String(value), locale)}
               formatter={(value) => formatFlow(Number(value), locale)}
             />
-            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
+            <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />
             {labels.map((label, index) => (
               <Bar
                 key={label}

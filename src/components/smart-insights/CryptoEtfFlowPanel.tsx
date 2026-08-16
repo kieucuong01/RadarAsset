@@ -211,7 +211,7 @@ export function CryptoEtfFlowPanel({
               labelFormatter={(value) => dateLabel(String(value), locale)}
               formatter={(value) => formatFlow(value == null ? null : Number(value), locale)}
             />
-            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
+            <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />
             {ASSETS.map((asset) =>
               visibleAssets.has(asset.key) ? (
                 <Bar key={asset.key} dataKey={asset.key} fill={asset.color} radius={[2, 2, 0, 0]} />
