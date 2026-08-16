@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { removeWatchlistItem } from "@/lib/backend/db";
+import { removeWatchlistItem } from "@/lib/backend/research-repository";
 import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

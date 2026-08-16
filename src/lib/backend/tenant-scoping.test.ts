@@ -57,17 +57,10 @@ import { createDefaultPortfolioAssumptions } from "@/lib/backtest/contracts";
 import {
   createQuantRun,
   getQuantRun,
-  importResearchRun,
   loadAssets,
   loadMarketBars,
   listQuantRuns,
-  loadAssetIntelligence,
-  loadInsights,
-  loadResearchRuns,
   loadTickerResponse,
-  loadWatchlist,
-  upsertWatchlistItem,
-  removeWatchlistItem,
   upsertStrategyAssignment,
 } from "./db";
 import {
@@ -75,6 +68,15 @@ import {
   loadPortfolioResponse,
   validateSourceSignalExecution,
 } from "./portfolio-repository";
+import {
+  importResearchRun,
+  loadAssetIntelligence,
+  loadInsights,
+  loadResearchRuns,
+  loadWatchlist,
+  removeWatchlistItem,
+  upsertWatchlistItem,
+} from "./research-repository";
 import { getWorkerImportContext } from "./worker-context";
 
 const viewerContext = {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { loadResearchRuns } from "@/lib/backend/db";
+import { loadResearchRuns } from "@/lib/backend/research-repository";
 
 export const dynamic = "force-dynamic";
 

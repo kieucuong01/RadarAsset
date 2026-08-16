@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/app/api/_lib";
-import { loadAssetIntelligence } from "@/lib/backend/db";
+import { loadAssetIntelligence } from "@/lib/backend/research-repository";
 
 export const dynamic = "force-dynamic";
 

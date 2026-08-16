@@ -52,14 +52,9 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
     ...original,
     listStrategyAssignments: mocks.listStrategyAssignments,
     updateStrategySignalStatus: mocks.updateStrategySignalStatus,
-    loadWatchlist: mocks.loadWatchlist,
-    upsertWatchlistItem: mocks.upsertWatchlistItem,
-    removeWatchlistItem: mocks.removeWatchlistItem,
     createQuantRun: mocks.createQuantRun,
     listQuantRuns: mocks.listQuantRuns,
     getQuantRun: mocks.getQuantRun,
-    loadResearchRuns: mocks.loadResearchRuns,
-    importResearchRun: mocks.importResearchRun,
   };
 });
 
@@ -76,6 +71,18 @@ vi.mock("@/lib/backend/portfolio-repository", async (importOriginal) => {
   return {
     ...original,
     loadPortfolioResponse: mocks.loadPortfolioResponse,
+  };
+});
+
+vi.mock("@/lib/backend/research-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/research-repository")>();
+  return {
+    ...original,
+    loadWatchlist: mocks.loadWatchlist,
+    upsertWatchlistItem: mocks.upsertWatchlistItem,
+    removeWatchlistItem: mocks.removeWatchlistItem,
+    loadResearchRuns: mocks.loadResearchRuns,
+    importResearchRun: mocks.importResearchRun,
   };
 });
 
