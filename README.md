@@ -10,6 +10,16 @@ Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadc
 - Local PostgreSQL with Prisma migrations and seed data
 - Python worker for quant runs and investor-intelligence imports
 
+### Backend ownership
+
+Next.js API routes call focused persistence modules instead of a shared database facade:
+
+- `market-repository.ts`: assets, bars, ticker, and market-data health
+- `portfolio-repository.ts`: portfolio state, performance, and transactions
+- `research-repository.ts`: public intelligence, watchlists, and research imports
+- `strategy-forward-repository.ts`: strategy assignments and signal status
+- `quant-runs.ts`: portfolio backtest run lifecycle and artifacts
+
 ## Local Setup
 
 ```powershell

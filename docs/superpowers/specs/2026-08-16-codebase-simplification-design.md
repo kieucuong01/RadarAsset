@@ -120,6 +120,8 @@ repository root, never the process working directory.
 
 ### Phase 2: Server and worker boundaries
 
+**Backend repository boundary: complete. Python worker split: pending.**
+
 Split `src/lib/backend/db.ts` by existing business responsibility:
 
 ```text
