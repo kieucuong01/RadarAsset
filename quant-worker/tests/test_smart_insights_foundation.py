@@ -780,6 +780,90 @@ def test_artifact_store_rejects_traversal_and_hash_mismatch(tmp_path: Path) -> N
         store.read(stored.locator)
 
 
+def test_main_builds_production_collectors_with_selected_artifact_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backend = object()
+    connection = SimpleNamespace(close=lambda: None)
+
+    class Repository:
+        def upsert_metric_definitions(self, _definitions: object) -> None:
+            return None
+
+    repository = Repository()
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/datavest")
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "connect_database",
+        lambda _database_url: connection,
+    )
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "PostgresInsightRepository",
+        lambda _connection: repository,
+    )
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "PostgresEventRepository",
+        lambda _connection: object(),
+    )
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "build_batch_collectors",
+        lambda *_args, **_kwargs: {},
+    )
+
+    def build_collectors(
+        _repository: object,
+        artifact_store: object,
+        _batch_collectors: object,
+    ) -> dict[str, object]:
+        assert artifact_store is backend
+        return {
+            "alternative-fng": lambda source: SourceRunResult(
+                source_code=source.code,
+                status="succeeded",
+                records_fetched=1,
+                error_code=None,
+                retry_count=0,
+                started_at=NOW,
+                finished_at=NOW,
+            )
+        }
+
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "build_production_collectors",
+        build_collectors,
+    )
+    monkeypatch.setattr(
+        collect_smart_insights,
+        "build_production_event_collectors",
+        lambda *_args, **_kwargs: {},
+    )
+    for name in (
+        "run_crypto_pipeline",
+        "run_macro_pipeline",
+        "run_global_event_risk_pipeline",
+        "run_gold_pipeline",
+    ):
+        monkeypatch.setattr(collect_smart_insights, name, lambda *_args, **_kwargs: None)
+
+    result = collect_smart_insights.main(
+        [
+            "daily",
+            "--source",
+            "alternative-fng",
+            "--env-file",
+            str(tmp_path / "missing.env"),
+        ],
+        artifact_store_factory=lambda: backend,
+    )
+
+    assert result == 0
+
+
 def test_validation_rejects_naive_time_before_non_finite_value() -> None:
     with pytest.raises(ObservationValidationError) as error:
         validate_observations(

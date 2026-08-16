@@ -17,7 +17,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ingest_market_data import psycopg_connection_url
-from smart_insights.artifacts import ArtifactStore
+from smart_insights.artifacts import ArtifactBackend, artifact_store_from_env
 from smart_insights.bitinfocharts_acquisition import (
     BitInfoChartsCrawler,
     NodriverBitInfoChartsClient,
@@ -204,7 +204,7 @@ def run_calendar_schedule(
     *,
     as_of: datetime,
     repository: PostgresInsightRepository,
-    artifact_store: ArtifactStore,
+    artifact_store: ArtifactBackend,
     collector: CryptoCraftCollector,
 ) -> tuple[list[CollectionOutcome], int]:
     if schedule not in {"calendar-current", "calendar-next", "calendar-event"}:
@@ -715,7 +715,7 @@ def build_batch_collectors(
 
 def build_production_collectors(
     repository: PostgresInsightRepository,
-    artifact_store: ArtifactStore,
+    artifact_store: ArtifactBackend,
     batch_collectors: Mapping[str, BatchCollector],
     *,
     clock: Callable[[], datetime] | None = None,
@@ -768,7 +768,7 @@ def build_production_collectors(
 def build_production_event_collectors(
     repository: PostgresEventRepository,
     quarantine_repository: PostgresInsightRepository,
-    artifact_store: ArtifactStore,
+    artifact_store: ArtifactBackend,
     event_collectors: Mapping[str, EventCollector],
     *,
     clock: Callable[[], datetime] | None = None,
@@ -904,6 +904,7 @@ def main(
     *,
     collectors: Mapping[str, Collector] | None = None,
     smoke_collectors: Mapping[str, BatchCollector] | None = None,
+    artifact_store_factory: Callable[[], ArtifactBackend] = artifact_store_from_env,
 ) -> int:
     args = _argument_parser().parse_args(argv)
     if args.cbbi_backfill and args.source != "cbbi-public":
@@ -1008,14 +1009,7 @@ def main(
                     ], 0
                 _emit(outcomes, exit_code)
                 return exit_code
-            artifact_store = ArtifactStore(
-                Path(
-                    os.getenv(
-                        "SMART_INSIGHTS_ARTIFACT_ROOT",
-                        ".local-data/smart-insights",
-                    )
-                )
-            )
+            artifact_store = artifact_store_factory()
             if args.schedule.startswith("calendar-"):
                 source = source_for_code("cryptocraft")
                 if args.source not in {None, source.code}:
