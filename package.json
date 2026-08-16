@@ -27,7 +27,9 @@
     "strategy:sync": "node --import tsx scripts/sync-strategy-catalog.ts",
     "quant:worker": "python quant-worker/worker.py",
     "quant:engine": "python -m uvicorn service:app --app-dir quant-worker --host 127.0.0.1 --port 8100",
-    "market:ingest": "python quant-worker/ingest_market_data.py"
+    "market:ingest": "python quant-worker/ingest_market_data.py",
+    "release:assemble": "node scripts/release/build-release.mjs",
+    "release:test": "vitest run scripts/release/release-manifest.test.mjs scripts/release/build-release.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.6.26",
