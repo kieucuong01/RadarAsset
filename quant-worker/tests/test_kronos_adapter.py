@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -73,8 +75,18 @@ def test_adapter_produces_ordered_deterministic_quantiles() -> None:
     assert result.seed == 20260814
 
 
-def test_upstream_paths_are_generated_in_one_batch() -> None:
+def test_upstream_paths_are_generated_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     import pandas as pd
+
+    seeded = []
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(
+            manual_seed=seeded.append,
+            cuda=SimpleNamespace(manual_seed_all=lambda _seed: None),
+        ),
+    )
 
     class FakeBatchPredictor:
         def __init__(self):
@@ -92,6 +104,7 @@ def test_upstream_paths_are_generated_in_one_batch() -> None:
     request = build_request(bars(80), as_of=bars(80)[-1].ts, sample_count=3)
     paths = _UpstreamPathPredictor(upstream, "cpu").predict_close_paths(request)
 
+    assert seeded == [request.seed]
     assert upstream.calls == 1
     assert len(paths) == 3
     assert all(len(path) == 7 for path in paths)
