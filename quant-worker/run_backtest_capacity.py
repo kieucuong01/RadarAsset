@@ -13,7 +13,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backtest.capacity import build_capacity_report
-from worker import PostgresWorkerRepository, process_next_run
+from backtest.run_execution import process_next_run
+from backtest.run_repository import PostgresWorkerRepository
 
 
 def _database_url() -> str:
