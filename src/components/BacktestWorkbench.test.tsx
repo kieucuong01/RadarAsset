@@ -80,6 +80,7 @@ const model = {
     {
       id: "leg-btc",
       symbol: "BTC",
+      currency: "USDT",
       label: "BTC · MA Crossover",
       allocationBps: 10_000,
       initialNotional: 56_200.25,
@@ -99,7 +100,7 @@ const model = {
           exitSignalAt: "2026-01-03T00:00:00Z",
           exitAt: "2026-01-04T00:00:00Z",
           entryPrice: 56_000,
-          exitPrice: 56_200.25,
+          exitPrice: 56_200.256,
           quantity: 1.23456789,
           fees: 1.25,
           slippageCost: 0.5,
@@ -180,9 +181,44 @@ describe("BacktestWorkbench", () => {
     );
 
     expect(text).toContain("56,200.25 USD");
+    expect(text).toContain("56,200.26 USDT");
     expect(text).toContain("1.23456789");
     expect(text).toContain("1.25 USD");
     expect(text).toContain("−12.35%");
+  });
+
+  it("rounds VND execution prices while fees and P&L stay in the base currency", () => {
+    const vndModel = {
+      ...model,
+      legs: [
+        {
+          ...model.legs[0],
+          id: "leg-vnm",
+          symbol: "VNM",
+          currency: "VND",
+          trades: [
+            {
+              ...model.legs[0].trades[0],
+              asset: "VNM",
+              entryPrice: 123_456.78,
+              exitPrice: 123_456.78,
+            },
+          ],
+        },
+      ],
+    } satisfies BacktestResultModel;
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <BacktestTradeList model={vndModel} currency="USD" />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("123,457 VND");
+    expect(text).not.toContain("123,456.78");
+    expect(text).toContain("1.25 USD");
+    expect(text).toContain("−12.35 USD");
   });
 
   it("formats backtest KPI percentages and ratios with shared precision", () => {

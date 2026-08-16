@@ -25,7 +25,13 @@ import {
   buildPortfolioTradeRows,
   filterPortfolioTradeRows,
 } from "@/lib/backtest/result-presentation";
-import { formatCount, formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
+import {
+  formatCount,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+} from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type BacktestTradeListProps = {
@@ -99,7 +105,7 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
                     <Badge variant="outline">{trade.action.toUpperCase()}</Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatNumber(trade.price, { maximumFractionDigits: 8 })}
+                    {formatPrice(trade.price, { locale, currency: trade.currency })}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatNumber(trade.quantity, { maximumFractionDigits: 8 })}

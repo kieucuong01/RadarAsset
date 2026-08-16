@@ -63,6 +63,7 @@ function modelWithTrades(): BacktestResultModel {
       {
         id: "leg-btc",
         symbol: "BTC",
+        currency: "USDT",
         label: "BTC · MA Crossover",
         allocationBps: 5000,
         initialNotional: 500,
@@ -78,6 +79,7 @@ function modelWithTrades(): BacktestResultModel {
       {
         id: "leg-fpt",
         symbol: "FPT",
+        currency: "VND",
         label: "FPT · Turtle",
         allocationBps: 5000,
         initialNotional: 500,
@@ -129,9 +131,11 @@ describe("backtest result presentation", () => {
     expect(rows[0]).toMatchObject({
       legId: "leg-fpt",
       strategyCode: "turtle",
+      currency: "VND",
       fees: 1,
       barsHeld: 2,
     });
+    expect(rows[1]?.currency).toBe("USDT");
   });
 
   it("filters portfolio trades by exact symbol", () => {

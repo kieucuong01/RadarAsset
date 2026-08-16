@@ -20,6 +20,7 @@ export type PortfolioTradeRow = {
   legId: string;
   strategyCode: string;
   asset: string;
+  currency: string;
   action: "long" | "buy" | "sell";
   signalAt: string;
   executedAt: string;
@@ -42,6 +43,7 @@ export function buildPortfolioTradeRows(model: BacktestResultModel): PortfolioTr
                 legId: leg.id,
                 strategyCode: leg.strategyCode,
                 asset: trade.asset,
+                currency: leg.currency,
                 action: trade.action,
                 signalAt: trade.signalAt,
                 executedAt: trade.executedAt,
@@ -57,6 +59,7 @@ export function buildPortfolioTradeRows(model: BacktestResultModel): PortfolioTr
                 legId: leg.id,
                 strategyCode: leg.strategyCode,
                 asset: trade.asset,
+                currency: leg.currency,
                 action: "long",
                 signalAt: trade.entrySignalAt,
                 executedAt: trade.exitAt,
