@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type ActiveBacktestPortfolioProps = {
@@ -9,20 +10,12 @@ type ActiveBacktestPortfolioProps = {
   model: BacktestResultModel;
 };
 
-function money(value: number, currency: "USD" | "VND") {
-  return new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "VND" ? 0 : 2,
-  }).format(value);
-}
-
 function shortDate(value: string | undefined) {
   return value ? value.slice(0, 10) : "-";
 }
 
 export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const firstPoint = model.aggregate.equity[0];
   const lastPoint = model.aggregate.equity.at(-1);
   const currency = model.aggregate.assumptions.baseCurrency;
@@ -62,15 +55,23 @@ export function ActiveBacktestPortfolio({ run, model }: ActiveBacktestPortfolioP
                   {submittedLeg?.strategyName ?? leg.strategyCode}
                 </span>
                 <span className="text-muted-foreground">·</span>
-                <span className="text-primary">{(leg.allocationBps / 100).toFixed(2)}%</span>
+                <span className="text-primary">{formatPercent(leg.allocationBps / 100)}</span>
                 {leverage > 1 ? (
                   <>
                     <span className="text-muted-foreground">·</span>
-                    <Badge variant="outline">{leverage.toFixed(1)}x</Badge>
+                    <Badge variant="outline">
+                      {formatNumber(leverage, {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })}
+                      x
+                    </Badge>
                   </>
                 ) : null}
               </div>
-              <span className="sr-only">{money(leg.initialNotional, currency)}</span>
+              <span className="sr-only">
+                {formatMoney(leg.initialNotional, { locale, currency })}
+              </span>
             </div>
           );
         })}

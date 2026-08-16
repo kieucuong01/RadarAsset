@@ -1,6 +1,14 @@
 import { z } from "zod";
 
 import { normalizeStrategyParameters, strategyDefinition } from "@/lib/backtest/strategy-catalog";
+import {
+  formatCount,
+  formatMoney,
+  formatPercent,
+  formatPrice,
+  formatRatio,
+} from "@/lib/financial-format";
+import type { Locale } from "@/lib/i18n/dictionary";
 
 const baseRule = {
   schemaVersion: z.literal(1),
@@ -110,18 +118,25 @@ const OPERATOR_LABELS = {
   gte: "lớn hơn hoặc bằng",
 } as const;
 
-export function describeCustomStrategy(input: CustomStrategyInput | CustomStrategy) {
+export function describeCustomStrategy(
+  input: CustomStrategyInput | CustomStrategy,
+  locale: Locale = "vi",
+) {
   const rule = normalizeCustomStrategy(input);
   if (rule.kind === "catalog_preset") {
-    return `${rule.symbol}: ${strategyDefinition(rule.strategyCode, rule.strategyVersion).name} với tham số đã lưu.`;
+    const name = strategyDefinition(rule.strategyCode, rule.strategyVersion).name;
+    return locale === "vi"
+      ? `${rule.symbol}: ${name} với tham số đã lưu.`
+      : `${rule.symbol}: ${name} with saved parameters.`;
   }
   if (rule.kind === "scheduled_dca") {
-    return `Mua ${rule.symbol} trị giá ${rule.amount.toLocaleString("en-US")} ${rule.currency} vào ngày ${rule.dayOfMonth} hàng tháng.`;
+    return `${locale === "vi" ? "Mua" : "Buy"} ${rule.symbol} ${locale === "vi" ? "trị giá" : "worth"} ${formatMoney(rule.amount, { locale, currency: rule.currency })} ${locale === "vi" ? "vào ngày" : "on day"} ${formatCount(rule.dayOfMonth)} ${locale === "vi" ? "hàng tháng" : "monthly"}.`;
   }
   if (rule.kind === "price_threshold") {
-    return `${rule.action === "buy" ? "Mua" : "Bán"} ${rule.sizePct}% ${rule.symbol} khi giá ${OPERATOR_LABELS[rule.operator]} ${rule.value.toLocaleString("en-US")} ${rule.currency}.`;
+    const threshold = formatPrice(rule.value, { locale, currency: rule.currency });
+    return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${formatPercent(rule.sizePct)} ${rule.symbol} ${locale === "vi" ? "khi giá" : "when price"} ${OPERATOR_LABELS[rule.operator]} ${threshold}.`;
   }
-  return `${rule.action === "buy" ? "Mua" : "Bán"} ${rule.symbol} khi ${rule.metric.toUpperCase()} ${OPERATOR_LABELS[rule.operator]} ${rule.value}.`;
+  return `${rule.action === "buy" ? (locale === "vi" ? "Mua" : "Buy") : locale === "vi" ? "Bán" : "Sell"} ${rule.symbol} ${locale === "vi" ? "khi" : "when"} ${rule.metric.toUpperCase()} ${OPERATOR_LABELS[rule.operator]} ${formatRatio(rule.value)}.`;
 }
 
 const storageSchema = z

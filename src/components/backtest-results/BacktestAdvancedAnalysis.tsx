@@ -30,7 +30,9 @@ import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { advancedAnalysisAvailability, robustnessStatus } from "@/lib/backtest/result-presentation";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
+import type { Locale } from "@/lib/i18n/dictionary";
 
 const COLORS = [
   "var(--chart-1)",
@@ -46,21 +48,22 @@ type BacktestAdvancedAnalysisProps = {
   currency: "USD" | "VND";
 };
 
-function money(value: number, currency: "USD" | "VND") {
-  return new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "VND" ? 0 : 2,
-  }).format(value);
-}
-
 function dateLabel(value: string) {
   return value.slice(0, 10);
 }
 
-function EquityChart({ data }: { data: Array<{ timestamp: string; equity: number }> }) {
+function EquityChart({
+  data,
+  locale,
+  currency,
+}: {
+  data: Array<{ timestamp: string; equity: number }>;
+  locale: Locale;
+  currency: "USD" | "VND";
+}) {
   const gradientId = useId().replaceAll(":", "");
   const rows = data.map((point) => ({ ...point, date: dateLabel(point.timestamp) }));
+  const moneyLabel = (value: number) => formatMoney(value, { locale, currency });
   return (
     <div className="h-72 min-w-0" aria-label="Leg equity curve">
       <ResponsiveContainer width="100%" height="100%">
@@ -73,7 +76,13 @@ function EquityChart({ data }: { data: Array<{ timestamp: string; equity: number
           </defs>
           <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} fontSize={11} />
-          <YAxis tickLine={false} axisLine={false} width={68} fontSize={11} />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            width={68}
+            fontSize={11}
+            tickFormatter={(value) => moneyLabel(Number(value))}
+          />
           <Tooltip
             contentStyle={{
               background: "var(--card)",
@@ -81,6 +90,7 @@ function EquityChart({ data }: { data: Array<{ timestamp: string; equity: number
               borderRadius: 8,
               fontSize: 12,
             }}
+            formatter={(value) => moneyLabel(Number(value))}
           />
           <Area
             type="monotone"
@@ -98,7 +108,7 @@ function EquityChart({ data }: { data: Array<{ timestamp: string; equity: number
 export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvancedAnalysisProps) {
   const [applyingLegId, setApplyingLegId] = useState<string | null>(null);
   const availability = advancedAnalysisAvailability(model);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const componentKeys = useMemo(
     () =>
       Object.keys(model.aggregate.contribution[0]?.components ?? {}).sort((left, right) =>
@@ -123,16 +133,16 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
           timestamp: event.timestamp,
           type: t("backtestResults.advanced.contributionEvent"),
           amount: event.amount,
-          detail: `Cash ${money(event.cashAmount, currency)}`,
+          detail: `Cash ${formatMoney(event.cashAmount, { locale, currency })}`,
         })),
         ...model.aggregate.rebalance.map((event) => ({
           timestamp: event.timestamp,
           type: t("backtestResults.advanced.rebalanceEvent"),
           amount: event.turnover,
-          detail: `Cost ${money(event.cost, currency)}`,
+          detail: `Cost ${formatMoney(event.cost, { locale, currency })}`,
         })),
       ].sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
-    [currency, model.aggregate.cashFlow, model.aggregate.rebalance, t],
+    [currency, locale, model.aggregate.cashFlow, model.aggregate.rebalance, t],
   );
 
   async function applyStrategy(leg: BacktestResultModel["legs"][number]) {
@@ -250,7 +260,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     {t("backtestResults.advanced.oosMean")}
                   </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
-                    {model.aggregate.robustness.outOfSampleMeanReturnPct.toFixed(2)}%
+                    {formatPercent(model.aggregate.robustness.outOfSampleMeanReturnPct)}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
@@ -258,7 +268,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     {t("backtestResults.advanced.positiveFolds")}
                   </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
-                    {model.aggregate.robustness.outOfSamplePositiveFoldPct.toFixed(0)}%
+                    {formatPercent(model.aggregate.robustness.outOfSamplePositiveFoldPct)}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
@@ -266,7 +276,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                     {t("backtestResults.advanced.oosDispersion")}
                   </p>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
-                    {model.aggregate.robustness.outOfSampleReturnStdPct.toFixed(2)}%
+                    {formatPercent(model.aggregate.robustness.outOfSampleReturnStdPct)}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
@@ -303,13 +313,13 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                         {dateLabel(fold.testStart)} → {dateLabel(fold.testEnd)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {fold.referenceReturnPct.toFixed(2)}%
+                        {formatPercent(fold.referenceReturnPct)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {fold.outOfSampleReturnPct.toFixed(2)}%
+                        {formatPercent(fold.outOfSampleReturnPct)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {fold.degradationPctPoints.toFixed(2)} pp
+                        {formatNumber(fold.degradationPctPoints, { maximumFractionDigits: 2 })} pp
                       </TableCell>
                     </TableRow>
                   ))}
@@ -321,7 +331,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                 <p className="mt-1 text-muted-foreground">
                   {model.aggregate.robustness.parameterStability.status === "not_evaluated"
                     ? "Not evaluated: this run did not execute neighboring parameter sets."
-                    : `${model.aggregate.robustness.parameterStability.status} · score ${model.aggregate.robustness.parameterStability.score?.toFixed(1) ?? "—"}/100`}
+                    : `${model.aggregate.robustness.parameterStability.status} · score ${formatNumber(model.aggregate.robustness.parameterStability.score, { maximumFractionDigits: 1 })}/100`}
                 </p>
                 {model.aggregate.robustness.warnings.length > 0 ? (
                   <p className="mt-2 text-amber-600 dark:text-amber-400">
@@ -381,7 +391,15 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                             minTickGap={28}
                             fontSize={11}
                           />
-                          <YAxis tickLine={false} axisLine={false} width={68} fontSize={11} />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            width={68}
+                            fontSize={11}
+                            tickFormatter={(value) =>
+                              formatMoney(Number(value), { locale, currency })
+                            }
+                          />
                           <Tooltip
                             contentStyle={{
                               background: "var(--card)",
@@ -389,6 +407,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                               borderRadius: 8,
                               fontSize: 12,
                             }}
+                            formatter={(value) => formatMoney(Number(value), { locale, currency })}
                           />
                           {componentKeys.map((key, index) => (
                             <Area
@@ -424,7 +443,10 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                               {key === "cash" ? "Cash" : key}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {money(latestContribution?.components[key] ?? 0, currency)}
+                              {formatMoney(latestContribution?.components[key], {
+                                locale,
+                                currency,
+                              })}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -470,7 +492,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                           <TableCell>{dateLabel(event.timestamp)}</TableCell>
                           <TableCell>{event.type}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {money(event.amount, currency)}
+                            {formatMoney(event.amount, { locale, currency })}
                           </TableCell>
                           <TableCell className="text-muted-foreground">{event.detail}</TableCell>
                         </TableRow>
@@ -489,7 +511,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                   <div className="min-w-0">
                     <CardTitle>{leg.label}</CardTitle>
                     <CardDescription>
-                      v{leg.strategyVersion} · {(leg.allocationBps / 100).toFixed(2)}% · dataset{" "}
+                      v{leg.strategyVersion} · {formatPercent(leg.allocationBps / 100)} · dataset{" "}
                       {leg.datasetVersionId.slice(0, 8)}
                     </CardDescription>
                   </div>
@@ -500,11 +522,14 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                   </Button>
                 </CardHeader>
                 <CardContent className="flex min-w-0 flex-col gap-4">
-                  <EquityChart data={leg.equity} />
+                  <EquityChart data={leg.equity} locale={locale} currency={currency} />
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
                     {t("backtestResults.advanced.parameters")}:{" "}
                     {Object.entries(leg.strategyParameters)
-                      .map(([key, value]) => `${key}=${String(value)}`)
+                      .map(
+                        ([key, value]) =>
+                          `${key}=${typeof value === "number" ? formatNumber(value) : String(value)}`,
+                      )
                       .join(", ")}
                   </div>
                 </CardContent>
@@ -542,10 +567,10 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
                               <TableCell>{dateLabel(trade.entryAt)}</TableCell>
                               <TableCell>{dateLabel(trade.exitAt)}</TableCell>
                               <TableCell className="text-right tabular-nums">
-                                {money(trade.realizedPnl, currency)}
+                                {formatMoney(trade.realizedPnl, { locale, currency })}
                               </TableCell>
                               <TableCell className="text-right tabular-nums">
-                                {trade.returnPct.toFixed(2)}%
+                                {formatPercent(trade.returnPct)}
                               </TableCell>
                             </TableRow>
                           ))}

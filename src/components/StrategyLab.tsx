@@ -785,7 +785,7 @@ function ReadinessBadge({
 }
 
 function BuilderPreview({ builder }: { builder: BuilderState }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   let draft: CustomStrategyInput | null = null;
   try {
     const base = {
@@ -848,7 +848,7 @@ function BuilderPreview({ builder }: { builder: BuilderState }) {
             <Alert>
               <CheckCircle2 />
               <AlertTitle>{builder.name || t("strategyLab.unnamed")}</AlertTitle>
-              <AlertDescription>{describeCustomStrategy(draft)}</AlertDescription>
+              <AlertDescription>{describeCustomStrategy(draft, locale)}</AlertDescription>
             </Alert>
             <div className="flex items-center gap-2">
               <ReadinessBadge status={readiness.status} />

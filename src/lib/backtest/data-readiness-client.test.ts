@@ -106,6 +106,23 @@ describe("Quant data readiness client", () => {
     });
   });
 
+  it("groups large active-dataset and backlog counts", () => {
+    expect(
+      quantDataReadinessSummary({
+        ...validReadiness,
+        activeDatasetsByMarketTimeframe: [
+          { market: "vn_equity", timeframe: "1d", count: 12_000 },
+          { market: "crypto_spot", timeframe: "1h", count: 450 },
+        ],
+        backlogCount: 12_450,
+      }),
+    ).toEqual({
+      tone: "backlog",
+      label: "12,450 active datasets",
+      detail: "12,450 ingestion jobs queued/running",
+    });
+  });
+
   it("classifies stale, missing, and failed provider operations as degraded", () => {
     expect(quantDataOperationsHealth(validReadiness)).toEqual({
       tone: "degraded",

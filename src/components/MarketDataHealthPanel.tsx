@@ -13,6 +13,7 @@ import {
   quantDataOperationsHealth,
   type QuantDataReadiness,
 } from "@/lib/backtest/data-readiness-client";
+import { formatCount } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 function dateLabel(value: string | null, locale: "vi" | "en") {
@@ -27,10 +28,6 @@ export function MarketDataHealthPanel() {
   const [readiness, setReadiness] = useState<QuantDataReadiness | null>(null);
   const [failed, setFailed] = useState(false);
   const { t, locale } = useI18n();
-  const numberFormatter = useMemo(
-    () => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"),
-    [locale],
-  );
 
   useEffect(() => {
     let mounted = true;
@@ -73,19 +70,21 @@ export function MarketDataHealthPanel() {
   const metrics = [
     {
       label: t("quant.dataHealth.coverage"),
-      value: `${readiness.expectedDatasetCount - readiness.missingDatasetCount}/${readiness.expectedDatasetCount}`,
-      detail: t("quant.dataHealth.missingDatasets", { count: readiness.missingDatasetCount }),
+      value: `${formatCount(readiness.expectedDatasetCount - readiness.missingDatasetCount)}/${formatCount(readiness.expectedDatasetCount)}`,
+      detail: t("quant.dataHealth.missingDatasets", {
+        count: formatCount(readiness.missingDatasetCount),
+      }),
       icon: Database,
     },
     {
       label: t("quant.dataHealth.stale"),
-      value: numberFormatter.format(readiness.staleDatasetCount),
-      detail: t("quant.dataHealth.missingBars", { count: readiness.missingBarCount }),
+      value: formatCount(readiness.staleDatasetCount),
+      detail: t("quant.dataHealth.missingBars", { count: formatCount(readiness.missingBarCount) }),
       icon: History,
     },
     {
       label: t("quant.dataHealth.backlog"),
-      value: numberFormatter.format(readiness.dueBacklogCount),
+      value: formatCount(readiness.dueBacklogCount),
       detail: readiness.oldestDueBacklogAt
         ? t("quant.dataHealth.oldestBacklog", {
             date: dateLabel(readiness.oldestDueBacklogAt, locale),
@@ -103,7 +102,7 @@ export function MarketDataHealthPanel() {
     },
     {
       label: t("quant.dataHealth.providerFailures"),
-      value: numberFormatter.format(health.providerFailureCount),
+      value: formatCount(health.providerFailureCount),
       detail: t("quant.dataHealth.lastScheduler", {
         date: dateLabel(readiness.lastSchedulerSuccessAt, locale),
       }),
@@ -123,7 +122,7 @@ export function MarketDataHealthPanel() {
             ? t("quant.dataHealth.healthy")
             : health.tone === "failed"
               ? t("quant.dataHealth.failed")
-              : t("quant.dataHealth.degraded", { count: health.issueCount })}
+              : t("quant.dataHealth.degraded", { count: formatCount(health.issueCount) })}
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

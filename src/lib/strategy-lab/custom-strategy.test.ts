@@ -31,6 +31,25 @@ const dcaRule = {
   dayOfMonth: 1,
 } as const;
 
+const vndDcaRule = {
+  ...dcaRule,
+  amount: 1_000_000,
+  currency: "VND",
+} as const;
+
+const priceRule = {
+  schemaVersion: 1,
+  id: "price-btc",
+  name: "Mua BTC",
+  symbol: "btc",
+  kind: "price_threshold",
+  operator: "crosses_below",
+  value: 56_200.25,
+  currency: "USD",
+  action: "buy",
+  sizePct: 12.35,
+} as const;
+
 describe("custom strategy rules", () => {
   it("normalizes executable catalog presets through the canonical validator", () => {
     expect(normalizeCustomStrategy(catalogPreset)).toMatchObject({
@@ -61,6 +80,28 @@ describe("custom strategy rules", () => {
     expect(() => normalizeCustomStrategy({ ...dcaRule, amount: 0 })).toThrow();
     expect(describeCustomStrategy(dcaRule)).toContain("400 USD");
     expect(describeCustomStrategy(dcaRule)).toContain("BTC");
+  });
+
+  it("formats strategy money, prices, percentages, and ratios with explicit units", () => {
+    expect(describeCustomStrategy(vndDcaRule)).toContain("1,000,000 VND");
+    expect(describeCustomStrategy(priceRule, "en")).toContain("12.35% BTC");
+    expect(describeCustomStrategy(priceRule, "en")).toContain("56,200.25 USD");
+    expect(
+      describeCustomStrategy(
+        {
+          schemaVersion: 1,
+          id: "pb-fpt",
+          name: "FPT valuation",
+          symbol: "FPT",
+          kind: "fundamental_threshold",
+          metric: "pb",
+          operator: "lt",
+          value: 4.123456,
+          action: "buy",
+        },
+        "en",
+      ),
+    ).toContain("4.1235");
   });
 
   it("round-trips valid local drafts and ignores malformed storage", () => {

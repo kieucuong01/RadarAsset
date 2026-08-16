@@ -67,6 +67,7 @@ import {
   optimizerMethodTranslationKey,
   type OptimizerMethod,
 } from "@/lib/backtest/optimizer-methods";
+import { formatCount, formatNumber, formatPercent, formatRatio } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 export function PortfolioOptimizerWorkbench({
@@ -74,11 +75,7 @@ export function PortfolioOptimizerWorkbench({
 }: {
   initialSymbols?: string[];
 }) {
-  const { t, locale } = useI18n();
-  const numberFormatter = useMemo(
-    () => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"),
-    [locale],
-  );
+  const { t } = useI18n();
   const range = useRef(createRollingBacktestRange()).current;
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [from, setFrom] = useState(range.from);
@@ -237,7 +234,7 @@ export function PortfolioOptimizerWorkbench({
               {method === "target_return" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-target-return">
-                    {t("optimizer.targetReturn", { value: targetReturnPct })}
+                    {t("optimizer.targetReturn", { value: formatNumber(targetReturnPct) })}
                   </FieldLabel>
                   <Input
                     id="optimizer-target-return"
@@ -258,7 +255,9 @@ export function PortfolioOptimizerWorkbench({
               {method === "target_volatility" ? (
                 <Field>
                   <FieldLabel htmlFor="optimizer-target-volatility">
-                    {t("optimizer.targetVolatility", { value: targetVolatilityPct })}
+                    {t("optimizer.targetVolatility", {
+                      value: formatNumber(targetVolatilityPct),
+                    })}
                   </FieldLabel>
                   <Input
                     id="optimizer-target-volatility"
@@ -300,7 +299,9 @@ export function PortfolioOptimizerWorkbench({
                 </Field>
               ) : null}
               <Field>
-                <FieldLabel>{t("optimizer.maxWeight", { value: maxWeightPct })}</FieldLabel>
+                <FieldLabel>
+                  {t("optimizer.maxWeight", { value: formatNumber(maxWeightPct) })}
+                </FieldLabel>
                 <Slider
                   value={[maxWeightPct]}
                   min={10}
@@ -318,7 +319,7 @@ export function PortfolioOptimizerWorkbench({
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium">
-                  {t("optimizer.assets", { count: assets.length })}
+                  {t("optimizer.assets", { count: formatCount(assets.length) })}
                 </span>
                 <QuantAssetPickerDialog
                   timeframe={timeframe}
@@ -344,8 +345,7 @@ export function PortfolioOptimizerWorkbench({
                   <span className="min-w-0">
                     <span className="block font-semibold">{asset.symbol}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {asset.market} · {numberFormatter.format(asset.rowCount)}{" "}
-                      {t("optimizer.bars")}
+                      {asset.market} · {formatCount(asset.rowCount)} {t("optimizer.bars")}
                     </span>
                   </span>
                   <Button
@@ -402,16 +402,13 @@ export function PortfolioOptimizerWorkbench({
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric
                   label={t("optimizer.expectedReturn")}
-                  value={`${proposal.expectedReturnPct.toFixed(2)}%`}
+                  value={formatPercent(proposal.expectedReturnPct)}
                 />
                 <Metric
                   label={t("optimizer.volatility")}
-                  value={`${proposal.volatilityPct.toFixed(2)}%`}
+                  value={formatPercent(proposal.volatilityPct)}
                 />
-                <Metric
-                  label={t("optimizer.sharpe")}
-                  value={proposal.sharpe?.toFixed(2) ?? t("common.notAvailable")}
-                />
+                <Metric label={t("optimizer.sharpe")} value={formatRatio(proposal.sharpe)} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <ValidationMetrics
@@ -433,7 +430,7 @@ export function PortfolioOptimizerWorkbench({
               />
               <AllocationBreakdown slices={dashboardModel.allocationSlices} />
               <p className="text-xs text-muted-foreground">
-                {t("optimizer.observations", { count: proposal.observationCount })} ·{" "}
+                {t("optimizer.observations", { count: formatCount(proposal.observationCount) })} ·{" "}
                 {t(optimizerMethodTranslationKey(proposal.method, "label"))} ·{" "}
                 {proposal.source.library} {proposal.source.version}
               </p>
@@ -471,16 +468,16 @@ function ValidationMetrics({
       <p className="text-sm font-semibold">{label}</p>
       <div className="mt-3 grid grid-cols-2 gap-3 text-sm tabular-nums">
         <span>
-          {t("optimizer.return")} {metrics.expectedReturnPct.toFixed(2)}%
+          {t("optimizer.return")} {formatPercent(metrics.expectedReturnPct)}
         </span>
         <span>
-          {t("optimizer.volatility")} {metrics.volatilityPct.toFixed(2)}%
+          {t("optimizer.volatility")} {formatPercent(metrics.volatilityPct)}
         </span>
         <span>
-          {t("optimizer.sharpe")} {metrics.sharpe?.toFixed(2) ?? t("common.notAvailable")}
+          {t("optimizer.sharpe")} {formatRatio(metrics.sharpe)}
         </span>
         <span>
-          {t("optimizer.maxDd")} {metrics.maxDrawdownPct.toFixed(2)}%
+          {t("optimizer.maxDd")} {formatPercent(metrics.maxDrawdownPct)}
         </span>
       </div>
     </div>
@@ -495,7 +492,7 @@ const chartTooltipStyle = {
 };
 
 function pct(value: number) {
-  return `${value.toFixed(2)}%`;
+  return formatPercent(value);
 }
 
 function AllocationPie({ slices }: { slices: OptimizerAllocationSlice[] }) {
@@ -510,7 +507,7 @@ function AllocationPie({ slices }: { slices: OptimizerAllocationSlice[] }) {
           </p>
         </div>
         <Badge variant="secondary">
-          {slices.length} {t("common.assets")}
+          {formatCount(slices.length)} {t("common.assets")}
         </Badge>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
@@ -607,7 +604,7 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
               tickLine={false}
               axisLine={false}
               fontSize={11}
-              tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+              tickFormatter={(value) => formatPercent(Number(value))}
             />
             <YAxis
               type="number"
@@ -618,7 +615,7 @@ function RiskReturnChart({ points }: { points: OptimizerRiskReturnPoint[] }) {
               axisLine={false}
               width={48}
               fontSize={11}
-              tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+              tickFormatter={(value) => formatPercent(Number(value))}
             />
             <ZAxis dataKey="weightPct" range={[80, 280]} />
             <Tooltip
@@ -682,7 +679,7 @@ function CorrelationMatrix({
                       className="inline-flex min-w-14 justify-center rounded-md px-2 py-1 font-mono text-xs tabular-nums"
                       style={{ backgroundColor: correlationBackground(cell.value) }}
                     >
-                      {cell.value.toFixed(2)}
+                      {formatRatio(cell.value)}
                     </span>
                   </TableCell>
                 ))}
