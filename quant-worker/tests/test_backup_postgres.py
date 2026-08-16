@@ -196,11 +196,11 @@ def test_restore_drill_uses_exact_isolated_database_and_drops_it(
         payload,
         {"sha256": checksum, "database": "datavest"},
     )
-    access_grants: list[tuple[Path, Path]] = []
+    access_grants: list[Path] = []
     monkeypatch.setattr(
         backup_postgres,
-        "_grant_postgres_restore_access",
-        lambda work_directory, plaintext: access_grants.append((work_directory, plaintext)),
+        "_create_postgres_restore_view",
+        lambda plaintext: (None, access_grants.append(plaintext) or plaintext),
     )
 
     backup_postgres.restore_drill(
@@ -232,7 +232,7 @@ def test_restore_drill_uses_exact_isolated_database_and_drops_it(
         "datavest_restore_test",
     ]
     assert len(access_grants) == 1
-    assert access_grants[0][1].name == "restore.dump"
+    assert access_grants[0].name == "restore.dump"
     assert list(tmp_path.rglob("*.dump*")) == []
 
 

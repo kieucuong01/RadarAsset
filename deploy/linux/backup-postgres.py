@@ -75,14 +75,22 @@ def _prepare_spool(spool_root: Path) -> Path:
     return work_directory
 
 
-def _grant_postgres_restore_access(work_directory: Path, plaintext: Path) -> None:
+def _create_postgres_restore_view(plaintext: Path) -> tuple[Path, Path]:
     import grp
 
     postgres_gid = grp.getgrnam("postgres").gr_gid
-    os.chown(work_directory, -1, postgres_gid)
-    work_directory.chmod(0o750)
-    os.chown(plaintext, -1, postgres_gid)
-    plaintext.chmod(0o640)
+    work_directory = Path(tempfile.mkdtemp(prefix="datavest-restore-", dir="/tmp"))
+    accessible_plaintext = work_directory / "restore.dump"
+    try:
+        os.chown(work_directory, -1, postgres_gid)
+        work_directory.chmod(0o750)
+        os.link(plaintext, accessible_plaintext)
+        os.chown(accessible_plaintext, -1, postgres_gid)
+        accessible_plaintext.chmod(0o640)
+        return work_directory, accessible_plaintext
+    except Exception:
+        shutil.rmtree(work_directory, ignore_errors=True)
+        raise
 
 
 def _prune_encrypted_retries(spool_root: Path, *, keep: int = 3) -> None:
@@ -252,6 +260,7 @@ def restore_drill(
     work_directory = _prepare_spool(spool_root)
     encrypted = work_directory / "restore.dump.enc"
     plaintext = work_directory / "restore.dump"
+    postgres_work_directory: Path | None = None
 
     try:
         response = _download_object(s3, locator_bucket, key, encrypted)
@@ -282,7 +291,7 @@ def restore_drill(
             ],
             env=_command_environment(DATAVEST_BACKUP_PASSPHRASE=encryption_secret),
         )
-        _grant_postgres_restore_access(work_directory, plaintext)
+        postgres_work_directory, postgres_plaintext = _create_postgres_restore_view(plaintext)
         runner.run(ADMIN_PREFIX + ["dropdb", "--if-exists", RESTORE_DATABASE])
         runner.run(ADMIN_PREFIX + ["createdb", RESTORE_DATABASE])
         try:
@@ -294,7 +303,7 @@ def restore_drill(
                     "--no-owner",
                     "--dbname",
                     RESTORE_DATABASE,
-                    str(plaintext),
+                    str(postgres_plaintext),
                 ]
             )
             migration = runner.run(
@@ -336,6 +345,8 @@ def restore_drill(
         finally:
             runner.run(ADMIN_PREFIX + ["dropdb", "--if-exists", RESTORE_DATABASE])
     finally:
+        if postgres_work_directory is not None:
+            shutil.rmtree(postgres_work_directory, ignore_errors=True)
         plaintext.unlink(missing_ok=True)
         encrypted.unlink(missing_ok=True)
         shutil.rmtree(work_directory, ignore_errors=True)
