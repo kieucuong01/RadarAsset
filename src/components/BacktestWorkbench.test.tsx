@@ -138,6 +138,11 @@ describe("BacktestWorkbench", () => {
     expect(html).toContain("Danh mục đang chạy");
     expect(html).toContain("Equity Curve &amp; Drawdown");
     expect(html).toContain("Danh sách lệnh");
+    expect(html).toContain("Tổng vốn");
+    expect(html).toContain("Chế độ phân bổ");
+    expect(html).toContain("Trọng số cash (%)");
+    expect(html).toContain("Góp vốn hàng tháng");
+    expect(html).toContain("Chưa thể chạy backtest");
     expect(html).toContain("Run Portfolio Backtest");
   });
 
