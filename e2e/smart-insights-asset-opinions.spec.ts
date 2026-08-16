@@ -236,6 +236,17 @@ async function seedBriefing(email: string) {
         },
         update: { name: name(symbol), market: market(symbol) },
       });
+      await prisma.watchlistItem.upsert({
+        where: {
+          organizationId_userId_assetId: {
+            organizationId,
+            userId: user.id,
+            assetId: asset.id,
+          },
+        },
+        create: { organizationId, userId: user.id, assetId: asset.id },
+        update: {},
+      });
       const evidence = await prisma.evidenceItem.create({
         data: {
           researchRunId: run.id,
@@ -477,6 +488,8 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   await expect(page.getByText("Research run", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Investor Intelligence", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Tài sản nổi bật", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Thêm mã" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mua BTC" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /USDT/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /USDC/ })).toHaveCount(0);
   const detail = page.getByTestId("asset-opinion-detail");

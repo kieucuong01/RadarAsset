@@ -151,17 +151,16 @@ export function AssetOpinions({
   onPortfolioRecorded,
 }: Props) {
   const workspaceEnabled = watchlist !== undefined || portfolio !== null || portfolioAvailable;
-  const trackedAssets = watchlist ?? [];
   const items = useMemo(
     () =>
       buildAssetOpinionWorkspace({
         opinions,
-        watchlist: trackedAssets,
+        watchlist: watchlist ?? [],
         holdings: portfolio?.holdings ?? [],
         watchlistAvailable,
         portfolioAvailable,
       }),
-    [opinions, portfolio, portfolioAvailable, trackedAssets, watchlistAvailable],
+    [opinions, portfolio, portfolioAvailable, watchlist, watchlistAvailable],
   );
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
