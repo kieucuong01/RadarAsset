@@ -37,8 +37,6 @@
 - [ ] **Step 1: Write the failing brand contract test**
 
 ```ts
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { BRAND, BRAND_COLORS, resolveSiteUrl } from "./brand";
@@ -72,14 +70,6 @@ describe("DataVest brand contract", () => {
     expect(() => resolveSiteUrl("javascript:alert(1)")).toThrow("http or https");
   });
 
-  it("stores approved marketing context and ignores visual-companion output", () => {
-    const context = readFileSync(resolve(".agents/product-marketing.md"), "utf8");
-    const gitignore = readFileSync(resolve(".gitignore"), "utf8");
-    expect(context).toContain("DataVest.vn");
-    expect(context).toContain("không phải cảm tính");
-    expect(context).toContain("Unknown or unavailable proof");
-    expect(gitignore).toMatch(/^\.superpowers\/$/m);
-  });
 });
 ```
 
@@ -87,7 +77,7 @@ describe("DataVest brand contract", () => {
 
 Run: `npx vitest run src/lib/brand.test.ts`
 
-Expected: FAIL because `src/lib/brand.ts` and `.agents/product-marketing.md` do not exist.
+Expected: FAIL because `src/lib/brand.ts` does not exist.
 
 - [ ] **Step 3: Implement the typed brand module**
 
@@ -169,8 +159,6 @@ git commit -m "feat: establish DataVest brand foundation"
 - [ ] **Step 1: Write the failing logo behavior test**
 
 ```tsx
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -191,15 +179,6 @@ describe("DataVestLogo", () => {
     expect(markup).toContain("#1746A2");
     expect(markup).toContain("#F2B84B");
     expect(markup).toContain('data-evidence-node="focus"');
-  });
-
-  it("ships standalone vector assets with the same identity", () => {
-    for (const file of ["datavest-mark.svg", "datavest-wordmark.svg"]) {
-      const source = readFileSync(resolve("public/brand", file), "utf8");
-      expect(source).toContain("#1746A2");
-      expect(source).toContain("#F2B84B");
-      expect(source).not.toMatch(/radar|candlestick|rocket/i);
-    }
   });
 });
 ```
@@ -248,7 +227,6 @@ git commit -m "feat: add DataVest visual identity"
 ### Task 3: Rebrand the visible application shell and authentication copy
 
 **Files:**
-- Create: `src/lib/public-brand-surfaces.test.ts`
 - Modify: `src/components/Header.tsx`
 - Modify: `src/components/Footer.tsx`
 - Modify: `src/components/AuthForm.tsx`
@@ -264,50 +242,34 @@ git commit -m "feat: add DataVest visual identity"
 - Consumes: `DataVestLogo` and `BRAND`.
 - Preserves: current navigation routes, auth behavior, tenant behavior, localStorage keys, and scheduled-task identifiers.
 
-- [ ] **Step 1: Write the failing public-surface guard**
-
-Create a Vitest test that reads the files above and verifies:
-
-```ts
-const retired = /RadarAsset|Quant Insight Radar|radarasset\.app/;
-expect(publicSource, file).not.toMatch(retired);
-expect(shellSource).toContain("DataVestLogo");
-expect(shellSource).toContain("DataVest");
-expect(authSource).toContain("DataVest");
-```
-
-Explicitly do not scan Prisma migrations, localStorage migration files, deployment task names, historical verification documents, or demo-email fixtures.
-
-- [ ] **Step 2: Run the guard and confirm it fails on current public copy**
-
-Run: `npx vitest run src/lib/public-brand-surfaces.test.ts`
-
-Expected: FAIL with current RadarAsset strings.
-
-- [ ] **Step 3: Replace shell icons and copy**
+- [ ] **Step 1: Replace shell icons and copy**
 
 - Header and mobile sheet: replace the Lucide `Radar` icon and hard-coded wordmark with `DataVestLogo lockup`.
 - Footer: use the lockup, descriptor, a `/gioi-thieu` link, and the DataVest risk disclaimer.
 - Keep navigation and accessible labels unchanged except where the retired brand appears.
 
-- [ ] **Step 4: Replace authentication metadata and prompts**
+- [ ] **Step 2: Replace authentication metadata and prompts**
 
 Update sign-in, sign-up, onboarding, and the `New to RadarAsset?` prompt to DataVest. Do not change auth routes, organization provisioning, form behavior, or stored user identity.
 
-- [ ] **Step 5: Update active project identity**
+- [ ] **Step 3: Update active project identity**
 
 Change the current README heading/description and architecture heading/active-product references to DataVest. Change package names from `quant-insight-radar` to `datavest` in both package files without renaming the repository directory or Python package structure.
 
-- [ ] **Step 6: Run the public-surface and existing UI tests**
+- [ ] **Step 4: Run existing UI and localization behavior tests**
 
-Run: `npx vitest run src/lib/public-brand-surfaces.test.ts src/lib/mvp-ui.test.ts src/lib/i18n/dictionary.test.ts`
+Run: `npx vitest run src/lib/mvp-ui.test.ts src/lib/i18n/dictionary.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 3 only**
+- [ ] **Step 5: Inspect the rendered shell during Task 8**
+
+Copy-only and static-asset changes do not get source-grep unit tests. Their acceptance gate is the production build plus real desktop/mobile rendering in Task 8.
+
+- [ ] **Step 6: Commit Task 3 only**
 
 ```powershell
-git add -- src/lib/public-brand-surfaces.test.ts src/components/Header.tsx src/components/Footer.tsx src/components/AuthForm.tsx src/app/sign-in/page.tsx src/app/sign-up/page.tsx src/app/onboarding/page.tsx README.md docs/architecture.md package.json package-lock.json
+git add -- src/components/Header.tsx src/components/Footer.tsx src/components/AuthForm.tsx src/app/sign-in/page.tsx src/app/sign-up/page.tsx src/app/onboarding/page.tsx README.md docs/architecture.md package.json package-lock.json
 git commit -m "feat: rebrand public application as DataVest"
 ```
 
@@ -477,7 +439,7 @@ Add a visible `Giới thiệu & phương pháp` link to `/gioi-thieu` without ch
 
 - [ ] **Step 5: Run the page and shell tests**
 
-Run: `npx vitest run src/app/gioi-thieu/page.test.tsx src/lib/public-brand-surfaces.test.ts`
+Run: `npx vitest run src/app/gioi-thieu/page.test.tsx`
 
 Expected: PASS.
 
@@ -493,64 +455,24 @@ git commit -m "feat: add DataVest introduction and methodology page"
 ### Task 6: Rewrite AI-agent discovery content without unsupported claims
 
 **Files:**
-- Create: `src/lib/ai-discovery.test.ts`
 - Modify: `public/llms.txt`
 
 **Interfaces:**
 - Consumes: approved positioning and the `/gioi-thieu` route.
 - Produces: a Vietnamese-first, plain-Markdown entity summary for AI agents.
 
-- [ ] **Step 1: Write the failing AI discovery test**
-
-```ts
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-
-describe("AI discovery file", () => {
-  const content = readFileSync(resolve("public/llms.txt"), "utf8");
-
-  it("defines DataVest, its audience, and factual product surfaces", () => {
-    expect(content).toContain("# DataVest.vn");
-    expect(content).toContain("nhà đầu tư cá nhân Việt Nam");
-    expect(content).toContain("https://datavest.vn/gioi-thieu");
-    expect(content).toContain("https://datavest.vn/portfolio");
-    expect(content).toContain("https://datavest.vn/quant-lab");
-  });
-
-  it("explains data states and the advice boundary", () => {
-    for (const state of ["Dữ liệu hệ thống", "Dữ liệu mẫu", "Mô phỏng", "Dữ liệu chưa khả dụng"]) {
-      expect(content).toContain(state);
-    }
-    expect(content).toContain("không phải tư vấn tài chính cá nhân hóa");
-  });
-
-  it("removes retired identity and unsupported claims", () => {
-    expect(content).not.toMatch(/RadarAsset|radarasset\.app|AI price prediction|guaranteed/i);
-  });
-});
-```
-
-- [ ] **Step 2: Run the AI discovery test and confirm it fails**
-
-Run: `npx vitest run src/lib/ai-discovery.test.ts`
-
-Expected: FAIL on the existing RadarAsset and AI-prediction claims.
-
-- [ ] **Step 3: Rewrite `public/llms.txt`**
+- [ ] **Step 1: Rewrite `public/llms.txt`**
 
 Use absolute canonical links. Include the entity definition, audience, page directory, data-state meanings, source/method caveats, risk statement, and an `Updated: 2026-08-16` line. Describe Smart Insights as evidence-backed market context, Portfolio as a simulated/private tracking workspace, and Quant Lab as optimization plus historical backtesting. Do not describe unavailable prediction as a feature.
 
-- [ ] **Step 4: Run the AI discovery test**
+- [ ] **Step 2: Review the machine-readable content against the approved claims**
 
-Run: `npx vitest run src/lib/ai-discovery.test.ts`
+Confirm that every linked route is canonical, every capability is visible in the current product, all four data states are defined, and the advice boundary is explicit. Static Markdown is verified through its built HTTP response in Task 8 rather than a source-text change-detector test.
 
-Expected: PASS.
-
-- [ ] **Step 5: Commit Task 6 only**
+- [ ] **Step 3: Commit Task 6 only**
 
 ```powershell
-git add -- src/lib/ai-discovery.test.ts public/llms.txt
+git add -- public/llms.txt
 git commit -m "feat: publish accurate DataVest AI discovery context"
 ```
 
@@ -652,7 +574,7 @@ git commit -m "feat: migrate DataVest outward worker identity"
 Run:
 
 ```powershell
-npx vitest run src/lib/brand.test.ts src/components/DataVestLogo.test.tsx src/lib/public-brand-surfaces.test.ts src/lib/seo.test.ts src/app/gioi-thieu/page.test.tsx src/lib/ai-discovery.test.ts
+npx vitest run src/lib/brand.test.ts src/components/DataVestLogo.test.tsx src/lib/seo.test.ts src/app/gioi-thieu/page.test.tsx
 ```
 
 Expected: all focused tests PASS.
@@ -719,7 +641,7 @@ Run:
 ```powershell
 git diff --check
 git status --short
-git diff --stat HEAD~7..HEAD
+git diff --stat main...HEAD
 ```
 
 Confirm `.superpowers/` is ignored, unrelated files are not staged, and commits contain only intended rebrand work.
