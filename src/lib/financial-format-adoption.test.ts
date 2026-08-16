@@ -20,6 +20,10 @@ const migratedFiles = [
   "src/components/smart-insights/CryptoQuantPulseTabs.tsx",
   "src/components/smart-insights/EventRiskPanel.tsx",
   "src/components/backtest-results/BacktestTradeList.tsx",
+  "src/components/backtest-results/BacktestAdvancedAnalysis.tsx",
+  "src/components/backtest-results/advanced/AdvancedAnalysisSummary.tsx",
+  "src/components/backtest-results/advanced/AggregatePortfolioAnalysis.tsx",
+  "src/components/backtest-results/advanced/BacktestLegAnalysis.tsx",
 ];
 
 const mockPortfolioDateTimeFormatter =

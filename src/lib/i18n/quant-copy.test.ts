@@ -27,6 +27,9 @@ const QUANT_FILES = [
   "src/components/backtest-results/BacktestKpiGrid.tsx",
   "src/components/backtest-results/BacktestTradeList.tsx",
   "src/components/backtest-results/BacktestAdvancedAnalysis.tsx",
+  "src/components/backtest-results/advanced/AdvancedAnalysisSummary.tsx",
+  "src/components/backtest-results/advanced/AggregatePortfolioAnalysis.tsx",
+  "src/components/backtest-results/advanced/BacktestLegAnalysis.tsx",
   "src/components/PortfolioStrategyForwardTests.tsx",
   "src/components/StrategyAssignmentPanel.tsx",
 ];
