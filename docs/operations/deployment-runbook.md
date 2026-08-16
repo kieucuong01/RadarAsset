@@ -70,3 +70,38 @@ journalctl -u datavest-web -u datavest-quant-engine -u datavest-worker --since '
 Use manual rollback only after confirming that `previous` resolves to a direct child of `/opt/datavest/releases` and its `release.json` is the intended SHA. The normal deploy entry point owns pointer and dependency consistency; do not manually repoint only `current` when dependency hashes differ. Prefer redeploying the prior GitHub artifact through `/usr/local/sbin/deploy-datavest` so checksum, migration compatibility, shared dependency pointers, health checks, and bounded retention all run again.
 
 If the deploy entry point itself is broken, stop and repair it from the reviewed release bundle before changing symlinks. Preserve both release directories and collect service journals first.
+
+## Nginx and TLS bootstrap
+
+Provisioning installs the reviewed HTTP bootstrap site into `sites-available` without enabling or reloading it. After the `datavest.vn` and `www.datavest.vn` A records resolve to this VPS, enable and validate only the DataVest site:
+
+```bash
+sudo ln -sfn /etc/nginx/sites-available/datavest.conf /etc/nginx/sites-enabled/datavest.conf
+sudo nginx -t
+sudo systemctl reload nginx
+curl -I http://datavest.vn/api/health/live
+curl -I http://www.datavest.vn/
+```
+
+Issue the certificate with the existing Certbot installation:
+
+```bash
+sudo certbot --nginx --redirect -d datavest.vn -d www.datavest.vn
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot renew --dry-run
+```
+
+Inspect the generated configuration. The final state must proxy only apex HTTPS to `127.0.0.1:4200`; both HTTP names must redirect to HTTPS, and HTTPS `www` must return `308 https://datavest.vn$request_uri`. Confirm the certificate covers both names and do not alter another application's server block.
+
+## GitHub production environment
+
+Create a protected GitHub environment named `production`, requiring manual approval for the first releases. Configure only these delivery secrets:
+
+- `DATAVEST_VPS_HOST`
+- `DATAVEST_VPS_PORT`
+- `DATAVEST_VPS_USER` (normally `datavest-deploy`)
+- `DATAVEST_VPS_SSH_KEY`
+- `DATAVEST_VPS_KNOWN_HOSTS` (the exact pinned host-key line)
+
+The deploy job downloads the artifact produced by its successful build dependency, verifies it again, transfers both files over pinned-key SSH, and invokes only the narrow `sudo /usr/local/sbin/deploy-datavest` command. It removes temporary SSH material even when deployment fails. Application, database, DeepSeek, and S3 secrets remain on the VPS and are never added to GitHub Actions.

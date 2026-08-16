@@ -141,5 +141,11 @@ if [[ -f "${script_dir}/run-scheduled-job.sh" ]]; then
     /usr/local/libexec/datavest/run-scheduled-job
 fi
 
+if [[ -f "${script_dir}/nginx/datavest.conf" ]]; then
+  install -o root -g root -m 0644 \
+    "${script_dir}/nginx/datavest.conf" \
+    /etc/nginx/sites-available/datavest.conf
+fi
+
 systemctl daemon-reload
 echo "provision_status=ok"

@@ -85,3 +85,75 @@ jobs:
             datavest-release-*.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Download checksummed release
+        uses: actions/download-artifact@v4
+        with:
+          name: datavest-release-${{ github.sha }}
+          path: release-artifact
+
+      - name: Verify downloaded artifact
+        working-directory: release-artifact
+        run: |
+          set -Eeuo pipefail
+          archive="datavest-release-${GITHUB_SHA:0:12}.tar.gz"
+          test -f "${archive}"
+          test -f "${archive}.sha256"
+          sha256sum -c "${archive}.sha256"
+
+      - name: Transfer and activate release
+        env:
+          DATAVEST_VPS_HOST: ${{ secrets.DATAVEST_VPS_HOST }}
+          DATAVEST_VPS_PORT: ${{ secrets.DATAVEST_VPS_PORT }}
+          DATAVEST_VPS_USER: ${{ secrets.DATAVEST_VPS_USER }}
+          DATAVEST_VPS_SSH_KEY: ${{ secrets.DATAVEST_VPS_SSH_KEY }}
+          DATAVEST_VPS_KNOWN_HOSTS: ${{ secrets.DATAVEST_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          for name in \
+            DATAVEST_VPS_HOST \
+            DATAVEST_VPS_PORT \
+            DATAVEST_VPS_USER \
+            DATAVEST_VPS_SSH_KEY \
+            DATAVEST_VPS_KNOWN_HOSTS; do
+            test -n "${!name}"
+          done
+          [[ "${DATAVEST_VPS_PORT}" =~ ^[0-9]{1,5}$ ]]
+          [[ "${DATAVEST_VPS_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]]
+
+          key_file="${RUNNER_TEMP}/datavest-deploy-key"
+          known_hosts_file="${RUNNER_TEMP}/datavest-known-hosts"
+          printf '%s\n' "${DATAVEST_VPS_SSH_KEY}" > "${key_file}"
+          printf '%s\n' "${DATAVEST_VPS_KNOWN_HOSTS}" > "${known_hosts_file}"
+          chmod 600 "$key_file" "${known_hosts_file}"
+
+          archive="datavest-release-${GITHUB_SHA:0:12}.tar.gz"
+          archive_path="release-artifact/${archive}"
+          common_ssh_options=(
+            -i "${key_file}"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=${known_hosts_file}"
+          )
+          scp -P "${DATAVEST_VPS_PORT}" "${common_ssh_options[@]}" \
+            "${archive_path}" \
+            "${archive_path}.sha256" \
+            "${DATAVEST_VPS_USER}@${DATAVEST_VPS_HOST}:/opt/datavest/incoming/"
+          remote_command="sudo /usr/local/sbin/deploy-datavest '/opt/datavest/incoming/${archive}' '${GITHUB_SHA}'"
+          ssh -p "${DATAVEST_VPS_PORT}" "${common_ssh_options[@]}" \
+            "${DATAVEST_VPS_USER}@${DATAVEST_VPS_HOST}" \
+            "${remote_command}"
+
+      - name: Remove temporary SSH material
+        if: ${{ always() }}
+        run: |
+          rm -f \
+            "${RUNNER_TEMP}/datavest-deploy-key" \
+            "${RUNNER_TEMP}/datavest-known-hosts"
