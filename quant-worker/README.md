@@ -155,9 +155,12 @@ python quant-worker\collect_smart_insights.py daily --live-smoke `
 ```
 
 Live smoke writes nothing and emits only source code, effective time, row count, status, and a
-sanitized error code. Daily production collection writes gzipped content-addressed artifacts under
-`SMART_INSIGHTS_ARTIFACT_ROOT`, publishes accepted observations transactionally, and calculates a
-regime snapshot after the enabled collectors finish. Scrapling sources use only fixed
+sanitized error code. Daily collection writes gzipped content-addressed artifacts through the
+configured backend, publishes accepted observations transactionally, and calculates a regime
+snapshot after the enabled collectors finish. Development defaults to the private filesystem under
+`SMART_INSIGHTS_ARTIFACT_ROOT`. Production sets `SMART_INSIGHTS_ARTIFACT_BACKEND=s3` and stores
+private objects under `s3://datavest/smart-insights/raw/`; failed uploads remain in the bounded local
+spool for operational retry. Scrapling sources use only fixed
 registry URLs or source-specific discovered paths; arbitrary scheduler URLs are rejected.
 CoinShares images are read locally by RapidOCR and fail closed on confidence, layout, unit, or
 cross-table reconciliation errors.

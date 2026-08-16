@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DataVest daily market ingestion
+
+[Timer]
+OnCalendar=*-*-* 01:15:00 Asia/Bangkok
+Unit=datavest-job@market-daily.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

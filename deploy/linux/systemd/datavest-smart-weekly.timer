@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DataVest weekly Smart Insights collection
+
+[Timer]
+OnCalendar=Mon *-*-* 03:30:00 Asia/Bangkok
+Unit=datavest-job@smart-weekly.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

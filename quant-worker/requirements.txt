@@ -5,6 +5,7 @@ pytest>=8.0
 ccxt==4.5.73
 scrapling[fetchers]==0.4.14
 beautifulsoup4>=4.13,<5
+boto3>=1.35,<2
 markitdown==0.1.7
 nodriver==0.50.1
 rapidocr>=3.9,<4

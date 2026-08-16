@@ -12,7 +12,13 @@ Copy `.env.example` to `.env.local` and configure:
 
 - `DATABASE_URL`: PostgreSQL used by Prisma and the Python worker.
 - `SMART_INSIGHTS_TIMEZONE`: product day boundary, normally `Asia/Bangkok`.
-- `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response artifact directory.
+- `SMART_INSIGHTS_ARTIFACT_BACKEND`: `filesystem` locally and `s3` in production.
+- `SMART_INSIGHTS_ARTIFACT_ROOT`: private raw-response directory used by the filesystem backend.
+- `SMART_INSIGHTS_ARTIFACT_SPOOL_ROOT`: bounded local spool retained when S3 upload cannot be
+  verified.
+- `DATAVEST_S3_ENDPOINT_URL`, `DATAVEST_S3_BUCKET`, `DATAVEST_S3_ACCESS_KEY_ID`, and
+  `DATAVEST_S3_SECRET_ACCESS_KEY`: server-only private S3 configuration. Production uses bucket
+  `datavest`; never copy values into Git, Markdown, browser code, or workflow logs.
 - `SMART_INSIGHTS_HTTP_TIMEOUT_SECONDS`: bounded source request timeout.
 - `FRED_API_KEY`: optional. When absent, the collector uses the official bounded
   `fredgraph.csv` endpoint and keeps the same validated metric contract.
@@ -26,6 +32,26 @@ Copy `.env.example` to `.env.local` and configure:
 Scrapling, MarkItDown, Nodriver, and RapidOCR run in the main Python environment. They receive only source URLs
 registered in code. Scheduler and API inputs cannot provide an arbitrary crawl URL. Raw HTML,
 provider images, OCR tokens, and content-addressed artifacts remain private.
+
+The S3 backend uses deterministic `s3://datavest/smart-insights/raw/<source>/<yyyy>/<mm>/<sha256>.json.gz`
+locators and single-request `PutObject`. It supplies no public ACL. An upload is accepted only after
+remote length and checksum metadata match; otherwise the compressed spool file remains local and
+the collector fails explicitly. Reads require the configured bucket/prefix and validate both gzip
+and the uncompressed SHA-256. S3 outage or integrity failure never falls back to invented evidence.
+
+After provisioning or rotating credentials, verify the private bucket with one reversible object:
+
+```bash
+/opt/datavest/shared/python-venv/bin/python \
+  /opt/datavest/current/deploy/linux/verify-s3-access.py \
+  --env-file /opt/datavest/shared/.env \
+  --bucket datavest
+```
+
+Success requires authenticated head/list/put/head/get/delete operations, confirmed post-delete
+absence, and denied anonymous read. The utility prints status names only and always attempts cleanup
+after a successful put. A failed command is not bucket evidence; inspect server-side logs without
+printing the environment file or provider exception body.
 
 Install and verify the pinned browser runtime once per worker environment:
 
@@ -71,33 +97,33 @@ validates registration but does not prove that a provider is live.
 
 Current verified and enabled sources:
 
-| Source                        | Market                                    | Frequency                   | Collection                                                        |
-| ----------------------------- | ----------------------------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `alternative-fng`             | Crypto                                    | Daily                       | API                                                               |
-| `bitinfocharts-top-addresses` | Crypto/BTC large-address cohort           | Daily                       | Scrapling with Nodriver 403 fallback and MarkItDown normalization |
-| `coinmetrics-community`       | Crypto/on-chain active addresses and MVRV | Daily                       | API                                                               |
-| `mempool-space`               | Crypto/on-chain                           | Daily                       | API                                                               |
-| `defillama-stablecoins`       | Crypto/liquidity                          | Daily                       | API                                                               |
-| `defillama-chains`            | Crypto/on-chain                           | Daily                       | API                                                               |
-| `deribit-public`              | Crypto/derivatives                        | Daily                       | API                                                               |
-| `cryptocraft`                 | Macro/calendar                            | Due-state calendar schedule | Scrapling                                                         |
-| `blockchaincenter-altcoin-season` | Crypto/altcoin market rotation        | Daily                       | Scrapling                                                         |
-| `farside-btc-etf`             | Crypto/Bitcoin ETF flows                  | Daily                       | Scrapling                                                         |
-| `farside-eth-etf`             | Crypto/Ethereum ETF flows                 | Daily                       | Scrapling                                                         |
-| `farside-sol-etf`             | Crypto/Solana ETF flows                   | Daily                       | Scrapling                                                         |
-| `coinshares-weekly`           | Crypto/digital-asset fund flows           | Weekly                      | Scrapling plus local RapidOCR                                     |
-| `fred`                        | Macro/rates, liquidity and USD            | Daily                       | Official API or keyless official CSV                              |
-| `cftc-disaggregated`          | Gold/managed-money positioning            | Weekly                      | Official API with official yearly-archive fallback                |
-| `coinglass-margin-borrow`     | Crypto/derivatives pressure               | Every four hours            | Bounded Nodriver rendering                                        |
-| `coinglass-liquidation-maxpain` | Crypto/options and liquidation pressure | Every four hours          | Bounded Nodriver rendering                                        |
-| `cbbi-public`                 | Crypto/cycle composite                    | Daily                       | Scrapling/public JSON                                             |
+| Source                            | Market                                    | Frequency                   | Collection                                                        |
+| --------------------------------- | ----------------------------------------- | --------------------------- | ----------------------------------------------------------------- |
+| `alternative-fng`                 | Crypto                                    | Daily                       | API                                                               |
+| `bitinfocharts-top-addresses`     | Crypto/BTC large-address cohort           | Daily                       | Scrapling with Nodriver 403 fallback and MarkItDown normalization |
+| `coinmetrics-community`           | Crypto/on-chain active addresses and MVRV | Daily                       | API                                                               |
+| `mempool-space`                   | Crypto/on-chain                           | Daily                       | API                                                               |
+| `defillama-stablecoins`           | Crypto/liquidity                          | Daily                       | API                                                               |
+| `defillama-chains`                | Crypto/on-chain                           | Daily                       | API                                                               |
+| `deribit-public`                  | Crypto/derivatives                        | Daily                       | API                                                               |
+| `cryptocraft`                     | Macro/calendar                            | Due-state calendar schedule | Scrapling                                                         |
+| `blockchaincenter-altcoin-season` | Crypto/altcoin market rotation            | Daily                       | Scrapling                                                         |
+| `farside-btc-etf`                 | Crypto/Bitcoin ETF flows                  | Daily                       | Scrapling                                                         |
+| `farside-eth-etf`                 | Crypto/Ethereum ETF flows                 | Daily                       | Scrapling                                                         |
+| `farside-sol-etf`                 | Crypto/Solana ETF flows                   | Daily                       | Scrapling                                                         |
+| `coinshares-weekly`               | Crypto/digital-asset fund flows           | Weekly                      | Scrapling plus local RapidOCR                                     |
+| `fred`                            | Macro/rates, liquidity and USD            | Daily                       | Official API or keyless official CSV                              |
+| `cftc-disaggregated`              | Gold/managed-money positioning            | Weekly                      | Official API with official yearly-archive fallback                |
+| `coinglass-margin-borrow`         | Crypto/derivatives pressure               | Every four hours            | Bounded Nodriver rendering                                        |
+| `coinglass-liquidation-maxpain`   | Crypto/options and liquidation pressure   | Every four hours            | Bounded Nodriver rendering                                        |
+| `cbbi-public`                     | Crypto/cycle composite                    | Daily                       | Scrapling/public JSON                                             |
 
 Implemented but disabled pending a successful deployment-environment smoke:
 
-| Source                              | Intended frequency | Current reason                                                                                                                                                                                                                                   |
-| ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mempool-btc-large-addresses`       | Daily              | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
-| `cftc-legacy`                       | Weekly             | The four financial-futures positioning markets have not passed an independent deployment-network smoke; Macro therefore stays unavailable when its other groups cover less than 60%                                                              |
+| Source                        | Intended frequency | Current reason                                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mempool-btc-large-addresses` | Daily              | The initial 2026-08-14 smoke failed closed with `MISSING_WATCHLIST`. A validated BitInfoCharts cohort now exists, but this separate Mempool collector has not yet passed a new live smoke, PostgreSQL publication, and Data Health qualification |
+| `cftc-legacy`                 | Weekly             | The four financial-futures positioning markets have not passed an independent deployment-network smoke; Macro therefore stays unavailable when its other groups cover less than 60%                                                              |
 
 The 2026-08-15 bounded production-parser smoke fetched 3 BlockchainCenter observations and
 195/165/105 Farside BTC/ETH/SOL observations. Live smoke is write-free; enabled scheduled

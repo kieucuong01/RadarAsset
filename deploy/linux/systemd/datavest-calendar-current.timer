@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh current DataVest economic calendar window
+
+[Timer]
+OnCalendar=*-*-* 00,02,04,06,08,10,12,14,16,18,20,22:10:00 Asia/Bangkok
+Unit=datavest-job@calendar-current.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

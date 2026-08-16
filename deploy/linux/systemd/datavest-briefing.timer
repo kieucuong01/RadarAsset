@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate daily DataVest investor briefings
+
+[Timer]
+OnCalendar=*-*-* 06:15:00 Asia/Bangkok
+Unit=datavest-job@briefing.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

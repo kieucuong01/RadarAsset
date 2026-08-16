@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule encrypted DataVest PostgreSQL backups
+
+[Timer]
+OnCalendar=*-*-* 04:45:00 Asia/Bangkok
+Unit=datavest-postgres-backup.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
