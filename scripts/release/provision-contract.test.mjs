@@ -16,6 +16,9 @@ describe("DataVest provisioning entry point", () => {
 
   it("installs the credential-safe S3 verifier for post-provision checks", async () => {
     const source = await readFile(scriptUrl, "utf8");
+    expect(source).toContain("command -v setfacl");
+    expect(source).toContain("install -d -o root -g datavest -m 0750 /opt/datavest");
+    expect(source).toContain("setfacl -m u:datavest-deploy:--x /opt/datavest");
     expect(source).toContain('"${script_dir}/verify-s3-access.py"');
     expect(source).toContain("/usr/local/libexec/datavest/verify-s3-access.py");
   });

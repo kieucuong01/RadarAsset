@@ -85,8 +85,13 @@ id -u datavest >/dev/null 2>&1 || useradd \
 id -u datavest-deploy >/dev/null 2>&1 || useradd \
   --create-home --shell /bin/bash datavest-deploy
 passwd --lock datavest-deploy >/dev/null
+command -v setfacl >/dev/null || {
+  echo "provision_status=setfacl_missing" >&2
+  exit 1
+}
 
 install -d -o root -g datavest -m 0750 /opt/datavest
+setfacl -m u:datavest-deploy:--x /opt/datavest
 install -d -o root -g datavest -m 0750 /opt/datavest/releases
 install -d -o datavest-deploy -g datavest -m 2750 /opt/datavest/incoming
 install -d -o root -g datavest -m 0750 /opt/datavest/shared

@@ -80,6 +80,9 @@ describe("DataVest atomic deploy", () => {
     expect(source).toContain("realpath --");
     expect(source).toContain("sha256sum -c");
     expect(source).toContain("prisma migrate deploy");
+    expect(source).toContain("DATAVEST_PRISMA_SCHEMA=");
+    expect(source).toContain("DATAVEST_PRISMA_MIGRATIONS=");
+    expect(source).toContain("prisma-production.config.mjs");
     expect(source).toContain("systemctl restart datavest-quant-engine.service");
     expect(source).toContain("systemctl restart datavest-web.service");
     expect(source).not.toMatch(/git\s+pull|npm\s+(ci|install)|pip\s+install\s+-r/);

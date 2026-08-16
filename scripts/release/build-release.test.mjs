@@ -35,6 +35,7 @@ async function fakeRepository() {
   await write(root, "prisma/schema.prisma", "model User {}\n");
   await write(root, "prisma/migrations/001_init/migration.sql", "SELECT 1;\n");
   await write(root, "deploy/linux/provision-datavest.sh", "#!/bin/bash\n");
+  await write(root, "deploy/linux/prisma-production.config.mjs", "export default {};\n");
   await write(root, "dist/wheelhouse/runtime.whl", "wheel");
   await write(root, "dist/migration-tooling/node_modules/prisma/build/index.js", "prisma");
   await write(root, "package-lock.json", '{"lockfileVersion":3}\n');
@@ -66,6 +67,7 @@ describe("production release assembler", () => {
       "prisma/schema.prisma",
       "prisma/migrations/001_init/migration.sql",
       "deploy/linux/provision-datavest.sh",
+      "deploy/linux/prisma-production.config.mjs",
       "wheelhouse/runtime.whl",
       "migration-tooling/node_modules/prisma/build/index.js",
       "release.json",

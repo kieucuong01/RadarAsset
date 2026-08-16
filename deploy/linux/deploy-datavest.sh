@@ -242,9 +242,12 @@ print(value, end="")
 PY
 )"
 echo "deploy_step=prisma migrate deploy"
-DATABASE_URL="${database_url}" DATAVEST_RELEASE_SHA="${git_sha}" \
+DATABASE_URL="${database_url}" \
+  DATAVEST_PRISMA_SCHEMA="${release_dir}/prisma/schema.prisma" \
+  DATAVEST_PRISMA_MIGRATIONS="${release_dir}/prisma/migrations" \
+  DATAVEST_RELEASE_SHA="${git_sha}" \
   "${node_bin}" "${migration_target}/node_modules/prisma/build/index.js" \
-  migrate deploy --schema "${release_dir}/prisma/schema.prisma"
+  migrate deploy --config "${release_dir}/deploy/linux/prisma-production.config.mjs"
 unset database_url
 
 old_current="$(readlink -f -- "${current_link}" 2>/dev/null || true)"
