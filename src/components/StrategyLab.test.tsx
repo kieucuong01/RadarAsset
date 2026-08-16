@@ -16,6 +16,11 @@ describe("StrategyLab", () => {
     expect(html).toContain("Thư viện chiến lược");
     expect(html).toContain("Thiết kế chiến lược");
     expect(html).toContain("Chiến lược của tôi (0)");
+    expect(html).toContain("Tìm chiến lược");
+    expect(html).toContain("Nhóm phân tích");
+    expect(html).toContain("Phân tích cơ bản");
+    expect(html).toContain("Chiến lược hệ thống");
+    expect(html).toContain("MA Crossover");
     expect(html).not.toContain("trình duyệt này");
   });
 });
