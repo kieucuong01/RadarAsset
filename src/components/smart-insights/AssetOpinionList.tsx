@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleMinus, TrendingDown, TrendingUp } from "lucide-react";
+import type { KeyboardEvent } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  CircleMinus,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 
 import { FreshnessBadge } from "./FreshnessBadge";
 import { failedGateLabel, isTechnicalQuantOpinion } from "./asset-opinion-labels";
@@ -48,6 +56,12 @@ function actionLabel(action: string, locale: Locale) {
   return ACTIONS[action]?.[locale] ?? action.replaceAll("_", " ");
 }
 
+function activateOnKeyboard(event: KeyboardEvent, activate: () => void) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  activate();
+}
+
 function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
   if (opinion.explanationStatus === "accepted") {
     return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
@@ -91,12 +105,10 @@ function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale:
 
 export function AssetOpinionList({
   opinions,
-  selectedSymbol,
   locale,
   onSelect,
 }: {
   opinions: AssetOpinionModel[];
-  selectedSymbol: string;
   locale: Locale;
   onSelect: (symbol: string) => void;
 }) {
@@ -143,30 +155,28 @@ export function AssetOpinionList({
             {opinions.map((opinion) => (
               <TableRow
                 key={opinion.symbol}
-                data-state={selectedSymbol === opinion.symbol ? "selected" : undefined}
+                role="button"
+                tabIndex={0}
+                aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
+                className="group cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => onSelect(opinion.symbol)}
+                onKeyDown={(event) => activateOnKeyboard(event, () => onSelect(opinion.symbol))}
               >
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    className="h-auto min-h-11 justify-start px-2 py-2 text-left"
-                    aria-pressed={selectedSymbol === opinion.symbol}
-                    onClick={() => onSelect(opinion.symbol)}
-                  >
-                    <span>
-                      <span className="block font-semibold">{opinion.symbol}</span>
-                      <span className="block text-xs font-normal text-muted-foreground">
-                        {opinion.assetName}
-                      </span>
-                      {opinion.evidence.length ? (
-                        <span className="mt-1 block max-w-52 truncate text-xs font-normal text-muted-foreground">
-                          {opinion.evidence
-                            .slice(0, 3)
-                            .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
-                            .join(" · ")}
-                        </span>
-                      ) : null}
+                  <span>
+                    <span className="block font-semibold">{opinion.symbol}</span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {opinion.assetName}
                     </span>
-                  </Button>
+                    {opinion.evidence.length ? (
+                      <span className="mt-1 block max-w-52 truncate text-xs font-normal text-muted-foreground">
+                        {opinion.evidence
+                          .slice(0, 3)
+                          .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
+                          .join(" · ")}
+                      </span>
+                    ) : null}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <OpinionState opinion={opinion} locale={locale} />
@@ -184,6 +194,10 @@ export function AssetOpinionList({
                       {explanationLabel(opinion, locale)}
                     </span>
                   ) : null}
+                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                    {locale === "vi" ? "Xem phân tích" : "View analysis"}
+                    <ChevronRight aria-hidden="true" />
+                  </span>
                 </TableCell>
               </TableRow>
             ))}
@@ -196,11 +210,8 @@ export function AssetOpinionList({
           <Button
             key={opinion.symbol}
             variant="outline"
-            className={cn(
-              "h-auto min-h-28 w-full justify-start whitespace-normal p-4 text-left",
-              selectedSymbol === opinion.symbol && "border-primary bg-primary/5",
-            )}
-            aria-pressed={selectedSymbol === opinion.symbol}
+            className="group h-auto min-h-28 w-full justify-start whitespace-normal p-4 text-left hover:border-primary/40 hover:bg-primary/5"
+            aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
             onClick={() => onSelect(opinion.symbol)}
           >
             <span className="flex w-full min-w-0 flex-col gap-3">
@@ -232,6 +243,10 @@ export function AssetOpinionList({
                     .join(" · ")}
                 </span>
               ) : null}
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                {locale === "vi" ? "Xem phân tích" : "View analysis"}
+                <ChevronRight aria-hidden="true" />
+              </span>
             </span>
           </Button>
         ))}

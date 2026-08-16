@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AssetOpinionModel, EvidenceModel } from "@/lib/smart-insights-client";
 
+import { AssetOpinionDetailContent } from "./AssetOpinionDetail";
 import { AssetOpinions } from "./AssetOpinions";
 import { formatEvidenceDisplayValue } from "./evidence-display-value";
 
@@ -114,7 +115,7 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
 }
 
 describe("AssetOpinions", () => {
-  it("renders table, mobile cards, three scenarios, and numerical evidence", () => {
+  it("advertises row and card analysis while keeping details closed by default", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions
         opinions={[opinion()]}
@@ -124,23 +125,14 @@ describe("AssetOpinions", () => {
       />,
     );
     expect(html).toContain("Quan điểm AI theo tài sản");
-    expect(html).toContain("hidden md:block");
-    expect(html).toContain("md:hidden");
-    expect(html).toContain("Kịch bản cơ sở");
-    expect(html).toContain("Quan điểm định lượng chung");
-    expect(html).toContain("Quan điểm theo danh mục");
-    expect(html).toContain("Tỷ trọng hiện tại");
-    expect(html).toContain("Khẩu vị rủi ro");
-    expect(html).toContain("Nguồn &amp; độ mới");
+    expect(html).toContain('data-testid="asset-opinion-table"');
+    expect(html).toContain('data-testid="asset-opinion-cards"');
+    expect(html).toContain("Xem phân tích");
+    expect(html).toContain('role="button"');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain("AI đã phân tích");
-    expect(html).toContain("Vì các số liệu này");
-    expect(html).toContain("Yếu tố phản biện");
-    expect(html).toContain("Điều kiện đổi quan điểm");
-    expect(html).toContain("Cách tính chi tiết");
-    expect(html).toContain("Điểm chuẩn hóa");
-    expect(html).toContain("Đóng góp");
-    expect(html).toContain("1.00");
-    expect(html).not.toContain("animationDuration");
+    expect(html).not.toContain('data-testid="asset-opinion-detail"');
+    expect(html).not.toContain("Nguồn &amp; độ mới");
   });
 
   it("formats decision evidence from raw values and preserves unmatched provider values", () => {
@@ -257,26 +249,24 @@ describe("AssetOpinions", () => {
       pillarCode: "trend",
     };
     const html = renderToStaticMarkup(
-      <AssetOpinions
-        opinions={[
-          opinion({
-            symbol: "XAU",
-            assetName: "Gold",
-            explanationStatus: "quant_only",
-            decisionInputs: [
-              technicalInput,
-              { ...technicalInput, evidenceId: "e2", metricCode: "market.return_60d" },
-              { ...technicalInput, evidenceId: "e3", metricCode: "market.ma_50_position" },
-            ],
-            evidence: [
-              opinion().evidence[0],
-              { ...opinion().evidence[1], id: "e2", metricCode: "market.return_60d" },
-              { ...opinion().evidence[1], id: "e3", metricCode: "market.ma_50_position" },
-            ],
-            supportingEvidenceIds: ["e1"],
-            contradictingEvidenceIds: ["e2"],
-          }),
-        ]}
+      <AssetOpinionDetailContent
+        opinion={opinion({
+          symbol: "XAU",
+          assetName: "Gold",
+          explanationStatus: "quant_only",
+          decisionInputs: [
+            technicalInput,
+            { ...technicalInput, evidenceId: "e2", metricCode: "market.return_60d" },
+            { ...technicalInput, evidenceId: "e3", metricCode: "market.ma_50_position" },
+          ],
+          evidence: [
+            opinion().evidence[0],
+            { ...opinion().evidence[1], id: "e2", metricCode: "market.return_60d" },
+            { ...opinion().evidence[1], id: "e3", metricCode: "market.ma_50_position" },
+          ],
+          supportingEvidenceIds: ["e1"],
+          contradictingEvidenceIds: ["e2"],
+        })}
         portfolioState="available"
         locale="vi"
         onEvidence={() => undefined}
@@ -290,8 +280,8 @@ describe("AssetOpinions", () => {
 
   it("distinguishes a missing portfolio from a real zero-weight asset", () => {
     const html = renderToStaticMarkup(
-      <AssetOpinions
-        opinions={[opinion({ portfolioWeightPct: "0" })]}
+      <AssetOpinionDetailContent
+        opinion={opinion({ portfolioWeightPct: "0" })}
         portfolioState="missing"
         locale="vi"
         onEvidence={() => undefined}
@@ -304,43 +294,41 @@ describe("AssetOpinions", () => {
 
   it("labels altcoin factors and data-backed change conditions in Vietnamese", () => {
     const html = renderToStaticMarkup(
-      <AssetOpinions
-        opinions={[
-          opinion({
-            symbol: "ETH",
-            assetName: "Ethereum",
-            pillars: [
-              { ...opinion().pillars[0], code: "btc_trend" },
-              { ...opinion().pillars[0], code: "altcoin_rotation" },
-              { ...opinion().pillars[0], code: "etf_flow" },
-              { ...opinion().pillars[0], code: "macro" },
-            ],
-            decisionInputs: [
-              {
-                ...opinion().decisionInputs[0],
-                metricCode: "crypto.btc.return_20d",
-                pillarCode: "btc_trend",
-              },
-              {
-                ...opinion().decisionInputs[0],
-                evidenceId: "rotation",
-                metricCode: "crypto.cycle.altcoin_season.index",
-                pillarCode: "altcoin_rotation",
-              },
-              {
-                ...opinion().decisionInputs[0],
-                evidenceId: "m2",
-                metricCode: "macro.m2_change_4w",
-                pillarCode: "macro",
-              },
-            ],
-            quantInvalidationConditions: [
-              "BTC_TREND_TURNS_NEGATIVE",
-              "ALTCOIN_SEASON_BELOW_75",
-              "ETH_ETF_FLOW_TURNS_NEGATIVE",
-            ],
-          }),
-        ]}
+      <AssetOpinionDetailContent
+        opinion={opinion({
+          symbol: "ETH",
+          assetName: "Ethereum",
+          pillars: [
+            { ...opinion().pillars[0], code: "btc_trend" },
+            { ...opinion().pillars[0], code: "altcoin_rotation" },
+            { ...opinion().pillars[0], code: "etf_flow" },
+            { ...opinion().pillars[0], code: "macro" },
+          ],
+          decisionInputs: [
+            {
+              ...opinion().decisionInputs[0],
+              metricCode: "crypto.btc.return_20d",
+              pillarCode: "btc_trend",
+            },
+            {
+              ...opinion().decisionInputs[0],
+              evidenceId: "rotation",
+              metricCode: "crypto.cycle.altcoin_season.index",
+              pillarCode: "altcoin_rotation",
+            },
+            {
+              ...opinion().decisionInputs[0],
+              evidenceId: "m2",
+              metricCode: "macro.m2_change_4w",
+              pillarCode: "macro",
+            },
+          ],
+          quantInvalidationConditions: [
+            "BTC_TREND_TURNS_NEGATIVE",
+            "ALTCOIN_SEASON_BELOW_75",
+            "ETH_ETF_FLOW_TURNS_NEGATIVE",
+          ],
+        })}
         portfolioState="available"
         locale="vi"
         onEvidence={() => undefined}

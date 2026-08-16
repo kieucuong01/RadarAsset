@@ -27,10 +27,10 @@ export function AssetOpinions({
   onRefresh?: () => void;
   refreshPending?: boolean;
 }) {
-  const [selectedSymbol, setSelectedSymbol] = useState(opinions[0]?.symbol ?? "");
-  const selected = opinions.find((opinion) => opinion.symbol === selectedSymbol) ?? opinions[0];
+  const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const activeOpinion = opinions.find((opinion) => opinion.symbol === activeSymbol) ?? null;
 
-  if (!selected) {
+  if (!opinions.length) {
     const content =
       generationState === "generating"
         ? {
@@ -141,20 +141,21 @@ export function AssetOpinions({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <AssetOpinionList
-            opinions={opinions}
-            selectedSymbol={selected.symbol}
-            locale={locale}
-            onSelect={setSelectedSymbol}
-          />
+          <AssetOpinionList opinions={opinions} locale={locale} onSelect={setActiveSymbol} />
         </CardContent>
       </Card>
-      <AssetOpinionDetail
-        opinion={selected}
-        portfolioState={portfolioState}
-        locale={locale}
-        onEvidence={onEvidence}
-      />
+      {activeOpinion ? (
+        <AssetOpinionDetail
+          opinion={activeOpinion}
+          open
+          onOpenChange={(open) => {
+            if (!open) setActiveSymbol(null);
+          }}
+          portfolioState={portfolioState}
+          locale={locale}
+          onEvidence={onEvidence}
+        />
+      ) : null}
     </section>
   );
 }

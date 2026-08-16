@@ -33,6 +33,13 @@ import { FreshnessBadge } from "./FreshnessBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -251,7 +258,7 @@ function Charts({ opinion, locale }: { opinion: AssetOpinionModel; locale: Local
   );
 }
 
-export function AssetOpinionDetail({
+export function AssetOpinionDetailContent({
   opinion,
   portfolioState,
   locale,
@@ -279,7 +286,7 @@ export function AssetOpinionDetail({
       : evidence.displayValue;
   };
   return (
-    <Card className="min-w-0 border-primary/20 shadow-none" data-testid="asset-opinion-detail">
+    <Card className="min-w-0 border-primary/20 shadow-none">
       <CardHeader className="gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -543,5 +550,37 @@ export function AssetOpinionDetail({
         </section>
       </CardContent>
     </Card>
+  );
+}
+
+export function AssetOpinionDetail({
+  open,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof AssetOpinionDetailContent> & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-6xl gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]"
+        data-testid="asset-opinion-detail"
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>
+            {props.opinion.symbol} · {props.opinion.assetName}
+          </DialogTitle>
+          <DialogDescription>
+            {props.locale === "vi"
+              ? "Phân tích định lượng theo tài sản"
+              : "Quantitative asset analysis"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-h-[calc(100dvh-2rem)]">
+          <AssetOpinionDetailContent {...props} />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
