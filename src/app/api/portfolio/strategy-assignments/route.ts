@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { listStrategyAssignments } from "@/lib/backend/db";
+import { listStrategyAssignments } from "@/lib/backend/strategy-forward-repository";
 import { applyStrategyAssignment } from "@/lib/backend/strategy-forward-tests";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 

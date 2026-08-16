@@ -46,20 +46,39 @@ vi.mock("@/lib/auth/tenant-context", () => ({
   requireTenantCapability: mocks.requireTenantCapability,
 }));
 
-vi.mock("@/lib/backend/db", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/backend/db")>();
+vi.mock("@/lib/backend/strategy-forward-repository", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/lib/backend/strategy-forward-repository")>();
+  return {
+    ...original,
+    listStrategyAssignments: mocks.listStrategyAssignments,
+    updateStrategySignalStatus: mocks.updateStrategySignalStatus,
+  };
+});
+
+vi.mock("@/lib/backend/market-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/market-repository")>();
+  return {
+    ...original,
+    loadMarketDataHealth: mocks.loadMarketDataHealth,
+  };
+});
+
+vi.mock("@/lib/backend/portfolio-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/portfolio-repository")>();
   return {
     ...original,
     loadPortfolioResponse: mocks.loadPortfolioResponse,
-    listStrategyAssignments: mocks.listStrategyAssignments,
-    updateStrategySignalStatus: mocks.updateStrategySignalStatus,
+  };
+});
+
+vi.mock("@/lib/backend/research-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/research-repository")>();
+  return {
+    ...original,
     loadWatchlist: mocks.loadWatchlist,
     upsertWatchlistItem: mocks.upsertWatchlistItem,
     removeWatchlistItem: mocks.removeWatchlistItem,
-    createQuantRun: mocks.createQuantRun,
-    listQuantRuns: mocks.listQuantRuns,
-    getQuantRun: mocks.getQuantRun,
-    loadMarketDataHealth: mocks.loadMarketDataHealth,
     loadResearchRuns: mocks.loadResearchRuns,
     importResearchRun: mocks.importResearchRun,
   };

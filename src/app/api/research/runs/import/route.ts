@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
-import { importResearchRun } from "@/lib/backend/db";
+import { importResearchRun } from "@/lib/backend/research-repository";
 import { getWorkerImportContext } from "@/lib/backend/worker-context";
 
 export const dynamic = "force-dynamic";

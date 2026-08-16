@@ -53,26 +53,26 @@ vi.mock("@/lib/db/prisma", () => ({
   getPrisma: () => prisma,
 }));
 
-import { createDefaultPortfolioAssumptions } from "@/lib/backtest/contracts";
+import { loadAssets, loadMarketBars, loadTickerResponse } from "./market-repository";
 import {
   createPortfolioTransaction,
-  createQuantRun,
-  getQuantRun,
+  loadPortfolioResponse,
+  validateSourceSignalExecution,
+} from "./portfolio-repository";
+import {
+  listPortfolioQuantRuns as listQuantRuns,
+  loadPortfolioQuantRun as getQuantRun,
+} from "./quant-runs";
+import {
   importResearchRun,
-  loadAssets,
-  loadMarketBars,
-  listQuantRuns,
   loadAssetIntelligence,
   loadInsights,
-  loadPortfolioResponse,
   loadResearchRuns,
-  loadTickerResponse,
   loadWatchlist,
-  upsertWatchlistItem,
   removeWatchlistItem,
-  upsertStrategyAssignment,
-  validateSourceSignalExecution,
-} from "./db";
+  upsertWatchlistItem,
+} from "./research-repository";
+import { upsertStrategyAssignment } from "./strategy-forward-repository";
 import { getWorkerImportContext } from "./worker-context";
 
 const viewerContext = {
@@ -81,7 +81,6 @@ const viewerContext = {
   role: "viewer" as const,
 };
 const editorContext = { ...viewerContext, role: "editor" as const };
-const defaultAssumptions = createDefaultPortfolioAssumptions(10, 5);
 
 describe("organization-scoped database services", () => {
   beforeEach(() => {
@@ -418,83 +417,13 @@ describe("organization-scoped database services", () => {
     );
   });
 
-  it("scopes quant create, list, and detail operations", async () => {
-    prisma.asset.findMany.mockResolvedValue([
-      {
-        symbol: "BTC",
-        maxLeverage: 1,
-        datasets: [{ versions: [{ id: "dataset-btc-1d-v1" }] }],
-      },
-    ]);
-    prisma.quantRun.create.mockResolvedValue({
-      id: "run-1",
-      strategyName: "MA Crossover Backtest",
-      status: "queued",
-      timeframe: "1d",
-      progress: 0,
-      strategyHash: "hash",
-      datasetVersionIds: ["dataset-btc-1d-v1"],
-      engineVersion: "ma-cross-v1",
-      parameters: {
-        timeframe: "1d",
-        totalCapital: 10000,
-        allocationMode: "equal",
-        feeBps: 10,
-        slippageBps: 5,
-        from: "2024-01-01",
-        to: "2025-01-01",
-        legs: [
-          {
-            symbol: "BTC",
-            allocationBps: 10000,
-            leverage: 1,
-            strategyCode: "ma_crossover",
-            strategyVersion: "1.0.0",
-            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
-          },
-        ],
-      },
-      metrics: null,
-      errorMessage: null,
-      startedAt: null,
-      finishedAt: null,
-      createdAt: new Date("2026-01-01"),
-      artifacts: [],
-    });
+  it("scopes quant list and detail operations", async () => {
+    prisma.quantRun.findMany.mockResolvedValue([]);
     prisma.quantRun.findFirst.mockResolvedValue(null);
 
-    await createQuantRun(editorContext, {
-      timeframe: "1d",
-      totalCapital: 10000,
-      allocationMode: "equal",
-      feeBps: 10,
-      slippageBps: 5,
-      assumptions: defaultAssumptions,
-      from: "2024-01-01",
-      to: "2025-01-01",
-      legs: [
-        {
-          symbol: "BTC",
-          allocationBps: 10000,
-          leverage: 1,
-          strategyCode: "ma_crossover",
-          strategyVersion: "1.0.0",
-          strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
-        },
-      ],
-    });
     await listQuantRuns(viewerContext);
     await expect(getQuantRun(viewerContext, "run-other")).rejects.toThrow("Quant run not found.");
 
-    expect(prisma.quantRun.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          organizationId: "org-a",
-          userId: "user-a",
-          strategyVersionId: "strategy-version-1",
-        }),
-      }),
-    );
     expect(prisma.quantRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { organizationId: "org-a" } }),
     );
@@ -506,70 +435,6 @@ describe("organization-scoped database services", () => {
         }),
       }),
     );
-  });
-
-  it("fails closed when a requested strategy version is not synchronized", async () => {
-    prisma.strategyVersion.findUnique.mockResolvedValue(null);
-
-    await expect(
-      createQuantRun(editorContext, {
-        timeframe: "1d",
-        totalCapital: 10000,
-        allocationMode: "equal",
-        feeBps: 10,
-        slippageBps: 5,
-        assumptions: defaultAssumptions,
-        from: "2024-01-01",
-        to: "2025-01-01",
-        legs: [
-          {
-            symbol: "BTC",
-            allocationBps: 10000,
-            leverage: 1,
-            strategyCode: "ma_crossover",
-            strategyVersion: "1.0.0",
-            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
-          },
-        ],
-      }),
-    ).rejects.toThrow("not synchronized");
-    expect(prisma.asset.findMany).not.toHaveBeenCalled();
-    expect(prisma.quantRun.create).not.toHaveBeenCalled();
-  });
-
-  it("fails closed before persistence when the legacy runner receives mixed strategies", async () => {
-    await expect(
-      createQuantRun(editorContext, {
-        timeframe: "1d",
-        totalCapital: 10000,
-        allocationMode: "equal",
-        feeBps: 10,
-        slippageBps: 5,
-        assumptions: defaultAssumptions,
-        from: "2024-01-01",
-        to: "2025-01-01",
-        legs: [
-          {
-            symbol: "BTC",
-            allocationBps: 5000,
-            leverage: 1,
-            strategyCode: "ma_crossover",
-            strategyVersion: "1.0.0",
-            strategyParameters: { fastPeriod: 5, slowPeriod: 20 },
-          },
-          {
-            symbol: "FPT",
-            allocationBps: 5000,
-            leverage: 1,
-            strategyCode: "turtle_breakout",
-            strategyVersion: "1.0.0",
-            strategyParameters: { entryPeriod: 20, exitPeriod: 10 },
-          },
-        ],
-      }),
-    ).rejects.toThrow("Mixed per-asset strategies are not available");
-    expect(prisma.strategyVersion.findUnique).not.toHaveBeenCalled();
-    expect(prisma.quantRun.create).not.toHaveBeenCalled();
   });
 
   it("upserts one tenant-scoped strategy assignment per portfolio asset", async () => {

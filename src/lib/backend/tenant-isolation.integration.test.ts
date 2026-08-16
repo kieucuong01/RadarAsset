@@ -5,13 +5,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getPrisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/auth/tenant-context";
 
+import { createPortfolioTransaction, loadPortfolioResponse } from "./portfolio-repository";
 import {
-  createPortfolioTransaction,
-  getQuantRun,
-  listQuantRuns,
-  loadPortfolioResponse,
-  loadWatchlist,
-} from "./db";
+  listPortfolioQuantRuns as listQuantRuns,
+  loadPortfolioQuantRun as getQuantRun,
+} from "./quant-runs";
+import { loadWatchlist } from "./research-repository";
 import { resetDemoIdentity } from "./seed-safety";
 import { listMarketIngestionRequests, requestMarketIngestion } from "./ingestion-requests";
 

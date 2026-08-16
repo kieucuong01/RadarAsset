@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   requireTenantCapability: vi.fn(),
 }));
 
-vi.mock("@/lib/backend/db", () => ({
+vi.mock("@/lib/backend/portfolio-repository", () => ({
   createPortfolioTransaction: mocks.createPortfolioTransaction,
 }));
 

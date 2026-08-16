@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { loadWatchlist, upsertWatchlistItem } from "@/lib/backend/db";
+import { loadWatchlist, upsertWatchlistItem } from "@/lib/backend/research-repository";
 import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
 export const dynamic = "force-dynamic";

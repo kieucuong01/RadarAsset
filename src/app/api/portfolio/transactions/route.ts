@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { createPortfolioTransaction } from "@/lib/backend/db";
+import { createPortfolioTransaction } from "@/lib/backend/portfolio-repository";
 import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfolio";
 import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
