@@ -10,7 +10,9 @@
 
 **Tech Stack:** Python 3.12, NumPy/Pandas, pytest, Prisma/PostgreSQL, Next.js 15, React 19, TypeScript, Vitest, Recharts.
 
-**Dependency:** Complete `2026-08-14-macro-energy-event-risk.md` through Task 8 before starting this plan.
+**Dependency:** The Macro Event Risk foundation is present in
+`quant-worker/smart_insights/event_*`, `quant-worker/smart_insights/metrics/event_risk.py`, and the
+corresponding Prisma event models. Verify those current boundaries before starting this plan.
 
 **Interpretation rule:** Results are descriptive associations, never causal claims or recommendations.
 
