@@ -1,0 +1,25 @@
+[Unit]
+Description=Create an encrypted DataVest PostgreSQL backup in private S3
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=datavest
+Group=datavest
+ExecStart=/opt/datavest/shared/python-venv/bin/python /usr/local/libexec/datavest/backup-postgres.py create --env-file /opt/datavest/shared/.env
+TimeoutStartSec=30min
+MemoryMax=400M
+Nice=10
+IOSchedulingClass=best-effort
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/datavest/shared/spool/backups

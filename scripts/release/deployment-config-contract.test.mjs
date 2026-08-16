@@ -208,4 +208,27 @@ describe("DataVest production service configuration", () => {
       expect(entries[name]).toBe("");
     }
   });
+
+  it("keeps encrypted PostgreSQL backup scheduling disabled until a restore drill passes", async () => {
+    const service = parseUnit(await read("deploy/linux/systemd/datavest-postgres-backup.service"));
+    const timer = parseUnit(await read("deploy/linux/systemd/datavest-postgres-backup.timer"));
+    expect(service.Service).toMatchObject({
+      Type: "oneshot",
+      User: "datavest",
+      Group: "datavest",
+      ExecStart:
+        "/opt/datavest/shared/python-venv/bin/python /usr/local/libexec/datavest/backup-postgres.py create --env-file /opt/datavest/shared/.env",
+      TimeoutStartSec: "30min",
+      MemoryMax: "400M",
+      ProtectSystem: "strict",
+      NoNewPrivileges: "true",
+    });
+    expect(timer.Timer).toMatchObject({
+      OnCalendar: "*-*-* 04:45:00 Asia/Bangkok",
+      Unit: "datavest-postgres-backup.service",
+      Persistent: "true",
+      RandomizedDelaySec: "10m",
+    });
+    expect(timer.Install.WantedBy).toBe("timers.target");
+  });
 });

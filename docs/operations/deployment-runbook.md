@@ -105,3 +105,32 @@ Create a protected GitHub environment named `production`, requiring manual appro
 - `DATAVEST_VPS_KNOWN_HOSTS` (the exact pinned host-key line)
 
 The deploy job downloads the artifact produced by its successful build dependency, verifies it again, transfers both files over pinned-key SSH, and invokes only the narrow `sudo /usr/local/sbin/deploy-datavest` command. It removes temporary SSH material even when deployment fails. Application, database, DeepSeek, and S3 secrets remain on the VPS and are never added to GitHub Actions.
+
+## Encrypted PostgreSQL backups
+
+Provisioning generates an independent `DATAVEST_BACKUP_ENCRYPTION_SECRET`; it is not copied from Radar BDS, Tử Vi, an S3 credential, or the database password. The backup utility writes a PostgreSQL custom-format dump only inside the mode-0700 backup spool, encrypts it with AES-256-CBC/PBKDF2, deletes plaintext in `finally`, uploads the ciphertext to the private `datavest` bucket, and verifies its size and SHA-256 metadata. Failed uploads retain at most three encrypted retry payloads and no plaintext.
+
+The timer is installed but intentionally disabled. First create and verify one backup:
+
+```bash
+sudo -u datavest /opt/datavest/shared/python-venv/bin/python \
+  /usr/local/libexec/datavest/backup-postgres.py create \
+  --env-file /opt/datavest/shared/.env
+```
+
+Record the returned `s3://datavest/operations/backups/postgres/...dump.enc` locator without recording any environment value. Then run the isolated restore drill as root:
+
+```bash
+sudo /opt/datavest/shared/python-venv/bin/python \
+  /usr/local/libexec/datavest/backup-postgres.py restore-drill \
+  --env-file /opt/datavest/shared/.env \
+  --locator 's3://datavest/operations/backups/postgres/<yyyy>/<mm>/<file>.dump.enc'
+```
+
+The drill accepts only the fixed temporary database `datavest_restore_test`, verifies migrations and application tables, and drops that database in `finally`. It never restores over `datavest`. Enable the timer only after both commands succeed:
+
+```bash
+sudo systemctl enable --now datavest-postgres-backup.timer
+systemctl list-timers datavest-postgres-backup.timer
+journalctl -u datavest-postgres-backup.service --since '-1 day' --no-pager
+```

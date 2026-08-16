@@ -91,6 +91,7 @@ install -d -o root -g datavest -m 0750 /opt/datavest/releases
 install -d -o datavest-deploy -g datavest -m 2750 /opt/datavest/incoming
 install -d -o root -g datavest -m 0750 /opt/datavest/shared
 install -d -o datavest -g datavest -m 0750 /opt/datavest/shared/spool
+install -d -o datavest -g datavest -m 0700 /opt/datavest/shared/spool/backups
 install -d -o root -g datavest -m 0750 /opt/datavest/logs
 install -d -o root -g root -m 0755 /usr/local/libexec/datavest
 
@@ -116,6 +117,8 @@ for unit in \
   datavest-quant-engine.service \
   datavest-worker.service \
   datavest-job@.service \
+  datavest-postgres-backup.service \
+  datavest-postgres-backup.timer \
   datavest-market-daily.timer \
   datavest-smart-four-hourly.timer \
   datavest-smart-daily.timer \
@@ -139,6 +142,12 @@ if [[ -f "${script_dir}/run-scheduled-job.sh" ]]; then
   install -o root -g root -m 0755 \
     "${script_dir}/run-scheduled-job.sh" \
     /usr/local/libexec/datavest/run-scheduled-job
+fi
+
+if [[ -f "${script_dir}/backup-postgres.py" ]]; then
+  install -o root -g root -m 0755 \
+    "${script_dir}/backup-postgres.py" \
+    /usr/local/libexec/datavest/backup-postgres.py
 fi
 
 if [[ -f "${script_dir}/nginx/datavest.conf" ]]; then
