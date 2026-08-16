@@ -4,7 +4,7 @@
 
 **Goal:** Reduce `StrategyLab.tsx` from 1,144 lines to a focused workflow orchestrator while preserving its three tabs, DB-backed custom strategy lifecycle, backtest handoff, translations, and visual styling.
 
-**Architecture:** Keep API loading, persistence mutations, active tab, builder draft, and backtest handoff in `StrategyLab.tsx`. Move each visible tab to a domain component under `src/components/strategy-lab/`: the library panel owns only search/filter UI state, the builder panel owns builder presentation fields, and the saved panel renders persisted strategies and delegates edit/archive/backtest actions upward. No new hooks, contexts, dependencies, or generic component abstractions.
+**Architecture:** Keep API loading, persistence mutations, active tab, library filters, builder draft, and backtest handoff in `StrategyLab.tsx`; filters stay above tab content so tab switches preserve them. Move each visible tab to a domain component under `src/components/strategy-lab/`: the library panel renders controlled search/filter inputs, the builder panel owns builder presentation fields, and the saved panel renders persisted strategies and delegates edit/archive/backtest actions upward. No new hooks, contexts, dependencies, or generic component abstractions.
 
 **Tech Stack:** React 19, Next.js 16, TypeScript, shadcn/ui, Vitest server rendering.
 
@@ -12,7 +12,7 @@
 
 - Preserve all translated copy, HTML labels, Tailwind classes, tab values, toast behavior, API calls, and `StrategyLabSelection` payloads.
 - Preserve the current builder normalization and persistence behavior; financial/strategy semantics are out of scope.
-- `StrategyLab.tsx` remains the only module that calls Strategy Lab API clients or performs legacy migration.
+- `StrategyLab.tsx` remains the only module that calls Strategy Lab API clients or performs legacy migration; saved panels may use the client module's exported type contract.
 - Child panels import concrete UI modules directly; do not add barrel files or `React.memo` without measured need.
 - Use functional state updates and keep derived filtering in render rather than effects.
 - Add no dependency and change no i18n key.
@@ -52,6 +52,11 @@
 
 ```ts
 export function StrategyLibraryPanel(props: {
+  query: string;
+  family: "all" | StrategyFamily;
+  onQueryChange: (query: string) => void;
+  onFamilyChange: (family: "all" | StrategyFamily) => void;
+  onBuild: () => void;
   onCustomize: (strategyCode: string) => void;
   onUsePreset: (input: {
     code: string;

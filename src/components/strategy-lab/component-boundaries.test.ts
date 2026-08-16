@@ -28,8 +28,16 @@ describe("Strategy Lab component boundaries", () => {
       const path = resolve(STRATEGY_LAB_ROOT, `${name}.tsx`);
       if (!existsSync(path)) continue;
       const source = readFileSync(path, "utf8");
-      expect(source).not.toContain("@/lib/strategy-lab/client");
       expect(source).not.toContain("@/lib/strategy-lab/legacy-migration");
+      expect(source).not.toMatch(
+        /\b(createCustomStrategy|createCustomStrategyVersion|archiveCustomStrategy|listCustomStrategies)\b/,
+      );
     }
+  });
+
+  it("keeps library filters above tab content so switching tabs does not reset them", () => {
+    const source = readFileSync(resolve(COMPONENT_ROOT, "StrategyLab.tsx"), "utf8");
+    expect(source).toContain("const [libraryQuery, setLibraryQuery]");
+    expect(source).toContain("const [libraryFamily, setLibraryFamily]");
   });
 });
