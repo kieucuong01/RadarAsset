@@ -2,6 +2,12 @@
 
 Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadcn/ui, Recharts, and a separate Python quant worker.
 
+## Documentation
+
+- [Architecture map](docs/architecture.md)
+- [Documentation index](docs/README.md)
+- [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md)
+
 ## Stack
 
 - Next.js App Router with React and TypeScript

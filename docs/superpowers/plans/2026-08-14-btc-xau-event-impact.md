@@ -1,5 +1,7 @@
 # BTC and XAU Event Impact Implementation Plan
 
+**Status:** Planned — the event-impact storage, calculation, API, and UI are not present on `main`.
+
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Measure and present the historical association between deduplicated macro events and subsequent BTC/XAU returns, with point-in-time alignment, matched controls, deterministic confidence intervals, and explicit sample-quality gates.
@@ -8,7 +10,9 @@
 
 **Tech Stack:** Python 3.12, NumPy/Pandas, pytest, Prisma/PostgreSQL, Next.js 15, React 19, TypeScript, Vitest, Recharts.
 
-**Dependency:** Complete `2026-08-14-macro-energy-event-risk.md` through Task 8 before starting this plan.
+**Dependency:** The Macro Event Risk foundation is present in
+`quant-worker/smart_insights/event_*`, `quant-worker/smart_insights/metrics/event_risk.py`, and the
+corresponding Prisma event models. Verify those current boundaries before starting this plan.
 
 **Interpretation rule:** Results are descriptive associations, never causal claims or recommendations.
 
@@ -46,9 +50,9 @@
 - [ ] **Step 1: Write a failing schema contract test**
 
 ```ts
-const schema = readFileSync("prisma/schema.prisma", "utf8")
-expect(schema).toContain("model EventImpactObservation")
-expect(schema).toContain("model EventImpactAggregate")
+const schema = readFileSync("prisma/schema.prisma", "utf8");
+expect(schema).toContain("model EventImpactObservation");
+expect(schema).toContain("model EventImpactAggregate");
 ```
 
 - [ ] **Step 2: Run and confirm failure**
@@ -309,20 +313,20 @@ Run: `npm test -- src/app/api/smart-insights/macro/event-impact/route.test.ts`
 
 ```ts
 export interface EventImpactView {
-  asset: "BTC" | "XAU"
-  methodology: "btc-xau-event-impact-v1"
-  asOf: string
-  sourceStatus: Availability
+  asset: "BTC" | "XAU";
+  methodology: "btc-xau-event-impact-v1";
+  asOf: string;
+  sourceStatus: Availability;
   horizons: Array<{
-    category: string
-    days: 1 | 3 | 7 | 30
-    sampleStatus: "INSUFFICIENT_DATA" | "THIN_SAMPLE" | "AVAILABLE"
-    sampleSize: number
-    medianAbnormal: number | null
-    iqr: [number, number] | null
-    confidence95: [number, number] | null
-    hitRate: number | null
-  }>
+    category: string;
+    days: 1 | 3 | 7 | 30;
+    sampleStatus: "INSUFFICIENT_DATA" | "THIN_SAMPLE" | "AVAILABLE";
+    sampleSize: number;
+    medianAbnormal: number | null;
+    iqr: [number, number] | null;
+    confidence95: [number, number] | null;
+    hitRate: number | null;
+  }>;
 }
 ```
 

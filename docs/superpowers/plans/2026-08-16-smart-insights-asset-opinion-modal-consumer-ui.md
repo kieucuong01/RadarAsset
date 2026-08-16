@@ -1,5 +1,7 @@
 # Smart Insights Asset Opinion Modal and Consumer UI Implementation Plan
 
+**Status:** Active — implementation is currently uncommitted in the main worktree.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the always-visible asset-opinion detail with a discoverable responsive modal, hide consumer-irrelevant operational health data, and restore visible Smart Insights Crypto chart lines.
@@ -42,12 +44,14 @@
 ### Task 1: Make Every Asset Row and Card an Explicit Modal Trigger
 
 **Files:**
+
 - Modify: `src/components/smart-insights/AssetOpinions.tsx`
 - Modify: `src/components/smart-insights/AssetOpinionList.tsx`
 - Modify: `src/components/smart-insights/AssetOpinionDetail.tsx`
 - Modify: `src/components/smart-insights/AssetOpinions.test.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `AssetOpinionModel`, `portfolioState`, `locale`, and `onEvidence` props.
 - Produces: `AssetOpinionList({ opinions, locale, onSelect })`, where `onSelect(symbol: string): void`; `AssetOpinionDetail({ opinion, open, onOpenChange, portfolioState, locale, onEvidence })`.
 
@@ -105,19 +109,21 @@ In `AssetOpinions.tsx`, replace permanent selection with nullable active state:
 const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
 const activeOpinion = opinions.find((item) => item.symbol === activeSymbol) ?? null;
 
-<AssetOpinionList opinions={opinions} locale={locale} onSelect={setActiveSymbol} />
-{activeOpinion ? (
-  <AssetOpinionDetail
-    opinion={activeOpinion}
-    open
-    onOpenChange={(open) => {
-      if (!open) setActiveSymbol(null);
-    }}
-    portfolioState={portfolioState}
-    locale={locale}
-    onEvidence={onEvidence}
-  />
-) : null}
+<AssetOpinionList opinions={opinions} locale={locale} onSelect={setActiveSymbol} />;
+{
+  activeOpinion ? (
+    <AssetOpinionDetail
+      opinion={activeOpinion}
+      open
+      onOpenChange={(open) => {
+        if (!open) setActiveSymbol(null);
+      }}
+      portfolioState={portfolioState}
+      locale={locale}
+      onEvidence={onEvidence}
+    />
+  ) : null;
+}
 ```
 
 Do not preselect `opinions[0]`.
@@ -127,10 +133,7 @@ Do not preselect `opinions[0]`.
 In `AssetOpinionList.tsx`, remove `selectedSymbol`, remove the nested symbol button, and add one activation helper:
 
 ```tsx
-function activateOnKeyboard(
-  event: React.KeyboardEvent,
-  activate: () => void,
-) {
+function activateOnKeyboard(event: React.KeyboardEvent, activate: () => void) {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
   activate();
@@ -170,7 +173,9 @@ Change `AssetOpinionDetail` to accept `open` and `onOpenChange`. Use the existin
     data-testid="asset-opinion-detail"
   >
     <DialogHeader className="sr-only">
-      <DialogTitle>{opinion.symbol} · {opinion.assetName}</DialogTitle>
+      <DialogTitle>
+        {opinion.symbol} · {opinion.assetName}
+      </DialogTitle>
       <DialogDescription>
         {locale === "vi" ? "Phân tích định lượng theo tài sản" : "Quantitative asset analysis"}
       </DialogDescription>
@@ -205,12 +210,14 @@ git commit -m "feat: open asset opinions in a modal"
 ### Task 2: Organize the Modal into Decision Tabs and On-Demand Sources
 
 **Files:**
+
 - Create: `src/components/smart-insights/AssetOpinionSourcesDisclosure.tsx`
 - Modify: `src/components/smart-insights/AssetOpinionDetail.tsx`
 - Modify: `src/components/smart-insights/AssetOpinions.test.tsx`
 - Modify: `e2e/smart-insights-asset-opinions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `AssetOpinionModel`, `Locale`, existing `AssetOpinionCalculation`, existing evidence callback.
 - Produces: `AssetOpinionSourcesDisclosure({ opinion, locale, onEvidence }): JSX.Element`; dialog tabs `thesis`, `calculation`, `scenarios`.
 
@@ -276,7 +283,10 @@ export function AssetOpinionSourcesDisclosure({ opinion, locale, onEvidence }: P
         <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
       </Button>
       {open ? (
-        <div id={regionId} className="mt-3 max-h-72 overflow-y-auto rounded-xl border bg-background">
+        <div
+          id={regionId}
+          className="mt-3 max-h-72 overflow-y-auto rounded-xl border bg-background"
+        >
           {/* existing desktop evidence table and mobile evidence cards */}
         </div>
       ) : null}
@@ -383,11 +393,13 @@ git commit -m "feat: organize asset opinion modal for investors"
 ### Task 3: Remove Consumer Data Health and Admin Pipeline Noise
 
 **Files:**
+
 - Modify: `src/components/SmartInsights.tsx`
 - Modify: `src/components/smart-insights/source-guard.test.ts`
 - Modify: `e2e/smart-insights-asset-opinions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: briefing, regimes and preferences as the initial Smart Insights request group.
 - Produces: consumer Smart Insights with no `HealthModel` state, `/api/smart-insights/data-health` request or `DataHealthPanel` render.
 
@@ -397,10 +409,7 @@ Add to `source-guard.test.ts`:
 
 ```ts
 it("keeps operational data health out of the consumer Smart Insights page", () => {
-  const page = readFileSync(
-    join(process.cwd(), "src", "components", "SmartInsights.tsx"),
-    "utf8",
-  );
+  const page = readFileSync(join(process.cwd(), "src", "components", "SmartInsights.tsx"), "utf8");
   for (const forbidden of [
     "DataHealthPanel",
     "healthSchema",
@@ -481,6 +490,7 @@ git commit -m "refactor: hide Smart Insights admin health data"
 ### Task 4: Restore Fear & Greed, CBBI and Related Crypto Chart Lines
 
 **Files:**
+
 - Modify: `src/components/smart-insights/CryptoFearGreedPanel.tsx`
 - Modify: `src/components/smart-insights/CryptoCyclePanel.tsx`
 - Modify: `src/components/smart-insights/CryptoDerivativesPressurePanel.tsx`
@@ -489,6 +499,7 @@ git commit -m "refactor: hide Smart Insights admin health data"
 - Modify: `src/components/smart-insights/SmartInsightsNumberFormatting.test.tsx`
 
 **Interfaces:**
+
 - Consumes: existing numeric Recharts series and CSS tokens from `src/app/globals.css`.
 - Produces: valid `var(--chart-1)` strokes, deterministic line rendering and visible single-point dots.
 
@@ -505,15 +516,23 @@ it("uses complete theme colors for active Crypto line charts", () => {
     "CryptoLargeAddressPanel.tsx",
   ];
   for (const file of files) {
-    const source = readFileSync(join(process.cwd(), "src", "components", "smart-insights", file), "utf8");
+    const source = readFileSync(
+      join(process.cwd(), "src", "components", "smart-insights", file),
+      "utf8",
+    );
     expect(source, file).not.toContain("hsl(var(--primary))");
     expect(source, file).toContain("var(--chart-1)");
     expect(source, file).toContain("isAnimationActive={false}");
   }
-  expect(readFileSync(join(process.cwd(), "src/components/smart-insights/CryptoFearGreedPanel.tsx"), "utf8"))
-    .toContain("visible.series.length === 1");
-  expect(readFileSync(join(process.cwd(), "src/components/smart-insights/CryptoCyclePanel.tsx"), "utf8"))
-    .toContain("visible!.cbbi.series.length === 1");
+  expect(
+    readFileSync(
+      join(process.cwd(), "src/components/smart-insights/CryptoFearGreedPanel.tsx"),
+      "utf8",
+    ),
+  ).toContain("visible.series.length === 1");
+  expect(
+    readFileSync(join(process.cwd(), "src/components/smart-insights/CryptoCyclePanel.tsx"), "utf8"),
+  ).toContain("visible!.cbbi.series.length === 1");
 });
 ```
 
@@ -560,9 +579,9 @@ Replace only `stroke="hsl(var(--primary))"` with `stroke="var(--chart-1)"`; add 
 In `SmartInsightsNumberFormatting.test.tsx`, retain the existing numeric values and add these source-level assertions:
 
 ```ts
-expect(fearGreedSource).toContain('data={visible.series}');
+expect(fearGreedSource).toContain("data={visible.series}");
 expect(fearGreedSource).toContain('stroke="var(--chart-1)"');
-expect(cycleSource).toContain('data={visible!.cbbi.series}');
+expect(cycleSource).toContain("data={visible!.cbbi.series}");
 expect(cycleSource).toContain('stroke="var(--chart-1)"');
 ```
 
@@ -591,9 +610,11 @@ git commit -m "fix: restore Smart Insights Crypto chart lines"
 ### Task 5: Full Verification and Browser QA
 
 **Files:**
+
 - No planned source changes. If a regression is found, return to the task that owns the affected file, correct it there, and rerun that task's checks before repeating this verification task.
 
 **Interfaces:**
+
 - Consumes: completed modal, tabs, source disclosure, consumer/admin boundary and chart fixes.
 - Produces: buildable Smart Insights with verified desktop/mobile behavior and no relevant runtime errors.
 

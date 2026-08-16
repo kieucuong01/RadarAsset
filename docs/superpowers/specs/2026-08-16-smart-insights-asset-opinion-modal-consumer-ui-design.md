@@ -1,7 +1,7 @@
 # Smart Insights Asset Opinion Modal and Consumer UI Design
 
 **Date:** 2026-08-16  
-**Status:** Approved in conversation; pending written-spec review
+**Status:** Active — approved design for the uncommitted main-worktree implementation.
 
 ## Goal
 
