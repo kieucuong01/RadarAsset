@@ -154,8 +154,8 @@ preserve leasing, cancellation, timeout, retries, cache semantics, and result ch
 
 ### Phase 3: Frontend and localization boundaries
 
-**Localization dictionary split: complete. `StrategyLab` and `PortfolioBacktestBuilder` splits:
-complete. Remaining large screen splits: pending.**
+**Localization dictionary split: complete. `StrategyLab`, `PortfolioBacktestBuilder`, and
+`MockPortfolio` splits: complete. Remaining large screen splits: pending.**
 
 Split only components that exceed roughly 600 lines or combine data loading, mutations, state, and
 multiple visual panels. The first targets are:

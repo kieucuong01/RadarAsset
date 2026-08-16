@@ -21,10 +21,12 @@
 ### Task 1: Guard the component boundaries
 
 **Files:**
+
 - Create: `src/components/mock-portfolio/component-boundaries.test.ts`
 - Modify: `src/components/PortfolioNumberFormatting.test.tsx`
 
 **Interfaces:**
+
 - Consumes: current `MockPortfolio` static render and portfolio response fixtures.
 - Produces: line-budget, file-ownership, client-import, and visible-section regression gates.
 
@@ -36,11 +38,13 @@
 ### Task 2: Extract header and overview presentation
 
 **Files:**
+
 - Create: `src/components/mock-portfolio/PortfolioHeader.tsx`
 - Create: `src/components/mock-portfolio/PortfolioOverviewPanel.tsx`
 - Modify: `src/components/MockPortfolio.tsx`
 
 **Interfaces:**
+
 - Consumes: `PortfolioResponse | null`, active `PortfolioTimeframe`, and `onTimeframeChange(timeframe)`.
 - Produces: `PortfolioHeader` and `PortfolioOverviewPanel` with unchanged rendered markup; the overview owns only the private hide-balance toggle.
 
@@ -53,30 +57,34 @@
 ### Task 3: Extract holdings and risk panels
 
 **Files:**
+
 - Create: `src/components/mock-portfolio/PortfolioHoldingsTable.tsx`
 - Create: `src/components/mock-portfolio/PortfolioRiskMetrics.tsx`
 - Modify: `src/components/MockPortfolio.tsx`
-- Modify: `src/lib/i18n/portfolio-copy.test.ts`
+- Modify: `src/lib/financial-format-adoption.test.ts`
 
 **Interfaces:**
+
 - Consumes: typed holdings, typed risk metrics, and the active base currency.
 - Produces: unchanged holdings table, sentiment badge, and risk metric cards using the existing formatter rules.
 
 - [ ] **Step 1: Move the holdings table and private sentiment badge.**
 - [ ] **Step 2: Move risk metric icon mapping and cards.**
-- [ ] **Step 3: Add the new files to portfolio mojibake/i18n coverage.**
+- [ ] **Step 3: Add the new files to shared financial-formatter adoption coverage.**
 - [ ] **Step 4: Run focused formatting tests, i18n tests, ESLint, and TypeScript and verify GREEN.**
 - [ ] **Step 5: Commit** with `refactor: extract portfolio holdings and risk panels`.
 
 ### Task 4: Extract the transaction log and finish orchestration
 
 **Files:**
+
 - Create: `src/components/mock-portfolio/PortfolioTransactionLog.tsx`
 - Modify: `src/components/MockPortfolio.tsx`
 - Modify: `src/components/PortfolioNumberFormatting.test.tsx`
-- Modify: `src/lib/i18n/portfolio-copy.test.ts`
+- Modify: `src/lib/financial-format-adoption.test.ts`
 
 **Interfaces:**
+
 - Consumes: portfolio transactions, holdings, disabled state, timeframe, base currency, and `onRecorded(portfolio)`.
 - Produces: unchanged normalized transaction rows and `PortfolioTransactionDialog` workflow.
 
@@ -88,9 +96,11 @@
 ### Task 5: Verify, document, and integrate
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-08-16-codebase-simplification-design.md`
 
 **Interfaces:**
+
 - Consumes: all extracted components and current repository verification scripts.
 - Produces: verified local-main merge and current local server on port 3100.
 
@@ -98,4 +108,3 @@
 - [ ] **Step 2: Run** `npm run build` **from the main checkout after merge.**
 - [ ] **Step 3: Update the simplification design to mark `MockPortfolio` complete and commit.**
 - [ ] **Step 4: Merge the feature branch locally into `main`, remove only this worktree/branch, restart `npm run dev:web`, and verify `/portfolio` returns the expected authenticated redirect or page.**
-
