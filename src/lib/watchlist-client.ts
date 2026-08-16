@@ -86,4 +86,5 @@ export async function addFavoriteAsset(
 export async function removeFavoriteAsset(id: string, request: FetchLike = fetch) {
   const response = await request(`/api/watchlist/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (response.status !== 204) throw new Error("Không thể xóa tài sản khỏi danh sách yêu thích.");
+  return { refreshQueued: response.headers.get("X-Smart-Insights-Refresh") === "queued" };
 }

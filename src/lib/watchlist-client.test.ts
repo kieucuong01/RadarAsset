@@ -80,15 +80,31 @@ describe("watchlist client", () => {
     ]);
   });
 
-  it("deletes one favorite and accepts only a 204 response", async () => {
+  it("deletes one tracked asset and reports whether opinion refresh was queued", async () => {
     let captured = "";
     const request = async (input: RequestInfo | URL, init?: RequestInit) => {
       captured = `${String(input)}:${init?.method}`;
-      return new Response(null, { status: 204 });
+      return new Response(null, {
+        status: 204,
+        headers: { "X-Smart-Insights-Refresh": "queued" },
+      });
     };
 
-    await expect(removeFavoriteAsset("favorite-a", request)).resolves.toBeUndefined();
+    await expect(removeFavoriteAsset("favorite-a", request)).resolves.toEqual({
+      refreshQueued: true,
+    });
     expect(captured).toBe("/api/watchlist/favorite-a:DELETE");
+
+    await expect(
+      removeFavoriteAsset(
+        "favorite-b",
+        async () =>
+          new Response(null, {
+            status: 204,
+            headers: { "X-Smart-Insights-Refresh": "failed" },
+          }),
+      ),
+    ).resolves.toEqual({ refreshQueued: false });
   });
 
   it("rejects malformed favorite response data", async () => {
