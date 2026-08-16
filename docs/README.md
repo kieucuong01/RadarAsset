@@ -31,11 +31,9 @@ current provider availability or dataset freshness.
 
 ## Active delivery documents
 
-| Status  | Document                                                                                                             | Why it remains                                                                                       |
-| ------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Planned | [BTC and XAU Event Impact](superpowers/plans/2026-08-14-btc-xau-event-impact.md)                                     | The event-impact storage, calculation, API, and UI described by this plan are not present on `main`. |
-| Active  | [Asset Opinion Modal implementation](superpowers/plans/2026-08-16-smart-insights-asset-opinion-modal-consumer-ui.md) | Its implementation is currently uncommitted in the main worktree.                                    |
-| Active  | [Asset Opinion Modal design](superpowers/specs/2026-08-16-smart-insights-asset-opinion-modal-consumer-ui-design.md)  | It is the approved design for the same active main-worktree change.                                  |
+| Status  | Document                                                                         | Why it remains                                                                                       |
+| ------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Planned | [BTC and XAU Event Impact](superpowers/plans/2026-08-14-btc-xau-event-impact.md) | The event-impact storage, calculation, API, and UI described by this plan are not present on `main`. |
 
 Remove a plan/spec from this table and the active tree once its implementation is merged or a newer
 document supersedes it. Git history is the archive.
