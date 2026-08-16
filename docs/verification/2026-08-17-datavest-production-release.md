@@ -3,10 +3,11 @@
 ## Release identity
 
 - Domain: `https://datavest.vn`
-- Active application release: `951529dc388131070b7fefd78d33ff9cfd14db9c`
-- Active release directory: `20260816T192430Z-951529dc3881`
-- Latest installed operations configuration: `29a73a3` (writable, private browser HOME for hardened collector jobs)
-- GitHub artifact workflow: `31967001594`, conclusion `success`
+- Active application release: `eef8309cdde55a82d4df7662b0c19d3470c275e0`
+- Active release directory: `20260816T224350Z-eef8309cdde5`
+- GitHub artifact workflow: `31976715582`, conclusion `success`
+- GitHub artifact digest: `sha256:13d595a667a3771424ec8c0d09b41e2f3bbbb6fca1cfc05b19c0008cb5ae31a7`
+- Release archive SHA-256: `279afb5664f253f202c2cf9323b1db3f7dd6112456d2d4c8b91ef82361d4a74a`
 - The downloaded artifact ZIP matched the GitHub digest, and its release tarball matched the bundled SHA-256 file before transfer.
 
 ## Runtime checks
@@ -34,22 +35,29 @@ The deploy kept two release directories only: the active release and one rollbac
 
 ## Scheduled data jobs
 
-Enabled timers:
+Enabled timers after successful production smokes:
 
 - `datavest-market-daily.timer`
 - `datavest-postgres-backup.timer`
+- `datavest-smart-daily.timer`
+- `datavest-smart-weekly.timer`
+- `datavest-calendar-current.timer`
+- `datavest-calendar-next.timer`
+- `datavest-briefing.timer`
 
 The production market smoke completed successfully for all 22 selected daily assets, with 22 succeeded and 0 degraded. It covered the curated Vietnam equity/index, crypto, and XAU universe. The run used 276.7 MB peak memory and no swap.
 
-The following timers remain disabled because their production-environment smoke did not pass:
+The restored S3 publication boundary accepts only integrity-matching local or `s3://` locators with the expected source, observation year/month, and content hash. Production evidence after the fix:
 
-- `datavest-smart-four-hourly.timer`: Chrome launches correctly after the browser HOME fix, but CoinGlass returns placeholder-only tables and the fail-closed parser reports `SCHEMA_DRIFT`.
-- `datavest-smart-daily.timer`: includes the same CoinGlass sources, so it is not enabled independently.
-- `datavest-smart-weekly.timer`: BIS, CFTC, and CoinShares all returned `INTERNAL_ERROR` in the production smoke.
-- `datavest-calendar-current.timer` and `datavest-calendar-next.timer`: CryptoCraft returned HTTP 200, but the production parse path exited with status 2 and published no events.
-- `datavest-briefing.timer`: there were zero organization memberships, so a run would not exercise DeepSeek or produce meaningful verification evidence.
+- Weekly job exited 0: BIS published 65 records and CoinShares published 40; CFTC remained fail-closed.
+- Calendar current job exited 0: CryptoCraft published 28 current-week and 21 next-week events.
+- Calendar next job exited 0 with `not_due`, which is the expected schedule state at verification time.
+- Daily job exited 0. Successful sources included Alternative.me FNG, BitInfoCharts, BlockchainCenter, CBBI, CoinMetrics, DefiLlama, Deribit, all three Farside ETF feeds, GDACS, mempool.space, NASA EONET, and USGS.
+- FRED timed out during this run. Both CoinGlass paths remained `SCHEMA_DRIFT`/quarantined because the public tables exposed placeholders rather than usable values.
+- A bounded, non-persisting DeepSeek production smoke returned one accepted JSON response through the configured client. The briefing job then exited 0 with zero records because production still had zero organization memberships; the enabled timer will begin generating tenant briefings when memberships exist.
+- PostgreSQL contained new `insight_raw_snapshots.storage_locator` values under `s3://datavest/smart-insights/raw/...` for BIS, CoinShares, CryptoCraft, and the successful daily sources.
 
-These failures remain visible and no sample, synthetic, or unverified provider value was persisted as live evidence.
+`datavest-smart-four-hourly.timer` remains disabled because it contains only the two CoinGlass collectors, so it cannot currently produce a successful source result. Provider failures remain visible and no sample, synthetic, or unverified provider value was persisted as live evidence.
 
 ## Public browser and SEO checks
 
@@ -64,9 +72,10 @@ Read-only Chromium checks were run at desktop and mobile viewports after waiting
 - `sitemap.xml`: HTTP 200
 - `https://www.datavest.vn/`: HTTP 308 to the apex domain
 - No uncaught browser page exception occurred.
+- The anonymous homepage regression passed on desktop and mobile with zero tenant-only requests and zero failed API responses.
 
-Known browser issue: an unauthenticated homepage visit still requests protected portfolio and Smart Insights APIs, producing expected 401 responses plus one briefing 409 in the console. The page renders its labelled unavailable/sample fallback, but these requests should be gated by authentication in a later frontend fix.
+Authenticated Smart Insights also passed its desktop end-to-end account, workspace, 25-asset opinion, evidence, and request-budget flow after the guest gating change.
 
 ## Remaining release automation work
 
-The production application was activated through the restricted `datavest-deploy` account and fixed sudo command. The GitHub production environment still needs its VPS host, port, user, SSH key, and known-hosts secrets before `workflow_dispatch` can deploy without the local operator path. This does not affect the currently active release or the build-only push workflow.
+The production application was activated through the restricted `datavest-deploy` account and fixed sudo command. The GitHub production environment still needs its VPS host, port, user, SSH key, and known-hosts secrets before `workflow_dispatch` can deploy without the local operator path. Entering the private key requires explicit confirmation at the action moment. This does not affect the active release or the successful build-on-push workflow.

@@ -16,10 +16,10 @@
 - Modify: `quant-worker/smart_insights/repository.py`
 - Test: `quant-worker/tests/test_smart_insights_repository_artifacts.py`
 
-- [ ] Add failing tests for a valid local locator, a valid `s3://bucket/prefix/...` locator, and mismatched source/date/hash locators.
-- [ ] Run the focused pytest file and confirm the S3 case fails for the current implementation.
-- [ ] Implement strict locator-tail validation without weakening content hash or byte-count checks.
-- [ ] Re-run focused repository, artifact-store, and event-repository tests.
+- [x] Add failing tests for a valid local locator, a valid `s3://bucket/prefix/...` locator, and mismatched source/date/hash locators.
+- [x] Run the focused pytest file and confirm the S3 case fails for the current implementation.
+- [x] Implement strict locator-tail validation without weakening content hash or byte-count checks.
+- [x] Re-run focused repository, artifact-store, and event-repository tests.
 
 ## Task 2: Stop anonymous tenant-only API traffic
 
@@ -30,11 +30,11 @@
 - Modify: `src/components/smart-insights/LegacyMarketPulse.tsx`
 - Test: `e2e/smart-insights-guest.spec.ts`
 
-- [ ] Add an anonymous-browser regression test that records API responses and requires zero tenant-only requests and zero 4xx/5xx responses from the homepage.
-- [ ] Run the test against the current implementation and confirm it fails with the existing 401/409 traffic.
-- [ ] Mount organization and notification data hooks only after an authenticated session exists.
-- [ ] Gate tenant-only Smart Insights effects and mutation callbacks on authentication; retain clearly labelled illustrative guest content.
-- [ ] Re-run the guest test on desktop and mobile.
+- [x] Add an anonymous-browser regression test that records API responses and requires zero tenant-only requests and zero 4xx/5xx responses from the homepage.
+- [x] Run the test against the current implementation and confirm it fails with the existing 401/409 traffic.
+- [x] Mount organization and notification data hooks only after an authenticated session exists.
+- [x] Gate tenant-only Smart Insights effects and mutation callbacks on authentication; retain clearly labelled illustrative guest content.
+- [x] Re-run the guest test on desktop and mobile.
 
 ## Task 3: Prove AI and collector behavior on production inputs
 
@@ -43,21 +43,21 @@
 - Test only if needed: `quant-worker/tests/test_smart_insights_openai_responses.py`
 - Update: `docs/verification/2026-08-17-datavest-production-release.md`
 
-- [ ] Run a bounded, non-persisting DeepSeek synthesis smoke through the production configuration without printing secrets.
-- [ ] Run live collector smokes for BIS, CoinShares, CFTC, CryptoCraft, and the configured daily group.
-- [ ] Record successful sources separately from external unavailable/schema-drift sources; do not fabricate values or bypass access gates.
+- [x] Run a bounded, non-persisting DeepSeek synthesis smoke through the production configuration without printing secrets.
+- [x] Run live collector smokes for BIS, CoinShares, CFTC, CryptoCraft, and the configured daily group.
+- [x] Record successful sources separately from external unavailable/schema-drift sources; do not fabricate values or bypass access gates.
 
 ## Task 4: Verify, release, and schedule
 
 **Files:**
 - Update: `docs/verification/2026-08-17-datavest-production-release.md`
 
-- [ ] Run formatting, lint, typecheck, focused tests, the complete test suites, and the production build.
-- [ ] Commit only the intended files, push `main`, and verify the GitHub build artifact for the pushed SHA.
-- [ ] Deploy the exact pushed artifact through the restricted deploy account.
-- [ ] Verify active SHA, three services, readiness, canonical/robots/sitemap/www redirect, anonymous desktop/mobile browser behavior, S3 artifact publication, and disk retention.
-- [ ] Enable only timers whose live jobs exit successfully; leave dedicated failing-provider timers disabled with evidence.
-- [ ] Remove exact temporary diagnostic files from local ignored output and VPS spool/incoming locations.
+- [x] Run formatting, lint, typecheck, focused tests, the complete test suites, and the production build.
+- [x] Commit only the intended files, push `main`, and verify the GitHub build artifact for the pushed SHA.
+- [x] Deploy the exact pushed artifact through the restricted deploy account.
+- [x] Verify active SHA, three services, readiness, canonical/robots/sitemap/www redirect, anonymous desktop/mobile browser behavior, S3 artifact publication, and disk retention.
+- [x] Enable only timers whose live jobs exit successfully; leave dedicated failing-provider timers disabled with evidence.
+- [x] Remove exact temporary diagnostic files from local ignored output and VPS spool/incoming locations.
 
 ## Task 5: Complete GitHub automated deployment setup
 
