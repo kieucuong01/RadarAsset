@@ -17,6 +17,7 @@ from backtest.providers import (
 )
 from backtest.market_calendar import HOSE_TIMEZONE, is_session_day
 from backtest.catalog import FEEDS
+from backtest.daily_scope import load_daily_scope_symbols
 from ingest_market_data import load_database_url, psycopg_connection_url
 
 
@@ -438,11 +439,28 @@ def queue_market_ingestion_requests(
     organization_slug: str = "demo-workspace",
     user_email: str = "demo@radarasset.local",
     now: datetime | None = None,
+    allowed_symbols: Sequence[str] | None = None,
 ) -> int:
-    if command not in {"all", "daily", "hourly"}:
+    if command == "hourly":
+        raise ValueError("Intraday market ingestion is retired.")
+    if command not in {"all", "daily"}:
         raise ValueError("Unsupported bulk ingestion command.")
-    timeframe_filter = {"all": "all", "daily": "1d", "hourly": "1h"}[command]
     cutoffs = market_timeframe_stale_cutoffs(now or datetime.now(timezone.utc))
+    scope = tuple(
+        sorted(
+            dict.fromkeys(
+                symbol.strip().upper()
+                for symbol in (
+                    allowed_symbols
+                    if allowed_symbols is not None
+                    else load_daily_scope_symbols(connection)
+                )
+                if symbol.strip()
+            )
+        )
+    )
+    if not scope:
+        raise ValueError("Daily market ingestion scope is empty.")
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(
@@ -458,19 +476,16 @@ def queue_market_ingestion_requests(
                   LIMIT 1
                 ),
                 candidates AS (
-                  SELECT pi.id AS provider_instrument_id, timeframe.timeframe
+                  SELECT pi.id AS provider_instrument_id, '1d'::text AS timeframe
                   FROM provider_instruments AS pi
                   JOIN data_providers AS provider ON provider.id = pi.provider_id
                   JOIN assets AS asset ON asset.id = pi.asset_id
-                  CROSS JOIN LATERAL (
-                    VALUES ('1d'), ('1h')
-                  ) AS timeframe(timeframe)
                   LEFT JOIN LATERAL (
                     SELECT version.coverage_end
                     FROM datasets AS dataset
                     JOIN dataset_versions AS version ON version.dataset_id = dataset.id
                     WHERE dataset.asset_id = asset.id
-                      AND dataset.timeframe = timeframe.timeframe
+                      AND dataset.timeframe = '1d'
                       AND dataset.adjustment_policy = 'raw'
                       AND version.is_active = true
                     ORDER BY version.published_at DESC
@@ -480,18 +495,15 @@ def queue_market_ingestion_requests(
                     AND pi.is_active = true
                     AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free', 'msn-via-vnstock')
                     AND asset.market IN ('crypto_spot', 'vn_equity', 'metal_spot')
-                    AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
+                    AND UPPER(asset.symbol) = ANY(%s)
                     AND (
                       active_raw.coverage_end IS NULL
                       OR active_raw.coverage_end < CASE
-                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1h' THEN %s
-                        WHEN asset.market = 'crypto_spot' AND timeframe.timeframe = '1d' THEN %s
-                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1h' THEN %s
-                        WHEN asset.market = 'vn_equity' AND timeframe.timeframe = '1d' THEN %s
-                        WHEN asset.market = 'metal_spot' AND timeframe.timeframe = '1d' THEN %s
+                        WHEN asset.market = 'crypto_spot' THEN %s
+                        WHEN asset.market = 'vn_equity' THEN %s
+                        WHEN asset.market = 'metal_spot' THEN %s
                       END
                     )
-                    AND (%s = 'all' OR %s = timeframe.timeframe)
                 )
                 INSERT INTO market_ingestion_requests (
                   id, organization_id, user_id, provider_instrument_id, timeframe,
@@ -518,13 +530,10 @@ def queue_market_ingestion_requests(
                 (
                     user_email,
                     organization_slug,
-                    cutoffs[("crypto_spot", "1h")],
+                    list(scope),
                     cutoffs[("crypto_spot", "1d")],
-                    cutoffs[("vn_equity", "1h")],
                     cutoffs[("vn_equity", "1d")],
                     cutoffs[("metal_spot", "1d")],
-                    timeframe_filter,
-                    timeframe_filter,
                 ),
             )
             return cursor.rowcount

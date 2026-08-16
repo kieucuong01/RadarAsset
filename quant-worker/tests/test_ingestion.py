@@ -8,6 +8,7 @@ import pytest
 
 from backtest.ingestion import (
     IngestionSelection,
+    certified_active_rows,
     ingestion_window,
     run_ingestion,
 )
@@ -157,6 +158,36 @@ class FakeRepository:
 
 def selection(asset: str, timeframe: str = "1h") -> IngestionSelection:
     return IngestionSelection(asset=asset, timeframe=timeframe)
+
+
+def test_vn_daily_publication_keeps_only_calendar_certified_active_history() -> None:
+    rows = (
+        Bar(
+            asset="HPG",
+            timestamp=datetime(2023, 12, 29, tzinfo=timezone.utc),
+            timeframe="1d",
+            open=Decimal("100"),
+            high=Decimal("101"),
+            low=Decimal("99"),
+            close=Decimal("100"),
+            volume=Decimal("10"),
+            source="legacy-live",
+        ),
+        Bar(
+            asset="HPG",
+            timestamp=datetime(2024, 1, 2, tzinfo=timezone.utc),
+            timeframe="1d",
+            open=Decimal("100"),
+            high=Decimal("101"),
+            low=Decimal("99"),
+            close=Decimal("100"),
+            volume=Decimal("10"),
+            source="certified-live",
+        ),
+    )
+
+    assert certified_active_rows(rows, market="vn_equity") == (rows[1],)
+    assert certified_active_rows(rows, market="crypto_spot") == rows
 
 
 def test_provider_failure_preserves_active_version_and_other_feed_succeeds() -> None:
@@ -320,7 +351,7 @@ def test_ingestion_windows_use_initial_backfill_and_incremental_overlap() -> Non
     )
     incremental = ingestion_window("1h", now=NOW, active=snapshot("BTC"))
 
-    assert initial.fetch_start == NOW - timedelta(days=3653)
+    assert initial.fetch_start == datetime(2024, 1, 1, tzinfo=timezone.utc)
     assert initial.overlap_start == initial.fetch_start
     assert crypto_initial.fetch_start == datetime(2017, 1, 1, tzinfo=timezone.utc)
     assert metal_daily_initial.fetch_start == datetime(1999, 6, 3, tzinfo=timezone.utc)

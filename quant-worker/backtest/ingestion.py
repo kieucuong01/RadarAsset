@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol
 
 from .catalog import FEEDS
+from .market_calendar import HOSE_VERIFIED_FROM, timestamp_to_market_date
 from .models import Bar
 from .providers import INTERVALS, ProviderUnavailableError
 from .publication import (
@@ -107,6 +108,10 @@ def ingestion_window(
         raise ValueError("Unsupported ingestion timeframe.")
     if market == "crypto_spot":
         initial_start = datetime(2017, 1, 1, tzinfo=timezone.utc)
+    elif market == "vn_equity":
+        initial_start = datetime.combine(
+            HOSE_VERIFIED_FROM, datetime.min.time(), tzinfo=timezone.utc
+        )
     elif market == "metal_spot":
         initial_start = (
             datetime(2003, 5, 5, tzinfo=timezone.utc)
@@ -138,6 +143,18 @@ def ingestion_window(
         fetch_start=fetch_start,
         fetch_end=now,
         overlap_start=fetch_start,
+    )
+
+
+def certified_active_rows(
+    rows: tuple[Bar, ...], *, market: str
+) -> tuple[Bar, ...]:
+    if market != "vn_equity":
+        return rows
+    return tuple(
+        row
+        for row in rows
+        if timestamp_to_market_date(row.timestamp, market) >= HOSE_VERIFIED_FROM
     )
 
 
@@ -284,7 +301,13 @@ def _run_live_selection(
             now=now,
         )
         fetched_row_count = len(incoming)
-        active_rows = () if active is None or active.is_fixture else active.rows
+        active_rows = (
+            ()
+            if active is None or active.is_fixture
+            else certified_active_rows(
+                active.rows, market=FEEDS[selection.asset].market
+            )
+        )
         merged = merge_snapshot(
             active_rows,
             incoming,

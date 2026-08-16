@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 import psycopg
 
-from backtest.ingestion import ingestion_window
+from backtest.ingestion import certified_active_rows, ingestion_window
 from backtest.ingestion_repository import (
     PostgresRequestRepository,
     QueuedIngestionRequest,
@@ -126,7 +126,7 @@ def _prepare_request_dataset(
         rows = incoming
     else:
         rows = merge_snapshot(
-            active.rows,
+            certified_active_rows(active.rows, market=request.market),
             incoming,
             overlap_start=window.overlap_start,
         )

@@ -346,7 +346,7 @@ def test_request_worker_heartbeat_and_lease_renewal_round_trip() -> None:
         connection.close()
 
 
-def test_due_queue_skips_fresh_and_enqueues_stale_crypto_hourly() -> None:
+def test_due_queue_skips_fresh_and_enqueues_stale_scoped_crypto_daily() -> None:
     suffix = uuid4().hex[:8]
     organization_id = str(uuid4())
     user_id = str(uuid4())
@@ -397,7 +397,7 @@ def test_due_queue_skips_fresh_and_enqueues_stale_crypto_hourly() -> None:
                 (instrument_id, provider_id, asset_id, f"QD{suffix}USDT"),
             )
             cursor.execute(
-                "INSERT INTO datasets (id, asset_id, timeframe, adjustment_policy, created_at) VALUES (%s, %s, '1h', 'raw', NOW())",
+                "INSERT INTO datasets (id, asset_id, timeframe, adjustment_policy, created_at) VALUES (%s, %s, '1d', 'raw', NOW())",
                 (dataset_id, asset_id),
             )
             cursor.execute(
@@ -419,10 +419,11 @@ def test_due_queue_skips_fresh_and_enqueues_stale_crypto_hourly() -> None:
 
         assert queue_market_ingestion_requests(
             connection,
-            command="hourly",
+            command="daily",
             organization_slug=org_slug,
             user_email=email,
             now=now,
+            allowed_symbols=(f"QD{suffix}",),
         ) >= 0
         with connection.cursor() as cursor:
             cursor.execute(
@@ -432,15 +433,16 @@ def test_due_queue_skips_fresh_and_enqueues_stale_crypto_hourly() -> None:
             assert cursor.fetchone()["count"] == 0
             cursor.execute(
                 "UPDATE dataset_versions SET coverage_end = %s WHERE id = %s",
-                (datetime(2026, 8, 14, 5, tzinfo=timezone.utc), version_id),
+                (datetime(2026, 8, 11, 5, tzinfo=timezone.utc), version_id),
             )
 
         assert queue_market_ingestion_requests(
             connection,
-            command="hourly",
+            command="daily",
             organization_slug=org_slug,
             user_email=email,
             now=now,
+            allowed_symbols=(f"QD{suffix}",),
         ) >= 1
         with connection.cursor() as cursor:
             cursor.execute(

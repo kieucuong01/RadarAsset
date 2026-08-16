@@ -1,6 +1,6 @@
 param(
-    [ValidateSet("all", "hourly", "daily")]
-    [string]$Command = "all",
+    [ValidateSet("all", "daily")]
+    [string]$Command = "daily",
     [string]$PythonExecutable = "python",
     [switch]$DryRun,
     [switch]$DrainRequests,

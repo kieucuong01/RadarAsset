@@ -177,20 +177,24 @@ panel displayed `bitinfocharts-top-addresses` as `validated` and `FRESH`. The se
 
 ## Scheduler matrix
 
-The repository provides commands but does not create OS scheduled tasks.
+The repository includes an explicit Windows Scheduled Task installer at
+`deploy/windows/install-quant-ingestion-tasks.ps1`. Installation remains a deployment action;
+the web application never creates or changes OS tasks.
 
-For the daily asset-opinion path, use the composed fail-closed runner. It refreshes
-only VNINDEX, FPT, the curated crypto universe and XAU, runs enabled Smart Insights
-daily collectors and derived pipelines, then regenerates every member briefing
-only when both data stages succeed. It intentionally does not expand to every
-dynamically discovered HOSE instrument or unrelated backtest feed:
+For the daily asset-opinion path, use the composed fail-closed runner. Its shared
+daily scope is the curated decision universe plus assets currently present in a
+user's holdings or watchlist. It queues only `1d` datasets, then runs corporate-action
+and adjusted-data publication, enabled Smart Insights daily collectors and derived
+pipelines, and every member briefing. It does not pre-ingest the full discovered HOSE
+catalog. Historical `1h` versions remain immutable but are not queued and do not gate
+daily readiness:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/refresh-asset-opinions.ps1
 ```
 
-The Windows task installer uses this runner for the daily task while retaining
-the lightweight market-data-only runner for the hourly task.
+The Windows task installer uses this runner for the daily task. The four-hourly task
+collects existing derivatives pressure metrics only; it does not ingest intraday price bars.
 
 | Job                                            | Recommended trigger               | Command                                                             |
 | ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |

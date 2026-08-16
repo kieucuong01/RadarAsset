@@ -1,11 +1,28 @@
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psycopg
+import pytest
+
+from ingest_market_data import psycopg_connection_url
 from verify_market_ingestion import SchedulerAlreadyRunning, finish_scheduler_run, recover_stale_scheduler_runs, retire_out_of_scope_requests, start_scheduler_run, verify_health
-from verify_market_ingestion import health_json_output
+from verify_market_ingestion import health_json_output, load_health
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_daily_health_query_executes_without_ambiguous_join_columns() -> None:
+    database_url = os.getenv("TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("TEST_DATABASE_URL is required for PostgreSQL integration tests.")
+
+    with psycopg.connect(psycopg_connection_url(database_url)) as connection:
+        health = load_health(connection, ("BTC",))
+
+    assert health["missing_dataset_count"] >= 0
+    assert health["stale_dataset_count"] >= 0
 
 
 def test_health_verifier_keeps_recent_provider_failures_as_diagnostics() -> None:
@@ -115,25 +132,16 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
         encoding="utf-8"
     )
 
-    market = wrapper.index('ingest_market_data.py')
+    market = wrapper.index('run-market-ingestion.ps1')
     sources = wrapper.index('run-smart-insights.ps1')
     briefing = wrapper.index('"briefing"')
     assert market < sources < briefing
-    assert '$taskAssets = @(' in wrapper
-    assert '"VNINDEX"' in wrapper
-    assert '"VN30"' in wrapper
-    assert '"FPT"' in wrapper
-    assert '"BTC"' in wrapper
-    assert '"XAU"' in wrapper
-    assert '"XMR"' not in wrapper
-    assert '"--asset"' in wrapper
-    assert '"--timeframe" "1d"' in wrapper
-    assert '"--env-file"' in wrapper
-    assert 'run-market-ingestion.ps1' not in wrapper
+    assert '$taskAssets = @(' not in wrapper
+    assert '-Command "daily"' in wrapper
+    assert '-DrainRequests' in wrapper
     assert '-AllMemberships' in wrapper
     assert '-Schedule "calendar-current"' in wrapper
-    assert '"--retire-out-of-scope"' in wrapper
-    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 5
+    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 4
 
     installer = (
         ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1"
@@ -172,8 +180,10 @@ def test_post_run_verifier_checks_scheduler_backlog_and_data_freshness() -> None
     assert "market_ingestion_requests" in source
     assert "dataset_versions" in source
     assert "missing_bar_count" in source
-    assert "DISTINCT ON (instrument.asset_id, timeframe.timeframe)" in source
-    assert "DISTINCT ON (dataset.asset_id, dataset.timeframe)" in source
+    assert "load_daily_scope_symbols" in source
+    assert "'1d'::text AS timeframe" in source
+    assert "CROSS JOIN (VALUES ('1d'), ('1h'))" not in source
+    assert "DISTINCT ON (dataset.asset_id)" in source
     assert "Exit 1" in wrapper
     assert '.venv\\Scripts\\python.exe' in wrapper
 

@@ -38,6 +38,12 @@ def test_xau_calendar_is_24_by_5_and_crypto_is_24_by_7() -> None:
     assert is_session_day(saturday, "crypto_spot")
 
 
+def test_xau_calendar_excludes_observed_full_market_holidays() -> None:
+    assert not is_session_day(date(2025, 4, 18), "metal_spot")
+    assert not is_session_day(date(2020, 12, 25), "metal_spot")
+    assert not is_session_day(date(2021, 1, 1), "metal_spot")
+
+
 def test_vietnam_market_date_uses_asia_ho_chi_minh_not_utc() -> None:
     assert timestamp_to_market_date(
         datetime(2025, 2, 3, 17, 30, tzinfo=timezone.utc), "vn_equity"

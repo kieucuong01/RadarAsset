@@ -24,21 +24,21 @@ NOW = datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
 
 
 def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
-    hourly = build_selections("hourly", asset=None, timeframe=None)
     daily = build_selections("daily", asset=None, timeframe=None)
     all_selections = build_selections("all", asset=None, timeframe=None)
-    hourly_symbols = [symbol for symbol in FEEDS if symbol not in {"VNINDEX", "VN30"}]
 
-    assert [(item.asset, item.timeframe) for item in hourly] == [
-        (symbol, "1h") for symbol in hourly_symbols
-    ]
     assert [(item.asset, item.timeframe) for item in daily] == [
         (symbol, "1d") for symbol in FEEDS
     ]
     assert [(item.asset, item.timeframe) for item in all_selections] == [
-        *[(symbol, "1d") for symbol in FEEDS],
-        *[(symbol, "1h") for symbol in hourly_symbols],
+        (symbol, "1d") for symbol in FEEDS
     ]
+
+    with pytest.raises(ValueError, match="retired"):
+        build_selections("hourly", asset=None, timeframe=None)
+
+    with pytest.raises(ValueError, match="retired"):
+        build_selections("all", asset="BTC", timeframe="1h")
 
 
 def test_main_returns_one_for_an_incomplete_single_feed_selection(capsys: Any) -> None:
@@ -51,7 +51,7 @@ def test_main_returns_one_for_an_incomplete_single_feed_selection(capsys: Any) -
     }
 
 
-def test_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -> None:
+def test_daily_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -> None:
     captured: list[Any] = []
 
     def fake_run(selections: list[Any], **kwargs: Any):
@@ -71,22 +71,21 @@ def test_dry_run_emits_sanitized_json_and_propagates_partial_exit(capsys: Any) -
         )
 
     exit_code = main(
-        ["hourly", "--dry-run"],
+        ["daily", "--dry-run"],
         now=NOW,
         run_ingestion_fn=fake_run,
         provider_factory=object(),
     )
 
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    hourly_symbols = [symbol for symbol in FEEDS if symbol not in {"VNINDEX", "VN30"}]
     assert exit_code == 2
     assert [(item.asset, item.timeframe) for item in captured] == [
-        (symbol, "1h") for symbol in hourly_symbols
+        (symbol, "1d") for symbol in FEEDS
     ]
     assert lines[-1] == {
         "status": "partial_failure",
-        "selected": len(hourly_symbols),
-        "succeeded": len(hourly_symbols) - 1,
+        "selected": len(FEEDS),
+        "succeeded": len(FEEDS) - 1,
         "degraded": 1,
     }
     assert "errorMessage" not in lines[0]

@@ -44,6 +44,33 @@ _VN_HOLIDAYS = {
     date(2026, 9, 2),
 }
 
+# Full-session OTC gold closures observed in the certified Dukascopy daily
+# history. Partial sessions remain valid bars and are intentionally retained.
+_XAU_FULL_SESSION_HOLIDAYS = frozenset(
+    {
+        date(2013, 3, 29),
+        date(2013, 12, 25),
+        date(2014, 4, 18),
+        date(2015, 4, 3),
+        date(2015, 12, 25),
+        date(2016, 1, 1),
+        date(2016, 3, 25),
+        date(2017, 4, 14),
+        date(2018, 3, 30),
+        date(2019, 4, 19),
+        date(2020, 4, 10),
+        date(2020, 12, 25),
+        date(2021, 1, 1),
+        date(2021, 4, 2),
+        date(2021, 12, 24),
+        date(2022, 4, 15),
+        date(2023, 4, 7),
+        date(2024, 3, 29),
+        date(2025, 4, 18),
+        date(2026, 4, 3),
+    }
+)
+
 _ANNUALIZATION = {
     ("vn_equity", "1d"): 252,
     ("vn_equity", "1h"): 1_260,
@@ -78,10 +105,11 @@ MARKET_CALENDARS = {
         market="metal_spot",
         venue="OTC",
         timezone_name="UTC",
-        version="xau-24x5-rollover-v1",
+        version="xau-24x5-full-closures-2013-2026-v2",
         certified_from=None,
         certified_to=None,
         weekdays=frozenset(range(5)),
+        closure_dates=_XAU_FULL_SESSION_HOLIDAYS,
         rollover_utc_hour=22,
     ),
 }

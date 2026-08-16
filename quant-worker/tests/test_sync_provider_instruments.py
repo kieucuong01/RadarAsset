@@ -86,22 +86,29 @@ class FakeConnection:
         return self.cursor_instance
 
 
-def test_bulk_queue_selects_supported_timeframes_for_all_synced_instruments() -> None:
+def test_bulk_queue_selects_only_daily_assets_in_the_decision_scope() -> None:
     connection = FakeConnection()
 
-    count = queue_market_ingestion_requests(connection, command="all")
+    count = queue_market_ingestion_requests(
+        connection,
+        command="daily",
+        allowed_symbols=("BTC", "FPT", "XAU"),
+    )
 
     assert count == 7
     query, params = connection.cursor_instance.queries[0]
     assert "provider_instruments" in query
     assert "market_ingestion_requests" in query
     assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
-    assert params[-2:] == ("all", "all")
+    assert params[2] == ["BTC", "FPT", "XAU"]
     assert "dukascopy-public" in query
     assert "NOT (provider.code = 'msn-via-vnstock'" not in query
     assert "active_raw.coverage_end IS NULL" in query
     assert "pg_advisory_xact_lock" in query
     assert "ON CONFLICT DO NOTHING" in query
+    assert "'1d'::text AS timeframe" in query
+    assert "'1h'" not in query
+    assert "UPPER(asset.symbol) = ANY(%s)" in query
 
 
 def test_catalog_sync_preserves_stale_instruments_and_snapshots_listing_state() -> None:
@@ -212,12 +219,14 @@ def test_incomplete_catalog_cannot_deactivate_existing_provider_universe() -> No
 def test_bulk_queue_ignores_inactive_catalog_entries() -> None:
     connection = FakeConnection()
 
-    queue_market_ingestion_requests(connection, command="daily")
+    queue_market_ingestion_requests(
+        connection, command="daily", allowed_symbols=("BTC", "FPT")
+    )
 
     query, params = connection.cursor_instance.queries[0]
     assert "pi.is_active = true" in query
     assert params[0:2] == ("demo@radarasset.local", "demo-workspace")
-    assert params[-2:] == ("1d", "1d")
+    assert params[2] == ["BTC", "FPT"]
 
 
 def test_due_cutoffs_follow_closed_crypto_and_hose_sessions() -> None:
@@ -246,17 +255,19 @@ def test_due_cutoffs_use_previous_hose_session_on_market_holiday() -> None:
     )
 
 
-def test_bulk_queue_excludes_unsupported_xau_hourly_identity() -> None:
+def test_bulk_queue_rejects_retired_hourly_schedule() -> None:
     connection = FakeConnection()
 
-    queue_market_ingestion_requests(
-        connection,
-        command="hourly",
-        now=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
-    )
-
-    query, _params = connection.cursor_instance.queries[0]
-    assert "NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')" in query
+    try:
+        queue_market_ingestion_requests(
+            connection,
+            command="hourly",
+            now=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+        )
+    except ValueError as error:
+        assert str(error) == "Intraday market ingestion is retired."
+    else:
+        raise AssertionError("hourly queue must be retired")
 
 
 def test_catalog_cli_uses_configured_service_tenant_for_scheduled_queue(monkeypatch) -> None:

@@ -11,7 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ingest_market_data import load_database_url, psycopg_connection_url
-from backtest.catalog import FEEDS
+from backtest.daily_scope import load_daily_scope_symbols
 
 
 class SchedulerAlreadyRunning(RuntimeError):
@@ -21,28 +21,33 @@ class SchedulerAlreadyRunning(RuntimeError):
 
 
 HEALTH_SQL = """
-WITH expected AS (
-  SELECT DISTINCT ON (instrument.asset_id, timeframe.timeframe)
-         instrument.asset_id, timeframe.timeframe
+WITH scope AS MATERIALIZED (
+  SELECT DISTINCT instrument.asset_id
 FROM provider_instruments instrument
   JOIN data_providers provider ON provider.id = instrument.provider_id
   JOIN assets asset ON asset.id = instrument.asset_id
-  CROSS JOIN (VALUES ('1d'), ('1h')) AS timeframe(timeframe)
   WHERE instrument.is_active = true AND provider.status = 'active'
-    AND NOT (asset.market = 'metal_spot' AND timeframe.timeframe = '1h')
+    AND provider.code IN ('binance-public', 'dukascopy-public', 'vnstock-vci-free')
+    AND UPPER(asset.symbol) = ANY(%s)
+), expected AS (
+  SELECT asset_id, '1d'::text AS timeframe FROM scope
 ), active_versions AS (
-  SELECT DISTINCT ON (dataset.asset_id, dataset.timeframe)
+  SELECT DISTINCT ON (dataset.asset_id)
          dataset.asset_id, dataset.timeframe, version.coverage_end,
          version.missing_bar_count
   FROM datasets dataset
   JOIN dataset_versions version ON version.dataset_id = dataset.id
-  WHERE dataset.adjustment_policy = 'raw' AND version.is_active = true
+  JOIN scope ON scope.asset_id = dataset.asset_id
+  WHERE dataset.timeframe = '1d'
+    AND dataset.adjustment_policy = 'raw' AND version.is_active = true
     AND version.quality_status IN ('passed', 'warning')
-  ORDER BY dataset.asset_id, dataset.timeframe, version.published_at DESC
+  ORDER BY dataset.asset_id, version.published_at DESC
 ), backlog AS (
-  SELECT COUNT(*)::int AS count, MIN(created_at) AS oldest_at
-  FROM market_ingestion_requests
-  WHERE status IN ('queued', 'running')
+  SELECT COUNT(*)::int AS count, MIN(request.created_at) AS oldest_at
+  FROM market_ingestion_requests request
+  JOIN provider_instruments instrument ON instrument.id = request.provider_instrument_id
+  JOIN scope ON scope.asset_id = instrument.asset_id
+  WHERE request.timeframe = '1d' AND request.status IN ('queued', 'running')
 ), failures AS (
   SELECT COUNT(*)::int AS count
   FROM market_ingestion_requests
@@ -54,11 +59,8 @@ FROM provider_instruments instrument
 SELECT
   COUNT(*) FILTER (WHERE active.asset_id IS NULL)::int AS missing_dataset_count,
   COUNT(*) FILTER (
-    WHERE active.asset_id IS NOT NULL AND active.coverage_end <
-      CASE WHEN expected.timeframe = '1h'
-        THEN NOW() - INTERVAL '3 hours'
-        ELSE NOW() - INTERVAL '3 days'
-      END
+    WHERE active.asset_id IS NOT NULL
+      AND active.coverage_end < NOW() - INTERVAL '3 days'
   )::int AS stale_dataset_count,
   COALESCE(SUM(active.missing_bar_count), 0)::bigint AS missing_bar_count,
   backlog.count AS backlog_count,
@@ -79,9 +81,26 @@ GROUP BY backlog.count, backlog.oldest_at, failures.count, worker.heartbeat_at
 """
 
 
-def load_health(connection: Any) -> dict[str, Any]:
+def load_health(
+    connection: Any, allowed_symbols: Sequence[str] | None = None
+) -> dict[str, Any]:
+    scope = tuple(
+        sorted(
+            dict.fromkeys(
+                symbol.strip().upper()
+                for symbol in (
+                    allowed_symbols
+                    if allowed_symbols is not None
+                    else load_daily_scope_symbols(connection)
+                )
+                if symbol.strip()
+            )
+        )
+    )
+    if not scope:
+        raise ValueError("Daily market ingestion scope is empty.")
     with connection.cursor(row_factory=dict_row) as cursor:
-        cursor.execute(HEALTH_SQL)
+        cursor.execute(HEALTH_SQL, (list(scope),))
         row = cursor.fetchone()
     if row is None:
         raise RuntimeError("Market ingestion health query returned no result.")
@@ -122,7 +141,10 @@ def retire_out_of_scope_requests(
             JOIN assets AS asset ON asset.id = instrument.asset_id
             WHERE request.provider_instrument_id = instrument.id
               AND request.status IN ('queued', 'running')
-              AND NOT (UPPER(asset.symbol) = ANY(%s))
+              AND (
+                NOT (UPPER(asset.symbol) = ANY(%s))
+                OR request.timeframe <> '1d'
+              )
             """,
             (list(normalized),),
         )
@@ -240,7 +262,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--env-file", default=".env.local")
     parser.add_argument("--maximum-backlog-age-hours", type=int, default=6)
     parser.add_argument("--maximum-recent-failures", type=int, default=0)
-    parser.add_argument("--start-command", choices=("all", "hourly", "daily"))
+    parser.add_argument("--start-command", choices=("all", "daily"))
     parser.add_argument("--finish-run")
     parser.add_argument("--finish-status", choices=("succeeded", "failed"))
     parser.add_argument("--queued-count", type=int, default=0)
@@ -257,7 +279,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         url = psycopg_connection_url(load_database_url(Path(args.env_file)))
         with psycopg.connect(url) as connection:
             if args.retire_out_of_scope:
-                retired = retire_out_of_scope_requests(connection, tuple(FEEDS))
+                retired = retire_out_of_scope_requests(
+                    connection, load_daily_scope_symbols(connection)
+                )
                 print(json.dumps({"status": "succeeded", "retired": retired}))
                 return 0
             if args.start_command:

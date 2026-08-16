@@ -1,6 +1,10 @@
 from datetime import date
 
-from publish_adjusted_datasets import _coverage_contains_raw, _deactivate_adjusted_dataset
+from publish_adjusted_datasets import (
+    _coverage_contains_raw,
+    _deactivate_adjusted_dataset,
+    _load_candidates,
+)
 
 
 class Cursor:
@@ -25,6 +29,22 @@ class Connection:
         return self.value
 
 
+class CandidateCursor(Cursor):
+    def __init__(self):
+        self.rows = [{"symbol": "FPT", "timeframe": "1d"}]
+
+    def fetchall(self):
+        return self.rows
+
+
+class CandidateConnection:
+    def __init__(self):
+        self.value = CandidateCursor()
+
+    def cursor(self, **_kwargs):
+        return self.value
+
+
 def test_unsafe_adjusted_dataset_is_deactivated_by_asset_and_timeframe() -> None:
     connection = Connection()
 
@@ -42,3 +62,14 @@ def test_action_coverage_dates_must_contain_raw_range() -> None:
 
     assert not _coverage_contains_raw(action_start, action_end, raw_start, raw_end)
     assert _coverage_contains_raw(raw_start, raw_end, raw_start, raw_end)
+
+
+def test_adjusted_candidates_are_limited_to_daily_scope_and_daily_timeframe() -> None:
+    connection = CandidateConnection()
+
+    candidates = _load_candidates(connection, ("FPT", "VCB"))
+
+    assert candidates == [{"symbol": "FPT", "timeframe": "1d"}]
+    assert "dataset.timeframe = '1d'" in connection.value.query
+    assert "asset.symbol = ANY(%s::text[])" in connection.value.query
+    assert connection.value.params == (["FPT", "VCB"],)

@@ -14,6 +14,8 @@ from psycopg.rows import dict_row
 from backtest.adjusted_publication import build_adjusted_publication
 from backtest.adjustments import AdjustmentUnavailable
 from backtest.corporate_actions import CorporateActionRecord
+from backtest.daily_scope import load_daily_scope_symbols
+from backtest.ingestion import certified_active_rows
 from backtest.publication import PostgresDatasetPublisher, prepare_dataset_publication
 from ingest_market_data import load_database_url, psycopg_connection_url
 
@@ -114,6 +116,27 @@ def _coverage_contains_raw(
     )
 
 
+def _load_candidates(connection: Any, symbols: Sequence[str]) -> list[dict[str, Any]]:
+    if not symbols:
+        return []
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """
+            SELECT asset.symbol, dataset.timeframe
+            FROM assets AS asset
+            JOIN datasets AS dataset ON dataset.asset_id = asset.id
+            JOIN dataset_versions AS version ON version.dataset_id = dataset.id AND version.is_active = true
+            WHERE asset.market = 'vn_equity'
+              AND dataset.adjustment_policy = 'raw'
+              AND dataset.timeframe = '1d'
+              AND asset.symbol = ANY(%s::text[])
+            ORDER BY asset.symbol, dataset.timeframe
+            """,
+            (list(symbols),),
+        )
+        return list(cursor.fetchall())
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Publish immutable total-return VN datasets.")
     parser.add_argument("--env-file", default=".env.local")
@@ -127,20 +150,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     blocked_reasons = {"coverage": 0, "unverified": 0, "quality": 0}
     with psycopg.connect(url, autocommit=False) as connection:
         publisher = PostgresDatasetPublisher(connection)
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT asset.symbol, dataset.timeframe
-                FROM assets AS asset
-                JOIN datasets AS dataset ON dataset.asset_id = asset.id
-                JOIN dataset_versions AS version ON version.dataset_id = dataset.id AND version.is_active = true
-                WHERE asset.market = 'vn_equity' AND dataset.adjustment_policy = 'raw'
-                  AND (%s::text[] = '{}' OR asset.symbol = ANY(%s::text[]))
-                ORDER BY asset.symbol, dataset.timeframe
-                """,
-                (args.symbol, args.symbol),
-            )
-            candidates = cursor.fetchall()
+        daily_symbols = load_daily_scope_symbols(connection)
+        requested = {str(symbol).strip().upper() for symbol in args.symbol if str(symbol).strip()}
+        allowed_symbols = tuple(
+            symbol for symbol in daily_symbols if not requested or symbol in requested
+        )
+        candidates = _load_candidates(connection, allowed_symbols)
         for candidate in candidates:
             symbol = str(candidate["symbol"])
             timeframe = str(candidate["timeframe"])
@@ -149,8 +164,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if raw is None:
                 skipped += 1
                 continue
-            raw_start = raw.rows[0].timestamp.date()
-            raw_end = raw.rows[-1].timestamp.date()
+            active_rows = certified_active_rows(raw.rows, market="vn_equity")
+            if not active_rows:
+                skipped += 1
+                continue
+            raw_start = active_rows[0].timestamp.date()
+            raw_end = active_rows[-1].timestamp.date()
             if not complete or not _coverage_contains_raw(
                 action_start, action_end, raw_start, raw_end
             ):
@@ -161,7 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 continue
             metadata = raw.source_metadata
             prepared_raw = prepare_dataset_publication(
-                list(raw.rows),
+                list(active_rows),
                 market="vn_equity",
                 provider_code=str(metadata.get("provider", "vnstock-vci-free")),
                 provider_name="Vnstock VCI Free",

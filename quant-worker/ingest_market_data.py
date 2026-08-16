@@ -52,10 +52,6 @@ def read_bounded_environment_integer(
     return value
 
 
-def supports_scheduled_timeframe(asset: str, timeframe: str) -> bool:
-    return not (asset in {"VNINDEX", "VN30"} and timeframe == "1h")
-
-
 def load_database_url(env_file: Path) -> str:
     existing = os.getenv("DATABASE_URL")
     if existing:
@@ -101,34 +97,23 @@ def build_selections(
     if (asset is None) != (timeframe is None):
         raise ValueError("Single-feed ingestion requires both asset and timeframe.")
     if asset is not None and timeframe is not None:
+        if timeframe != "1d":
+            raise ValueError("Intraday market ingestion is retired.")
         if command != "all":
             raise ValueError("Single-feed selection cannot be combined with a schedule command.")
         return [IngestionSelection(asset, timeframe)]
     if command == "hourly":
-        return [
-            IngestionSelection(symbol, "1h")
-            for symbol in FEEDS
-            if supports_scheduled_timeframe(symbol, "1h")
-        ]
-    if command == "daily":
+        raise ValueError("Intraday market ingestion is retired.")
+    if command in {"daily", "all"}:
         return [IngestionSelection(symbol, "1d") for symbol in FEEDS]
-    if command == "all":
-        return [
-            IngestionSelection(symbol, scheduled_timeframe)
-            for scheduled_timeframe in ("1d", "1h")
-            for symbol in FEEDS
-            if supports_scheduled_timeframe(symbol, scheduled_timeframe)
-        ]
     raise ValueError("Unsupported ingestion command.")
 
 
 def _argument_parser() -> StrictArgumentParser:
     parser = StrictArgumentParser(description="Ingest research-only market datasets.")
-    parser.add_argument(
-        "command", nargs="?", choices=("all", "hourly", "daily"), default="all"
-    )
+    parser.add_argument("command", nargs="?", choices=("all", "daily"), default="all")
     parser.add_argument("--asset", choices=tuple(FEEDS))
-    parser.add_argument("--timeframe", choices=("1h", "1d"))
+    parser.add_argument("--timeframe", choices=("1d",))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--env-file", default=".env.local")
     return parser
