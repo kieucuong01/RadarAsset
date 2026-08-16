@@ -48,11 +48,11 @@ function isWithin(root, candidate) {
   );
 }
 
-async function copyTree(source, destination, { filter, allowedSymlinkRoot } = {}) {
+async function copyTree(source, destination, { filter, allowedSymlinkRoots = [] } = {}) {
   if (!(await pathExists(source))) return;
   await cp(source, destination, {
     recursive: true,
-    dereference: Boolean(allowedSymlinkRoot),
+    dereference: allowedSymlinkRoots.length > 0,
     errorOnExist: true,
     force: false,
     filter: async (entrySource) => {
@@ -64,7 +64,7 @@ async function copyTree(source, destination, { filter, allowedSymlinkRoot } = {}
       const details = await lstat(entrySource);
       if (details.isSymbolicLink()) {
         const target = await realpath(entrySource);
-        if (!allowedSymlinkRoot || !isWithin(allowedSymlinkRoot, target)) {
+        if (!allowedSymlinkRoots.some((root) => isWithin(root, target))) {
           throw new Error(`Symbolic link target is outside the allowed release root: ${relative}`);
         }
         return true;
@@ -123,7 +123,10 @@ export async function assembleRelease({ repoRoot, outputRoot, gitSha, builtAt })
   await mkdir(output, { recursive: true });
 
   await copyTree(path.join(root, ".next", "standalone"), path.join(output, "web"), {
-    allowedSymlinkRoot: path.join(root, "node_modules"),
+    allowedSymlinkRoots: [
+      path.join(root, "node_modules"),
+      path.join(root, ".next", "standalone", "node_modules"),
+    ],
   });
   await copyTree(path.join(root, ".next", "static"), path.join(output, "web", ".next", "static"));
   await copyTree(path.join(root, "public"), path.join(output, "web", "public"));

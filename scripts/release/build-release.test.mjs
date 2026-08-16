@@ -121,6 +121,39 @@ describe("production release assembler", () => {
     await expect(readFile(path.join(copied, "index.js"), "utf8")).resolves.toBe("traced runtime");
   });
 
+  it("materializes Linux Next.js links within standalone node_modules", async () => {
+    const repoRoot = await fakeRepository();
+    const outputRoot = path.join(repoRoot, "dist", "release");
+    const packageRoot = path.join(repoRoot, ".next", "standalone", "node_modules", "linux-runtime");
+    const tracedLink = path.join(
+      repoRoot,
+      ".next",
+      "standalone",
+      ".next",
+      "node_modules",
+      "linux-runtime",
+    );
+    await write(packageRoot, "index.js", "linux runtime");
+    await mkdir(path.dirname(tracedLink), { recursive: true });
+    try {
+      await symlink(packageRoot, tracedLink, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EPERM") return;
+      throw error;
+    }
+
+    await assembleRelease({
+      repoRoot,
+      outputRoot,
+      gitSha: "a".repeat(40),
+      builtAt: "2026-08-16T00:00:00.000Z",
+    });
+
+    const copied = path.join(outputRoot, "web", ".next", "node_modules", "linux-runtime");
+    expect((await lstat(copied)).isSymbolicLink()).toBe(false);
+    await expect(readFile(path.join(copied, "index.js"), "utf8")).resolves.toBe("linux runtime");
+  });
+
   it("rejects a Next.js traced link outside repository node_modules", async () => {
     const repoRoot = await fakeRepository();
     const outputRoot = path.join(repoRoot, "dist", "release");
