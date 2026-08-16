@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { CryptoQuantPulseTabs } from "@/components/smart-insights/CryptoQuantPulseTabs";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
+import { formatMarketMetric } from "@/components/smart-insights/market-metric-value";
 import {
   MacroQuantPulseTabs,
   type MacroPulseState,
@@ -205,8 +206,7 @@ function MetricGrid({
                   <FreshnessBadge state={metric.freshness} />
                 </div>
                 <p className="font-mono text-xl font-semibold">
-                  {metric.value}{" "}
-                  <span className="text-xs font-normal text-muted-foreground">{metric.unit}</span>
+                  {formatMarketMetric(metric, locale)}
                 </p>
                 <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span className="truncate">

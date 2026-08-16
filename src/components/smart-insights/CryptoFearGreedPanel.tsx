@@ -14,6 +14,7 @@ import {
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatNumber } from "@/lib/financial-format";
 
 export type CryptoPanelMode = "loading" | "system" | "sample" | "unavailable";
 
@@ -93,7 +94,7 @@ export function CryptoFearGreedPanel({
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
-        <FearGreedGauge value={latest.value} label={latest.classification} />
+        <FearGreedGauge value={latest.value} label={latest.classification} locale={locale} />
         <div className="h-[280px] min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={visible.series} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
@@ -111,10 +112,21 @@ export function CryptoFearGreedPanel({
                 minTickGap={24}
                 fontSize={11}
               />
-              <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} fontSize={11} />
+              <YAxis
+                domain={[0, 100]}
+                ticks={[0, 25, 50, 75, 100]}
+                tickFormatter={(value: number) => formatNumber(value, { maximumFractionDigits: 2 })}
+                fontSize={11}
+              />
               <Tooltip
                 labelFormatter={(value) => dateLabel(String(value), locale)}
-                formatter={(value) => [Number(value), "Fear & Greed"]}
+                formatter={(value) => [
+                  formatMetricValue(value == null ? null : Number(value), {
+                    locale,
+                    unit: "INDEX",
+                  }),
+                  "Fear & Greed",
+                ]}
               />
               <Line
                 type="monotone"
@@ -144,7 +156,9 @@ export function CryptoFearGreedPanel({
             {tableRows.map((row) => (
               <tr key={row.effectiveAt} className="border-t">
                 <td className="px-4 py-2 tabular-nums">{dateLabel(row.effectiveAt, locale)}</td>
-                <td className="px-4 py-2 text-right font-semibold tabular-nums">{row.value}</td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                  {formatMetricValue(row.value, { locale, unit: "INDEX" })}
+                </td>
                 <td className="px-4 py-2">{row.classification}</td>
                 <td className="px-4 py-2">
                   <DataStatusBadge status={mode === "sample" ? "SAMPLE" : "SYSTEM"} />
@@ -168,7 +182,15 @@ export function CryptoFearGreedPanel({
   );
 }
 
-function FearGreedGauge({ value, label }: { value: number; label: string }) {
+function FearGreedGauge({
+  value,
+  label,
+  locale,
+}: {
+  value: number;
+  label: string;
+  locale: "vi" | "en";
+}) {
   const radius = 70;
   const angle = (Math.max(0, Math.min(100, value)) / 100) * 180;
   const radians = ((180 - angle) * Math.PI) / 180;
@@ -195,7 +217,9 @@ function FearGreedGauge({ value, label }: { value: number; label: string }) {
         <circle cx="90" cy="90" r="6" fill="currentColor" />
       </svg>
       <div className="-mt-3 text-center">
-        <p className="text-3xl font-bold tabular-nums">{Math.round(value)}</p>
+        <p className="text-3xl font-bold tabular-nums">
+          {formatMetricValue(value, { locale, unit: "INDEX" })}
+        </p>
         <p className="text-xs font-semibold text-primary">{label}</p>
       </div>
     </div>

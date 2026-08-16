@@ -40,7 +40,15 @@ function metricLabel(series: CryptoMetricSeries) {
   return series.asset ? `${series.asset} · ${name}` : name;
 }
 
-function formatMetric(value: number, unit: string, locale: "vi" | "en") {
+function semanticUnit(series: CryptoMetricSeries): string {
+  if (series.metricCode === "crypto.derivatives.open_interest" && series.unit === "native") {
+    return "contracts";
+  }
+  return series.unit;
+}
+
+function formatMetric(value: number, series: CryptoMetricSeries, locale: "vi" | "en") {
+  const unit = semanticUnit(series);
   if (unit === "return" || unit === "ratio_change") {
     return formatPercent(value, { multiplier: 100 });
   }
@@ -49,7 +57,8 @@ function formatMetric(value: number, unit: string, locale: "vi" | "en") {
   return formatMetricValue(value, { locale, unit });
 }
 
-function formatAxis(value: number, unit: string) {
+function formatAxis(value: number, series: CryptoMetricSeries) {
+  const unit = semanticUnit(series);
   if (unit === "return" || unit === "ratio_change") {
     return formatPercent(value, { multiplier: 100 });
   }
@@ -75,17 +84,16 @@ function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: 
             minTickGap={24}
             fontSize={11}
           />
-          <YAxis
-            fontSize={11}
-            width={56}
-            tickFormatter={(value) => formatAxis(value, series[0].unit)}
-          />
+          <YAxis fontSize={11} width={56} tickFormatter={(value) => formatAxis(value, series[0])} />
           <Tooltip
             labelFormatter={(value) => dateLabel(String(value), locale)}
-            formatter={(value, name) => [
-              value == null ? "—" : formatMetric(Number(value), series[0].unit, locale),
-              metricLabel(series.find((item) => item.key === name) ?? series[0]),
-            ]}
+            formatter={(value, name) => {
+              const item = series.find((candidate) => candidate.key === name) ?? series[0];
+              return [
+                value == null ? "—" : formatMetric(Number(value), item, locale),
+                metricLabel(item),
+              ];
+            }}
           />
           {chartSeries.map((item, index) => (
             <Line
@@ -175,7 +183,7 @@ export function CryptoMetricTrendPanel({
               <FreshnessBadge state={item.latest.freshness} />
             </div>
             <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
-              {formatMetric(item.latest.value, item.unit, locale)}
+              {formatMetric(item.latest.value, item, locale)}
             </p>
             <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <time dateTime={item.latest.effectiveAt}>

@@ -15,6 +15,7 @@ import {
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { FreshnessBadge } from "@/components/smart-insights/FreshnessBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatPercent } from "@/lib/financial-format";
 import type { CryptoPanelMode } from "./CryptoFearGreedPanel";
 
 const ALTCOIN_URL = "https://www.blockchaincenter.net/altcoin-season-index/";
@@ -104,7 +105,10 @@ export function CryptoCyclePanel({
               <div key={String(label)} className="rounded-xl border bg-background/50 p-4">
                 <p className="text-xs text-muted-foreground">{label}</p>
                 <p className="mt-2 font-mono text-2xl font-semibold tabular-nums">
-                  {typeof value === "number" ? `${value.toFixed(0)} / 100` : "—"}
+                  {formatMetricValue(typeof value === "number" ? value : null, {
+                    locale,
+                    unit: "INDEX",
+                  })}
                 </p>
               </div>
             ))}
@@ -161,7 +165,7 @@ export function CryptoCyclePanel({
             <div className="rounded-xl border bg-background/50 p-5 text-center">
               <p className="text-xs text-muted-foreground">Confidence</p>
               <p className="mt-2 font-mono text-4xl font-bold tabular-nums">
-                {cbbi.confidence.toFixed(1)}%
+                {formatPercent(cbbi.confidence)}
               </p>
             </div>
             {visible!.cbbi.series.length > 1 ? (
@@ -182,10 +186,18 @@ export function CryptoCyclePanel({
                       minTickGap={24}
                       fontSize={11}
                     />
-                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" fontSize={11} />
+                    <YAxis
+                      domain={[0, 100]}
+                      ticks={[0, 25, 50, 75, 100]}
+                      tickFormatter={(value: number) => formatPercent(value)}
+                      fontSize={11}
+                    />
                     <Tooltip
                       labelFormatter={(value) => dateLabel(String(value), locale)}
-                      formatter={(value) => [`${Number(value).toFixed(1)}%`, "CBBI Confidence"]}
+                      formatter={(value) => [
+                        formatPercent(value == null ? null : Number(value)),
+                        "CBBI Confidence",
+                      ]}
                     />
                     <Line
                       type="monotone"
@@ -208,7 +220,7 @@ export function CryptoCyclePanel({
                   {COMPONENT_LABELS[component.code] ?? component.code}
                 </p>
                 <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
-                  {component.value.toFixed(1)}%
+                  {formatPercent(component.value)}
                 </p>
               </div>
             ))}

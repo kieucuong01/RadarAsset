@@ -1,7 +1,11 @@
+"use client";
+
 import { ExternalLink } from "lucide-react";
 
 import { FreshnessBadge } from "./FreshnessBadge";
+import { formatMarketMetric } from "./market-metric-value";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/context";
 import type { MetricModel } from "@/lib/smart-insights-client";
 
 export function MetricPanel({
@@ -13,6 +17,7 @@ export function MetricPanel({
   description: string;
   metrics: MetricModel[];
 }) {
+  const { locale } = useI18n();
   const latest = new Map<string, MetricModel>();
   for (const row of metrics)
     if (!latest.has(`${row.metricCode}:${row.asset ?? "global"}`))
@@ -33,8 +38,9 @@ export function MetricPanel({
               <FreshnessBadge state={row.freshness} />
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="font-mono text-xl font-semibold">{row.value}</span>
-              <span className="text-xs text-muted-foreground">{row.unit}</span>
+              <span className="font-mono text-xl font-semibold">
+                {formatMarketMetric(row, locale)}
+              </span>
             </div>
             <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>

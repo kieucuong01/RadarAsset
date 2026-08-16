@@ -11,13 +11,20 @@ import type { EnergyPulseModel } from "@/lib/smart-insights-client";
 import type { MetricModel } from "@/lib/smart-insights-client";
 
 import { CryptoDerivativesPressurePanel } from "./CryptoDerivativesPressurePanel";
+import { CryptoEtfFlowPanel } from "./CryptoEtfFlowPanel";
+import { CryptoFearGreedPanel } from "./CryptoFearGreedPanel";
+import { CryptoFundFlowPanel } from "./CryptoFundFlowPanel";
 import { CryptoLargeAddressPanel } from "./CryptoLargeAddressPanel";
 import { CryptoMetricTrendPanel } from "./CryptoMetricTrendPanel";
 import { CryptoQuantPulseTabs } from "./CryptoQuantPulseTabs";
+import { CryptoCyclePanel } from "./CryptoCyclePanel";
 import { EconomicCalendar } from "./EconomicCalendar";
 import { EnergyPulsePanel } from "./EnergyPulsePanel";
+import { GoldPanel } from "./GoldPanel";
 import { LegacyInvestorIntelligence } from "./LegacyInvestorIntelligence";
+import { LegacyMarketPulse } from "./LegacyMarketPulse";
 import { LegacyWatchlist } from "./LegacyWatchlist";
+import { MacroPanel } from "./MacroPanel";
 
 function textContent(html: string): string {
   return html
@@ -28,6 +35,33 @@ function textContent(html: string): string {
 }
 
 const observedAt = "2026-08-16T00:00:00Z";
+
+function metric(
+  observationId: string,
+  market: MetricModel["market"],
+  metricCode: string,
+  value: string,
+  unit: string,
+): MetricModel {
+  return {
+    observationId,
+    metricCode,
+    market,
+    asset: market === "gold" ? "XAU" : null,
+    value,
+    unit,
+    delta: null,
+    percentile: null,
+    effectiveStart: observedAt,
+    effectiveEnd: observedAt,
+    observedAt,
+    sourceCode: "source-system",
+    sourceUrl: "https://example.test/source",
+    freshness: "fresh",
+    qualityWarnings: [],
+    methodologyVersion: "v1",
+  };
+}
 
 const largeAddressActivity = {
   status: "system",
@@ -150,36 +184,292 @@ describe("Smart Insights number formatting", () => {
     expect(text).toContain("−4.25%");
   });
 
-  it("translates explicit metric units while leaving chart series numeric", () => {
+  it("maps production open-interest metadata to localized contracts", () => {
     const text = textContent(
       renderToStaticMarkup(
         <CryptoMetricTrendPanel
-          title="Flows"
-          description="Flow metrics"
+          title="Derivatives"
+          description="Open interest"
           emptyDescription="Unavailable"
           locale="vi"
           series={[
             {
-              key: "flow",
-              metricCode: "crypto.coinshares.net_flow_usd",
+              key: "open-interest",
+              metricCode: "crypto.derivatives.open_interest",
               asset: "BTC",
-              unit: "USD_MILLION",
+              unit: "native",
               latest: {
                 effectiveAt: observedAt,
-                value: 120.5,
-                sourceCode: "coinshares-weekly",
-                sourceUrl: "https://coinshares.com/",
+                value: 12_345,
+                sourceCode: "deribit-public",
+                sourceUrl: "https://www.deribit.com/",
                 freshness: "fresh",
               },
-              points: [],
-              trendPoints: [],
+              points: [
+                {
+                  effectiveAt: "2026-08-15T00:00:00Z",
+                  value: 12_000,
+                  sourceCode: "deribit-public",
+                  sourceUrl: "https://www.deribit.com/",
+                  freshness: "fresh",
+                },
+                {
+                  effectiveAt: observedAt,
+                  value: 12_345,
+                  sourceCode: "deribit-public",
+                  sourceUrl: "https://www.deribit.com/",
+                  freshness: "fresh",
+                },
+              ],
+              trendPoints: [
+                {
+                  effectiveAt: "2026-08-15T00:00:00Z",
+                  value: 12_000,
+                  sourceCode: "deribit-public",
+                  sourceUrl: "https://www.deribit.com/",
+                  freshness: "fresh",
+                },
+                {
+                  effectiveAt: observedAt,
+                  value: 12_345,
+                  sourceCode: "deribit-public",
+                  sourceUrl: "https://www.deribit.com/",
+                  freshness: "fresh",
+                },
+              ],
             },
           ]}
         />,
       ),
     );
 
+    expect(text).toContain("12,345 hợp đồng");
+    expect(text).not.toContain("native");
+  });
+
+  it("formats the production Farside ETF panel with shared million-USD semantics", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <CryptoEtfFlowPanel
+          locale="vi"
+          mode="system"
+          data={{
+            status: "system",
+            sourceCodes: ["farside-btc-etf"],
+            series: [
+              {
+                effectiveAt: observedAt,
+                btc: -120_500_000,
+                eth: null,
+                sol: null,
+                total: -120_500_000,
+              },
+            ],
+            summaries: [
+              {
+                asset: "BTC",
+                latest: -120_500_000,
+                fiveDay: -120_500_000,
+                thirtyDay: -120_500_000,
+                latestEffectiveAt: observedAt,
+              },
+            ],
+          }}
+        />,
+      ),
+    );
+
+    expect(text).toContain("−120.5 triệu USD");
+    expect(text).not.toContain("-US$120.5m");
+  });
+
+  it("formats the production CoinShares panel with shared million-USD semantics", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <CryptoFundFlowPanel
+          locale="vi"
+          mode="system"
+          data={{
+            status: "system",
+            sourceCode: "coinshares-weekly",
+            sourceUrl: "https://coinshares.com/",
+            series: [
+              {
+                effectiveAt: observedAt,
+                total: -120_500_000,
+                assets: [{ label: "Bitcoin", value: -120_500_000 }],
+              },
+            ],
+            latestBreakdown: [{ label: "Bitcoin", value: -120_500_000 }],
+          }}
+        />,
+      ),
+    );
+
+    expect(text).toContain("−120.5 triệu USD");
+    expect(text).not.toContain("-US$120.5m");
+  });
+
+  it("formats the production Fear and Greed index with a localized unit", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <CryptoFearGreedPanel
+          locale="vi"
+          mode="system"
+          data={{
+            status: "system",
+            sourceCode: "alternative-fng",
+            sourceUrl: "https://alternative.me/crypto/fear-and-greed-index/",
+            latest: { effectiveAt: observedAt, value: 62.5, classification: "Greed" },
+            series: [{ effectiveAt: observedAt, value: 62.5, classification: "Greed" }],
+          }}
+        />,
+      ),
+    );
+
+    expect(text).toContain("62.5 điểm");
+  });
+
+  it("formats production cycle indices and confidence through shared semantics", () => {
+    const components = [
+      "pi_cycle",
+      "rupl_nupl",
+      "rhodl",
+      "puell",
+      "two_year_ma",
+      "trolololo",
+      "mvrv",
+      "reserve_risk",
+      "woobull",
+    ].map((code) => ({ code, value: 61.25 })) as NonNullable<
+      CryptoMarketPulseModel["cycleIndicators"]["cbbi"]["latest"]
+    >["components"];
+    const text = textContent(
+      renderToStaticMarkup(
+        <CryptoCyclePanel
+          locale="vi"
+          mode="system"
+          data={{
+            altcoinSeason: {
+              status: "system",
+              sourceCode: "blockchaincenter-altcoin-season",
+              sourceUrl: "https://www.blockchaincenter.net/altcoin-season-index/",
+              observedAt,
+              latest: {
+                effectiveAt: observedAt,
+                season90d: 62.5,
+                month: 62.5,
+                year: 62.5,
+                classification: "neutral",
+              },
+              series: [],
+            },
+            cbbi: {
+              status: "system",
+              sourceCode: "cbbi-public",
+              sourceUrl: "https://colintalkscrypto.com/cbbi/",
+              observedAt,
+              latest: { effectiveAt: observedAt, confidence: 61.25, components },
+              series: [],
+            },
+          }}
+        />,
+      ),
+    );
+
+    expect(text).toContain("62.5 điểm");
+    expect(text).toContain("61.25%");
+    expect(text).not.toContain("61.3%");
+  });
+
+  it("formats the production Macro metric panel from real unit spelling", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <MacroPanel
+            metrics={[
+              metric(
+                "macro-flow",
+                "macro",
+                "macro.fed_balance_sheet_change_4w",
+                "120.500000",
+                "USD million",
+              ),
+            ]}
+          />
+        </I18nProvider>,
+      ),
+    );
+
     expect(text).toContain("120.5 triệu USD");
+    expect(text).not.toContain("120.500000");
+  });
+
+  it("formats the production Gold metric panel return as a percentage", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <GoldPanel
+            metrics={[metric("gold-return", "gold", "gold.xau_return_1d", "-0.0425", "return")]}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("−4.25%");
+    expect(text).not.toContain("-0.0425return");
+  });
+
+  it("formats the active legacy Macro pulse route", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <LegacyMarketPulse
+            market="macro"
+            metrics={[
+              metric(
+                "legacy-macro-flow",
+                "macro",
+                "macro.fed_balance_sheet_change_4w",
+                "120.500000",
+                "USD million",
+              ),
+            ]}
+            regimes={[]}
+            macroEventRisk={null}
+            energyPulse={null}
+            macroPulseState="loaded"
+            onMarketChange={() => undefined}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("120.5 triệu USD");
+    expect(text).not.toContain("120.500000");
+  });
+
+  it("formats the active legacy Gold pulse route", () => {
+    const text = textContent(
+      renderToStaticMarkup(
+        <I18nProvider>
+          <LegacyMarketPulse
+            market="gold"
+            metrics={[
+              metric("legacy-gold-return", "gold", "gold.xau_return_1d", "-0.0425", "return"),
+            ]}
+            regimes={[]}
+            macroEventRisk={null}
+            energyPulse={null}
+            macroPulseState="loaded"
+            onMarketChange={() => undefined}
+          />
+        </I18nProvider>,
+      ),
+    );
+
+    expect(text).toContain("−4.25%");
+    expect(text).not.toContain("-0.0425return");
   });
 
   it("formats ratio-backed overview returns as percentages", () => {

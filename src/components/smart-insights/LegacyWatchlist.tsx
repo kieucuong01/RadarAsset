@@ -38,6 +38,10 @@ const SAMPLE_WATCHLIST: WatchlistItemResponse[] = [
   },
 ];
 
+function formatAvailableMoney(value: number, locale: "vi" | "en") {
+  return value > 0 ? formatPrice(value, { locale }) : "—";
+}
+
 export function LegacyWatchlist() {
   const { locale, t } = useI18n();
   const [items, setItems] = useState<WatchlistItemResponse[]>(SAMPLE_WATCHLIST);
@@ -127,7 +131,7 @@ export function LegacyWatchlist() {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right font-medium tabular-nums">
-                    {formatPrice(item.price, { locale })}
+                    {formatAvailableMoney(item.price, locale)}
                   </td>
                   <td
                     className={
@@ -139,7 +143,7 @@ export function LegacyWatchlist() {
                     {formatPercent(item.chg, { sign: true })}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">
-                    {formatPrice(item.alert, { locale })}
+                    {formatAvailableMoney(item.alert, locale)}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button
