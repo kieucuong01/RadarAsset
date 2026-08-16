@@ -5,9 +5,10 @@ import { requireTenantPage } from "@/lib/auth/page-guard";
 import { normalizePreselectedSymbols } from "@/lib/backtest/preselection";
 
 export const metadata: Metadata = {
-  title: "Quant Lab",
+  title: "Phòng Quant",
   description:
-    "Build, allocate, and backtest portfolio strategies with rich performance analytics.",
+    "Tối ưu phân bổ và kiểm định chiến lược trên dữ liệu lịch sử với phân tích hiệu suất và rủi ro.",
+  alternates: { canonical: "/quant-lab" },
 };
 
 export default async function QuantLabPage({
