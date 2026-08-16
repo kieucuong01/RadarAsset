@@ -38,19 +38,25 @@ function finite(value: string | null): number | null {
 }
 
 function strongestReason(opinion: OpinionChangeInput): PortfolioOpinionChange["reason"] {
-  return (
+  const row =
     opinion.decisionInputs
-      .map((row) => ({ row, contribution: finite(row.contribution) }))
+      .map((input) => ({ input, contribution: finite(input.contribution) }))
       .filter(
-        (item): item is { row: (typeof opinion.decisionInputs)[number]; contribution: number } =>
+        (item): item is { input: (typeof opinion.decisionInputs)[number]; contribution: number } =>
           Number.isFinite(item.contribution),
       )
       .sort(
         (left, right) =>
           Math.abs(right.contribution) - Math.abs(left.contribution) ||
-          left.row.metricCode.localeCompare(right.row.metricCode),
-      )[0]?.row ?? null
-  );
+          left.input.metricCode.localeCompare(right.input.metricCode),
+      )[0]?.input ?? null;
+  if (!row) return null;
+  return {
+    metricCode: row.metricCode,
+    rawValue: row.rawValue,
+    unit: row.unit,
+    contribution: row.contribution,
+  };
 }
 
 export function derivePortfolioOpinionChanges(

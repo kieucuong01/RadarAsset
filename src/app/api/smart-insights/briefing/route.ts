@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { apiError } from "@/app/api/_lib";
-import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
+import { AuthenticationRequiredError } from "@/lib/auth/errors";
+import {
+  requireTenantCapability,
+  requireTenantContext,
+  resolvePublicMarketTenantContext,
+} from "@/lib/auth/tenant-context";
 import { loadBriefingEnvelope, SmartInsightsInputError } from "@/lib/backend/smart-insights";
 import {
   enqueueBriefingRefresh,
@@ -12,11 +17,20 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const context = await requireTenantContext();
-    requireTenantCapability(context, "research", "read");
+    let personalContext = true;
+    const context = await requireTenantContext().catch((error: unknown) => {
+      if (error instanceof AuthenticationRequiredError) {
+        personalContext = false;
+        return resolvePublicMarketTenantContext();
+      }
+      throw error;
+    });
+    if (personalContext) requireTenantCapability(context, "research", "read");
     const [envelope, refresh] = await Promise.all([
       loadBriefingEnvelope(context, new URL(request.url).searchParams.get("date")),
-      loadBriefingRefreshState(context),
+      personalContext
+        ? loadBriefingRefreshState(context)
+        : Promise.resolve({ state: "idle" as const, errorCode: null }),
     ]);
     if (!envelope) {
       const headers = {

@@ -84,4 +84,26 @@ describe("loadSmartInsightsWorkspaceData", () => {
     });
     expect(result.portfolio).toEqual({ available: true, value: portfolio, error: null });
   });
+
+  it("does not surface personal watchlist errors for unauthenticated guest mode", async () => {
+    const result = await loadSmartInsightsWorkspaceData({
+      loadWatchlist: async () => {
+        throw new Error("Không thể tải danh sách tài sản yêu thích.");
+      },
+      loadPortfolio: async () => {
+        throw new Error("Authentication required.");
+      },
+    });
+
+    expect(result.watchlist).toEqual({
+      available: false,
+      items: [],
+      error: null,
+    });
+    expect(result.portfolio).toEqual({
+      available: false,
+      value: null,
+      error: "Authentication required.",
+    });
+  });
 });

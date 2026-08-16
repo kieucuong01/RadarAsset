@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthenticationRequiredError } from "@/lib/auth/errors";
+
 const mocks = vi.hoisted(() => ({
   requireTenantContext: vi.fn(),
   requireTenantCapability: vi.fn(),
+  resolvePublicMarketTenantContext: vi.fn(),
   loadBriefingEnvelope: vi.fn(),
   loadBriefingRefreshState: vi.fn(),
   enqueueBriefingRefresh: vi.fn(),
@@ -11,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth/tenant-context", () => ({
   requireTenantContext: mocks.requireTenantContext,
   requireTenantCapability: mocks.requireTenantCapability,
+  resolvePublicMarketTenantContext: mocks.resolvePublicMarketTenantContext,
 }));
 
 vi.mock("@/lib/backend/smart-insights", async (importOriginal) => ({
@@ -26,11 +30,17 @@ vi.mock("@/lib/backend/smart-insights-refresh", () => ({
 import { GET, POST } from "./route";
 
 const context = { userId: "user-a", organizationId: "org-a", role: "editor" as const };
+const publicContext = {
+  userId: "public-user",
+  organizationId: "public-org",
+  role: "viewer" as const,
+};
 
 describe("Smart Insights briefing lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireTenantContext.mockResolvedValue(context);
+    mocks.resolvePublicMarketTenantContext.mockResolvedValue(publicContext);
     mocks.loadBriefingEnvelope.mockResolvedValue(null);
     mocks.loadBriefingRefreshState.mockResolvedValue({
       state: "idle",
@@ -85,6 +95,28 @@ describe("Smart Insights briefing lifecycle", () => {
     expect(response.headers.get("x-smart-insights-briefing-state")).toBe("ready");
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({ id: "briefing-a", assetOpinions: [] });
+  });
+
+  it("serves the public market briefing to guests without requiring tenant permission", async () => {
+    mocks.requireTenantContext.mockRejectedValue(new AuthenticationRequiredError());
+    mocks.loadBriefingEnvelope.mockResolvedValue({
+      fingerprint: "public-fingerprint",
+      briefing: {
+        id: "public-briefing",
+        assetOpinions: [{ symbol: "BTC" }, { symbol: "XAU" }, { symbol: "VNINDEX" }],
+      },
+    });
+
+    const response = await GET(new Request("http://localhost/api/smart-insights/briefing"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.resolvePublicMarketTenantContext).toHaveBeenCalledOnce();
+    expect(mocks.loadBriefingEnvelope).toHaveBeenCalledWith(publicContext, null);
+    expect(mocks.requireTenantCapability).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      id: "public-briefing",
+      assetOpinions: [{ symbol: "BTC" }, { symbol: "XAU" }, { symbol: "VNINDEX" }],
+    });
   });
 
   it("does not return 304 because derived opinion changes can update independently", async () => {

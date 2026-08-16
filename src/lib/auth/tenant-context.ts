@@ -71,6 +71,34 @@ export function resolveTenantContext(input: {
   };
 }
 
+export async function resolvePublicMarketTenantContext(): Promise<TenantContext> {
+  const email =
+    process.env.SMART_INSIGHTS_PUBLIC_USER_EMAIL?.trim() ||
+    process.env.QUANT_WORKER_USER_EMAIL?.trim() ||
+    "demo@radarasset.local";
+  const slug =
+    process.env.SMART_INSIGHTS_PUBLIC_ORGANIZATION_SLUG?.trim() ||
+    process.env.QUANT_WORKER_ORGANIZATION_SLUG?.trim() ||
+    "demo-workspace";
+  const membership = await getPrisma().membership.findFirst({
+    where: {
+      user: { email },
+      organization: { slug },
+    },
+    select: { userId: true, organizationId: true, role: true },
+  });
+
+  if (!membership) {
+    throw new OrganizationRequiredError("Public Smart Insights briefing is not configured.");
+  }
+
+  return {
+    userId: membership.userId,
+    organizationId: membership.organizationId,
+    role: normalizeTenantRole(membership.role),
+  };
+}
+
 export async function requireTenantContext(): Promise<TenantContext> {
   const [{ auth }, requestHeaders] = await Promise.all([import("@/lib/auth"), headers()]);
   const session = await auth.api.getSession({ headers: requestHeaders });

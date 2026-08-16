@@ -1,11 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AuthenticationRequiredError,
   OrganizationRequiredError,
   TenantForbiddenError,
 } from "./errors";
-import { requireTenantCapability, resolveTenantContext } from "./tenant-context";
+
+const mocks = vi.hoisted(() => ({
+  membershipFindFirst: vi.fn(),
+}));
+
+vi.mock("@/lib/db/prisma", () => ({
+  getPrisma: () => ({
+    membership: {
+      findFirst: mocks.membershipFindFirst,
+    },
+  }),
+}));
+
+import {
+  requireTenantCapability,
+  resolvePublicMarketTenantContext,
+  resolveTenantContext,
+} from "./tenant-context";
 
 const session = (activeOrganizationId: string | null = null) => ({
   user: { id: "user-1" },
@@ -13,6 +30,11 @@ const session = (activeOrganizationId: string | null = null) => ({
 });
 
 describe("tenant context resolution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   it("uses the active organization only when membership exists", () => {
     const result = resolveTenantContext({
       session: session("org-2"),
@@ -98,5 +120,53 @@ describe("tenant context resolution", () => {
     expect(() => requireTenantCapability(result, "portfolio", "write")).toThrow(
       TenantForbiddenError,
     );
+  });
+
+  it("resolves the configured public market tenant for guest Smart Insights reads", async () => {
+    mocks.membershipFindFirst.mockResolvedValue({
+      userId: "user-public",
+      organizationId: "org-public",
+      role: "viewer,editor",
+    });
+
+    await expect(resolvePublicMarketTenantContext()).resolves.toEqual({
+      userId: "user-public",
+      organizationId: "org-public",
+      role: "editor",
+    });
+    expect(mocks.membershipFindFirst).toHaveBeenCalledWith({
+      where: {
+        user: { email: "demo@radarasset.local" },
+        organization: { slug: "demo-workspace" },
+      },
+      select: { userId: true, organizationId: true, role: true },
+    });
+  });
+
+  it("uses explicit public Smart Insights tenant env overrides", async () => {
+    vi.stubEnv("SMART_INSIGHTS_PUBLIC_USER_EMAIL", "public@example.test");
+    vi.stubEnv("SMART_INSIGHTS_PUBLIC_ORGANIZATION_SLUG", "public-workspace");
+    mocks.membershipFindFirst.mockResolvedValue({
+      userId: "user-public",
+      organizationId: "org-public",
+      role: "viewer",
+    });
+
+    await resolvePublicMarketTenantContext();
+
+    expect(mocks.membershipFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          user: { email: "public@example.test" },
+          organization: { slug: "public-workspace" },
+        },
+      }),
+    );
+  });
+
+  it("fails closed when the public market tenant is not configured in the database", async () => {
+    mocks.membershipFindFirst.mockResolvedValue(null);
+
+    await expect(resolvePublicMarketTenantContext()).rejects.toThrow(OrganizationRequiredError);
   });
 });

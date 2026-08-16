@@ -59,6 +59,33 @@ describe("derivePortfolioOpinionChanges", () => {
     });
   });
 
+  it("strips internal decision input fields from the public change reason", () => {
+    const previous = [opinion("BTC")];
+    const current = [
+      opinion("BTC", {
+        quantScore: "5",
+        decisionInputs: [
+          {
+            metricCode: "crypto.fear_greed.index",
+            rawValue: "34",
+            unit: "INDEX",
+            contribution: "6.17",
+            evidenceId: "evidence-a",
+            pillarCode: "sentiment_onchain",
+            normalizedScore: "52.33",
+          } as OpinionChangeInput["decisionInputs"][number],
+        ],
+      }),
+    ];
+
+    expect(derivePortfolioOpinionChanges(current, previous)[0]?.reason).toEqual({
+      metricCode: "crypto.fear_greed.index",
+      rawValue: "34",
+      unit: "INDEX",
+      contribution: "6.17",
+    });
+  });
+
   it("omits unchanged and invalid-score assets", () => {
     const previous = [opinion("BTC"), opinion("ETH", { quantScore: null })];
     const current = [opinion("BTC"), opinion("ETH", { quantScore: "not-a-number" })];

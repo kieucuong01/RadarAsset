@@ -5,6 +5,7 @@ import { AuthenticationRequiredError, TenantForbiddenError } from "@/lib/auth/er
 const mocks = vi.hoisted(() => ({
   requireTenantContext: vi.fn(),
   requireTenantCapability: vi.fn(),
+  resolvePublicMarketTenantContext: vi.fn(),
   loadPortfolioResponse: vi.fn(),
   listStrategyAssignments: vi.fn(),
   applyStrategyAssignment: vi.fn(),
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth/tenant-context", () => ({
   requireTenantContext: mocks.requireTenantContext,
   requireTenantCapability: mocks.requireTenantCapability,
+  resolvePublicMarketTenantContext: mocks.resolvePublicMarketTenantContext,
 }));
 
 vi.mock("@/lib/backend/strategy-forward-repository", async (importOriginal) => {
