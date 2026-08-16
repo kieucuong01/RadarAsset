@@ -102,8 +102,10 @@ describe("EventRiskPanel financial formatting", () => {
 
     expect(text).toContain("67.89 /100");
     expect(text).toContain("67.89%");
-    expect(text).toContain("−26.79%");
-    expect(text).toContain("40.73%");
+    expect(text).toContain("BTC impact−26.79 score");
+    expect(text).toContain("XAU impact40.73 score");
+    expect(text).not.toContain("BTC impact−26.79%");
+    expect(text).not.toContain("XAU impact40.73%");
     expect(text).toContain("12,345.6789 · 33.33%");
     expect(text).toContain("88.89/100");
     expect(text).toContain("12,345 nguồn");

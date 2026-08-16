@@ -58,8 +58,8 @@ export function EventRiskPanel({
       value: formatPercent(data.freshWeight, { multiplier: 100 }),
       unit: "",
     },
-    { label: "BTC impact", value: formatPercent(impacts.get("BTC")?.score), unit: "" },
-    { label: "XAU impact", value: formatPercent(impacts.get("XAU")?.score), unit: "" },
+    { label: "BTC impact", value: formatScore(impacts.get("BTC")?.score), unit: "score" },
+    { label: "XAU impact", value: formatScore(impacts.get("XAU")?.score), unit: "score" },
   ];
   return (
     <section className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5">
