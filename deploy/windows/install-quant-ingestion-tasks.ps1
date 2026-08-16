@@ -27,6 +27,10 @@ if (-not (Test-Path -LiteralPath $smartInsightsWrapper -PathType Leaf)) {
 }
 
 if ($Verify) {
+    $legacyHourly = Get-ScheduledTask -TaskName "RadarAsset Market Ingestion Hourly" -ErrorAction SilentlyContinue
+    if ($null -ne $legacyHourly -and $legacyHourly.State -ne "Disabled") {
+        throw "Legacy intraday task is still enabled."
+    }
     $expectedTasks = @(
         @{ Name = "RadarAsset Smart Insights Four Hourly"; Argument = "run-smart-insights.ps1"; Schedule = "four-hourly" },
         @{ Name = "RadarAsset Intelligence Daily"; Argument = "refresh-asset-opinions.ps1"; Schedule = $null },
@@ -59,6 +63,17 @@ if ($Verify) {
         }
     }
     return
+}
+
+$legacyTaskNames = @(
+    "RadarAsset Market Ingestion Hourly",
+    "RadarAsset Market Ingestion Daily"
+)
+foreach ($legacyTaskName in $legacyTaskNames) {
+    $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
+    if ($null -ne $legacyTask -and $legacyTask.State -ne "Disabled") {
+        Disable-ScheduledTask -TaskName $legacyTaskName | Out-Null
+    }
 }
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)

@@ -131,6 +131,10 @@ def test_scheduler_artifact_has_bounded_four_hourly_daily_and_weekly_triggers() 
     assert ".Actions" in installer
     assert "LastTaskResult" in installer
     assert "refresh-asset-opinions.ps1" in installer
+    assert '"RadarAsset Market Ingestion Hourly"' in installer
+    assert '"RadarAsset Market Ingestion Daily"' in installer
+    assert "Disable-ScheduledTask" in installer
+    assert "Legacy intraday task" in installer
 
 
 def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> None:
