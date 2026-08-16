@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LoaderCircle, Search } from "lucide-react";
 import { z } from "zod";
 
+import { AssetIcon } from "@/components/AssetIcon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -143,9 +144,14 @@ export function FavoriteAssetDialog({
                   selected?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
                 }`}
               >
-                <span>
-                  <span className="block font-semibold">{item.symbol}</span>
-                  <span className="block text-xs text-muted-foreground">{item.name}</span>
+                <span className="flex min-w-0 items-center gap-3">
+                  <AssetIcon symbol={item.symbol} name={item.name} />
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{item.symbol}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {item.name}
+                    </span>
+                  </span>
                 </span>
                 <span className="text-right text-xs text-muted-foreground">
                   {item.providerCode}

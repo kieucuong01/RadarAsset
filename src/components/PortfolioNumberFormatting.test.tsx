@@ -205,6 +205,11 @@ describe("Portfolio number formatting", () => {
     expect(text).toContain("0 USDT");
     expect(text).not.toContain("common.fee-");
     expect(text).not.toContain("$1,250,000.00");
+    state.portfolioMode = true;
+    state.portfolioInjected = false;
+    state.loadingInjected = false;
+    const html = renderToStaticMarkup(<MockPortfolio />);
+    expect(html).toContain('data-asset-icon="BTC"');
   });
 
   it("preserves an explicit USD portfolio when the UI locale is Vietnamese", () => {

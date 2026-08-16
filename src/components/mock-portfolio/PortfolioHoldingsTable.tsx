@@ -1,5 +1,6 @@
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 
+import { AssetIcon } from "@/components/AssetIcon";
 import type { PortfolioResponse } from "@/lib/backend/types";
 import {
   formatCount,
@@ -78,9 +79,7 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
                 >
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-xs font-bold">
-                        {holding.ticker.slice(0, 2)}
-                      </div>
+                      <AssetIcon symbol={holding.ticker} name={holding.name} />
                       <div>
                         <div className="font-semibold">{holding.name}</div>
                         <div className="text-xs text-muted-foreground">{holding.ticker}</div>
