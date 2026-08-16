@@ -479,8 +479,8 @@ def test_nodriver_launch_uses_fresh_profile_and_awaits_cleanup(
     assert not profile_path.exists()
     assert calls == [
         (
-            False,
-            ["--window-position=-32000,-32000", "--window-size=800,600"],
+            True,
+            ["--window-size=800,600"],
         ),
         "about:blank",
         ("timezone", "UTC"),

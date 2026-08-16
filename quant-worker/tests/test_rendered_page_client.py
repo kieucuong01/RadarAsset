@@ -161,7 +161,7 @@ def test_nodriver_sets_utc_before_navigation_and_always_cleans_up(
     assert result.final_url == URL
     assert profile_path is not None and not profile_path.exists()
     assert calls[:4] == [
-        (False, ["--window-position=-32000,-32000", "--window-size=800,600"]),
+        (True, ["--window-size=800,600"]),
         "about:blank",
         ("timezone", "UTC"),
         URL,

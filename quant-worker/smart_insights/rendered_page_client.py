@@ -101,11 +101,8 @@ async def _fetch_with_nodriver(
         try:
             try:
                 browser = await nodriver.start(
-                    headless=False,
-                    browser_args=[
-                        "--window-position=-32000,-32000",
-                        "--window-size=800,600",
-                    ],
+                    headless=True,
+                    browser_args=["--window-size=800,600"],
                     user_data_dir=profile_dir,
                 )
             except Exception as error:
