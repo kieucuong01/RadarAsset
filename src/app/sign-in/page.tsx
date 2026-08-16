@@ -5,7 +5,7 @@ import { safeReturnTo } from "@/lib/auth/navigation";
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to your RadarAsset workspace.",
+  description: "Sign in to your DataVest workspace.",
 };
 
 export default async function SignInPage({

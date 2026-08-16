@@ -8,7 +8,6 @@ import {
   Menu,
   Moon,
   Newspaper,
-  Radar,
   Sun,
   Wallet,
   type LucideIcon,
@@ -17,6 +16,7 @@ import {
 import { CommandPaletteTrigger } from "@/components/CommandPalette";
 import { AccountMenu } from "@/components/AccountMenu";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { DataVestLogo } from "@/components/DataVestLogo";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -47,11 +47,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          <div className="grid size-9 place-items-center rounded-xl bg-gradient-primary shadow-glow">
-            <Radar className="size-5 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-bold tracking-tight">RadarAsset</span>
+        <Link href="/" aria-label="DataVest.vn" className="flex shrink-0 items-center">
+          <DataVestLogo lockup />
         </Link>
 
         <nav
@@ -129,11 +126,8 @@ export function Header() {
               className="w-[min(20rem,calc(100vw-2rem))] [&>button]:grid [&>button]:size-11 [&>button]:place-items-center"
             >
               <SheetHeader>
-                <SheetTitle className="flex items-center gap-2 text-left">
-                  <span className="grid size-9 place-items-center rounded-xl bg-gradient-primary">
-                    <Radar className="size-5 text-primary-foreground" />
-                  </span>
-                  RadarAsset
+                <SheetTitle className="text-left">
+                  <DataVestLogo lockup />
                 </SheetTitle>
                 <SheetDescription className="text-left">
                   {t("header.mobileDescription")}

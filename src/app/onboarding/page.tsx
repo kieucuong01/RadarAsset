@@ -8,7 +8,7 @@ import { shouldCreateWorkspace } from "@/lib/auth/navigation";
 
 export const metadata: Metadata = {
   title: "Workspace setup",
-  description: "Create or activate your RadarAsset workspace.",
+  description: "Create or activate your DataVest workspace.",
 };
 
 export default async function OnboardingPage({

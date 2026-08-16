@@ -1,6 +1,6 @@
-# Quant Insight Radar
+# DataVest.vn
 
-Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadcn/ui, Recharts, and a separate Python quant worker.
+Vietnamese-first quantitative data platform for individual investors, built on Next.js, PostgreSQL, Prisma, shadcn/ui, Recharts, and a separate Python quant worker.
 
 ## Documentation
 
