@@ -1,12 +1,12 @@
 # Quant Insight Radar
 
-Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadcn/ui, Recharts/ECharts, and a separate Python quant worker.
+Financial dashboard foundation built on Next.js, local PostgreSQL, Prisma, shadcn/ui, Recharts, and a separate Python quant worker.
 
 ## Stack
 
 - Next.js App Router with React and TypeScript
 - Tailwind CSS and shadcn/ui components
-- Recharts for the existing portfolio and quant charts, with ECharts available for heavier financial visuals
+- Recharts for portfolio and quant charts
 - Local PostgreSQL with Prisma migrations and seed data
 - Python worker for quant runs and investor-intelligence imports
 
@@ -26,6 +26,19 @@ The web development server uses the stable address `http://localhost:3100`:
 ```powershell
 npm run dev
 ```
+
+### Local verification
+
+Run every non-database code-quality gate from the repository root:
+
+```powershell
+npm run check
+npm run build
+```
+
+`npm run check` runs ESLint, Prettier verification, TypeScript, Vitest, and the Python test suite.
+The Python wrapper uses `PYTHON_EXECUTABLE` when set, otherwise the project `.venv` on Windows,
+then falls back to `python`.
 
 Portfolio optimization, Factor Lab and QuantStats use the private Python quant engine. On Windows,
 create the project environment once and start the engine on port `8100`:

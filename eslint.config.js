@@ -1,34 +1,27 @@
-import js from "@eslint/js";
-import nextPlugin from "@next/eslint-plugin-next";
-import eslintPluginPrettier from "eslint-plugin-prettier/recommended";
-import globals from "globals";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
-import tseslint from "typescript-eslint";
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import prettier from "eslint-config-prettier/flat";
 
-export default tseslint.config(
+export default defineConfig([
+  ...nextVitals,
+  prettier,
   {
-    ignores: ["dist", ".next", "node_modules", ".output", ".vinxi", ".venv/**", ".worktrees/**"],
-  },
-  {
-    extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ["**/*.{ts,tsx}"],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-    plugins: {
-      "@next/next": nextPlugin,
-      "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
-    },
     rules: {
-      ...nextPlugin.configs.recommended.rules,
-      ...nextPlugin.configs["core-web-vitals"].rules,
-      ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/static-components": "off",
     },
   },
-  eslintPluginPrettier,
-);
+  globalIgnores([
+    ".next/**",
+    ".npm-cache/**",
+    ".venv/**",
+    ".worktrees/**",
+    ".local-data/**",
+    ".pytest-*/**",
+    "graphify-out/**",
+    "node_modules/**",
+    "test-results/**",
+    "playwright-report/**",
+  ]),
+]);
