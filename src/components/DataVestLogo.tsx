@@ -28,12 +28,7 @@ export function DataVestLogo({
         focusable="false"
       >
         <rect x="2" y="2" width="60" height="60" rx="17" fill={BRAND_COLORS.cobalt} />
-        <path
-          d="M19 15v34"
-          stroke={BRAND_COLORS.white}
-          strokeWidth="5"
-          strokeLinecap="round"
-        />
+        <path d="M19 15v34" stroke={BRAND_COLORS.white} strokeWidth="5" strokeLinecap="round" />
         <path
           d="M25 17C39 17 46 23 46 32S39 47 25 47"
           fill="none"

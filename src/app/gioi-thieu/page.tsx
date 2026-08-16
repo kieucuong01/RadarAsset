@@ -68,8 +68,8 @@ export default function IntroductionPage() {
             Đầu tư có căn cứ, bắt đầu từ dữ liệu
           </h1>
           <p className="mt-5 max-w-3xl text-pretty text-lg leading-8 text-muted-foreground">
-            {BRAND.positioning} Nền tảng giúp người dùng nhìn thấy cả kết quả, nguồn dữ liệu
-            và giới hạn phương pháp thay vì dựa vào nhận định cảm tính.
+            {BRAND.positioning} Nền tảng giúp người dùng nhìn thấy cả kết quả, nguồn dữ liệu và giới
+            hạn phương pháp thay vì dựa vào nhận định cảm tính.
           </p>
           <p className="mt-4 text-sm text-muted-foreground">
             <time dateTime="2026-08-16">Cập nhật: 16/08/2026</time>
@@ -139,9 +139,9 @@ export default function IntroductionPage() {
               </h2>
               <p className="mt-3 max-w-3xl leading-7 text-muted-foreground">
                 DataVest cung cấp thông tin và công cụ phân tích, không phải tư vấn tài chính cá
-                nhân hóa. Backtest và mô phỏng mô tả dữ liệu lịch sử dưới các giả định cụ thể;
-                hiệu quả trong quá khứ không đảm bảo kết quả tương lai. Người dùng chịu trách nhiệm
-                cho quyết định và mức rủi ro của mình.
+                nhân hóa. Backtest và mô phỏng mô tả dữ liệu lịch sử dưới các giả định cụ thể; hiệu
+                quả trong quá khứ không đảm bảo kết quả tương lai. Người dùng chịu trách nhiệm cho
+                quyết định và mức rủi ro của mình.
               </p>
             </div>
           </div>

@@ -3,15 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  FlaskConical,
-  Menu,
-  Moon,
-  Newspaper,
-  Sun,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
+import { FlaskConical, Menu, Moon, Newspaper, Sun, Wallet, type LucideIcon } from "lucide-react";
 
 import { CommandPaletteTrigger } from "@/components/CommandPalette";
 import { AccountMenu } from "@/components/AccountMenu";

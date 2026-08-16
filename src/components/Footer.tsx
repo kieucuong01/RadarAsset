@@ -44,10 +44,10 @@ export function Footer() {
           <div className="flex max-w-3xl items-start gap-2">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-bear" />
             <p>
-              <span className="font-semibold text-foreground">Not financial advice.</span>{" "}
-              DataVest cung cấp thông tin và công cụ phân tích cho mục đích giáo dục, không phải tư
-              vấn tài chính cá nhân hóa. Thị trường luôn có rủi ro; hiệu quả trong quá khứ không đảm
-              bảo kết quả tương lai.
+              <span className="font-semibold text-foreground">Not financial advice.</span> DataVest
+              cung cấp thông tin và công cụ phân tích cho mục đích giáo dục, không phải tư vấn tài
+              chính cá nhân hóa. Thị trường luôn có rủi ro; hiệu quả trong quá khứ không đảm bảo kết
+              quả tương lai.
             </p>
           </div>
           <p className="shrink-0">© {new Date().getFullYear()} DataVest.vn.</p>

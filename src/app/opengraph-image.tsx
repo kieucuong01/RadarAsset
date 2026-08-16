@@ -31,12 +31,7 @@ export default function OpenGraphImage() {
       >
         <svg width="190" height="190" viewBox="0 0 64 64">
           <rect x="2" y="2" width="60" height="60" rx="17" fill={BRAND_COLORS.cobalt} />
-          <path
-            d="M19 15v34"
-            stroke={BRAND_COLORS.white}
-            strokeWidth="5"
-            strokeLinecap="round"
-          />
+          <path d="M19 15v34" stroke={BRAND_COLORS.white} strokeWidth="5" strokeLinecap="round" />
           <path
             d="M25 17C39 17 46 23 46 32S39 47 25 47"
             fill="none"
@@ -59,7 +54,9 @@ export default function OpenGraphImage() {
         </svg>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          <div style={{ display: "flex", fontSize: "76px", fontWeight: 750, letterSpacing: "-4px" }}>
+          <div
+            style={{ display: "flex", fontSize: "76px", fontWeight: 750, letterSpacing: "-4px" }}
+          >
             <span>Data</span>
             <span style={{ color: "#8A5A00" }}>Vest.vn</span>
           </div>

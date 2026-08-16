@@ -78,12 +78,7 @@
   --chart-4: #f2b84b;
   --chart-5: oklch(0.6 0.18 305);
 
-  --gradient-hero: linear-gradient(
-    135deg,
-    #1746a2 0%,
-    #285cbd 58%,
-    #f2b84b 140%
-  );
+  --gradient-hero: linear-gradient(135deg, #1746a2 0%, #285cbd 58%, #f2b84b 140%);
   --gradient-primary: linear-gradient(135deg, #1746a2, #285cbd 72%, #f2b84b 145%);
   --shadow-elegant: 0 20px 50px -20px rgb(23 70 162 / 0.35);
   --shadow-glow: 0 0 40px rgb(242 184 75 / 0.28);
@@ -121,12 +116,7 @@
   --chart-4: #f2b84b;
   --chart-5: oklch(0.68 0.18 305);
 
-  --gradient-hero: linear-gradient(
-    135deg,
-    #102855 0%,
-    #1746a2 64%,
-    #6b4b00 145%
-  );
+  --gradient-hero: linear-gradient(135deg, #102855 0%, #1746a2 64%, #6b4b00 145%);
   --gradient-primary: linear-gradient(135deg, #1746a2, #285cbd 72%, #f2b84b 145%);
   --shadow-elegant: 0 20px 50px -20px oklch(0 0 0 / 0.6);
   --shadow-glow: 0 0 40px rgb(242 184 75 / 0.22);

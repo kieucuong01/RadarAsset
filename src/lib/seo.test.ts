@@ -9,10 +9,7 @@ describe("DataVest SEO surfaces", () => {
   it("publishes one connected Organization and WebSite graph", () => {
     const graph = buildBrandJsonLd("https://datavest.vn");
 
-    expect(graph["@graph"].map((item) => item["@type"])).toEqual([
-      "Organization",
-      "WebSite",
-    ]);
+    expect(graph["@graph"].map((item) => item["@type"])).toEqual(["Organization", "WebSite"]);
     expect(graph["@graph"][0]).toMatchObject({
       name: "DataVest.vn",
       url: "https://datavest.vn",
