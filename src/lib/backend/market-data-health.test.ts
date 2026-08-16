@@ -9,7 +9,7 @@ const { prisma } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
 
-import { loadMarketDataHealth } from "./db";
+import { loadMarketDataHealth } from "./market-repository";
 
 describe("market data health read model", () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/app/api/_lib";
-import { loadAssets } from "@/lib/backend/db";
+import { loadAssets } from "@/lib/backend/market-repository";
 
 export const dynamic = "force-dynamic";
 
