@@ -26,4 +26,13 @@ describe("StrategyLab", () => {
 
     expect(source).toContain("describeCustomStrategy(draft, locale)");
   });
+
+  it("initializes a new draft lazily without synchronizing currency on locale changes", () => {
+    const source = readFileSync(resolve("src/components/StrategyLab.tsx"), "utf8");
+
+    expect(source).toContain(
+      'createInitialStrategyBuilderState(t("strategyLab.defaultName"), locale)',
+    );
+    expect(source).not.toContain('currency: "USD"');
+  });
 });

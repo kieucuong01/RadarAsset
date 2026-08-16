@@ -5,6 +5,7 @@ import {
   applyOptimizerProposal,
   builderValidationReasons,
   createInitialBuilderState,
+  createInitialBuilderStateForLocale,
   strategyInputWithPreset,
   reduceBuilder,
   toPortfolioBacktestSubmission,
@@ -108,6 +109,23 @@ function optimizerProposal(
 }
 
 describe("portfolio backtest builder state", () => {
+  it("uses the UI locale only when initializing a new builder currency", () => {
+    const now = new Date("2026-08-11T00:00:00.000Z");
+    const vietnamese = createInitialBuilderStateForLocale("vi", now);
+    const english = createInitialBuilderStateForLocale("en", now);
+
+    expect(vietnamese.assumptions.baseCurrency).toBe("VND");
+    expect(english.assumptions.baseCurrency).toBe("USD");
+
+    const editedVietnamese = reduceBuilder(vietnamese, {
+      type: "assumptionEdited",
+      key: "baseCurrency",
+      value: "VND",
+    });
+    createInitialBuilderStateForLocale("en", now);
+    expect(editedVietnamese.assumptions.baseCurrency).toBe("VND");
+  });
+
   it("starts empty without injecting fixed assets", () => {
     const state = createInitialBuilderState(new Date("2026-08-11T00:00:00.000Z"));
 

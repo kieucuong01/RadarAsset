@@ -10,6 +10,7 @@ import {
 import type { OptimizerProposal } from "./optimizer-client";
 import type { BacktestStrategyPreset } from "./preselection";
 import { normalizeStrategyParameters } from "./strategy-catalog";
+import { defaultCurrency } from "../financial-format";
 import { translate, type Locale } from "../i18n/dictionary";
 
 export type AllocationMode = "equal" | "custom" | "optimized";
@@ -144,6 +145,17 @@ export function createInitialBuilderState(now = new Date()): BuilderState {
     assumptions: createDefaultPortfolioAssumptions(10, 5),
     legs: [],
     optimizerProposal: null,
+  };
+}
+
+export function createInitialBuilderStateForLocale(locale: Locale, now = new Date()): BuilderState {
+  const state = createInitialBuilderState(now);
+  return {
+    ...state,
+    assumptions: {
+      ...state.assumptions,
+      baseCurrency: defaultCurrency(locale),
+    },
   };
 }
 

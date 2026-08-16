@@ -62,6 +62,12 @@ import { migrateLegacyStrategies } from "@/lib/strategy-lab/legacy-migration";
 import { listStrategyLibrary, type StrategyFamily } from "@/lib/strategy-lab/library";
 import { useI18n } from "@/lib/i18n/context";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
+import {
+  applySavedRuleToStrategyBuilder,
+  createInitialStrategyBuilderState,
+  type StrategyBuilderKind,
+  type StrategyBuilderState,
+} from "@/lib/strategy-lab/builder-state";
 
 const FAMILY_LABELS: Record<
   StrategyFamily,
@@ -85,50 +91,10 @@ function guideKey(
   return `strategyLab.guides.${code}.${field}` as TranslationKey;
 }
 
-type BuilderKind = CustomStrategyInput["kind"];
-type BuilderState = {
-  name: string;
-  symbol: string;
-  kind: BuilderKind;
-  strategyCode: string;
-  strategyParameters: Record<string, number>;
-  amount: number;
-  currency: "USD" | "VND";
-  dayOfMonth: number;
-  priceOperator: "crosses_above" | "crosses_below";
-  priceValue: number;
-  action: "buy" | "sell";
-  sizePct: number;
-  metric: "pb" | "pe" | "roe";
-  fundamentalOperator: "lt" | "lte" | "gt" | "gte";
-  fundamentalValue: number;
-};
-
 export type StrategyLabSelection = {
   preset: BacktestStrategyPreset;
   symbols: string[];
 };
-
-function initialBuilderState(name: string): BuilderState {
-  const strategy = STRATEGY_CATALOG[0];
-  return {
-    name,
-    symbol: "BTC",
-    kind: "catalog_preset",
-    strategyCode: strategy.code,
-    strategyParameters: { ...strategy.defaultParameters },
-    amount: 400,
-    currency: "USD",
-    dayOfMonth: 1,
-    priceOperator: "crosses_below",
-    priceValue: 50_000,
-    action: "sell",
-    sizePct: 100,
-    metric: "pb",
-    fundamentalOperator: "lt",
-    fundamentalValue: 4,
-  };
-}
 
 export function StrategyLab({
   onUsePreset,
@@ -140,8 +106,8 @@ export function StrategyLab({
   const [section, setSection] = useState("library");
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<"all" | StrategyFamily>("all");
-  const [builder, setBuilder] = useState<BuilderState>(() =>
-    initialBuilderState(t("strategyLab.defaultName")),
+  const [builder, setBuilder] = useState<StrategyBuilderState>(() =>
+    createInitialStrategyBuilderState(t("strategyLab.defaultName"), locale),
   );
   const [saved, setSaved] = useState<CustomStrategySummary[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(true);
@@ -299,30 +265,13 @@ export function StrategyLab({
     const latest = strategy.versions[0];
     if (!latest) return;
     setEditingId(strategy.id);
-    setBuilder((current) => {
-      if (latest.rule.kind === "scheduled_dca") {
-        return {
-          ...current,
-          name: strategy.name,
-          symbol: strategy.description ?? current.symbol,
-          kind: "scheduled_dca",
-          amount: latest.rule.contributionAmount,
-          currency: latest.rule.currency,
-          dayOfMonth: latest.rule.dayOfMonth,
-        };
-      }
-      return {
-        ...current,
+    setBuilder((current) =>
+      applySavedRuleToStrategyBuilder(current, {
         name: strategy.name,
-        symbol: strategy.description ?? current.symbol,
-        kind: "price_threshold",
-        priceOperator: latest.rule.operator,
-        priceValue: latest.rule.threshold,
-        currency: latest.rule.currency,
-        action: latest.rule.action,
-        sizePct: latest.rule.sizePct,
-      };
-    });
+        symbol: strategy.description,
+        rule: latest.rule,
+      }),
+    );
     setSection("builder");
   }
 
@@ -597,7 +546,10 @@ export function StrategyLab({
                       value={builder.kind}
                       onValueChange={(value) =>
                         value &&
-                        setBuilder((current) => ({ ...current, kind: value as BuilderKind }))
+                        setBuilder((current) => ({
+                          ...current,
+                          kind: value as StrategyBuilderKind,
+                        }))
                       }
                       variant="outline"
                       className="flex-wrap justify-start"
@@ -784,7 +736,7 @@ function ReadinessBadge({
   );
 }
 
-function BuilderPreview({ builder }: { builder: BuilderState }) {
+function BuilderPreview({ builder }: { builder: StrategyBuilderState }) {
   const { t, locale } = useI18n();
   let draft: CustomStrategyInput | null = null;
   try {
@@ -872,8 +824,8 @@ function RuleFields({
   selectedDefinition,
   onSelectCatalog,
 }: {
-  builder: BuilderState;
-  setBuilder: React.Dispatch<React.SetStateAction<BuilderState>>;
+  builder: StrategyBuilderState;
+  setBuilder: React.Dispatch<React.SetStateAction<StrategyBuilderState>>;
   selectedDefinition: (typeof STRATEGY_CATALOG)[number];
   onSelectCatalog: (code: string) => void;
 }) {
@@ -977,7 +929,7 @@ function RuleFields({
             onChange={(priceOperator) =>
               setBuilder((current) => ({
                 ...current,
-                priceOperator: priceOperator as BuilderState["priceOperator"],
+                priceOperator: priceOperator as StrategyBuilderState["priceOperator"],
               }))
             }
           />
@@ -1023,7 +975,10 @@ function RuleFields({
             { value: "roe", label: "ROE" },
           ]}
           onChange={(metric) =>
-            setBuilder((current) => ({ ...current, metric: metric as BuilderState["metric"] }))
+            setBuilder((current) => ({
+              ...current,
+              metric: metric as StrategyBuilderState["metric"],
+            }))
           }
         />
         <SelectField
@@ -1039,7 +994,8 @@ function RuleFields({
           onChange={(fundamentalOperator) =>
             setBuilder((current) => ({
               ...current,
-              fundamentalOperator: fundamentalOperator as BuilderState["fundamentalOperator"],
+              fundamentalOperator:
+                fundamentalOperator as StrategyBuilderState["fundamentalOperator"],
             }))
           }
         />

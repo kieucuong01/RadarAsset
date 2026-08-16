@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -136,6 +138,14 @@ describe("BacktestWorkbench", () => {
     expect(html).toContain("Equity Curve &amp; Drawdown");
     expect(html).toContain("Danh sách lệnh");
     expect(html).toContain("Run Portfolio Backtest");
+  });
+
+  it("initializes builder state lazily from the active locale", () => {
+    const source = readFileSync(resolve("src/components/PortfolioBacktestBuilder.tsx"), "utf8");
+
+    expect(source).toMatch(
+      /useReducer\(\s*reduceBuilder,\s*locale,\s*createInitialBuilderStateForLocale,?\s*\)/,
+    );
   });
 
   it("formats builder notional and row count without overriding the explicit base currency", () => {
