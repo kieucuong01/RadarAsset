@@ -41,4 +41,24 @@ describe("Mock Portfolio component boundaries", () => {
     const source = readFileSync(path, "utf8");
     expect(source.split(/\r?\n/).length).toBeLessThanOrEqual(360);
   });
+
+  it("keeps the primary transaction action at the top and risk directly after holdings", () => {
+    const orchestrator = readFileSync(resolve(COMPONENT_ROOT, "MockPortfolio.tsx"), "utf8");
+    const overview = readFileSync(resolve(PORTFOLIO_ROOT, "PortfolioOverviewPanel.tsx"), "utf8");
+    const transactionLog = readFileSync(
+      resolve(PORTFOLIO_ROOT, "PortfolioTransactionLog.tsx"),
+      "utf8",
+    );
+
+    expect(orchestrator).not.toContain("FavoriteAssetsPanel");
+    expect(orchestrator.indexOf("<PortfolioOverviewPanel")).toBeLessThan(
+      orchestrator.indexOf("<PortfolioHoldingsTable"),
+    );
+    expect(orchestrator.indexOf("<PortfolioHoldingsTable")).toBeLessThan(
+      orchestrator.indexOf("<PortfolioRiskMetrics"),
+    );
+    expect(overview).toContain("PortfolioTransactionDialog");
+    expect(overview).toContain("AssetIcon");
+    expect(transactionLog).not.toContain("PortfolioTransactionDialog");
+  });
 });

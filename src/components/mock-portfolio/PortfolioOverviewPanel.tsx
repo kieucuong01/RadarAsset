@@ -14,6 +14,8 @@ import {
   YAxis,
 } from "recharts";
 
+import { AssetIcon } from "@/components/AssetIcon";
+import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import type { PortfolioResponse, PortfolioTimeframe } from "@/lib/backend/types";
 import { defaultCurrency, formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
@@ -30,17 +32,24 @@ type PortfolioOverviewPanelProps = {
   portfolio: PortfolioResponse | null;
   timeframe: PortfolioTimeframe;
   onTimeframeChange: (timeframe: PortfolioTimeframe) => void;
+  onRecorded: (portfolio: PortfolioResponse) => void;
 };
 
 export function PortfolioOverviewPanel({
   portfolio,
   timeframe,
   onTimeframeChange,
+  onRecorded,
 }: PortfolioOverviewPanelProps) {
   const { t, locale } = useI18n();
   const [hide, setHide] = useState(false);
   const allocationData = useMemo(
     () => portfolio?.allocation.map((item) => ({ name: item.category, value: item.value })) ?? [],
+    [portfolio],
+  );
+  const topHoldings = useMemo(
+    () =>
+      [...(portfolio?.holdings ?? [])].sort((left, right) => right.alloc - left.alloc).slice(0, 8),
     [portfolio],
   );
   const totalValue = portfolio?.totalValue ?? 0;
@@ -63,15 +72,24 @@ export function PortfolioOverviewPanel({
 
       <div className="space-y-6">
         <div className="rounded-2xl p-7 border border-border bg-card shadow-elegant">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {t("portfolio.balance.total")}
-            <button
-              onClick={() => setHide(!hide)}
-              className="hover:text-foreground"
-              aria-label={t("portfolio.balance.toggle")}
-            >
-              {hide ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {t("portfolio.balance.total")}
+              <button
+                onClick={() => setHide(!hide)}
+                className="hover:text-foreground"
+                aria-label={t("portfolio.balance.toggle")}
+              >
+                {hide ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <PortfolioTransactionDialog
+              holdings={portfolio?.holdings ?? []}
+              disabled={!portfolio}
+              timeframe={timeframe}
+              onRecorded={onRecorded}
+              portfolioCurrency={currency}
+            />
           </div>
           <div className="mt-2 text-5xl md:text-6xl font-bold tracking-tight tabular-nums">
             {hide ? "******" : money(totalValue)}
@@ -188,6 +206,29 @@ export function PortfolioOverviewPanel({
               ))}
             </ul>
           </div>
+          {topHoldings.length ? (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="mb-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                {locale === "vi" ? "Phân bổ theo mã" : "Allocation by symbol"}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {topHoldings.map((holding) => (
+                  <div
+                    key={holding.assetId}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-muted/35 px-3 py-2"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <AssetIcon symbol={holding.ticker} name={holding.name} size="sm" />
+                      <span className="truncate text-sm font-medium">{holding.ticker}</span>
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums">
+                      {formatPercent(holding.alloc)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

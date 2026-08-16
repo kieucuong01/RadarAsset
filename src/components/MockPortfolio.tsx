@@ -3,7 +3,6 @@
 import { startTransition, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { FavoriteAssetsPanel } from "@/components/FavoriteAssetsPanel";
 import { PortfolioHoldingsTable } from "@/components/mock-portfolio/PortfolioHoldingsTable";
 import { PortfolioHeader, PortfolioStatusPanel } from "@/components/mock-portfolio/PortfolioHeader";
 import { PortfolioOverviewPanel } from "@/components/mock-portfolio/PortfolioOverviewPanel";
@@ -94,14 +93,9 @@ export function MockPortfolio() {
         portfolio={portfolio}
         timeframe={timeframe}
         onTimeframeChange={(nextTimeframe) => startTransition(() => setTimeframe(nextTimeframe))}
+        onRecorded={handlePortfolioRecorded}
       />
       <PortfolioHoldingsTable holdings={holdings} currency={currency} />
-      <FavoriteAssetsPanel
-        holdings={holdings}
-        timeframe={timeframe}
-        onRecorded={handlePortfolioRecorded}
-        portfolioCurrency={currency}
-      />
       <PortfolioRiskMetrics metrics={portfolio?.riskMetrics ?? []} currency={currency} />
       <StrategyAssignmentPanel
         holdings={holdings}
@@ -111,14 +105,7 @@ export function MockPortfolio() {
         portfolioCurrency={currency}
       />
       <PortfolioStrategyForwardTests currency={currency} />
-      <PortfolioTransactionLog
-        transactions={portfolio?.transactions ?? []}
-        holdings={holdings}
-        disabled={!portfolio}
-        timeframe={timeframe}
-        currency={currency}
-        onRecorded={handlePortfolioRecorded}
-      />
+      <PortfolioTransactionLog transactions={portfolio?.transactions ?? []} currency={currency} />
     </main>
   );
 }

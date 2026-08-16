@@ -89,7 +89,6 @@ vi.mock("@/components/PortfolioTransactionDialog", () => ({
   PortfolioTransactionDialog: () => null,
 }));
 
-import { FavoriteAssetsPanel } from "./FavoriteAssetsPanel";
 import { MockPortfolio } from "./MockPortfolio";
 import { PortfolioStrategyForwardTests } from "./PortfolioStrategyForwardTests";
 import { StrategyAssignmentPanel } from "./StrategyAssignmentPanel";
@@ -219,85 +218,6 @@ describe("Portfolio number formatting", () => {
     expect(text).toContain("+12.34%");
     expect(text).toContain("1.2346");
     expect(text).not.toContain("56.200.000");
-  });
-
-  it("formats favorite prices with explicit quote currencies and missing quotes as unavailable", () => {
-    state.arrayQueue = [
-      [
-        {
-          id: "favorite-btc",
-          sym: "BTC",
-          name: "Bitcoin",
-          price: 56_200_000,
-          chg: 12.34,
-          alert: 0,
-          sentiment: "bull",
-          datasetState: "ready",
-          ingestionRequestId: null,
-          backtestableTimeframes: ["1d"],
-          currency: "USDT",
-          hasMarketQuote: true,
-        },
-        {
-          id: "favorite-fpt",
-          sym: "FPT",
-          name: "FPT",
-          price: 125_000,
-          chg: -1.25,
-          alert: 0,
-          sentiment: "neutral",
-          datasetState: "ready",
-          ingestionRequestId: null,
-          backtestableTimeframes: ["1d"],
-          currency: "VND",
-          hasMarketQuote: true,
-        },
-        {
-          id: "favorite-xau",
-          sym: "XAU",
-          name: "Gold",
-          price: 4_550.5,
-          chg: 0.5,
-          alert: 0,
-          sentiment: "bull",
-          datasetState: "ready",
-          ingestionRequestId: null,
-          backtestableTimeframes: ["1d"],
-          currency: "USD",
-          hasMarketQuote: true,
-        },
-        {
-          id: "favorite-missing",
-          sym: "ETH",
-          name: "Ethereum",
-          price: 0,
-          chg: 0,
-          alert: 0,
-          sentiment: "neutral",
-          datasetState: "stale",
-          ingestionRequestId: null,
-          backtestableTimeframes: [],
-          currency: "USDT",
-          hasMarketQuote: false,
-        },
-      ],
-    ];
-    const text = textContent(
-      renderToStaticMarkup(
-        <FavoriteAssetsPanel
-          holdings={[]}
-          timeframe="1M"
-          onRecorded={() => undefined}
-          portfolioCurrency="USD"
-        />,
-      ),
-    );
-
-    expect(text).toContain("56,200,000 USDT");
-    expect(text).toContain("125,000 VND");
-    expect(text).toContain("4,550.5 USD");
-    expect(text).toContain("+12.34%");
-    expect(text).toContain("EthereumStale——");
   });
 
   it("formats strategy forward-test money with the explicit assignment currency", () => {

@@ -1,11 +1,6 @@
 import { useMemo } from "react";
 
-import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
-import type {
-  PortfolioHoldingResponse,
-  PortfolioResponse,
-  PortfolioTimeframe,
-} from "@/lib/backend/types";
+import type { PortfolioResponse } from "@/lib/backend/types";
 import { formatMoney, formatNumber, formatPrice } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
@@ -24,21 +19,10 @@ type TransactionRow = {
 
 type PortfolioTransactionLogProps = {
   transactions: PortfolioResponse["transactions"];
-  holdings: PortfolioHoldingResponse[];
-  disabled: boolean;
-  timeframe: PortfolioTimeframe;
   currency: string;
-  onRecorded: (portfolio: PortfolioResponse) => void;
 };
 
-export function PortfolioTransactionLog({
-  transactions,
-  holdings,
-  disabled,
-  timeframe,
-  currency,
-  onRecorded,
-}: PortfolioTransactionLogProps) {
+export function PortfolioTransactionLog({ transactions, currency }: PortfolioTransactionLogProps) {
   const { t, locale } = useI18n();
   const visibleTransactions = useMemo<TransactionRow[]>(
     () =>
@@ -71,18 +55,9 @@ export function PortfolioTransactionLog({
             {t("portfolio.transactions.description")}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {t("portfolio.transactions.count", { count: visibleTransactions.length })}
-          </span>
-          <PortfolioTransactionDialog
-            holdings={holdings}
-            disabled={disabled}
-            timeframe={timeframe}
-            onRecorded={onRecorded}
-            portfolioCurrency={currency}
-          />
-        </div>
+        <span className="text-xs text-muted-foreground">
+          {t("portfolio.transactions.count", { count: visibleTransactions.length })}
+        </span>
       </div>
 
       <div className="overflow-x-auto">
