@@ -1,0 +1,82 @@
+name: Build production artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: datavest-production-artifact
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: quant-worker/requirements.txt
+
+      - name: Install application dependencies
+        run: |
+          npm ci
+          python -m pip install -r quant-worker/requirements.txt
+
+      - name: Run repository checks
+        run: npm run check
+
+      - name: Build Next.js standalone runtime
+        run: npm run build
+
+      - name: Build offline Python wheelhouse
+        run: |
+          mkdir -p dist/wheelhouse
+          python -m pip wheel \
+            --wheel-dir dist/wheelhouse \
+            -r quant-worker/requirements.txt
+
+      - name: Build offline Prisma migration tooling
+        run: |
+          PRISMA_VERSION="$(node -p "require('./node_modules/prisma/package.json').version")"
+          npm install \
+            --prefix dist/migration-tooling \
+            --package-lock=false \
+            --no-audit \
+            --no-fund \
+            "prisma@${PRISMA_VERSION}"
+          node dist/migration-tooling/node_modules/prisma/build/index.js --version
+
+      - name: Assemble and checksum release
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          npm run release:assemble
+          SHORT_SHA="${GIT_SHA:0:12}"
+          ARCHIVE="datavest-release-${SHORT_SHA}.tar.gz"
+          tar -C dist -czf "${ARCHIVE}" release
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+
+      - name: Upload checksummed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: datavest-release-${{ github.sha }}
+          path: |
+            datavest-release-*.tar.gz
+            datavest-release-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
