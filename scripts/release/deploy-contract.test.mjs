@@ -96,23 +96,15 @@ describe("DataVest atomic deploy", () => {
     await expect(readFile(path.join(fixture.testRoot, "current"))).rejects.toThrow();
   });
 
-  it("rejects wrong identity, low disk, and traversal before changing current", async () => {
-    for (const scenario of [
-      { fixture: await makeArchive(), sha: "f".repeat(40), disk: "99999999" },
-      { fixture: await makeArchive(), sha: gitSha, disk: "0" },
-      { fixture: await makeArchive({ traversal: true }), sha: gitSha, disk: "99999999" },
-    ]) {
-      await symlink("sentinel-release", path.join(scenario.fixture.testRoot, "current"));
-      const result = validate(
-        scenario.fixture.testRoot,
-        scenario.fixture.archive,
-        scenario.sha,
-        scenario.disk,
-      );
-      expect(result.status).not.toBe(0);
-      expect(await readlink(path.join(scenario.fixture.testRoot, "current"))).toBe(
-        "sentinel-release",
-      );
-    }
+  it.each([
+    ["wrong identity", false, "f".repeat(40), "99999999"],
+    ["low disk", false, gitSha, "0"],
+    ["path traversal", true, gitSha, "99999999"],
+  ])("rejects %s before changing current", async (_name, traversal, sha, disk) => {
+    const fixture = await makeArchive({ traversal });
+    await symlink("sentinel-release", path.join(fixture.testRoot, "current"));
+    const result = validate(fixture.testRoot, fixture.archive, sha, disk);
+    expect(result.status).not.toBe(0);
+    expect(await readlink(path.join(fixture.testRoot, "current"))).toBe("sentinel-release");
   });
 });
