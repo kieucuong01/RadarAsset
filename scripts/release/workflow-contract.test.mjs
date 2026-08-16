@@ -25,6 +25,13 @@ describe("production artifact workflow", () => {
     });
     expect(workflow.jobs.build["runs-on"]).toBe("ubuntu-24.04");
     expect(workflow.jobs.build.environment).toBeUndefined();
+    expect(workflow.jobs.build.env).toEqual({
+      BETTER_AUTH_URL: "http://127.0.0.1:4200",
+      BETTER_AUTH_SECRET: "datavest-build-only-secret-0000000000000000",
+      DATABASE_URL:
+        "postgresql://datavest_build:build_only@127.0.0.1:5432/datavest_build?schema=public",
+      NEXT_PUBLIC_SITE_URL: "https://datavest.vn",
+    });
   });
 
   it("runs every build gate before uploading a checksummed artifact", async () => {
@@ -55,12 +62,10 @@ describe("production artifact workflow", () => {
     expect(upload?.with?.name).toContain("github.sha");
   });
 
-  it("does not grant the build job production application secrets", async () => {
+  it("uses fixed build-only values and grants no production secrets", async () => {
     const { source, workflow } = await loadWorkflow();
 
-    expect(workflow.jobs.build.env).toBeUndefined();
-    expect(source).not.toMatch(
-      /DATABASE_URL|DEEPSEEK|S3_SECRET|BETTER_AUTH_SECRET|QUANT_ENGINE_API_TOKEN/,
-    );
+    expect(JSON.stringify(workflow.jobs.build.env)).not.toContain("secrets.");
+    expect(source).not.toMatch(/DEEPSEEK|S3_SECRET|QUANT_ENGINE_API_TOKEN/);
   });
 });
