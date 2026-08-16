@@ -176,7 +176,7 @@ def _derived_fact(
         observed_at=latest.observed_at,
         source_family="market_bars",
         source_code="radarasset-market-data",
-        source_url="https://radarasset.app/methodology/asset-opinion-facts-v1",
+        source_url="https://datavest.vn/gioi-thieu#phuong-phap",
         signed_score=None if score is None else _bounded(score),
         confidence=Decimal("100") if fresh else Decimal("0"),
         fresh=fresh,

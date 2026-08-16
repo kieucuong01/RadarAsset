@@ -71,7 +71,7 @@ class UrllibJsonTransport:
         self._opener = build_opener(_RejectRedirects())
 
     def get_json(self, url: str, *, timeout_seconds: float) -> HttpJsonResponse:
-        request = Request(url, headers={"User-Agent": "RadarAsset/1.0"})
+        request = Request(url, headers={"User-Agent": "DataVest/1.0"})
         try:
             with self._opener.open(request, timeout=timeout_seconds) as response:
                 body = response.read(self.max_response_bytes + 1)
