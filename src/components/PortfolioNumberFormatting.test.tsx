@@ -192,6 +192,12 @@ describe("Portfolio number formatting", () => {
   it("uses the explicit portfolio currency for totals, holdings, and risk money", () => {
     const text = renderPortfolio("VND");
 
+    expect(text).toContain("portfolio.balance.total");
+    expect(text).toContain("portfolio.allocation.title");
+    expect(text).toContain("portfolio.performance.title");
+    expect(text).toContain("portfolio.holdings.title");
+    expect(text).toContain("portfolio.risk.title");
+    expect(text).toContain("portfolio.transactions.title");
     expect(text).toContain("1,250,000 VND");
     expect(text).toContain("12,345.6789 BTC");
     expect(text).toContain("56,200,000 USDT");
