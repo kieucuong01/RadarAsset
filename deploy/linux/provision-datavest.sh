@@ -97,6 +97,7 @@ install -d -o datavest-deploy -g datavest -m 2750 /opt/datavest/incoming
 install -d -o root -g datavest -m 0750 /opt/datavest/shared
 install -d -o datavest -g datavest -m 0750 /opt/datavest/shared/spool
 install -d -o datavest -g datavest -m 0700 /opt/datavest/shared/spool/backups
+install -d -o datavest -g datavest -m 0700 /opt/datavest/shared/spool/browser-home
 install -d -o root -g datavest -m 0750 /opt/datavest/logs
 install -d -o root -g root -m 0755 /usr/local/libexec/datavest
 

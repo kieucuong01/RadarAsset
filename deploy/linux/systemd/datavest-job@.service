@@ -10,6 +10,7 @@ Group=datavest
 WorkingDirectory=/opt/datavest/current/quant-worker
 EnvironmentFile=/opt/datavest/shared/.env
 EnvironmentFile=-/opt/datavest/shared/release.env
+Environment=HOME=/opt/datavest/shared/spool/browser-home
 ExecStart=/usr/local/libexec/datavest/run-scheduled-job %i
 TimeoutStartSec=45min
 MemoryMax=900M

@@ -105,15 +105,20 @@ describe("DataVest production service configuration", () => {
 
   it("serializes bounded timer jobs on explicit Bangkok schedules", async () => {
     const service = parseUnit(await read("deploy/linux/systemd/datavest-job@.service"));
+    const provision = await read("deploy/linux/provision-datavest.sh");
     expect(service.Service).toMatchObject({
       User: "datavest",
       Group: "datavest",
+      Environment: "HOME=/opt/datavest/shared/spool/browser-home",
       ExecStart: "/usr/local/libexec/datavest/run-scheduled-job %i",
       TimeoutStartSec: "45min",
       MemoryMax: "900M",
       Nice: "10",
       IOSchedulingClass: "best-effort",
     });
+    expect(provision).toContain(
+      "install -d -o datavest -g datavest -m 0700 /opt/datavest/shared/spool/browser-home",
+    );
 
     const expected = {
       "datavest-market-daily.timer": [
