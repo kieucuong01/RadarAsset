@@ -506,7 +506,7 @@ def test_http_transport_identifies_bounded_public_source_requests() -> None:
     )
 
     request = opener.requests[0]
-    assert request.get_header("User-agent") == "RadarAsset/1.0"
+    assert request.get_header("User-agent") == "DataVest/1.0"
 
 
 def test_http_transport_retries_rate_limit_and_caps_retry_after() -> None:

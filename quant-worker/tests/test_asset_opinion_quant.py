@@ -200,6 +200,11 @@ def test_btc_context_uses_explainable_bounded_returns() -> None:
     )
     assert all(row.normalization_method == "return_x400_bounded_v1" for row in context)
     assert all(row.source_family == "market_bars" for row in context)
+    assert all(row.source_code == "radarasset-market-data" for row in context)
+    assert all(
+        row.source_url == "https://datavest.vn/gioi-thieu#phuong-phap"
+        for row in context
+    )
     assert tuple(len(row.underlying_ids) for row in context) == (21, 61)
 
 

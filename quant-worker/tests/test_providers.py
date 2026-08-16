@@ -17,9 +17,45 @@ from backtest.providers import (
     HttpJsonResponse,
     ProviderInstrumentDescriptor,
     ProviderUnavailableError,
+    UrllibJsonTransport,
     VnstockAdapter,
     _load_vnstock_market,
 )
+
+
+class FakeJsonResponse:
+    status = 200
+    headers: dict[str, str] = {}
+
+    def __enter__(self) -> "FakeJsonResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _limit: int) -> bytes:
+        return b"{}"
+
+
+class RecordingJsonOpener:
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    def open(self, request: Any, *, timeout: float) -> FakeJsonResponse:
+        self.requests.append(request)
+        assert timeout == 1
+        return FakeJsonResponse()
+
+
+def test_urllib_json_transport_identifies_datavest_requests() -> None:
+    opener = RecordingJsonOpener()
+    transport = UrllibJsonTransport()
+    transport._opener = opener
+
+    response = transport.get_json("https://example.test/data", timeout_seconds=1)
+
+    assert response.status == 200
+    assert opener.requests[0].get_header("User-agent") == "DataVest/1.0"
 
 
 class FakeDukascopyFrame:

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Radar, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 
+import { DataVestLogo } from "@/components/DataVestLogo";
+import { BRAND } from "@/lib/brand";
 import { APP_ROUTES } from "@/lib/navigation";
 
 export function Footer() {
@@ -8,14 +10,11 @@ export function Footer() {
     <footer className="mt-16 border-t border-border bg-card/40">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="grid size-9 place-items-center rounded-xl bg-gradient-primary shadow-glow">
-              <Radar className="size-5 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">RadarAsset</span>
+          <Link href="/" aria-label={BRAND.name} className="inline-flex items-center">
+            <DataVestLogo lockup />
           </Link>
           <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-            AI-powered insights and quantitative tools for crypto, equities, gold and macro markets.
+            {BRAND.descriptor}. {BRAND.tagline}
           </p>
         </div>
 
@@ -31,6 +30,11 @@ export function Footer() {
                 </Link>
               </li>
             ))}
+            <li>
+              <Link href="/gioi-thieu" className="transition-colors hover:text-primary">
+                Giới thiệu &amp; phương pháp
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
@@ -40,12 +44,13 @@ export function Footer() {
           <div className="flex max-w-3xl items-start gap-2">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-bear" />
             <p>
-              <span className="font-semibold text-foreground">Not financial advice.</span>{" "}
-              RadarAsset is for informational and educational purposes only. Markets carry risk;
-              past performance does not guarantee future results. Always do your own research.
+              <span className="font-semibold text-foreground">Not financial advice.</span> DataVest
+              cung cấp thông tin và công cụ phân tích cho mục đích giáo dục, không phải tư vấn tài
+              chính cá nhân hóa. Thị trường luôn có rủi ro; hiệu quả trong quá khứ không đảm bảo kết
+              quả tương lai.
             </p>
           </div>
-          <p className="shrink-0">© {new Date().getFullYear()} RadarAsset. All rights reserved.</p>
+          <p className="shrink-0">© {new Date().getFullYear()} DataVest.vn.</p>
         </div>
       </div>
     </footer>

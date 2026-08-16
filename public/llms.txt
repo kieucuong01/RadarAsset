@@ -1,11 +1,30 @@
-# RadarAsset
+# DataVest.vn
 
-> AI-powered financial insights and quantitative backtesting platform covering crypto, equities, gold and macro markets.
+> DataVest.vn là nền tảng dữ liệu định lượng dành cho nhà đầu tư cá nhân Việt Nam, giúp người dùng kiểm chứng giả thuyết và ra quyết định dựa trên số liệu thay vì cảm tính.
 
-RadarAsset synthesizes news, on-chain data and market sentiment into actionable daily briefings, and gives traders a quantitative lab to optimize portfolios, run AI price predictions and backtest multi-asset strategies.
+## Đối tượng sử dụng
 
-## Pages
+DataVest.vn phục vụ nhà đầu tư cá nhân Việt Nam muốn theo dõi bối cảnh thị trường, quản lý danh mục và kiểm thử chiến lược bằng dữ liệu có nguồn gốc và trạng thái rõ ràng.
 
-- [Smart Insights](/): AI daily briefing, decision summary, fear & greed index, expert signals from top research desks.
-- [Mock Portfolio](/portfolio): Wealth-management dashboard with allocation donut, performance vs benchmark, and holdings table with AI sentiment.
-- [Quant Lab](/quant-lab): Portfolio optimizer, historical correlation matrix, risk/return frontier, AI price prediction and multi-leg backtest engine.
+## Trang chính thức
+
+- [Smart Insights](https://datavest.vn/): bối cảnh thị trường được tổng hợp từ các dữ kiện và chỉ báo có thể kiểm tra; dữ liệu không khả dụng được ghi nhận thay vì suy đoán.
+- [Giới thiệu và phương pháp](https://datavest.vn/gioi-thieu): định vị sản phẩm, nguyên tắc dữ liệu, giới hạn và cách diễn giải kết quả.
+- [Danh mục](https://datavest.vn/portfolio): không gian riêng để theo dõi hoặc mô phỏng danh mục; không phải bằng chứng về tài sản lưu ký hay hiệu suất đầu tư thực tế.
+- [Quant Lab](https://datavest.vn/quant-lab): công cụ tối ưu hóa danh mục và backtest trên dữ liệu lịch sử; kết quả quá khứ và mô phỏng không bảo đảm hiệu suất tương lai.
+
+## Trạng thái dữ liệu
+
+- Dữ liệu hệ thống: dữ liệu đã được hệ thống thu thập hoặc tính toán và có nguồn hoặc thời điểm cập nhật tương ứng.
+- Dữ liệu mẫu: dữ liệu minh họa được gắn nhãn, không đại diện cho dữ liệu thị trường đang hoạt động.
+- Mô phỏng: kết quả tạo từ giả định, mô hình hoặc backtest; không phải giao dịch hay lợi nhuận thực tế.
+- Dữ liệu chưa khả dụng: hệ thống không có đủ dữ liệu đáng tin cậy và không tự điền giá trị suy đoán.
+
+## Phương pháp và giới hạn
+
+DataVest.vn ưu tiên số liệu có thể kiểm chứng, hiển thị nguồn và thời điểm cập nhật khi khả dụng, đồng thời phân biệt dữ liệu thực với dữ liệu mẫu hoặc mô phỏng. Nội dung và kết quả trên nền tảng chỉ nhằm cung cấp thông tin và công cụ nghiên cứu, không phải tư vấn tài chính cá nhân hóa, khuyến nghị mua bán hay cam kết lợi nhuận.
+
+Canonical entity: https://datavest.vn/
+Language: vi
+Market: Vietnam
+Updated: 2026-08-16

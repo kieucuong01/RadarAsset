@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { AuthForm } from "@/components/AuthForm";
 
 export const metadata: Metadata = {
-  title: "Create account",
-  description: "Create a private RadarAsset workspace.",
+  title: "Tạo tài khoản",
+  description: "Tạo tài khoản và workspace DataVest riêng tư.",
+  robots: { index: false, follow: false },
 };
 
 export default function SignUpPage() {

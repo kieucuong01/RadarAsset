@@ -119,7 +119,7 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
           </form>
         </CardContent>
         <CardFooter className="justify-center text-sm text-muted-foreground">
-          {isSignUp ? "Already have an account?" : "New to RadarAsset?"}
+          {isSignUp ? "Already have an account?" : "New to DataVest?"}
           <Button asChild variant="link" className="px-2">
             <Link href={isSignUp ? "/sign-in" : "/sign-up"}>
               {isSignUp ? "Sign in" : "Create account"}

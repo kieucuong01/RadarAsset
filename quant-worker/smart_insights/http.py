@@ -61,7 +61,7 @@ class UrllibTransport:
     ) -> HttpResponse:
         _validate_transport_url(url, allow_loopback_http=False)
         return self._request(
-            Request(url, headers={"User-Agent": "RadarAsset/1.0"}, method="GET"),
+            Request(url, headers={"User-Agent": "DataVest/1.0"}, method="GET"),
             expected_url=url,
             timeout_seconds=timeout_seconds,
             max_bytes=max_bytes,

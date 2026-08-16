@@ -1,4 +1,4 @@
-# Quant Insight Radar Architecture
+# DataVest Architecture
 
 This document is the current architecture source of truth for the repository. It describes the
 software that exists on `main`; delivery history belongs in Git, and detailed operating procedures
@@ -6,7 +6,7 @@ belong in the linked runbooks.
 
 ## System context
 
-Quant Insight Radar is a tenant-aware investment research application for Vietnam equities,
+DataVest is a tenant-aware investment research application for Vietnam equities,
 cryptocurrency, and XAU/USD. The browser uses one Next.js application for the product UI and API.
 PostgreSQL is the shared system of record. Python processes own expensive ingestion, portfolio
 optimization, factor calculations, backtests, forward-signal evaluation, and Smart Insights

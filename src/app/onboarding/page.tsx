@@ -7,8 +7,9 @@ import { provisionOrganizationDefaults } from "@/lib/backend/organization-provis
 import { shouldCreateWorkspace } from "@/lib/auth/navigation";
 
 export const metadata: Metadata = {
-  title: "Workspace setup",
-  description: "Create or activate your RadarAsset workspace.",
+  title: "Thiết lập workspace",
+  description: "Tạo hoặc kích hoạt workspace DataVest của bạn.",
+  robots: { index: false, follow: false },
 };
 
 export default async function OnboardingPage({

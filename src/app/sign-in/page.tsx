@@ -4,8 +4,9 @@ import { AuthForm } from "@/components/AuthForm";
 import { safeReturnTo } from "@/lib/auth/navigation";
 
 export const metadata: Metadata = {
-  title: "Sign in",
-  description: "Sign in to your RadarAsset workspace.",
+  title: "Đăng nhập",
+  description: "Đăng nhập workspace DataVest của bạn.",
+  robots: { index: false, follow: false },
 };
 
 export default async function SignInPage({
