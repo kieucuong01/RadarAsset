@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const migratedFiles = [
   "src/components/MockPortfolio.tsx",
+  "src/components/mock-portfolio/PortfolioHeader.tsx",
+  "src/components/mock-portfolio/PortfolioOverviewPanel.tsx",
+  "src/components/mock-portfolio/PortfolioHoldingsTable.tsx",
+  "src/components/mock-portfolio/PortfolioRiskMetrics.tsx",
+  "src/components/mock-portfolio/PortfolioTransactionLog.tsx",
   "src/components/PortfolioTransactionDialog.tsx",
   "src/components/TickerTape.tsx",
   "src/components/FactorLab.tsx",
