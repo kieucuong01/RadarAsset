@@ -26,6 +26,7 @@ export function favoriteReducer(state: FavoriteUiState, action: FavoriteUiAction
 }
 
 export function favoriteActionState(item: WatchlistItemResponse) {
+  const symbol = item.sym.trim().toUpperCase();
   const label = {
     ready: "Ready",
     loading: "Loading data",
@@ -35,7 +36,7 @@ export function favoriteActionState(item: WatchlistItemResponse) {
   const canBacktest = item.datasetState === "ready" && item.backtestableTimeframes.length > 0;
   return {
     canBacktest,
-    backtestHref: canBacktest ? `/quant-lab?symbols=${encodeURIComponent(item.sym)}` : null,
+    backtestHref: canBacktest ? `/quant-lab?symbols=${encodeURIComponent(symbol)}` : null,
     label,
   };
 }
