@@ -6,10 +6,10 @@ import socket
 import time
 import uuid
 from argparse import ArgumentParser
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Callable, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
@@ -26,6 +26,7 @@ from backtest.custom_rules import (
 )
 from backtest.forward_evaluator import PostgresEvaluationRepository, process_next_evaluation
 from backtest.models import Bar
+from backtest.run_contracts import DatasetInput, QueuedRun, QueuedRunLeg, WorkerRepository
 from backtest.portfolio import (
     PortfolioAssumptions,
     PortfolioLegInput,
@@ -49,61 +50,6 @@ DEFAULT_DATABASE_URL = (
 )
 DEFAULT_LEASE_SECONDS = 300
 MAX_ATTEMPTS = 3
-
-
-@dataclass(frozen=True)
-class QueuedRunLeg:
-    id: str
-    asset: str
-    market: str
-    dataset_version_id: str
-    allocation_bps: int
-    initial_notional: Decimal
-    leverage: Decimal
-    strategy_code: str
-    strategy_version: str
-    strategy_parameters: dict[str, Any]
-    implementation_hash: str = ""
-
-
-@dataclass(frozen=True)
-class QueuedRun:
-    id: str
-    organization_id: str
-    strategy_hash: str
-    parameters: dict[str, Any]
-    dataset_version_ids: tuple[str, ...]
-    worker_id: str = ""
-    attempt_count: int = 0
-    deadline_at: datetime | None = None
-    legs: tuple[QueuedRunLeg, ...] = ()
-
-
-@dataclass(frozen=True)
-class DatasetInput:
-    version_id: str
-    asset: str
-    market: str
-    checksum: str
-    bars: list[Bar]
-    adjustment_policy: str = "raw"
-
-
-class WorkerRepository(Protocol):
-    def claim_next_run(self) -> QueuedRun | None: ...
-
-    def load_datasets(self, run: QueuedRun) -> list[DatasetInput]: ...
-
-    def complete_run(
-        self,
-        run: QueuedRun,
-        summary: dict[str, Any],
-        artifacts: list[dict[str, Any]],
-    ) -> bool: ...
-
-    def fail_run(self, run: QueuedRun, code: str, message: str) -> bool: ...
-
-    def checkpoint_run(self, run: QueuedRun, progress: int) -> str: ...
 
 
 class RunControlStop(Exception):
