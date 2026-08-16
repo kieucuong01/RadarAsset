@@ -89,6 +89,15 @@ describe("DataVest production service configuration", () => {
       "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/ingest_market_data.py daily --env-file /opt/datavest/shared/.env",
     );
 
+    const fourHourly = spawnSync(bash, [runner, "--print-command", "smart-four-hourly"], {
+      encoding: "utf8",
+    });
+    expect(fourHourly.status, fourHourly.stderr).toBe(0);
+    expect(fourHourly.stdout.trim().split(/\r?\n/)).toEqual([
+      "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/collect_smart_insights.py daily --source coinglass-margin-borrow --env-file /opt/datavest/shared/.env",
+      "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/collect_smart_insights.py daily --source coinglass-liquidation-maxpain --env-file /opt/datavest/shared/.env",
+    ]);
+
     const invalid = spawnSync(bash, [runner, "not-a-job"], { encoding: "utf8" });
     expect(invalid.status).toBe(2);
     expect(invalid.stderr.trim()).toBe("scheduled_job=invalid");

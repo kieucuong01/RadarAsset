@@ -35,12 +35,14 @@ if [[ $# -ne 1 ]]; then
 fi
 
 job="$1"
+command_2=()
 case "${job}" in
   market-daily)
     command=("${python_bin}" "${worker_root}/ingest_market_data.py" daily --env-file "${env_file}")
     ;;
   smart-four-hourly)
-    command=("${python_bin}" "${worker_root}/collect_smart_insights.py" four-hourly --env-file "${env_file}")
+    command=("${python_bin}" "${worker_root}/collect_smart_insights.py" daily --source coinglass-margin-borrow --env-file "${env_file}")
+    command_2=("${python_bin}" "${worker_root}/collect_smart_insights.py" daily --source coinglass-liquidation-maxpain --env-file "${env_file}")
     ;;
   smart-daily)
     command=("${python_bin}" "${worker_root}/collect_smart_insights.py" daily --env-file "${env_file}")
@@ -65,6 +67,9 @@ esac
 
 if [[ "${print_only}" == true ]]; then
   printf '%s\n' "${command[*]}"
+  if [[ ${#command_2[@]} -gt 0 ]]; then
+    printf '%s\n' "${command_2[*]}"
+  fi
   exit 0
 fi
 
@@ -81,4 +86,7 @@ fi
 
 echo "scheduled_job=started job=${job}"
 "${command[@]}"
+if [[ ${#command_2[@]} -gt 0 ]]; then
+  "${command_2[@]}"
+fi
 echo "scheduled_job=completed job=${job}"
