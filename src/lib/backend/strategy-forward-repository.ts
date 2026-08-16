@@ -60,7 +60,7 @@ function strategyAssignmentToResponse(assignment: {
   portfolioId: string;
   parameters: unknown;
   status: string;
-  asset: { symbol: string };
+  asset: { symbol: string; currency?: string };
   strategyVersion: { code: string; version: string; name: string };
   signals: Array<Parameters<typeof strategySignalToResponse>[0]>;
 }): StrategyAssignmentResponse {
@@ -68,6 +68,7 @@ function strategyAssignmentToResponse(assignment: {
     id: assignment.id,
     portfolioId: assignment.portfolioId,
     symbol: assignment.asset.symbol,
+    ...(assignment.asset.currency ? { currency: assignment.asset.currency } : {}),
     strategyCode: assignment.strategyVersion.code,
     strategyVersion: assignment.strategyVersion.version,
     strategyName: assignment.strategyVersion.name,

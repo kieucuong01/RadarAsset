@@ -12,6 +12,7 @@ import {
 } from "recharts";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { formatCount, formatNumber, formatPercent, formatScore } from "@/lib/financial-format";
 import type { MacroEventRiskModel } from "@/lib/smart-insights-client";
 
 import type { MacroPulseState } from "./MacroQuantPulseTabs";
@@ -51,10 +52,14 @@ export function EventRiskPanel({
   }
   const impacts = new Map(data.assetImpacts.map((impact) => [impact.asset, impact]));
   const cards = [
-    { label: "Event Risk", value: data.score == null ? "—" : data.score.toFixed(1), unit: "/100" },
-    { label: "Fresh weight", value: `${Math.round(data.freshWeight * 100)}`, unit: "%" },
-    { label: "BTC impact", value: impacts.get("BTC")?.score.toFixed(1) ?? "—", unit: "score" },
-    { label: "XAU impact", value: impacts.get("XAU")?.score.toFixed(1) ?? "—", unit: "score" },
+    { label: "Event Risk", value: formatScore(data.score), unit: "/100" },
+    {
+      label: "Fresh weight",
+      value: formatPercent(data.freshWeight, { multiplier: 100 }),
+      unit: "",
+    },
+    { label: "BTC impact", value: formatScore(impacts.get("BTC")?.score), unit: "score" },
+    { label: "XAU impact", value: formatScore(impacts.get("XAU")?.score), unit: "score" },
   ];
   return (
     <section className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5">
@@ -102,7 +107,7 @@ export function EventRiskPanel({
                 <YAxis domain={[0, 100]} fontSize={11} />
                 <Tooltip
                   labelFormatter={(value) => dateLabel(String(value), locale)}
-                  formatter={(value) => [Number(value), "Severity /100"]}
+                  formatter={(value) => [formatScore(Number(value)), "Severity /100"]}
                 />
                 <Line
                   type="monotone"
@@ -127,7 +132,8 @@ export function EventRiskPanel({
                   {component.code.replace("macro.event.", "")}
                 </dt>
                 <dd className="font-mono tabular-nums">
-                  {component.value ?? "—"} · {Math.round(component.weight * 100)}%
+                  {formatNumber(component.value)} ·{" "}
+                  {formatPercent(component.weight, { multiplier: 100 })}
                 </dd>
               </div>
             ))}
@@ -141,12 +147,12 @@ export function EventRiskPanel({
             <div className="flex items-start justify-between gap-3">
               <strong>{event.title}</strong>
               <span className="font-mono">
-                {event.severity == null ? "—" : `${event.severity.toFixed(0)}/100`}
+                {event.severity == null ? "—" : `${formatScore(event.severity)}/100`}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {event.country ?? "Global"} · {dateLabel(event.occurredAt, locale)} ·{" "}
-              {event.corroborationCount} nguồn
+              {formatCount(event.corroborationCount)} nguồn
             </p>
           </div>
         ))}
@@ -158,7 +164,7 @@ export function EventRiskPanel({
               <th className="px-4 py-2 text-left">Sự kiện</th>
               <th className="px-4 py-2 text-left">Loại</th>
               <th className="px-4 py-2 text-left">Khu vực</th>
-              <th className="px-4 py-2 text-right">Severity</th>
+              <th className="px-4 py-2 text-right">Severity /100</th>
               <th className="px-4 py-2 text-right">Nguồn</th>
             </tr>
           </thead>
@@ -168,9 +174,7 @@ export function EventRiskPanel({
                 <td className="px-4 py-2 font-medium">{event.title}</td>
                 <td className="px-4 py-2">{event.category}</td>
                 <td className="px-4 py-2">{event.country ?? "Global"}</td>
-                <td className="px-4 py-2 text-right font-mono">
-                  {event.severity == null ? "—" : event.severity.toFixed(0)}
-                </td>
+                <td className="px-4 py-2 text-right font-mono">{formatScore(event.severity)}</td>
                 <td className="px-4 py-2 text-right">
                   {event.sources[0]?.sourceUrl ? (
                     <a
@@ -179,11 +183,11 @@ export function EventRiskPanel({
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-primary"
                     >
-                      {event.corroborationCount}
+                      {formatCount(event.corroborationCount)}
                       <ExternalLink className="size-3" />
                     </a>
                   ) : (
-                    event.corroborationCount
+                    formatCount(event.corroborationCount)
                   )}
                 </td>
               </tr>

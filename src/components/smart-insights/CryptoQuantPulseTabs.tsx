@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatPercent } from "@/lib/financial-format";
 import {
   buildCryptoMetricSeries,
   buildCryptoOverviewObservations,
@@ -35,15 +36,11 @@ function dateLabel(value: string, locale: "vi" | "en") {
 
 function formatValue(value: number, unit: string, locale: "vi" | "en") {
   if (unit === "return" || unit === "ratio_change") {
-    return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-      style: "percent",
-      maximumFractionDigits: 2,
-    }).format(value);
+    return formatPercent(value, { multiplier: 100 });
   }
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    notation: Math.abs(value) >= 1_000_000 ? "compact" : "standard",
-    maximumFractionDigits: 2,
-  }).format(value);
+  if (unit === "index") return formatMetricValue(value, { locale, unit: "INDEX" });
+  if (unit === "percent" || unit === "rate") return formatPercent(value);
+  return formatMetricValue(value, { locale, unit });
 }
 
 function CryptoOverviewSummary({
@@ -104,8 +101,7 @@ function CryptoOverviewSummary({
               <FreshnessBadge state={item.freshness} />
             </div>
             <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
-              {formatValue(item.value, item.unit, locale)}{" "}
-              <span className="text-xs font-normal text-muted-foreground">{item.unit}</span>
+              {formatValue(item.value, item.unit, locale)}
             </p>
             <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <time dateTime={item.effectiveAt}>{dateLabel(item.effectiveAt, locale)}</time>

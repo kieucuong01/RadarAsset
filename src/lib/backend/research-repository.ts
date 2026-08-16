@@ -267,6 +267,8 @@ export async function loadWatchlist(context: TenantContext) {
       datasetState,
       ingestionRequestId: activeRequest?.id ?? null,
       backtestableTimeframes,
+      currency: item.asset.currency,
+      hasMarketQuote: Boolean(ticker),
     };
   });
 }

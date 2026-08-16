@@ -179,6 +179,7 @@ describe("portfolio backtest result model", () => {
     expect(model.aggregate.cashFlow[0]?.amount).toBe(100);
     expect(model.aggregate.robustness).toBeNull();
     expect(model.legs.map((leg) => leg.label)).toEqual(["BTC · MA Crossover"]);
+    expect(model.legs[0]?.currency).toBe("USDT");
   });
 
   it("parses immutable walk-forward selection and combined fragility", () => {

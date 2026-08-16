@@ -41,6 +41,16 @@ import type {
   PortfolioTimeframe,
 } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
+import {
+  defaultCurrency,
+  formatCount,
+  formatMetricValue,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+  formatRatio,
+} from "@/lib/financial-format";
 import { clearCachedPortfolio, getCachedPortfolio } from "@/lib/portfolio-client";
 
 const TIMEFRAMES = ["1W", "1M", "YTD", "1Y"] as const;
@@ -71,10 +81,11 @@ type Tx = {
   fee: number;
   netAmount: number;
   realizedPnL: number;
+  currency?: string;
 };
 
 export function MockPortfolio() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [hide, setHide] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>("1M");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
@@ -123,11 +134,9 @@ export function MockPortfolio() {
   const day = portfolio?.dayChangePct ?? 0;
   const holdings = portfolio?.holdings ?? [];
   const performance = portfolio?.performance ?? [];
-
-  const fmt0 = (n: number) =>
-    n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  const fmt2 = (n: number) =>
-    n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  const currency = portfolio?.baseCurrency ?? defaultCurrency(locale);
+  const money = (value: number) => formatMoney(value, { locale, currency });
+  const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
 
   if (loading && !portfolio) {
     return (
@@ -182,7 +191,7 @@ export function MockPortfolio() {
               </button>
             </div>
             <div className="mt-2 text-5xl md:text-6xl font-bold tracking-tight tabular-nums">
-              {hide ? "******" : fmt0(totalValue)}
+              {hide ? "******" : money(totalValue)}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <span
@@ -195,14 +204,12 @@ export function MockPortfolio() {
                 ) : (
                   <TrendingDown className="w-3.5 h-3.5" />
                 )}
-                {day >= 0 ? "+" : ""}
-                {day.toFixed(2)}% 24h
+                {formatPercent(day, { sign: true })} 24h
               </span>
               <span className="text-xs text-muted-foreground">
                 {t("portfolio.balance.totalPnl")}:{" "}
                 <span className={totalPnL >= 0 ? "text-bull" : "text-bear"}>
-                  {totalPnL >= 0 ? "+" : ""}
-                  {fmt0(totalPnL)} ({totalPnLPct.toFixed(2)}%)
+                  {signedMoney(totalPnL)} ({formatPercent(totalPnLPct, { sign: true })})
                 </span>
               </span>
             </div>
@@ -212,7 +219,7 @@ export function MockPortfolio() {
                   {t("portfolio.balance.openCost")}
                 </div>
                 <div className="mt-1 font-semibold tabular-nums">
-                  {hide ? "******" : fmt0(totalCost)}
+                  {hide ? "******" : money(totalCost)}
                 </div>
               </div>
               <div>
@@ -224,7 +231,7 @@ export function MockPortfolio() {
                     unrealizedPnL >= 0 ? "text-bull" : "text-bear"
                   }`}
                 >
-                  {hide ? "******" : `${unrealizedPnL >= 0 ? "+" : ""}${fmt0(unrealizedPnL)}`}
+                  {hide ? "******" : signedMoney(unrealizedPnL)}
                 </div>
               </div>
               <div>
@@ -236,7 +243,7 @@ export function MockPortfolio() {
                     realizedPnL >= 0 ? "text-bull" : "text-bear"
                   }`}
                 >
-                  {hide ? "******" : `${realizedPnL >= 0 ? "+" : ""}${fmt0(realizedPnL)}`}
+                  {hide ? "******" : signedMoney(realizedPnL)}
                 </div>
               </div>
             </div>
@@ -274,7 +281,10 @@ export function MockPortfolio() {
                         borderRadius: 8,
                         fontSize: 12,
                       }}
-                      formatter={(v: number) => [`${v}%`, t("portfolio.allocation.tooltip")]}
+                      formatter={(v: number) => [
+                        formatPercent(v),
+                        t("portfolio.allocation.tooltip"),
+                      ]}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -287,7 +297,7 @@ export function MockPortfolio() {
                       style={{ backgroundColor: allocationColors[d.name] ?? "var(--primary)" }}
                     />
                     <span className="text-muted-foreground w-16">{d.name}</span>
-                    <span className="font-semibold tabular-nums">{d.value}%</span>
+                    <span className="font-semibold tabular-nums">{formatPercent(d.value)}</span>
                   </li>
                 ))}
               </ul>
@@ -354,6 +364,7 @@ export function MockPortfolio() {
                   tickLine={false}
                   axisLine={false}
                   width={40}
+                  tickFormatter={(value: number) => formatNumber(value)}
                 />
                 <Tooltip
                   contentStyle={{
@@ -362,6 +373,7 @@ export function MockPortfolio() {
                     borderRadius: 8,
                     fontSize: 12,
                   }}
+                  formatter={(value) => formatNumber(Number(value))}
                 />
                 <Area
                   type="monotone"
@@ -385,26 +397,28 @@ export function MockPortfolio() {
         </div>
       </section>
 
-      <HoldingsTable holdings={holdings} fmt0={fmt0} fmt2={fmt2} />
+      <HoldingsTable holdings={holdings} currency={currency} />
       <FavoriteAssetsPanel
         holdings={holdings}
         timeframe={timeframe}
         onRecorded={handlePortfolioRecorded}
+        portfolioCurrency={currency}
       />
-      <RiskMetrics metrics={portfolio?.riskMetrics ?? []} />
+      <RiskMetrics metrics={portfolio?.riskMetrics ?? []} currency={currency} />
       <StrategyAssignmentPanel
         holdings={holdings}
         disabled={!portfolio}
         timeframe={timeframe}
         onRecorded={handlePortfolioRecorded}
+        portfolioCurrency={currency}
       />
-      <PortfolioStrategyForwardTests />
+      <PortfolioStrategyForwardTests currency={currency} />
       <TransactionLog
         transactions={portfolio?.transactions ?? []}
         holdings={holdings}
         disabled={!portfolio}
         timeframe={timeframe}
-        fmt2={fmt2}
+        currency={currency}
         onRecorded={handlePortfolioRecorded}
       />
     </main>
@@ -470,14 +484,12 @@ function StatusPanel({
 
 function HoldingsTable({
   holdings,
-  fmt0,
-  fmt2,
+  currency,
 }: {
   holdings: NonNullable<PortfolioResponse["holdings"]>;
-  fmt0: (n: number) => string;
-  fmt2: (n: number) => string;
+  currency: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <div className="p-5 border-b border-border flex items-center justify-between">
@@ -488,7 +500,7 @@ function HoldingsTable({
           </p>
         </div>
         <span className="text-xs text-muted-foreground">
-          {t("portfolio.holdings.count", { count: holdings.length })}
+          {t("portfolio.holdings.count", { count: formatCount(holdings.length) })}
         </span>
       </div>
 
@@ -530,6 +542,7 @@ function HoldingsTable({
             )}
             {holdings.map((holding) => {
               const up = holding.pnl >= 0;
+              const holdingCurrency = holding.currency ?? currency;
               return (
                 <tr
                   key={holding.ticker}
@@ -547,23 +560,21 @@ function HoldingsTable({
                     </div>
                   </td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {holding.qty.toLocaleString("en-US", { maximumFractionDigits: 8 })}
+                    {formatMetricValue(holding.qty, { locale, unit: holding.ticker })}
                   </td>
-                  <td className="text-right tabular-nums px-5 py-4">{fmt2(holding.cost)}</td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {holding.price.toLocaleString("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatPrice(holding.cost, { locale, currency: holdingCurrency })}
+                  </td>
+                  <td className="text-right tabular-nums px-5 py-4">
+                    {formatPrice(holding.price, { locale, currency: holdingCurrency })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4 font-medium">
-                    {fmt0(holding.value)}
+                    {formatMoney(holding.value, { locale, currency: holdingCurrency })}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-semibold tabular-nums w-10">
-                        {holding.alloc}%
+                        {formatPercent(holding.alloc)}
                       </span>
                       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                         <div
@@ -575,12 +586,11 @@ function HoldingsTable({
                   </td>
                   <td className="text-right px-5 py-4">
                     <div className={`font-semibold tabular-nums ${up ? "text-bull" : "text-bear"}`}>
-                      {up ? "+" : ""}
-                      {fmt0(holding.pnl)}
+                      {holding.pnl > 0 ? "+" : ""}
+                      {formatMoney(holding.pnl, { locale, currency: holdingCurrency })}
                     </div>
                     <div className={`text-xs tabular-nums ${up ? "text-bull" : "text-bear"}`}>
-                      {up ? "+" : ""}
-                      {holding.pnlPct.toFixed(2)}%
+                      {formatPercent(holding.pnlPct, { sign: true })}
                     </div>
                   </td>
                   <td className="px-5 py-4">
@@ -598,8 +608,14 @@ function HoldingsTable({
   );
 }
 
-function RiskMetrics({ metrics }: { metrics: PortfolioRiskMetricResponse[] }) {
-  const { t } = useI18n();
+function RiskMetrics({
+  metrics,
+  currency,
+}: {
+  metrics: PortfolioRiskMetricResponse[];
+  currency: string;
+}) {
+  const { t, locale } = useI18n();
   return (
     <section className="space-y-3" aria-labelledby="risk-metrics-heading">
       <div className="flex items-end justify-between">
@@ -646,7 +662,13 @@ function RiskMetrics({ metrics }: { metrics: PortfolioRiskMetricResponse[] }) {
                       : "text-foreground"
                 }`}
               >
-                {metric.value}
+                {metric.key === "var95"
+                  ? formatMoney(metric.rawValue, { locale, currency })
+                  : metric.key === "volatility" || metric.key === "maxDrawdown"
+                    ? formatPercent(metric.rawValue)
+                    : metric.key === "beta" || metric.key === "sharpe"
+                      ? formatRatio(metric.rawValue)
+                      : metric.value}
               </div>
               <div className="text-[11px] text-muted-foreground mt-0.5">{metric.sub}</div>
             </div>
@@ -662,17 +684,17 @@ function TransactionLog({
   holdings,
   disabled,
   timeframe,
-  fmt2,
+  currency,
   onRecorded,
 }: {
   transactions: PortfolioResponse["transactions"];
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
   timeframe: PortfolioTimeframe;
-  fmt2: (n: number) => string;
+  currency: string;
   onRecorded: (portfolio: PortfolioResponse) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const visibleTxs = useMemo<Tx[]>(
     () =>
       transactions.map((transaction) => ({
@@ -685,6 +707,7 @@ function TransactionLog({
         fee: transaction.fee,
         netAmount: transaction.netAmount,
         realizedPnL: transaction.realizedPnL,
+        currency: transaction.currency,
       })),
     [transactions],
   );
@@ -712,6 +735,7 @@ function TransactionLog({
             disabled={disabled}
             timeframe={timeframe}
             onRecorded={onRecorded}
+            portfolioCurrency={currency}
           />
         </div>
       </div>
@@ -764,21 +788,30 @@ function TransactionLog({
                       {isBuy ? t("common.buy") : t("common.sell")}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-right tabular-nums">{tx.qty.toLocaleString()}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{fmt2(tx.price)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">
+                    {formatNumber(tx.qty, { maximumFractionDigits: 8 })}
+                  </td>
+                  <td className="px-5 py-3 text-right tabular-nums">
+                    {formatPrice(tx.price, { locale, currency: tx.currency ?? currency })}
+                  </td>
                   <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">
-                    {tx.fee ? fmt2(tx.fee) : "-"}
+                    {formatMoney(tx.fee, { locale, currency: tx.currency ?? currency })}
                   </td>
                   <td className="px-5 py-3 text-right tabular-nums font-semibold">
-                    {tx.netAmount >= 0 ? "+" : ""}
-                    {fmt2(tx.netAmount)}
+                    {tx.netAmount > 0 ? "+" : ""}
+                    {formatMoney(tx.netAmount, { locale, currency: tx.currency ?? currency })}
                   </td>
                   <td
                     className={`px-5 py-3 text-right tabular-nums font-semibold ${
                       !isBuy && tx.realizedPnL >= 0 ? "text-bull" : !isBuy ? "text-bear" : ""
                     }`}
                   >
-                    {isBuy ? "–" : `${tx.realizedPnL >= 0 ? "+" : ""}${fmt2(tx.realizedPnL)}`}
+                    {isBuy
+                      ? "–"
+                      : `${tx.realizedPnL > 0 ? "+" : ""}${formatMoney(tx.realizedPnL, {
+                          locale,
+                          currency: tx.currency ?? currency,
+                        })}`}
                   </td>
                 </tr>
               );

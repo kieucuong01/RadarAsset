@@ -3,12 +3,9 @@ import { ArrowDownRight, ArrowUpRight, Gauge, Target, TrendingUp } from "lucide-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { buildBacktestKpis } from "@/lib/backtest/result-presentation";
+import { formatPercent, formatRatio } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
-
-function formatMetric(value: number | null, suffix = "", digits = 2) {
-  return value === null ? "-" : `${value.toFixed(digits)}${suffix}`;
-}
 
 export function BacktestKpiGrid({ model }: { model: BacktestResultModel }) {
   const { t } = useI18n();
@@ -16,35 +13,35 @@ export function BacktestKpiGrid({ model }: { model: BacktestResultModel }) {
   const items = [
     {
       label: t("backtestResults.maxDrawdown"),
-      value: formatMetric(kpis.maxDrawdownPct, "%"),
+      value: formatPercent(kpis.maxDrawdownPct),
       hint: t("backtestResults.peakLoss"),
       tone: "text-rose-600",
       icon: ArrowDownRight,
     },
     {
       label: t("backtestResults.profitFactor"),
-      value: formatMetric(kpis.profitFactor),
+      value: formatRatio(kpis.profitFactor),
       hint: t("backtestResults.grossWL"),
       tone: "text-emerald-600",
       icon: Target,
     },
     {
       label: t("backtestResults.sharpeRatio"),
-      value: formatMetric(kpis.sharpe),
+      value: formatRatio(kpis.sharpe),
       hint: t("backtestResults.riskAdjusted"),
       tone: "text-foreground",
       icon: Gauge,
     },
     {
       label: t("backtestResults.winRate"),
-      value: formatMetric(kpis.winRatePct, "%", 1),
+      value: formatPercent(kpis.winRatePct),
       hint: t("backtestResults.winningTrades"),
       tone: "text-emerald-600",
       icon: ArrowUpRight,
     },
     {
       label: t("backtestResults.totalReturn"),
-      value: formatMetric(kpis.totalReturnPct, "%", 1),
+      value: formatPercent(kpis.totalReturnPct),
       hint: t("backtestResults.portfolioReturn"),
       tone:
         kpis.totalReturnPct !== null && kpis.totalReturnPct < 0

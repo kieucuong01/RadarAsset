@@ -121,4 +121,11 @@ describe("Quant asset catalog client", () => {
       detail: "250 bars · catalog since 2025-06-01",
     });
   });
+
+  it("groups row counts with shared count punctuation", () => {
+    expect(assetReadinessLabel({ ...validItem, rowCount: 12_450 })).toEqual({
+      badge: "Sẵn sàng",
+      detail: "12,450 bars",
+    });
+  });
 });

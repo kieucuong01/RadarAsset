@@ -90,6 +90,7 @@ export function buildPortfolioResponse(input: {
       alloc: totalValue === 0 ? 0 : round((value / totalValue) * 100),
       sentiment: sentimentFor(pnlPct),
       category: categoryFor(position.assetClass),
+      ...(position.currency ? { currency: position.currency } : {}),
     };
   });
 
@@ -215,6 +216,7 @@ export function replayPortfolioLedger(input: {
       name: asset.name,
       assetClass: asset.assetClass,
       latestPrice: asset.latestPrice,
+      ...(asset.currency ? { currency: asset.currency } : {}),
     };
 
     if (enrichedNext.quantity <= 0) {
@@ -230,6 +232,9 @@ export function replayPortfolioLedger(input: {
 
     transactions.push({
       ...transaction,
+      ...(transaction.currency || asset.currency
+        ? { currency: transaction.currency || asset.currency }
+        : {}),
       grossAmount: round(grossAmount, 8),
       netAmount: round(netAmount, 8),
       releasedCostBasis: round(releasedCostBasis, 8),

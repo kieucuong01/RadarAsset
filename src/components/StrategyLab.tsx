@@ -5,10 +5,7 @@ import { ArrowRight, BookOpen, CheckCircle2, Save, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 import { SavedStrategiesPanel } from "@/components/strategy-lab/SavedStrategiesPanel";
-import {
-  StrategyBuilderPanel,
-  type StrategyBuilderState,
-} from "@/components/strategy-lab/StrategyBuilderPanel";
+import { StrategyBuilderPanel } from "@/components/strategy-lab/StrategyBuilderPanel";
 import {
   StrategyLibraryPanel,
   type StrategyLibraryFamily,
@@ -31,44 +28,28 @@ import {
   type CustomStrategySummary,
 } from "@/lib/strategy-lab/client";
 import { migrateLegacyStrategies } from "@/lib/strategy-lab/legacy-migration";
+import {
+  applySavedRuleToStrategyBuilder,
+  createInitialStrategyBuilderState,
+  type StrategyBuilderState,
+} from "@/lib/strategy-lab/builder-state";
 
 export type StrategyLabSelection = {
   preset: BacktestStrategyPreset;
   symbols: string[];
 };
 
-function initialBuilderState(name: string): StrategyBuilderState {
-  const strategy = STRATEGY_CATALOG[0];
-  return {
-    name,
-    symbol: "BTC",
-    kind: "catalog_preset",
-    strategyCode: strategy.code,
-    strategyParameters: { ...strategy.defaultParameters },
-    amount: 400,
-    currency: "USD",
-    dayOfMonth: 1,
-    priceOperator: "crosses_below",
-    priceValue: 50_000,
-    action: "sell",
-    sizePct: 100,
-    metric: "pb",
-    fundamentalOperator: "lt",
-    fundamentalValue: 4,
-  };
-}
-
 export function StrategyLab({
   onUsePreset,
 }: {
   onUsePreset: (selection: StrategyLabSelection) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [section, setSection] = useState("library");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryFamily, setLibraryFamily] = useState<StrategyLibraryFamily>("all");
   const [builder, setBuilder] = useState<StrategyBuilderState>(() =>
-    initialBuilderState(t("strategyLab.defaultName")),
+    createInitialStrategyBuilderState(t("strategyLab.defaultName"), locale),
   );
   const [saved, setSaved] = useState<CustomStrategySummary[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(true);
@@ -230,30 +211,13 @@ export function StrategyLab({
     const latest = strategy.versions[0];
     if (!latest) return;
     setEditingId(strategy.id);
-    setBuilder((current) => {
-      if (latest.rule.kind === "scheduled_dca") {
-        return {
-          ...current,
-          name: strategy.name,
-          symbol: strategy.description ?? current.symbol,
-          kind: "scheduled_dca",
-          amount: latest.rule.contributionAmount,
-          currency: latest.rule.currency,
-          dayOfMonth: latest.rule.dayOfMonth,
-        };
-      }
-      return {
-        ...current,
+    setBuilder((current) =>
+      applySavedRuleToStrategyBuilder(current, {
         name: strategy.name,
-        symbol: strategy.description ?? current.symbol,
-        kind: "price_threshold",
-        priceOperator: latest.rule.operator,
-        priceValue: latest.rule.threshold,
-        currency: latest.rule.currency,
-        action: latest.rule.action,
-        sizePct: latest.rule.sizePct,
-      };
-    });
+        symbol: strategy.description,
+        rule: latest.rule,
+      }),
+    );
     setSection("builder");
   }
 

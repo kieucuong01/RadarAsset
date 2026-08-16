@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { BuilderAction, DraftBacktestLeg } from "@/lib/backtest/builder-state";
 import type { StrategyCatalogItem } from "@/lib/backtest/client";
+import { formatCount, formatMoney, formatNumber } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
@@ -37,14 +38,6 @@ type BacktestLegCardProps = {
   dispatch: (action: BuilderAction) => void;
 };
 
-function formatMoney(value: number, currency: "USD" | "VND") {
-  return new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "VND" ? 0 : 2,
-  }).format(value);
-}
-
 export function BacktestLegCard({
   leg,
   strategies,
@@ -57,7 +50,6 @@ export function BacktestLegCard({
   const notional = (totalCapital * leg.allocationBps) / 10_000;
   const leverageOptions = [1, 1.5, 2].filter((value) => value <= leg.maxLeverage);
   const { t, locale } = useI18n();
-  const numberFormatter = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US");
 
   return (
     <Card className={cn(compact && "rounded-2xl border-border/80 shadow-sm")}>
@@ -74,8 +66,7 @@ export function BacktestLegCard({
               <Badge variant="outline">{leg.freshness}</Badge>
             </CardTitle>
             <CardDescription className={cn("mt-1", compact ? "line-clamp-2" : "truncate")}>
-              {leg.name} · {leg.currency} · {numberFormatter.format(leg.rowCount)}{" "}
-              {t("backtest.builder.bars")}
+              {leg.name} · {leg.currency} · {formatCount(leg.rowCount)} {t("backtest.builder.bars")}
             </CardDescription>
           </div>
           <Button
@@ -141,7 +132,9 @@ export function BacktestLegCard({
                   })
                 }
               />
-              <FieldDescription>{formatMoney(notional, baseCurrency)}</FieldDescription>
+              <FieldDescription>
+                {formatMoney(notional, { locale, currency: baseCurrency })}
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={`${leg.symbol}-strategy`}>
@@ -194,14 +187,23 @@ export function BacktestLegCard({
                   <SelectGroup>
                     {leverageOptions.map((value) => (
                       <SelectItem key={value} value={String(value)}>
-                        {value.toFixed(1)}×
+                        {formatNumber(value, {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}
+                        ×
                       </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
               <FieldDescription>
-                {t("backtest.builder.leg.maxLeverage", { value: leg.maxLeverage.toFixed(1) })}
+                {t("backtest.builder.leg.maxLeverage", {
+                  value: formatNumber(leg.maxLeverage, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  }),
+                })}
               </FieldDescription>
             </Field>
           </div>

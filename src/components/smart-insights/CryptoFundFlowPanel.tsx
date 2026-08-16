@@ -14,6 +14,7 @@ import {
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatNumber, formatPercent } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 import type { CryptoPanelMode } from "./CryptoFearGreedPanel";
 
@@ -47,11 +48,8 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
-function formatFlow(value: number): string {
-  const absolute = Math.abs(value);
-  if (absolute >= 1_000_000_000)
-    return `${value < 0 ? "-" : ""}US$${(absolute / 1_000_000_000).toFixed(2)}bn`;
-  return `${value < 0 ? "-" : ""}US$${(absolute / 1_000_000).toFixed(1)}m`;
+function formatFlow(value: number, locale: "vi" | "en"): string {
+  return formatMetricValue(value / 1_000_000, { locale, unit: "USD_MILLION" });
 }
 
 export function CryptoFundFlowPanel({
@@ -138,13 +136,15 @@ export function CryptoFundFlowPanel({
               fontSize={11}
             />
             <YAxis
-              tickFormatter={(value: number) => `${Math.round(value / 1_000_000)}m`}
+              tickFormatter={(value: number) =>
+                formatNumber(value / 1_000_000, { maximumFractionDigits: 2 })
+              }
               fontSize={11}
               width={52}
             />
             <Tooltip
               labelFormatter={(value) => dateLabel(String(value), locale)}
-              formatter={(value) => formatFlow(Number(value))}
+              formatter={(value) => formatFlow(Number(value), locale)}
             />
             <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
             {labels.map((label, index) => (
@@ -181,10 +181,10 @@ export function CryptoFundFlowPanel({
                       row.value < 0 && "text-bear",
                     )}
                   >
-                    {formatFlow(row.value)}
+                    {formatFlow(row.value, locale)}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                    {total ? `${((row.value / total) * 100).toFixed(1)}%` : "—"}
+                    {total ? formatPercent(row.value / total, { multiplier: 100 }) : "—"}
                   </td>
                 </tr>
               );

@@ -31,25 +31,10 @@ import {
   describeCustomStrategy,
   type CustomStrategyInput,
 } from "@/lib/strategy-lab/custom-strategy";
+import type { StrategyBuilderState } from "@/lib/strategy-lab/builder-state";
 import { useI18n } from "@/lib/i18n/context";
 
-export type StrategyBuilderState = {
-  name: string;
-  symbol: string;
-  kind: CustomStrategyInput["kind"];
-  strategyCode: string;
-  strategyParameters: Record<string, number>;
-  amount: number;
-  currency: "USD" | "VND";
-  dayOfMonth: number;
-  priceOperator: "crosses_above" | "crosses_below";
-  priceValue: number;
-  action: "buy" | "sell";
-  sizePct: number;
-  metric: "pb" | "pe" | "roe";
-  fundamentalOperator: "lt" | "lte" | "gt" | "gte";
-  fundamentalValue: number;
-};
+export type { StrategyBuilderState } from "@/lib/strategy-lab/builder-state";
 
 export function StrategyBuilderPanel({
   builder,
@@ -171,7 +156,7 @@ function ReadinessBadge({
 }
 
 function BuilderPreview({ builder }: { builder: StrategyBuilderState }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   let draft: CustomStrategyInput | null = null;
   try {
     const base = {
@@ -234,7 +219,7 @@ function BuilderPreview({ builder }: { builder: StrategyBuilderState }) {
             <Alert>
               <CheckCircle2 />
               <AlertTitle>{builder.name || t("strategyLab.unnamed")}</AlertTitle>
-              <AlertDescription>{describeCustomStrategy(draft)}</AlertDescription>
+              <AlertDescription>{describeCustomStrategy(draft, locale)}</AlertDescription>
             </Alert>
             <div className="flex items-center gap-2">
               <ReadinessBadge status={readiness.status} />

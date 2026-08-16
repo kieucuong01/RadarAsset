@@ -15,6 +15,7 @@ import {
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { CryptoMarketPulseModel } from "@/lib/crypto-market-pulse-client";
+import { formatMetricValue, formatNumber } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 import type { CryptoPanelMode } from "./CryptoFearGreedPanel";
 
@@ -51,12 +52,11 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
-function formatFlow(value: number | null): string {
-  if (value === null) return "—";
-  const absolute = Math.abs(value);
-  if (absolute >= 1_000_000_000)
-    return `${value < 0 ? "-" : ""}US$${(absolute / 1_000_000_000).toFixed(2)}bn`;
-  return `${value < 0 ? "-" : ""}US$${(absolute / 1_000_000).toFixed(1)}m`;
+function formatFlow(value: number | null, locale: "vi" | "en"): string {
+  return formatMetricValue(value === null ? null : value / 1_000_000, {
+    locale,
+    unit: "USD_MILLION",
+  });
 }
 
 function summarize(data: CryptoMarketPulseModel["etfFlows"], key: AssetKey) {
@@ -146,7 +146,7 @@ export function CryptoEtfFlowPanel({
                         typeof value === "number" && value < 0 && "text-bear",
                       )}
                     >
-                      {formatFlow(typeof value === "number" ? value : null)}
+                      {formatFlow(typeof value === "number" ? value : null, locale)}
                     </dd>
                   </div>
                 ))}
@@ -201,13 +201,15 @@ export function CryptoEtfFlowPanel({
               fontSize={11}
             />
             <YAxis
-              tickFormatter={(value: number) => `${Math.round(value / 1_000_000)}m`}
+              tickFormatter={(value: number) =>
+                formatNumber(value / 1_000_000, { maximumFractionDigits: 2 })
+              }
               fontSize={11}
               width={52}
             />
             <Tooltip
               labelFormatter={(value) => dateLabel(String(value), locale)}
-              formatter={(value) => formatFlow(value == null ? null : Number(value))}
+              formatter={(value) => formatFlow(value == null ? null : Number(value), locale)}
             />
             <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
             {ASSETS.map((asset) =>
@@ -243,7 +245,7 @@ export function CryptoEtfFlowPanel({
                       value !== null && value < 0 && "text-bear",
                     )}
                   >
-                    {formatFlow(value)}
+                    {formatFlow(value, locale)}
                   </td>
                 ))}
               </tr>

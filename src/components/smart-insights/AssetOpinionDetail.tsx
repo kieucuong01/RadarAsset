@@ -43,6 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 
 type Locale = "vi" | "en";
 const ACTIONS: Record<string, { vi: string; en: string }> = {
@@ -128,16 +129,6 @@ function dateLabel(value: string, locale: Locale) {
     day: "2-digit",
     month: "2-digit",
   }).format(new Date(value));
-}
-
-function percentLabel(value: string | null, locale: Locale, multiplier = 1) {
-  if (value == null) return "—";
-  const parsed = Number(value) * multiplier;
-  return Number.isFinite(parsed)
-    ? `${new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-        maximumFractionDigits: 1,
-      }).format(parsed)}%`
-    : "—";
 }
 
 function Scenario({
@@ -276,6 +267,17 @@ export function AssetOpinionDetail({
     opinion.explanationStatus === "insufficient_data" ||
     opinion.explanationStatus === "unavailable";
   const technicalLimitation = technicalQuantLimitation(opinion, locale);
+  const inputByEvidenceId = new Map(
+    opinion.decisionInputs
+      .filter((input) => input.evidenceId)
+      .map((input) => [input.evidenceId, input]),
+  );
+  const evidenceValue = (evidence: AssetOpinionModel["evidence"][number]) => {
+    const input = inputByEvidenceId.get(evidence.id);
+    return input
+      ? formatMetricValue(input.rawValue, { locale, unit: input.unit })
+      : evidence.displayValue;
+  };
   return (
     <Card className="min-w-0 border-primary/20 shadow-none" data-testid="asset-opinion-detail">
       <CardHeader className="gap-4">
@@ -293,13 +295,13 @@ export function AssetOpinionDetail({
             </div>
             <CardDescription className="mt-2">
               {locale === "vi"
-                ? `Horizon ${opinion.horizon} · Độ phủ ${Math.round(Number(opinion.dataCoverage) * 100)}%`
-                : `Horizon ${opinion.horizon} · Coverage ${Math.round(Number(opinion.dataCoverage) * 100)}%`}
+                ? `Horizon ${opinion.horizon} · Độ phủ ${formatPercent(Number(opinion.dataCoverage) * 100)}`
+                : `Horizon ${opinion.horizon} · Coverage ${formatPercent(Number(opinion.dataCoverage) * 100)}`}
             </CardDescription>
           </div>
           <div className="text-right">
             <p className="font-mono text-2xl font-semibold tabular-nums">
-              {opinion.quantScore ?? "—"}
+              {formatScore(opinion.quantScore)}
             </p>
             <p className="text-xs text-muted-foreground">Quant score</p>
           </div>
@@ -372,9 +374,7 @@ export function AssetOpinionDetail({
                   {locale === "vi" ? "Tỷ trọng hiện tại" : "Current weight"}
                 </dt>
                 <dd className="mt-1 font-mono tabular-nums">
-                  {portfolioState === "available"
-                    ? percentLabel(opinion.portfolioWeightPct, locale)
-                    : "—"}
+                  {portfolioState === "available" ? formatPercent(opinion.portfolioWeightPct) : "—"}
                 </dd>
               </div>
               <div>
@@ -383,7 +383,7 @@ export function AssetOpinionDetail({
                 </dt>
                 <dd className="mt-1 font-mono tabular-nums">
                   {portfolioState === "available"
-                    ? percentLabel(opinion.unrealizedReturn, locale, 100)
+                    ? formatPercent(opinion.unrealizedReturn, { multiplier: 100 })
                     : "—"}
                 </dd>
               </div>
@@ -485,7 +485,7 @@ export function AssetOpinionDetail({
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.metricCode}</TableCell>
                         <TableCell className="font-mono tabular-nums">
-                          {item.displayValue}
+                          {evidenceValue(item)}
                           {item.delta ? ` · Δ ${item.delta}` : ""}
                           {item.percentile ? ` · Pctl ${item.percentile}` : ""}
                         </TableCell>
@@ -521,7 +521,7 @@ export function AssetOpinionDetail({
                       <strong className="text-sm">{item.metricCode}</strong>
                       <FreshnessBadge state={item.freshness} />
                     </div>
-                    <p className="font-mono text-lg tabular-nums">{item.displayValue}</p>
+                    <p className="font-mono text-lg tabular-nums">{evidenceValue(item)}</p>
                     <div className="flex items-center justify-between gap-3">
                       <Badge variant="outline">{item.impact}</Badge>
                       <Button variant="ghost" size="sm" onClick={() => onEvidence(item.id)}>

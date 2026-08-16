@@ -25,6 +25,13 @@ import {
   buildPortfolioTradeRows,
   filterPortfolioTradeRows,
 } from "@/lib/backtest/result-presentation";
+import {
+  formatCount,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+} from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type BacktestTradeListProps = {
@@ -38,14 +45,6 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
   const rows = useMemo(() => buildPortfolioTradeRows(model), [model]);
   const visibleRows = useMemo(() => filterPortfolioTradeRows(rows, symbol), [rows, symbol]);
   const symbols = useMemo(() => Array.from(new Set(rows.map((row) => row.asset))).sort(), [rows]);
-  const money = new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "VND" ? 0 : 2,
-  });
-  const number = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    maximumFractionDigits: 8,
-  });
 
   return (
     <Card className="min-w-0 max-w-full">
@@ -106,20 +105,22 @@ export function BacktestTradeList({ model, currency }: BacktestTradeListProps) {
                     <Badge variant="outline">{trade.action.toUpperCase()}</Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {number.format(trade.price)}
+                    {formatPrice(trade.price, { locale, currency: trade.currency })}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {number.format(trade.quantity)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{trade.barsHeld ?? "-"}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money.format(trade.fees)}
+                    {formatNumber(trade.quantity, { maximumFractionDigits: 8 })}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.realizedPnl === null ? "-" : money.format(trade.realizedPnl)}
+                    {formatCount(trade.barsHeld)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.returnPct === null ? "-" : `${trade.returnPct.toFixed(2)}%`}
+                    {formatMoney(trade.fees, { locale, currency })}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatMoney(trade.realizedPnl, { locale, currency })}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPercent(trade.returnPct)}
                   </TableCell>
                 </TableRow>
               ))}

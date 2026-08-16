@@ -15,6 +15,7 @@ import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
 import { alignEquityAndDrawdown, buildBacktestKpis } from "@/lib/backtest/result-presentation";
+import { formatMoney, formatPercent, formatRatio } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type EquityDrawdownChartProps = {
@@ -29,22 +30,15 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-function metricValue(value: number | null, digits = 2) {
-  return value === null ? "-" : value.toFixed(digits);
-}
-
 export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const gradientId = useId().replaceAll(":", "");
   const kpis = buildBacktestKpis(model);
   const rows = alignEquityAndDrawdown(model.aggregate.equity, model.aggregate.drawdown).map(
     (point, index) => ({ ...point, date: `D${index}` }),
   );
-  const money = new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  });
+  const moneyLabel = (value: number) => formatMoney(value, { locale, currency });
+  const percentLabel = (value: number) => formatPercent(value);
 
   return (
     <Card className="min-w-0 max-w-full overflow-hidden rounded-2xl shadow-sm">
@@ -68,7 +62,7 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                     : "text-rose-600"
                 }
               >
-                {metricValue(kpis.totalReturnPct, 1)}%
+                {formatPercent(kpis.totalReturnPct)}
               </span>
             </span>
             <span className="text-muted-foreground">{t("backtestResults.benchmarkPending")}</span>
@@ -93,10 +87,16 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                 minTickGap={28}
                 fontSize={11}
               />
-              <YAxis tickLine={false} axisLine={false} width={68} fontSize={11} />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={68}
+                fontSize={11}
+                tickFormatter={(value) => moneyLabel(Number(value))}
+              />
               <Tooltip
                 contentStyle={tooltipStyle}
-                formatter={(value) => money.format(Number(value))}
+                formatter={(value) => moneyLabel(Number(value))}
               />
               <Area
                 type="monotone"
@@ -123,12 +123,12 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                   axisLine={false}
                   width={48}
                   fontSize={11}
-                  tickFormatter={(value) => `${value}%`}
+                  tickFormatter={(value) => percentLabel(Number(value))}
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(value) => [
-                    `${Number(value).toFixed(2)}%`,
+                    percentLabel(Number(value)),
                     t("backtestResults.drawdown"),
                   ]}
                 />
@@ -150,14 +150,14 @@ export function EquityDrawdownChart({ model, currency }: EquityDrawdownChartProp
                 {t("backtestResults.maxDrawdown")}
               </p>
               <p className="mt-1 font-semibold text-rose-600">
-                {metricValue(kpis.maxDrawdownPct, 2)}%
+                {formatPercent(kpis.maxDrawdownPct)}
               </p>
             </div>
             <div className="rounded-xl border p-3">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">
                 {t("backtestResults.sharpeRatio")}
               </p>
-              <p className="mt-1 font-semibold">{metricValue(kpis.sharpe, 2)}</p>
+              <p className="mt-1 font-semibold">{formatRatio(kpis.sharpe)}</p>
             </div>
           </div>
         </aside>

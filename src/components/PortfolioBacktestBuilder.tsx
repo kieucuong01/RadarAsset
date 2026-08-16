@@ -46,7 +46,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getQuantAssets } from "@/lib/backtest/asset-client";
 import {
   builderValidationReasons,
-  createInitialBuilderState,
+  createInitialBuilderStateForLocale,
   reduceBuilder,
   strategyInputWithPreset,
   toPortfolioBacktestSubmission,
@@ -83,7 +83,8 @@ export function PortfolioBacktestBuilder({
   strategyPreset = null,
   layout = "stacked",
 }: PortfolioBacktestBuilderProps) {
-  const [state, dispatch] = useReducer(reduceBuilder, undefined, () => createInitialBuilderState());
+  const { t, locale } = useI18n();
+  const [state, dispatch] = useReducer(reduceBuilder, locale, createInitialBuilderStateForLocale);
   const [strategies, setStrategies] = useState<StrategyCatalogItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +95,6 @@ export function PortfolioBacktestBuilder({
   const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const loadedInitialSymbols = useRef(false);
-  const { t, locale } = useI18n();
 
   useEffect(() => {
     const controller = new AbortController();

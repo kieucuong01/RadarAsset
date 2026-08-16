@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPercent, formatScore } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
 
 type FactorResponse =
@@ -41,6 +42,23 @@ type FactorResponse =
         volatility63dPct: number;
       }>;
     };
+
+type FactorRow = Extract<FactorResponse, { ready: true }>["rows"][number];
+
+export function FactorLabRows({ rows }: { rows: FactorRow[] }) {
+  return rows.map((row) => (
+    <TableRow key={row.symbol}>
+      <TableCell className="font-semibold">{row.symbol}</TableCell>
+      <TableCell>{formatScore(row.compositeScore)}</TableCell>
+      <TableCell>{formatScore(row.momentumScore)}</TableCell>
+      <TableCell>{formatScore(row.lowVolatilityScore)}</TableCell>
+      <TableCell>{formatScore(row.trendScore)}</TableCell>
+      <TableCell>{formatScore(row.liquidityScore)}</TableCell>
+      <TableCell>{formatPercent(row.momentum126dPct)}</TableCell>
+      <TableCell>{formatPercent(row.volatility63dPct)}</TableCell>
+    </TableRow>
+  ));
+}
 
 export function FactorLab() {
   const { t } = useI18n();
@@ -135,18 +153,7 @@ export function FactorLab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.rows.map((row) => (
-              <TableRow key={row.symbol}>
-                <TableCell className="font-semibold">{row.symbol}</TableCell>
-                <TableCell>{row.compositeScore.toFixed(1)}</TableCell>
-                <TableCell>{row.momentumScore.toFixed(1)}</TableCell>
-                <TableCell>{row.lowVolatilityScore.toFixed(1)}</TableCell>
-                <TableCell>{row.trendScore.toFixed(1)}</TableCell>
-                <TableCell>{row.liquidityScore.toFixed(1)}</TableCell>
-                <TableCell>{row.momentum126dPct.toFixed(2)}%</TableCell>
-                <TableCell>{row.volatility63dPct.toFixed(2)}%</TableCell>
-              </TableRow>
-            ))}
+            <FactorLabRows rows={data.rows} />
           </TableBody>
         </Table>
       </CardContent>

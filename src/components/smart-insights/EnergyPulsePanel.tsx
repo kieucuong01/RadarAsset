@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
+import { formatMetricValue, formatNumber } from "@/lib/financial-format";
 import type { EnergyPulseModel } from "@/lib/smart-insights-client";
 
 import type { MacroPulseState } from "./MacroQuantPulseTabs";
@@ -64,8 +65,7 @@ export function EnergyPulsePanel({
           <article key={card.code} className="rounded-xl border bg-background/50 p-4">
             <p className="text-xs text-muted-foreground">{card.label}</p>
             <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
-              {card.value == null ? "—" : card.value.toFixed(2)}{" "}
-              <span className="text-xs font-normal text-muted-foreground">{card.unit}</span>
+              {formatMetricValue(card.value, { locale, unit: card.unit })}
             </p>
             <p className="mt-2 text-[11px] text-muted-foreground">
               {card.asOf ? `As of ${dateLabel(card.asOf, locale)}` : "Unavailable"}
@@ -91,11 +91,17 @@ export function EnergyPulsePanel({
                 fontSize={11}
                 minTickGap={28}
               />
-              <YAxis fontSize={11} />
+              <YAxis
+                fontSize={11}
+                tickFormatter={(value: number) => formatNumber(value, { maximumFractionDigits: 2 })}
+              />
               <Tooltip
                 labelFormatter={(value) => dateLabel(String(value), locale)}
                 formatter={(value, name) => [
-                  Number(value).toFixed(2),
+                  formatMetricValue(value == null ? null : Number(value), {
+                    locale,
+                    unit: "USD/barrel",
+                  }),
                   name === "brent" ? "Brent USD/barrel" : "WTI USD/barrel",
                 ]}
               />

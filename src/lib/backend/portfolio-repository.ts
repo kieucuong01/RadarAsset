@@ -87,6 +87,7 @@ export async function loadPortfolioResponse(
     fee: numberFromDecimal(transaction.fee),
     executedAt: transaction.executedAt.toISOString(),
     note: transaction.note,
+    currency: transaction.asset.currency,
   }));
 
   const latestTransactionPrices = new Map<string, number>();
@@ -103,6 +104,7 @@ export async function loadPortfolioResponse(
       name: asset.name,
       assetClass: assertAssetClass(asset.assetClass),
       latestPrice: latestBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
+      currency: asset.currency,
     }),
   );
   const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });
@@ -239,6 +241,7 @@ export async function createPortfolioTransaction(
       fee: numberFromDecimal(transaction.fee),
       executedAt: transaction.executedAt.toISOString(),
       note: transaction.note,
+      currency: transaction.asset.currency,
     }));
     const lastTransactionPrice = new Map<string, number>();
     for (const transaction of ledgerTransactions) {
@@ -252,6 +255,7 @@ export async function createPortfolioTransaction(
         name: rowAsset.name,
         assetClass: assertAssetClass(rowAsset.assetClass),
         latestPrice: lastTransactionPrice.get(assetId) ?? 0,
+        currency: rowAsset.currency,
       }),
     );
     const ledger = replayPortfolioLedger({

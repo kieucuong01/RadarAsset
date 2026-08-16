@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
+import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 
 type Locale = "vi" | "en";
@@ -73,15 +74,6 @@ function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
   return null;
 }
 
-function percent(value: string, locale: Locale) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed)
-    ? new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-        maximumFractionDigits: 1,
-      }).format(parsed) + "%"
-    : "—";
-}
-
 function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale: Locale }) {
   const Icon = stanceIcon(opinion.stance);
   return (
@@ -91,7 +83,7 @@ function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale:
       </Badge>
       <FreshnessBadge state={opinion.freshness} />
       <span className="text-xs text-muted-foreground">
-        {locale === "vi" ? "Tin cậy" : "Confidence"} {percent(opinion.confidence, locale)}
+        {locale === "vi" ? "Tin cậy" : "Confidence"} {formatPercent(opinion.confidence)}
       </span>
     </div>
   );
@@ -108,6 +100,30 @@ export function AssetOpinionList({
   locale: Locale;
   onSelect: (symbol: string) => void;
 }) {
+  const evidenceValuesBySymbol = new Map(
+    opinions.map((opinion) => {
+      const inputByEvidenceId = new Map(
+        opinion.decisionInputs
+          .filter((input) => input.evidenceId)
+          .map((input) => [input.evidenceId, input]),
+      );
+      return [
+        opinion.symbol,
+        new Map(
+          opinion.evidence.map((evidence) => {
+            const input = inputByEvidenceId.get(evidence.id);
+            return [
+              evidence.id,
+              input
+                ? formatMetricValue(input.rawValue, { locale, unit: input.unit })
+                : evidence.displayValue,
+            ];
+          }),
+        ),
+      ];
+    }),
+  );
+
   return (
     <>
       <div className="hidden md:block" data-testid="asset-opinion-table">
@@ -145,7 +161,7 @@ export function AssetOpinionList({
                         <span className="mt-1 block max-w-52 truncate text-xs font-normal text-muted-foreground">
                           {opinion.evidence
                             .slice(0, 3)
-                            .map((item) => item.displayValue)
+                            .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
                             .join(" · ")}
                         </span>
                       ) : null}
@@ -156,10 +172,10 @@ export function AssetOpinionList({
                   <OpinionState opinion={opinion} locale={locale} />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {opinion.quantScore ?? "—"}
+                  {formatScore(opinion.quantScore)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {percent(opinion.portfolioWeightPct, locale)}
+                  {formatPercent(opinion.portfolioWeightPct)}
                 </TableCell>
                 <TableCell className="max-w-56 text-sm">
                   <span className="block">{actionLabel(opinion.personalizedAction, locale)}</span>
@@ -195,7 +211,9 @@ export function AssetOpinionList({
                     {opinion.assetName}
                   </span>
                 </span>
-                <span className="font-mono text-sm tabular-nums">{opinion.quantScore ?? "—"}</span>
+                <span className="font-mono text-sm tabular-nums">
+                  {formatScore(opinion.quantScore)}
+                </span>
               </span>
               <OpinionState opinion={opinion} locale={locale} />
               <span className="text-sm font-normal">
@@ -210,7 +228,7 @@ export function AssetOpinionList({
                 <span className="truncate text-xs font-normal text-muted-foreground">
                   {opinion.evidence
                     .slice(0, 3)
-                    .map((item) => item.displayValue)
+                    .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
                     .join(" · ")}
                 </span>
               ) : null}

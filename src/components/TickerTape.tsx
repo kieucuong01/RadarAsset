@@ -2,9 +2,16 @@ import { useEffect, useState } from "react";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import type { MarketTickerResponse } from "@/lib/backend/types";
-import { curatedTickerUrl, resolveCuratedTickerSnapshot } from "@/lib/ticker-presentation";
+import { formatPercent, formatPrice } from "@/lib/financial-format";
+import { useI18n } from "@/lib/i18n/context";
+import {
+  curatedTickerUrl,
+  resolveCuratedTickerSnapshot,
+  tickerQuoteCurrency,
+} from "@/lib/ticker-presentation";
 
 export function TickerTape() {
+  const { locale } = useI18n();
   const [snapshot, setSnapshot] = useState(() => resolveCuratedTickerSnapshot([]));
 
   useEffect(() => {
@@ -49,10 +56,13 @@ export function TickerTape() {
               <div key={`${tick.symbol}-${index}`} className="flex items-center gap-2 text-xs">
                 <span className="font-bold tracking-wide">{tick.symbol}</span>
                 <span className="tabular-nums text-muted-foreground">
-                  {tick.price.toLocaleString("en-US", { maximumFractionDigits: 4 })}
+                  {formatPrice(tick.price, {
+                    locale,
+                    currency: tickerQuoteCurrency(tick),
+                  })}
                 </span>
                 <span className={`tabular-nums font-semibold ${up ? "text-bull" : "text-bear"}`}>
-                  {up ? "▲" : "▼"} {Math.abs(tick.changePercent).toFixed(2)}%
+                  {up ? "▲" : "▼"} {formatPercent(Math.abs(tick.changePercent))}
                 </span>
                 <span className="text-border">|</span>
               </div>

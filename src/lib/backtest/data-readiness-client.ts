@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { cachedRequest, clearCachedRequest } from "@/lib/client/request-cache";
+import { formatCount } from "@/lib/financial-format";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 const QUANT_DATA_READINESS_CACHE_KEY = "quant:data-readiness";
@@ -105,14 +106,14 @@ export function quantDataReadinessSummary(readiness: QuantDataReadiness) {
   if (readiness.backlogCount > 0) {
     return {
       tone: "backlog" as const,
-      label: `${activeDatasetCount.toLocaleString()} active datasets`,
-      detail: `${readiness.backlogCount.toLocaleString()} ingestion jobs queued/running`,
+      label: `${formatCount(activeDatasetCount)} active datasets`,
+      detail: `${formatCount(readiness.backlogCount)} ingestion jobs queued/running`,
     };
   }
 
   return {
     tone: "ready" as const,
-    label: `${activeDatasetCount.toLocaleString()} active datasets`,
+    label: `${formatCount(activeDatasetCount)} active datasets`,
     detail: "No ingestion backlog",
   };
 }

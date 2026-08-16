@@ -13,6 +13,14 @@ export const CURATED_TICKER_SYMBOLS = [
   ...CURATED_TICKER_GROUPS.gold,
 ] as const;
 
+export function tickerQuoteCurrency(
+  tick: Pick<MarketTickerResponse, "assetClass">,
+): "VND" | "USDT" | "USD" {
+  if (tick.assetClass === "equity") return "VND";
+  if (tick.assetClass === "crypto") return "USDT";
+  return "USD";
+}
+
 export type TickerSnapshot<T> = {
   rows: T[];
   status: Extract<DataStatus, "SYSTEM" | "UNAVAILABLE">;

@@ -13,8 +13,9 @@ import {
 import { getStrategyForwardTests, type ForwardTest } from "@/lib/strategy-forward/client";
 import { buildForwardChart, buildForwardComparison } from "@/lib/strategy-forward/presentation";
 import { useI18n } from "@/lib/i18n/context";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 
-export function PortfolioStrategyForwardTests() {
+export function PortfolioStrategyForwardTests({ currency }: { currency?: string | null } = {}) {
   const { t } = useI18n();
   const [items, setItems] = useState<ForwardTest[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +48,13 @@ export function PortfolioStrategyForwardTests() {
         <p className="text-sm text-muted-foreground">{t("forwardTesting.description")}</p>
       </div>
       {items.map((item) => (
-        <ForwardCard key={item.assignmentId} item={item} />
+        <ForwardCard key={item.assignmentId} item={item} currency={item.currency ?? currency} />
       ))}
     </section>
   );
 }
 
-function ForwardCard({ item }: { item: ForwardTest }) {
+function ForwardCard({ item, currency }: { item: ForwardTest; currency?: string | null }) {
   const { t, locale } = useI18n();
   const chart = useMemo(() => buildForwardChart(item.snapshots), [item.snapshots]);
   const comparison = useMemo(
@@ -87,13 +88,19 @@ function ForwardCard({ item }: { item: ForwardTest }) {
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Metric
           label={t("forwardTesting.pnlExContributions")}
-          value={latest ? latest.pnlExcludingContributions : 0}
+          value={latest?.pnlExcludingContributions ?? null}
+          currency={currency}
         />
         <Metric
           label={t("forwardTesting.contributions")}
-          value={latest ? latest.cumulativeContributions : 0}
+          value={latest?.cumulativeContributions ?? null}
+          currency={currency}
         />
-        <Metric label={t("forwardTesting.fees")} value={latest ? latest.cumulativeFees : 0} />
+        <Metric
+          label={t("forwardTesting.fees")}
+          value={latest?.cumulativeFees ?? null}
+          currency={currency}
+        />
       </div>
       {comparison ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -117,8 +124,12 @@ function ForwardCard({ item }: { item: ForwardTest }) {
             <AreaChart data={chart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="timestamp" hide />
-              <YAxis domain={["auto", "auto"]} width={45} />
-              <Tooltip />
+              <YAxis
+                domain={["auto", "auto"]}
+                width={70}
+                tickFormatter={(value: number) => formatNumber(value)}
+              />
+              <Tooltip formatter={(value) => formatNumber(Number(value))} />
               <Area
                 dataKey="strategy"
                 name={t("forwardTesting.strategy")}
@@ -155,17 +166,21 @@ function ForwardCard({ item }: { item: ForwardTest }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  label,
+  value,
+  currency,
+}: {
+  label: string;
+  value: number | null;
+  currency?: string | null;
+}) {
   const { locale } = useI18n();
   return (
     <div className="rounded-xl border bg-muted/20 p-3">
       <div className="text-[10px] font-mono uppercase text-muted-foreground">{label}</div>
       <div className="mt-1 font-semibold tabular-nums">
-        {value.toLocaleString(locale === "vi" ? "vi-VN" : "en-US", {
-          style: "currency",
-          currency: "USD",
-          maximumFractionDigits: 2,
-        })}
+        {formatMoney(value, { locale, currency })}
       </div>
     </div>
   );
@@ -182,8 +197,7 @@ function PercentMetric({ label, value }: { label: string; value: number }) {
             : "mt-1 font-semibold tabular-nums text-bear"
         }
       >
-        {value >= 0 ? "+" : ""}
-        {value.toFixed(2)}%
+        {formatPercent(value, { sign: true })}
       </div>
     </div>
   );

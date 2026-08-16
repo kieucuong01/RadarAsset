@@ -34,7 +34,7 @@ function assignmentResponse(assignment: {
   portfolioId: string;
   parameters: unknown;
   status: string;
-  asset: { symbol: string };
+  asset: { symbol: string; currency?: string };
   strategyVersion: { code: string; version: string; name: string };
   signals: Array<{
     id: string;
@@ -53,6 +53,7 @@ function assignmentResponse(assignment: {
     id: assignment.id,
     portfolioId: assignment.portfolioId,
     symbol: assignment.asset.symbol,
+    ...(assignment.asset.currency ? { currency: assignment.asset.currency } : {}),
     strategyCode: assignment.strategyVersion.code,
     strategyVersion: assignment.strategyVersion.version,
     strategyName: assignment.strategyVersion.name,
@@ -286,7 +287,7 @@ export async function loadStrategyForwardTests(
       activatedAt: true,
       lastEvaluatedAt: true,
       lastEvaluatedBarAt: true,
-      asset: { select: { symbol: true } },
+      asset: { select: { symbol: true, currency: true } },
       strategyVersion: { select: { code: true, version: true, name: true, category: true } },
       signals: {
         where: { eventType: { not: "INITIAL_SNAPSHOT" } },
@@ -317,6 +318,7 @@ export async function loadStrategyForwardTests(
       assignmentId: row.id,
       portfolioId: row.portfolioId,
       symbol: row.asset.symbol,
+      currency: row.asset.currency,
       strategy: {
         code: row.strategyVersion.code,
         version: row.strategyVersion.version,

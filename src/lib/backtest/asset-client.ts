@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { formatCount } from "@/lib/financial-format";
+
 import type { QuantAssetQuery } from "@/lib/backend/quant-assets";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -73,13 +75,13 @@ export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | 
       return {
         badge: locale === "vi" ? "Độ phủ lịch sử một phần" : "Partial history coverage",
         detail: item.catalogCoverage.firstObservedAt
-          ? `${item.rowCount.toLocaleString()} bars · ${locale === "vi" ? "catalog từ" : "catalog since"} ${isoDay(item.catalogCoverage.firstObservedAt)}`
-          : `${item.rowCount.toLocaleString()} bars · ${locale === "vi" ? "chưa rõ mốc catalog" : "catalog start unknown"}`,
+          ? `${formatCount(item.rowCount)} bars · ${locale === "vi" ? "catalog từ" : "catalog since"} ${isoDay(item.catalogCoverage.firstObservedAt)}`
+          : `${formatCount(item.rowCount)} bars · ${locale === "vi" ? "chưa rõ mốc catalog" : "catalog start unknown"}`,
       };
     }
     return {
       badge: locale === "vi" ? "Sẵn sàng" : "Ready",
-      detail: `${item.rowCount.toLocaleString()} bars`,
+      detail: `${formatCount(item.rowCount)} bars`,
     };
   }
   if (item.reasonCode === "DATASET_RANGE_INSUFFICIENT") {
@@ -89,14 +91,14 @@ export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | 
       badge: locale === "vi" ? "Ngoài khoảng dữ liệu" : "Range unavailable",
       detail:
         start && end
-          ? `${item.rowCount.toLocaleString()} bars, ${start} ${locale === "vi" ? "đến" : "to"} ${end}`
-          : `${item.rowCount.toLocaleString()} bars`,
+          ? `${formatCount(item.rowCount)} bars, ${start} ${locale === "vi" ? "đến" : "to"} ${end}`
+          : `${formatCount(item.rowCount)} bars`,
     };
   }
   if (item.reasonCode === "DATASET_PROVIDER_GAP") {
     return {
       badge: locale === "vi" ? "Có khoảng trống dữ liệu" : "Provider data gap",
-      detail: `${item.blockingQualityIssueCount.toLocaleString()} ${locale === "vi" ? "khoảng lỗi" : "blocking ranges"}`,
+      detail: `${formatCount(item.blockingQualityIssueCount)} ${locale === "vi" ? "khoảng lỗi" : "blocking ranges"}`,
     };
   }
   if (item.reasonCode === "DATASET_CALENDAR_UNVERIFIED") {
@@ -109,7 +111,7 @@ export function assetReadinessLabel(item: QuantAssetCatalogItem, locale: "vi" | 
   }
   return {
     badge: locale === "vi" ? "Chưa có dataset" : "No dataset",
-    detail: `${item.rowCount.toLocaleString()} bars`,
+    detail: `${formatCount(item.rowCount)} bars`,
   };
 }
 

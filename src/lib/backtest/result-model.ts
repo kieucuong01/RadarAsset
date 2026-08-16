@@ -168,6 +168,7 @@ export type BacktestResultModel = {
   legs: Array<{
     id: string;
     symbol: string;
+    currency: string;
     label: string;
     allocationBps: number;
     initialNotional: number;
@@ -240,6 +241,7 @@ export function buildBacktestResultModel(run: BacktestRun): BacktestResultModel 
       return {
         id: leg.id,
         symbol: leg.symbol,
+        currency: leg.currency,
         label: `${leg.symbol} · ${leg.strategyName}`,
         allocationBps: leg.allocationBps,
         initialNotional: leg.initialNotional,
