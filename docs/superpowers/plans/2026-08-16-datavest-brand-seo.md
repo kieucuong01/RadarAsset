@@ -230,6 +230,7 @@ git commit -m "feat: add DataVest visual identity"
 - Modify: `src/components/Header.tsx`
 - Modify: `src/components/Footer.tsx`
 - Modify: `src/components/AuthForm.tsx`
+- Modify: `src/app/globals.css`
 - Modify: `src/app/sign-in/page.tsx`
 - Modify: `src/app/sign-up/page.tsx`
 - Modify: `src/app/onboarding/page.tsx`
@@ -246,6 +247,7 @@ git commit -m "feat: add DataVest visual identity"
 
 - Header and mobile sheet: replace the Lucide `Radar` icon and hard-coded wordmark with `DataVestLogo lockup`.
 - Footer: use the lockup, descriptor, a `/gioi-thieu` link, and the DataVest risk disclaimer.
+- Replace the old purple primary/gradient tokens with Cobalt-led UI tokens and Amber evidence accents; keep bull/bear colors unchanged and use accessible lighter Cobalt values for dark-mode interactive text where needed.
 - Keep navigation and accessible labels unchanged except where the retired brand appears.
 
 - [ ] **Step 2: Replace authentication metadata and prompts**
@@ -269,7 +271,7 @@ Copy-only and static-asset changes do not get source-grep unit tests. Their acce
 - [ ] **Step 6: Commit Task 3 only**
 
 ```powershell
-git add -- src/components/Header.tsx src/components/Footer.tsx src/components/AuthForm.tsx src/app/sign-in/page.tsx src/app/sign-up/page.tsx src/app/onboarding/page.tsx README.md docs/architecture.md package.json package-lock.json
+git add -- src/components/Header.tsx src/components/Footer.tsx src/components/AuthForm.tsx src/app/globals.css src/app/sign-in/page.tsx src/app/sign-up/page.tsx src/app/onboarding/page.tsx README.md docs/architecture.md package.json package-lock.json
 git commit -m "feat: rebrand public application as DataVest"
 ```
 
