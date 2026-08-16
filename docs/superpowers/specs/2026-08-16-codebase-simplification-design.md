@@ -147,7 +147,6 @@ quant-worker/
     run_contracts.py        # immutable queued-run contracts and repository protocol
     run_repository.py       # claim, lease, checkpoint, finish
     run_execution.py        # dataset loading and run orchestration
-    run_contracts.py        # queued-run data structures and protocol
 ```
 
 The existing `backtest` and `smart_insights` packages remain separate domains. The worker split must
