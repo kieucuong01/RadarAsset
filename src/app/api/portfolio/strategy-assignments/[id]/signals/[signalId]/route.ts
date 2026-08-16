@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { updateStrategySignalStatus } from "@/lib/backend/db";
+import { updateStrategySignalStatus } from "@/lib/backend/strategy-forward-repository";
 
 export const dynamic = "force-dynamic";
 

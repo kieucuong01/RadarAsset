@@ -50,11 +50,19 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/backend/db")>();
   return {
     ...original,
-    listStrategyAssignments: mocks.listStrategyAssignments,
-    updateStrategySignalStatus: mocks.updateStrategySignalStatus,
     createQuantRun: mocks.createQuantRun,
     listQuantRuns: mocks.listQuantRuns,
     getQuantRun: mocks.getQuantRun,
+  };
+});
+
+vi.mock("@/lib/backend/strategy-forward-repository", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/lib/backend/strategy-forward-repository")>();
+  return {
+    ...original,
+    listStrategyAssignments: mocks.listStrategyAssignments,
+    updateStrategySignalStatus: mocks.updateStrategySignalStatus,
   };
 });
 

@@ -26,6 +26,11 @@ const RESEARCH_ROUTES = [
   "src/app/api/research/runs/import/route.ts",
 ];
 
+const STRATEGY_ROUTES = [
+  "src/app/api/portfolio/strategy-assignments/route.ts",
+  "src/app/api/portfolio/strategy-assignments/[id]/signals/[signalId]/route.ts",
+];
+
 describe("backend repository boundaries", () => {
   it("routes market reads through the market repository", () => {
     for (const route of MARKET_ROUTES) {
@@ -43,6 +48,13 @@ describe("backend repository boundaries", () => {
 
   it("routes research and watchlist operations through the research repository", () => {
     for (const route of RESEARCH_ROUTES) {
+      const source = readFileSync(join(process.cwd(), route), "utf8");
+      expect(source, route).not.toContain('from "@/lib/backend/db"');
+    }
+  });
+
+  it("routes strategy persistence through the strategy-forward repository", () => {
+    for (const route of STRATEGY_ROUTES) {
       const source = readFileSync(join(process.cwd(), route), "utf8");
       expect(source, route).not.toContain('from "@/lib/backend/db"');
     }

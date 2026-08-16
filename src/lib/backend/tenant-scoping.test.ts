@@ -61,7 +61,6 @@ import {
   loadMarketBars,
   listQuantRuns,
   loadTickerResponse,
-  upsertStrategyAssignment,
 } from "./db";
 import {
   createPortfolioTransaction,
@@ -77,6 +76,7 @@ import {
   removeWatchlistItem,
   upsertWatchlistItem,
 } from "./research-repository";
+import { upsertStrategyAssignment } from "./strategy-forward-repository";
 import { getWorkerImportContext } from "./worker-context";
 
 const viewerContext = {
