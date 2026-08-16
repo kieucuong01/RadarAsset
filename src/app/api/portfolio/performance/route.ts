@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
-import { loadPortfolioPerformance, normalizePortfolioTimeframe } from "@/lib/backend/db";
+import {
+  loadPortfolioPerformance,
+  normalizePortfolioTimeframe,
+} from "@/lib/backend/portfolio-repository";
 
 export const dynamic = "force-dynamic";
 

@@ -50,7 +50,6 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/backend/db")>();
   return {
     ...original,
-    loadPortfolioResponse: mocks.loadPortfolioResponse,
     listStrategyAssignments: mocks.listStrategyAssignments,
     updateStrategySignalStatus: mocks.updateStrategySignalStatus,
     loadWatchlist: mocks.loadWatchlist,
@@ -59,9 +58,24 @@ vi.mock("@/lib/backend/db", async (importOriginal) => {
     createQuantRun: mocks.createQuantRun,
     listQuantRuns: mocks.listQuantRuns,
     getQuantRun: mocks.getQuantRun,
-    loadMarketDataHealth: mocks.loadMarketDataHealth,
     loadResearchRuns: mocks.loadResearchRuns,
     importResearchRun: mocks.importResearchRun,
+  };
+});
+
+vi.mock("@/lib/backend/market-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/market-repository")>();
+  return {
+    ...original,
+    loadMarketDataHealth: mocks.loadMarketDataHealth,
+  };
+});
+
+vi.mock("@/lib/backend/portfolio-repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/backend/portfolio-repository")>();
+  return {
+    ...original,
+    loadPortfolioResponse: mocks.loadPortfolioResponse,
   };
 });
 

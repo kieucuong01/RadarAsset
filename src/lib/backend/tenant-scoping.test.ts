@@ -55,7 +55,6 @@ vi.mock("@/lib/db/prisma", () => ({
 
 import { createDefaultPortfolioAssumptions } from "@/lib/backtest/contracts";
 import {
-  createPortfolioTransaction,
   createQuantRun,
   getQuantRun,
   importResearchRun,
@@ -64,15 +63,18 @@ import {
   listQuantRuns,
   loadAssetIntelligence,
   loadInsights,
-  loadPortfolioResponse,
   loadResearchRuns,
   loadTickerResponse,
   loadWatchlist,
   upsertWatchlistItem,
   removeWatchlistItem,
   upsertStrategyAssignment,
-  validateSourceSignalExecution,
 } from "./db";
+import {
+  createPortfolioTransaction,
+  loadPortfolioResponse,
+  validateSourceSignalExecution,
+} from "./portfolio-repository";
 import { getWorkerImportContext } from "./worker-context";
 
 const viewerContext = {

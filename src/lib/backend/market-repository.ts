@@ -38,7 +38,7 @@ const PUBLIC_MARKET_ERROR_CODES = new Set([
   "unsupported_timeframe",
 ]);
 
-function assertAssetClass(value: string): AssetClass {
+export function assertAssetClass(value: string): AssetClass {
   const known = ["crypto", "equity", "etf", "index", "fx", "commodity", "cash"];
   return known.includes(value) ? (value as AssetClass) : "equity";
 }
@@ -142,7 +142,7 @@ export async function loadActiveMarketBarsForAssets(
     });
 }
 
-function preferActiveDatasetBars<
+export function preferActiveDatasetBars<
   TMarketBar extends {
     assetId: string;
     ts: Date;
@@ -160,6 +160,33 @@ function preferActiveDatasetBars<
       return left.ts.getTime() - right.ts.getTime();
     },
   );
+}
+
+export function latestBarsByAssetId(
+  bars: {
+    assetId: string;
+    close: unknown;
+    ts: Date;
+    volume: unknown | null;
+    source?: string;
+  }[],
+) {
+  const map = new Map<
+    string,
+    { close: number; ts: Date; volume: number | null; source: string | null }
+  >();
+  for (const bar of bars) {
+    const current = map.get(bar.assetId);
+    if (!current || bar.ts > current.ts) {
+      map.set(bar.assetId, {
+        close: numberFromDecimal(bar.close),
+        ts: bar.ts,
+        volume: bar.volume === null ? null : numberFromDecimal(bar.volume),
+        source: bar.source ?? null,
+      });
+    }
+  }
+  return map;
 }
 
 function marketForSymbol(symbol: (typeof MARKET_DATA_SYMBOLS)[number]): MarketDataMarket {
