@@ -24,6 +24,7 @@ quant-worker/.runtime/
 test-results/
 playwright-report/
 graphify-out/
+.superpowers/
 dist
 dist-ssr
 .output
