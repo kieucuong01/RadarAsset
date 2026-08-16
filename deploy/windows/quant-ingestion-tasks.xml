@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<QuantIngestionTasks version="1">
+<QuantIngestionTasks version="2">
   <Task name="RadarAsset Smart Insights Four Hourly">
     <Trigger startBoundary="2026-08-14T00:10:00Z" repetitionInterval="PT4H" />
     <Command>powershell.exe</Command>

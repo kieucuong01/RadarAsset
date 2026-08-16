@@ -121,10 +121,16 @@ def test_scheduler_artifact_has_bounded_four_hourly_daily_and_weekly_triggers() 
     assert installer.count("New-ScheduledTaskTrigger") == 3
     assert "[switch]$Verify" in installer
     assert "RestartCount" in installer
+    assert "-RunLevel Limited" in installer
+    assert "-RunLevel Highest" not in installer
     assert '$ErrorActionPreference = "Stop"' in installer
     assert '$PSNativeCommandUseErrorActionPreference = $true' in installer
     assert "if ($Verify)" in installer
     assert installer.index("if ($Verify)") < installer.index("New-ScheduledTaskSettingsSet")
+    assert "Get-ScheduledTaskInfo" in installer
+    assert ".Actions" in installer
+    assert "LastTaskResult" in installer
+    assert "refresh-asset-opinions.ps1" in installer
 
 
 def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> None:
@@ -141,7 +147,8 @@ def test_daily_asset_opinion_refresh_runs_all_stages_in_fail_closed_order() -> N
     assert '-DrainRequests' in wrapper
     assert '-AllMemberships' in wrapper
     assert '-Schedule "calendar-current"' in wrapper
-    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 4
+    assert "verify_daily_pipeline.py" in wrapper
+    assert wrapper.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }") == 5
 
     installer = (
         ROOT / "deploy" / "windows" / "install-quant-ingestion-tasks.ps1"

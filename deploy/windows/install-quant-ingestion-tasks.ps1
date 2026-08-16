@@ -27,20 +27,42 @@ if (-not (Test-Path -LiteralPath $smartInsightsWrapper -PathType Leaf)) {
 }
 
 if ($Verify) {
-    $taskNames = @(
-        "RadarAsset Smart Insights Four Hourly",
-        "RadarAsset Intelligence Daily",
-        "RadarAsset Intelligence Weekly"
+    $expectedTasks = @(
+        @{ Name = "RadarAsset Smart Insights Four Hourly"; Argument = "run-smart-insights.ps1"; Schedule = "four-hourly" },
+        @{ Name = "RadarAsset Intelligence Daily"; Argument = "refresh-asset-opinions.ps1"; Schedule = $null },
+        @{ Name = "RadarAsset Intelligence Weekly"; Argument = "run-smart-insights.ps1"; Schedule = "weekly" }
     )
-    foreach ($taskName in $taskNames) {
-        & schtasks.exe /Query /TN $taskName /FO LIST
-        if ($LASTEXITCODE -ne 0) { throw "Scheduled task '$taskName' is not installed." }
+    foreach ($expected in $expectedTasks) {
+        $task = Get-ScheduledTask -TaskName $expected.Name -ErrorAction Stop
+        $taskInfo = Get-ScheduledTaskInfo -TaskName $expected.Name -ErrorAction Stop
+        $action = @($task.Actions)[0]
+        if ($null -eq $action -or $action.Execute -notlike "*powershell.exe") {
+            throw "Scheduled task '$($expected.Name)' has an invalid executable."
+        }
+        if ($action.Arguments -notlike "*$($expected.Argument)*") {
+            throw "Scheduled task '$($expected.Name)' has an invalid action path."
+        }
+        if ($null -ne $expected.Schedule -and $action.Arguments -notlike "*$($expected.Schedule)*") {
+            throw "Scheduled task '$($expected.Name)' has an invalid schedule action."
+        }
+        if ($task.State -notin @("Ready", "Running")) {
+            throw "Scheduled task '$($expected.Name)' is not ready."
+        }
+        if ($taskInfo.LastTaskResult -notin @(0, 267011)) {
+            throw "Scheduled task '$($expected.Name)' last run failed with $($taskInfo.LastTaskResult)."
+        }
+        [pscustomobject]@{
+            TaskName = $expected.Name
+            State = $task.State
+            LastTaskResult = $taskInfo.LastTaskResult
+            Action = $action.Arguments
+        }
     }
     return
 }
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)
-$principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Highest
+$principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Limited
 $fourHourlyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
     "-NoProfile -ExecutionPolicy Bypass -File `"$smartInsightsWrapper`" -Schedule four-hourly"
 )

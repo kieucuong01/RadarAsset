@@ -195,6 +195,22 @@ powershell.exe -NoProfile -File scripts/refresh-asset-opinions.ps1
 
 The Windows task installer uses this runner for the daily task. The four-hourly task
 collects existing derivatives pressure metrics only; it does not ingest intraday price bars.
+After a manual or scheduled daily run, the runner executes
+`quant-worker/verify_daily_pipeline.py`. The verifier succeeds only when the current
+Bangkok day has a successful daily market scheduler run and a published briefing for
+every organization membership. Its bounded JSON output uses stable failure codes
+`DAILY_MARKET_RUN_MISSING`, `DAILY_MARKET_RUN_FAILED`, and
+`DAILY_BRIEFING_INCOMPLETE`.
+
+Install the tasks from an elevated PowerShell session, then verify their executable,
+action path, state, and last result:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  deploy/windows/install-quant-ingestion-tasks.ps1 -Install
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  deploy/windows/install-quant-ingestion-tasks.ps1 -Verify
+```
 
 | Job                                            | Recommended trigger               | Command                                                             |
 | ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
