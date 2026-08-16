@@ -53,6 +53,29 @@ const briefingItemSchema = z.object({
   riskScenarios: z.array(z.string()),
 });
 
+const portfolioOpinionChangeSchema = z
+  .object({
+    symbol: z.string().min(1),
+    assetName: z.string().min(1),
+    changeType: z.enum(["stance_action", "score"]),
+    previousStance: assetStance,
+    currentStance: assetStance,
+    previousAction: assetAction,
+    currentAction: assetAction,
+    scoreDelta: decimal.nullable(),
+    portfolioWeightPct: decimal,
+    reason: z
+      .object({
+        metricCode: z.string().min(1),
+        rawValue: decimal,
+        unit: z.string().min(1),
+        contribution: decimal,
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+
 const assetOpinionSchema = z
   .object({
     symbol: z.string().min(1),
@@ -234,6 +257,8 @@ export const briefingSchema = z
     primary: z.array(briefingItemSchema),
     riskAlerts: z.array(briefingItemSchema),
     assetOpinions: z.array(assetOpinionSchema),
+    portfolioChanges: z.array(portfolioOpinionChangeSchema).max(3).default([]),
+    portfolioChangesStatus: z.enum(["accumulating", "ready"]).default("accumulating"),
     sourceRunId: z.string(),
   })
   .strict();

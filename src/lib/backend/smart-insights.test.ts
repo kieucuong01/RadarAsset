@@ -99,7 +99,7 @@ describe("Smart Insights read bounds", () => {
       explanationStatus: "accepted",
       failedGates: [],
     };
-    prisma.dailyBriefing.findFirst.mockResolvedValue({
+    const currentBriefing = {
       id: "briefing-a",
       effectiveDate: new Date("2026-08-15T00:00:00Z"),
       revision: 1,
@@ -112,6 +112,11 @@ describe("Smart Insights read bounds", () => {
       fingerprint: "fingerprint-a",
       marketSummary: { assetOpinions: Array.from({ length: 25 }, () => storedOpinion) },
       items: [],
+    };
+    prisma.dailyBriefing.findFirst.mockResolvedValueOnce(currentBriefing).mockResolvedValueOnce({
+      marketSummary: {
+        assetOpinions: [{ ...storedOpinion, stance: "NEUTRAL", quantScore: "40" }],
+      },
     });
     prisma.$queryRaw.mockResolvedValue([
       {
@@ -167,7 +172,16 @@ describe("Smart Insights read bounds", () => {
         },
       }),
     );
-    expect(prisma.dailyBriefing.findFirst).toHaveBeenCalledOnce();
+    expect(result?.briefing.portfolioChanges).toEqual([
+      expect.objectContaining({
+        symbol: "BTC",
+        previousStance: "NEUTRAL",
+        currentStance: "CONSTRUCTIVE",
+        changeType: "stance_action",
+      }),
+    ]);
+    expect(result?.briefing.portfolioChangesStatus).toBe("ready");
+    expect(prisma.dailyBriefing.findFirst).toHaveBeenCalledTimes(2);
     expect(prisma.$queryRaw).toHaveBeenCalledOnce();
     expect(prisma.evidenceItem.findMany).not.toHaveBeenCalled();
   });

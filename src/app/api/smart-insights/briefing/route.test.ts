@@ -83,7 +83,24 @@ describe("Smart Insights briefing lifecycle", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-smart-insights-briefing-state")).toBe("ready");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({ id: "briefing-a", assetOpinions: [] });
+  });
+
+  it("does not return 304 because derived opinion changes can update independently", async () => {
+    mocks.loadBriefingEnvelope.mockResolvedValue({
+      fingerprint: "fingerprint-a",
+      briefing: { id: "briefing-a", portfolioChangesStatus: "ready" },
+    });
+
+    const response = await GET(
+      new Request("http://localhost/api/smart-insights/briefing", {
+        headers: { "if-none-match": '"fingerprint-a"' },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ portfolioChangesStatus: "ready" });
   });
 
   it("queues a manual refresh behind research write authorization", async () => {

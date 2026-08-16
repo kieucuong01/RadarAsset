@@ -299,6 +299,8 @@ export function SmartInsights() {
         onWatchlistSaved={handleWatchlistSaved}
         onRemoveTrackedAsset={handleRemoveTrackedAsset}
         onPortfolioRecorded={handlePortfolioRecorded}
+        portfolioChanges={briefing?.portfolioChanges ?? []}
+        portfolioChangesStatus={briefing?.portfolioChangesStatus ?? "accumulating"}
       />
       <LegacyMarketPulse
         market={market}

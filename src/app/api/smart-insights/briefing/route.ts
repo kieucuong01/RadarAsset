@@ -37,15 +37,10 @@ export async function GET(request: Request) {
         { status: 404, headers },
       );
     }
-    const etag = `"${envelope.fingerprint}"`;
     const headers = {
-      ETag: etag,
-      "Cache-Control": "private, no-cache",
+      "Cache-Control": "private, no-store",
       "X-Smart-Insights-Briefing-State": "ready",
     };
-    if (request.headers.get("if-none-match") === etag) {
-      return new NextResponse(null, { status: 304, headers });
-    }
     return NextResponse.json(envelope.briefing, { headers });
   } catch (error) {
     return apiError(error, error instanceof SmartInsightsInputError ? 400 : 503);

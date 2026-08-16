@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import type { TenantContext } from "@/lib/auth/tenant-context";
+import { derivePortfolioOpinionChanges } from "@/lib/asset-opinion-changes";
 import { getPrisma } from "@/lib/db/prisma";
 
 import type {
@@ -527,12 +528,51 @@ export async function loadBriefingEnvelope(
     },
   });
   if (!row) return null;
-  const performanceBySymbol = await loadAssetOpinionPerformance(context);
+  const [previousRow, performanceBySymbol] = await Promise.all([
+    getPrisma().dailyBriefing.findFirst({
+      where: {
+        organizationId: context.organizationId,
+        userId: context.userId,
+        effectiveDate: { lt: row.effectiveDate },
+      },
+      orderBy: [{ effectiveDate: "desc" }, { revision: "desc" }],
+      select: { marketSummary: true },
+    }),
+    loadAssetOpinionPerformance(context),
+  ]);
   const legacyRows = row.items.filter((item) => item.signalSnapshot.signalType !== "asset_opinion");
   const items = legacyRows.map(briefingItem);
   const portfolio = object(row.portfolioSnapshot);
   const summary = object(row.marketSummary);
   const storedOpinions = Array.isArray(summary.assetOpinions) ? summary.assetOpinions : [];
+  const assetOpinions = storedOpinions.slice(0, 25).map((item) => {
+    let opinion: AssetOpinionReadModel;
+    try {
+      opinion = storedAssetOpinion(item);
+    } catch {
+      opinion = assetOpinionFallback(item);
+    }
+    return {
+      ...opinion,
+      performance: performanceBySymbol.get(opinion.symbol) ?? {
+        status: "accumulating" as const,
+        horizons: [],
+      },
+    };
+  });
+  const previousSummary = object(previousRow?.marketSummary);
+  const previousStoredOpinions = Array.isArray(previousSummary.assetOpinions)
+    ? previousSummary.assetOpinions
+    : null;
+  const previousOpinions = previousStoredOpinions
+    ? previousStoredOpinions.slice(0, 25).flatMap((item) => {
+        try {
+          return [storedAssetOpinion(item)];
+        } catch {
+          return [];
+        }
+      })
+    : null;
   const briefing: BriefingReadModel = {
     id: row.id,
     localDate: dateOnly(row.effectiveDate),
@@ -550,21 +590,9 @@ export async function loadBriefingEnvelope(
       const section = legacyRows[index]?.section;
       return section === "risk" || section === "risk_alert";
     }),
-    assetOpinions: storedOpinions.slice(0, 25).map((item) => {
-      let opinion: AssetOpinionReadModel;
-      try {
-        opinion = storedAssetOpinion(item);
-      } catch {
-        opinion = assetOpinionFallback(item);
-      }
-      return {
-        ...opinion,
-        performance: performanceBySymbol.get(opinion.symbol) ?? {
-          status: "accumulating",
-          horizons: [],
-        },
-      };
-    }),
+    assetOpinions,
+    portfolioChanges: derivePortfolioOpinionChanges(assetOpinions, previousOpinions),
+    portfolioChangesStatus: previousOpinions ? "ready" : "accumulating",
     sourceRunId: row.researchRunId,
   };
   return { briefing, fingerprint: row.fingerprint };

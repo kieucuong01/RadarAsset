@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { AssetOpinionDetail } from "./AssetOpinionDetail";
 import { AssetOpinionList } from "./AssetOpinionList";
+import { PortfolioChangeDigest } from "./PortfolioChangeDigest";
 import { FavoriteAssetDialog } from "@/components/FavoriteAssetDialog";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import {
@@ -26,6 +27,7 @@ import {
   type AssetOpinionWorkspaceItem,
 } from "@/lib/asset-opinion-workspace";
 import type { PortfolioResponse, WatchlistItemResponse } from "@/lib/backend/types";
+import type { PortfolioOpinionChange } from "@/lib/asset-opinion-changes";
 import type { AssetOpinionModel, BriefingGenerationState } from "@/lib/smart-insights-client";
 
 type Props = {
@@ -44,6 +46,8 @@ type Props = {
   onWatchlistSaved?: (items: WatchlistItemResponse[]) => void;
   onRemoveTrackedAsset?: (id: string) => Promise<void>;
   onPortfolioRecorded?: (portfolio: PortfolioResponse) => void;
+  portfolioChanges?: PortfolioOpinionChange[];
+  portfolioChangesStatus?: "accumulating" | "ready";
 };
 
 function EmptyOpinions({
@@ -149,6 +153,8 @@ export function AssetOpinions({
   onWatchlistSaved,
   onRemoveTrackedAsset,
   onPortfolioRecorded,
+  portfolioChanges = [],
+  portfolioChangesStatus = "accumulating",
 }: Props) {
   const workspaceEnabled = watchlist !== undefined || portfolio !== null || portfolioAvailable;
   const items = useMemo(
@@ -211,6 +217,15 @@ export function AssetOpinions({
 
   return (
     <section className="flex min-w-0 flex-col gap-5" aria-labelledby="asset-opinions-title">
+      <PortfolioChangeDigest
+        changes={portfolioChanges}
+        status={portfolioChangesStatus}
+        locale={locale}
+        onSelect={(symbol, trigger) => {
+          returnFocusRef.current = trigger;
+          setActiveSymbol(symbol);
+        }}
+      />
       <Card className="min-w-0 overflow-hidden shadow-none">
         <CardHeader className="gap-3 border-b bg-muted/20">
           <div className="flex flex-wrap items-start justify-between gap-3">

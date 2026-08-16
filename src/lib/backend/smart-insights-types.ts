@@ -1,3 +1,5 @@
+import type { PortfolioOpinionChange } from "@/lib/asset-opinion-changes";
+
 export type InsightMarket = "crypto" | "macro" | "gold";
 export type FreshnessState = "fresh" | "stale" | "conflicting" | "partial" | "unavailable";
 export type RegimeLabel =
@@ -138,6 +140,8 @@ export type BriefingReadModel = {
   primary: BriefingItemReadModel[];
   riskAlerts: BriefingItemReadModel[];
   assetOpinions: AssetOpinionReadModel[];
+  portfolioChanges: PortfolioOpinionChange[];
+  portfolioChangesStatus: "accumulating" | "ready";
   sourceRunId: string;
 };
 
