@@ -7,10 +7,10 @@ import pytest
 from backtest.models import Bar
 from backtest.quality import canonical_bar_checksum
 from backtest.custom_rules import custom_rule_implementation_hash
+from backtest.run_repository import PostgresWorkerRepository
 import worker
 from worker import (
     DatasetInput,
-    PostgresWorkerRepository,
     QueuedRun,
     QueuedRunLeg,
     bars_in_run_range,

@@ -27,6 +27,10 @@ from backtest.custom_rules import (
 from backtest.forward_evaluator import PostgresEvaluationRepository, process_next_evaluation
 from backtest.models import Bar
 from backtest.run_contracts import DatasetInput, QueuedRun, QueuedRunLeg, WorkerRepository
+from backtest.run_repository import (
+    PostgresWorkerRepository as RunRepository,
+    database_url as repository_database_url,
+)
 from backtest.portfolio import (
     PortfolioAssumptions,
     PortfolioLegInput,
@@ -1017,6 +1021,11 @@ class PostgresWorkerRepository:
             )
         self.connection.commit()
         return True
+
+
+# Compatibility exports remain stable while the entrypoint is slimmed in Task 4.
+PostgresWorkerRepository = RunRepository
+database_url = repository_database_url
 
 
 def run_once() -> dict[str, Any]:
