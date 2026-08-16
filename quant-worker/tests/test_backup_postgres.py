@@ -129,7 +129,16 @@ def test_create_encrypts_uploads_verifies_and_removes_plaintext(tmp_path: Path) 
     pg_dump = runner.calls[0]
     assert pg_dump["args"][:3] == ["pg_dump", "--format=custom", "--no-owner"]
     assert BASE_ENV["DATABASE_URL"] not in pg_dump["args"]
-    assert pg_dump["env"]["PGDATABASE"] == BASE_ENV["DATABASE_URL"]
+    expected_pg_environment = {
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "5432",
+        "PGUSER": "datavest",
+        "PGPASSWORD": "secret",
+        "PGDATABASE": "datavest",
+    }
+    assert {
+        name: pg_dump["env"][name] for name in expected_pg_environment
+    } == expected_pg_environment
     encryption = runner.calls[1]
     assert encryption["args"][:6] == [
         "openssl",

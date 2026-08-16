@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 BACKUP_PREFIX = "operations/backups/postgres"
@@ -50,6 +50,23 @@ def _command_environment(**values: str) -> dict[str, str]:
     return {**os.environ, **values}
 
 
+def _postgres_environment(database_url: str) -> dict[str, str]:
+    parsed = urlparse(database_url)
+    database = unquote(parsed.path.lstrip("/").split("/", 1)[0])
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname or not database:
+        raise ValueError("DATABASE_URL must identify a PostgreSQL database host.")
+    values = {
+        "PGHOST": parsed.hostname,
+        "PGPORT": str(parsed.port or 5432),
+        "PGDATABASE": database,
+    }
+    if parsed.username is not None:
+        values["PGUSER"] = unquote(parsed.username)
+    if parsed.password is not None:
+        values["PGPASSWORD"] = unquote(parsed.password)
+    return _command_environment(**values)
+
+
 def _prepare_spool(spool_root: Path) -> Path:
     spool_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     spool_root.chmod(0o700)
@@ -86,7 +103,7 @@ class SubprocessRunner:
             args,
             check=True,
             env=env,
-            capture_output=True,
+            capture_output=capture_output,
             text=text,
         )
 
@@ -122,7 +139,7 @@ def create_backup(
                 "--file",
                 str(plaintext),
             ],
-            env=_command_environment(PGDATABASE=database_url),
+            env=_postgres_environment(database_url),
         )
         runner.run(
             [
