@@ -547,6 +547,9 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   expect(requests.some((url) => url.includes("/api/research/runs"))).toBe(false);
   expect(requests.some((url) => url.includes("/intelligence"))).toBe(false);
   expect(requests.some((url) => url.includes("/api/insights"))).toBe(false);
+  expect(requests.some((url) => url.includes("/api/smart-insights/data-health"))).toBe(false);
+  await expect(page.getByText("Data Health", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/registered sources have accepted observations/i)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 
   const vitals = await page.evaluate(

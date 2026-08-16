@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
-import { DataHealthPanel } from "@/components/smart-insights/DataHealthPanel";
 import { EconomicCalendar } from "@/components/smart-insights/EconomicCalendar";
 import { EvidenceDrawer } from "@/components/smart-insights/EvidenceDrawer";
 import { AssetOpinions } from "@/components/smart-insights/AssetOpinions";
@@ -19,7 +18,6 @@ import {
   evidenceSchema,
   fetchParsed,
   fetchBriefing,
-  healthSchema,
   energyPulseSchema,
   macroEventRiskSchema,
   metricsSchema,
@@ -31,7 +29,6 @@ import {
   type BriefingGenerationState,
   type CalendarModel,
   type EvidenceModel,
-  type HealthModel,
   type EnergyPulseModel,
   type MacroEventRiskModel,
   type MetricModel,
@@ -60,7 +57,6 @@ export function SmartInsights() {
   const [metrics, setMetrics] = useState<MetricModel[]>([]);
   const [events, setEvents] = useState<CalendarModel[]>([]);
   const [preferences, setPreferences] = useState<PreferencesModel | null>(null);
-  const [health, setHealth] = useState<HealthModel | null>(null);
   const [macroEventRisk, setMacroEventRisk] = useState<MacroEventRiskModel | null>(null);
   const [energyPulse, setEnergyPulse] = useState<EnergyPulseModel | null>(null);
   const [macroPulseState, setMacroPulseState] = useState<"idle" | "loading" | "loaded" | "failed">(
@@ -76,21 +72,16 @@ export function SmartInsights() {
       fetchBriefing(controller.signal),
       fetchParsed("/api/smart-insights/regimes", regimesSchema, controller.signal),
       fetchParsed("/api/smart-insights/preferences", preferencesSchema, controller.signal),
-      fetchParsed("/api/smart-insights/data-health", healthSchema, controller.signal),
     ]).then((results) => {
       if (controller.signal.aborted) return;
-      const [briefingResult, regimeResult, preferenceResult, healthResult] = results;
+      const [briefingResult, regimeResult, preferenceResult] = results;
       if (briefingResult.status === "fulfilled") {
         setBriefing(briefingResult.value.briefing);
         setBriefingState(briefingResult.value.state);
       }
       if (regimeResult.status === "fulfilled") setRegimes(regimeResult.value.regimes);
       if (preferenceResult.status === "fulfilled") setPreferences(preferenceResult.value);
-      if (healthResult.status === "fulfilled") setHealth(healthResult.value);
-      const usable =
-        regimeResult.status === "fulfilled" ||
-        healthResult.status === "fulfilled" ||
-        briefingResult.status === "fulfilled";
+      const usable = regimeResult.status === "fulfilled" || briefingResult.status === "fulfilled";
       setState(usable ? "ready" : "error");
     });
     return () => controller.abort();
@@ -270,7 +261,6 @@ export function SmartInsights() {
       <section className="min-w-0">
         <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
       </section>
-      <DataHealthPanel sources={health?.sources ?? []} />
       <EvidenceDrawer
         evidence={evidence}
         open={evidenceId !== null}

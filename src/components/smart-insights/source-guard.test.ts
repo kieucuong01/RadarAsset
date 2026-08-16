@@ -11,6 +11,22 @@ function readSmartInsightsSourceTree(): string {
 }
 
 describe("Smart Insights source guard", () => {
+  it("keeps operational data health out of the consumer Smart Insights page", () => {
+    const page = readFileSync(
+      join(process.cwd(), "src", "components", "SmartInsights.tsx"),
+      "utf8",
+    );
+    for (const forbidden of [
+      "DataHealthPanel",
+      "healthSchema",
+      "HealthModel",
+      "setHealth",
+      "/api/smart-insights/data-health",
+    ]) {
+      expect(page).not.toContain(forbidden);
+    }
+  });
+
   it("contains no runtime sample market facts", () => {
     const source =
       readSmartInsightsSourceTree() +
