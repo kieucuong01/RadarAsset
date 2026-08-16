@@ -4,6 +4,16 @@ import { getPrisma } from "@/lib/db/prisma";
 import { resolveProviderInstrument } from "./provider-catalog";
 
 const ACTIVE_STATUSES = ["queued", "running"] as const;
+const TRANSACTION_RETRY_ATTEMPTS = 5;
+
+function isTransactionWriteConflict(error: unknown) {
+  if (error === null || typeof error !== "object") return false;
+  if ("code" in error && error.code === "P2034") return true;
+  if (!("cause" in error) || error.cause === null || typeof error.cause !== "object") {
+    return false;
+  }
+  return "kind" in error.cause && error.cause.kind === "TransactionWriteConflict";
+}
 
 export class IngestionRateLimitError extends Error {
   constructor(message: string) {
@@ -119,13 +129,14 @@ export async function requestMarketIngestion(context: TenantContext, input: Requ
       },
       { isolationLevel: "Serializable" },
     );
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < TRANSACTION_RETRY_ATTEMPTS; attempt += 1) {
     try {
       return await execute();
     } catch (error) {
-      const retryable =
-        error !== null && typeof error === "object" && "code" in error && error.code === "P2034";
-      if (!retryable || attempt === 2) throw error;
+      if (!isTransactionWriteConflict(error) || attempt === TRANSACTION_RETRY_ATTEMPTS - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
     }
   }
   throw new Error("Market ingestion request retry budget was exhausted.");

@@ -98,4 +98,24 @@ describe("tenant market ingestion request queue", () => {
     ).rejects.toBeInstanceOf(IngestionRateLimitError);
     expect(prisma.marketIngestionRequest.create).not.toHaveBeenCalled();
   });
+
+  it("retries a PostgreSQL adapter write conflict", async () => {
+    const conflict = Object.assign(new Error("TransactionWriteConflict"), {
+      name: "DriverAdapterError",
+      cause: { kind: "TransactionWriteConflict" },
+    });
+    prisma.$transaction
+      .mockRejectedValueOnce(conflict)
+      .mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma));
+    prisma.marketIngestionRequest.findFirst.mockResolvedValue(active);
+
+    await expect(
+      requestMarketIngestion(context, {
+        providerCode: "binance-public",
+        providerSymbol: "ETHUSDT",
+        timeframe: "1d",
+      }),
+    ).resolves.toMatchObject({ id: "request-a", created: false });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
 });
