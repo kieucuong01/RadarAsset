@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -57,6 +57,25 @@ describe("backend repository boundaries", () => {
     for (const route of STRATEGY_ROUTES) {
       const source = readFileSync(join(process.cwd(), route), "utf8");
       expect(source, route).not.toContain('from "@/lib/backend/db"');
+    }
+  });
+
+  it("keeps every API route independent of the removed database facade", () => {
+    const backendFacade = join(process.cwd(), "src/lib/backend/db.ts");
+    expect(existsSync(backendFacade)).toBe(false);
+
+    const apiRoot = join(process.cwd(), "src/app/api");
+    const pending = [apiRoot];
+    while (pending.length) {
+      const directory = pending.pop();
+      if (!directory) continue;
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) pending.push(path);
+        if (entry.isFile() && entry.name === "route.ts") {
+          expect(readFileSync(path, "utf8"), path).not.toContain("@/lib/backend/db");
+        }
+      }
     }
   });
 });

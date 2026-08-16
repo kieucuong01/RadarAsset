@@ -46,16 +46,6 @@ vi.mock("@/lib/auth/tenant-context", () => ({
   requireTenantCapability: mocks.requireTenantCapability,
 }));
 
-vi.mock("@/lib/backend/db", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/backend/db")>();
-  return {
-    ...original,
-    createQuantRun: mocks.createQuantRun,
-    listQuantRuns: mocks.listQuantRuns,
-    getQuantRun: mocks.getQuantRun,
-  };
-});
-
 vi.mock("@/lib/backend/strategy-forward-repository", async (importOriginal) => {
   const original =
     await importOriginal<typeof import("@/lib/backend/strategy-forward-repository")>();
