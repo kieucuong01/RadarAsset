@@ -108,6 +108,11 @@ describe("PortfolioOptimizerWorkbench formatting", () => {
 
     expect(html).not.toContain("5%%");
     expect(html.match(/data-axis="true">5%<\/span>/g) ?? []).toHaveLength(2);
+    expect(html).toContain("Phân bổ tối ưu");
+    expect(html).toContain("Phân bổ tài sản");
+    expect(html).toContain("Risk / Return — Expected Return vs Volatility");
+    expect(html).toContain("Ma trận tương quan lịch sử");
+    expect(html).toContain("Chi tiết phân bổ");
   });
 
   it("formats the visible Markowitz risk tolerance as a ratio", () => {

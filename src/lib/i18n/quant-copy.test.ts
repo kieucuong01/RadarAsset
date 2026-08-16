@@ -7,6 +7,9 @@ const QUANT_FILES = [
   "src/components/QuantLab.tsx",
   "src/components/MarketDataHealthPanel.tsx",
   "src/components/PortfolioOptimizerWorkbench.tsx",
+  "src/components/portfolio-optimizer/OptimizerConfigurationPanel.tsx",
+  "src/components/portfolio-optimizer/OptimizerResultsPanel.tsx",
+  "src/components/portfolio-optimizer/OptimizerVisualizations.tsx",
   "src/components/StrategyLab.tsx",
   "src/components/strategy-lab/StrategyLibraryPanel.tsx",
   "src/components/strategy-lab/StrategyBuilderPanel.tsx",
@@ -37,10 +40,13 @@ describe("Quant UI copy", () => {
   });
 
   it("uses translated optimizer method and strategy style labels", () => {
-    const optimizer = readFileSync(
-      resolve("src/components/PortfolioOptimizerWorkbench.tsx"),
-      "utf8",
-    );
+    const optimizer = [
+      "src/components/PortfolioOptimizerWorkbench.tsx",
+      "src/components/portfolio-optimizer/OptimizerConfigurationPanel.tsx",
+      "src/components/portfolio-optimizer/OptimizerResultsPanel.tsx",
+    ]
+      .map((file) => readFileSync(resolve(file), "utf8"))
+      .join("\n");
     const strategies = readFileSync(resolve("src/components/StrategyLab.tsx"), "utf8");
 
     expect(optimizer).not.toContain("OPTIMIZER_METHOD_LABELS");
