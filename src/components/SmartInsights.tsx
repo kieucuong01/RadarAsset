@@ -12,7 +12,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
+import type { PortfolioResponse, WatchlistItemResponse } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
+import { clearCachedPortfolio } from "@/lib/portfolio-client";
+import { loadSmartInsightsWorkspaceData } from "@/lib/smart-insights-workspace-client";
 import {
   calendarSchema,
   evidenceSchema,
@@ -35,6 +38,7 @@ import {
   type PreferencesModel,
   type RegimeModel,
 } from "@/lib/smart-insights-client";
+import { removeFavoriteAsset } from "@/lib/watchlist-client";
 
 type QueryState = "loading" | "ready" | "empty" | "error";
 
@@ -64,6 +68,11 @@ export function SmartInsights() {
   );
   const [state, setState] = useState<QueryState>("loading");
   const [refresh, setRefresh] = useState(0);
+  const [watchlist, setWatchlist] = useState<WatchlistItemResponse[]>([]);
+  const [watchlistAvailable, setWatchlistAvailable] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [portfolioAvailable, setPortfolioAvailable] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,6 +94,21 @@ export function SmartInsights() {
       setState(usable ? "ready" : "error");
     });
     return () => controller.abort();
+  }, [refresh]);
+
+  useEffect(() => {
+    let active = true;
+    void loadSmartInsightsWorkspaceData().then((result) => {
+      if (!active) return;
+      setWatchlist(result.watchlist.items);
+      setWatchlistAvailable(result.watchlist.available);
+      setWatchlistError(result.watchlist.error);
+      setPortfolio(result.portfolio.value);
+      setPortfolioAvailable(result.portfolio.available);
+    });
+    return () => {
+      active = false;
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -118,6 +142,25 @@ export function SmartInsights() {
     } finally {
       setBriefingRefreshPending(false);
     }
+  }
+
+  function handleWatchlistSaved(items: WatchlistItemResponse[]) {
+    setWatchlist(items);
+    setWatchlistAvailable(true);
+    setWatchlistError(null);
+    setBriefingState("generating");
+  }
+
+  async function handleRemoveTrackedAsset(id: string) {
+    const result = await removeFavoriteAsset(id);
+    setWatchlist((items) => items.filter((item) => item.id !== id));
+    if (result.refreshQueued) setBriefingState("generating");
+  }
+
+  function handlePortfolioRecorded(nextPortfolio: PortfolioResponse) {
+    clearCachedPortfolio();
+    setPortfolio(nextPortfolio);
+    setPortfolioAvailable(true);
   }
 
   useEffect(() => {
@@ -248,6 +291,14 @@ export function SmartInsights() {
         generationState={briefingState}
         onRefresh={refreshBriefing}
         refreshPending={briefingRefreshPending}
+        watchlist={watchlist}
+        watchlistAvailable={watchlistAvailable}
+        watchlistError={watchlistError}
+        portfolio={portfolio}
+        portfolioAvailable={portfolioAvailable}
+        onWatchlistSaved={handleWatchlistSaved}
+        onRemoveTrackedAsset={handleRemoveTrackedAsset}
+        onPortfolioRecorded={handlePortfolioRecorded}
       />
       <LegacyMarketPulse
         market={market}

@@ -1,17 +1,22 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import Link from "next/link";
+import type { KeyboardEvent, MouseEvent } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
   CircleMinus,
+  FlaskConical,
+  ShoppingCart,
+  Trash2,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
 
 import { FreshnessBadge } from "./FreshnessBadge";
 import { failedGateLabel, isTechnicalQuantOpinion } from "./asset-opinion-labels";
+import { AssetIcon } from "@/components/AssetIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +27,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { AssetOpinionWorkspaceItem } from "@/lib/asset-opinion-workspace";
+import { formatMetricValue, formatPercent, formatPrice, formatScore } from "@/lib/financial-format";
 import type { AssetOpinionModel } from "@/lib/smart-insights-client";
-import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 import { cn } from "@/lib/utils";
 
 type Locale = "vi" | "en";
+type TradeSide = "buy" | "sell";
 
 const ACTIONS: Record<string, { vi: string; en: string }> = {
   HOLD: { vi: "Giữ và theo dõi", en: "Hold and monitor" },
@@ -62,10 +69,13 @@ function activateOnKeyboard(event: KeyboardEvent, activate: () => void) {
   activate();
 }
 
+function stopRowActivation(event: MouseEvent) {
+  event.stopPropagation();
+}
+
 function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
-  if (opinion.explanationStatus === "accepted") {
+  if (opinion.explanationStatus === "accepted")
     return locale === "vi" ? "AI đã phân tích" : "AI analyzed";
-  }
   if (opinion.explanationStatus === "quant_only") {
     if (isTechnicalQuantOpinion(opinion)) {
       return locale === "vi"
@@ -82,9 +92,8 @@ function explanationLabel(opinion: AssetOpinionModel, locale: Locale) {
       ? `Chưa đủ dữ liệu · Chưa đủ bằng chứng${reason ? `: ${reason}` : ""}`
       : `Insufficient data · Insufficient evidence${reason ? `: ${reason}` : ""}`;
   }
-  if (opinion.explanationStatus === "unavailable") {
+  if (opinion.explanationStatus === "unavailable")
     return locale === "vi" ? "Dữ liệu chưa khả dụng" : "Data unavailable";
-  }
   return null;
 }
 
@@ -103,35 +112,134 @@ function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale:
   );
 }
 
-export function AssetOpinionList({
-  opinions,
+function PendingOpinion({ locale }: { locale: Locale }) {
+  return (
+    <div>
+      <Badge variant="secondary">
+        {locale === "vi" ? "Đang chuẩn bị phân tích" : "Preparing analysis"}
+      </Badge>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {locale === "vi"
+          ? "Mã đã được theo dõi; đang chờ dữ liệu định lượng."
+          : "Tracked; awaiting quant data."}
+      </p>
+    </div>
+  );
+}
+
+function ItemActions({
+  item,
   locale,
-  onSelect,
+  tradingAvailable,
+  onTrade,
+  onRemove,
 }: {
-  opinions: AssetOpinionModel[];
+  item: AssetOpinionWorkspaceItem;
   locale: Locale;
-  onSelect: (symbol: string, trigger: HTMLElement) => void;
+  tradingAvailable: boolean;
+  onTrade: (item: AssetOpinionWorkspaceItem, side: TradeSide) => void;
+  onRemove: (item: AssetOpinionWorkspaceItem) => void;
+}) {
+  const buy = locale === "vi" ? "Mua" : "Buy";
+  const sell = locale === "vi" ? "Bán" : "Sell";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" onClick={stopRowActivation}>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label={`${buy} ${item.symbol}`}
+        title={
+          tradingAvailable
+            ? undefined
+            : locale === "vi"
+              ? "Danh mục hiện chưa khả dụng"
+              : "Portfolio unavailable"
+        }
+        disabled={!tradingAvailable}
+        onClick={() => onTrade(item, "buy")}
+      >
+        <ShoppingCart aria-hidden="true" /> {buy}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label={`${sell} ${item.symbol}`}
+        title={item.canSell ? undefined : locale === "vi" ? "Chưa nắm giữ mã này" : "No holding"}
+        disabled={!item.canSell}
+        onClick={() => onTrade(item, "sell")}
+      >
+        <TrendingDown aria-hidden="true" /> {sell}
+      </Button>
+      {item.backtestHref ? (
+        <Button size="sm" variant="secondary" asChild>
+          <Link href={item.backtestHref} aria-label={`Backtest ${item.symbol}`}>
+            <FlaskConical aria-hidden="true" /> Backtest
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={`Backtest ${item.symbol}`}
+          title={locale === "vi" ? "Đang chuẩn bị dữ liệu backtest" : "Preparing backtest data"}
+          disabled
+        >
+          <FlaskConical aria-hidden="true" /> Backtest
+        </Button>
+      )}
+      {item.canRemove ? (
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`${locale === "vi" ? "Xóa" : "Remove"} ${item.symbol}`}
+          onClick={() => onRemove(item)}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+export function AssetOpinionList({
+  items,
+  locale,
+  tradingAvailable,
+  onSelect,
+  onTrade,
+  onRemove,
+}: {
+  items: AssetOpinionWorkspaceItem[];
+  locale: Locale;
+  tradingAvailable: boolean;
+  onSelect: (item: AssetOpinionWorkspaceItem, trigger: HTMLElement) => void;
+  onTrade: (item: AssetOpinionWorkspaceItem, side: TradeSide) => void;
+  onRemove: (item: AssetOpinionWorkspaceItem) => void;
 }) {
   const evidenceValuesBySymbol = new Map(
-    opinions.map((opinion) => {
+    items.flatMap((item) => {
+      const opinion = item.opinion;
+      if (!opinion) return [];
       const inputByEvidenceId = new Map(
         opinion.decisionInputs
           .filter((input) => input.evidenceId)
           .map((input) => [input.evidenceId, input]),
       );
       return [
-        opinion.symbol,
-        new Map(
-          opinion.evidence.map((evidence) => {
-            const input = inputByEvidenceId.get(evidence.id);
-            return [
-              evidence.id,
-              input
-                ? formatMetricValue(input.rawValue, { locale, unit: input.unit })
-                : evidence.displayValue,
-            ];
-          }),
-        ),
+        [
+          item.symbol,
+          new Map(
+            opinion.evidence.map((evidence) => {
+              const input = inputByEvidenceId.get(evidence.id);
+              return [
+                evidence.id,
+                input
+                  ? formatMetricValue(input.rawValue, { locale, unit: input.unit })
+                  : evidence.displayValue,
+              ];
+            }),
+          ),
+        ] as const,
       ];
     }),
   );
@@ -148,110 +256,161 @@ export function AssetOpinionList({
               <TableHead className="text-right">
                 {locale === "vi" ? "Tỷ trọng" : "Weight"}
               </TableHead>
-              <TableHead>{locale === "vi" ? "Hành động" : "Action"}</TableHead>
+              <TableHead>{locale === "vi" ? "Thao tác" : "Actions"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {opinions.map((opinion) => (
-              <TableRow
-                key={opinion.symbol}
-                role="button"
-                tabIndex={0}
-                aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
-                className="group cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={(event) => onSelect(opinion.symbol, event.currentTarget)}
-                onKeyDown={(event) =>
-                  activateOnKeyboard(event, () => onSelect(opinion.symbol, event.currentTarget))
-                }
-              >
-                <TableCell>
-                  <span>
-                    <span className="block font-semibold">{opinion.symbol}</span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {opinion.assetName}
-                    </span>
-                    {opinion.evidence.length ? (
-                      <span className="mt-1 block max-w-52 truncate text-xs font-normal text-muted-foreground">
-                        {opinion.evidence
-                          .slice(0, 3)
-                          .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
-                          .join(" · ")}
-                      </span>
+            {items.map((item) => {
+              const opinion = item.opinion;
+              const canOpen = Boolean(opinion);
+              return (
+                <TableRow
+                  key={item.symbol}
+                  role={canOpen ? "button" : undefined}
+                  tabIndex={canOpen ? 0 : undefined}
+                  aria-label={
+                    canOpen
+                      ? `${locale === "vi" ? "Xem phân tích" : "View analysis"} ${item.symbol} ${item.name}`
+                      : undefined
+                  }
+                  className={cn(
+                    "group transition-colors",
+                    canOpen &&
+                      "cursor-pointer hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  )}
+                  onClick={(event) => canOpen && onSelect(item, event.currentTarget)}
+                  onKeyDown={(event) =>
+                    canOpen && activateOnKeyboard(event, () => onSelect(item, event.currentTarget))
+                  }
+                >
+                  <TableCell>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <AssetIcon symbol={item.symbol} name={item.name} />
+                      <div className="min-w-0">
+                        <span className="block font-semibold">{item.symbol}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {item.name}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {formatPrice(item.price, { locale, currency: item.currency })}
+                        </span>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {opinion ? (
+                      <OpinionState opinion={opinion} locale={locale} />
+                    ) : (
+                      <PendingOpinion locale={locale} />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {opinion ? formatScore(opinion.quantScore) : "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {opinion ? formatPercent(opinion.portfolioWeightPct) : "—"}
+                  </TableCell>
+                  <TableCell className="min-w-72">
+                    {opinion ? (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        {actionLabel(opinion.personalizedAction, locale)} ·{" "}
+                        {explanationLabel(opinion, locale)}
+                        <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-primary">
+                          {locale === "vi" ? "Xem phân tích" : "View analysis"}{" "}
+                          <ChevronRight aria-hidden="true" />
+                        </span>
+                      </div>
                     ) : null}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <OpinionState opinion={opinion} locale={locale} />
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatScore(opinion.quantScore)}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatPercent(opinion.portfolioWeightPct)}
-                </TableCell>
-                <TableCell className="max-w-56 text-sm">
-                  <span className="block">{actionLabel(opinion.personalizedAction, locale)}</span>
-                  {explanationLabel(opinion, locale) ? (
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {explanationLabel(opinion, locale)}
-                    </span>
-                  ) : null}
-                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
-                    {locale === "vi" ? "Xem phân tích" : "View analysis"}
-                    <ChevronRight aria-hidden="true" />
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
+                    <ItemActions
+                      item={item}
+                      locale={locale}
+                      tradingAvailable={tradingAvailable}
+                      onTrade={onTrade}
+                      onRemove={onRemove}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
-      <div className="grid gap-3 md:hidden" data-testid="asset-opinion-cards">
-        {opinions.map((opinion) => (
-          <Button
-            key={opinion.symbol}
-            variant="outline"
-            className="group h-auto min-h-28 w-full justify-start whitespace-normal p-4 text-left hover:border-primary/40 hover:bg-primary/5"
-            aria-label={`${locale === "vi" ? "Xem phân tích" : "View analysis"} ${opinion.symbol} ${opinion.assetName}`}
-            onClick={(event) => onSelect(opinion.symbol, event.currentTarget)}
-          >
-            <span className="flex w-full min-w-0 flex-col gap-3">
-              <span className="flex items-start justify-between gap-3">
-                <span>
-                  <span className="block text-base font-semibold">{opinion.symbol}</span>
-                  <span className="block text-xs font-normal text-muted-foreground">
-                    {opinion.assetName}
-                  </span>
-                </span>
+      <div className="grid gap-3 p-3 md:hidden" data-testid="asset-opinion-cards">
+        {items.map((item) => {
+          const opinion = item.opinion;
+          return (
+            <article
+              key={item.symbol}
+              role={opinion ? "button" : undefined}
+              tabIndex={opinion ? 0 : undefined}
+              aria-label={
+                opinion
+                  ? `${locale === "vi" ? "Xem phân tích" : "View analysis"} ${item.symbol} ${item.name}`
+                  : undefined
+              }
+              className={cn(
+                "rounded-xl border p-4",
+                opinion && "cursor-pointer hover:border-primary/40 hover:bg-primary/5",
+              )}
+              onClick={(event) => opinion && onSelect(item, event.currentTarget)}
+              onKeyDown={(event) =>
+                opinion && activateOnKeyboard(event, () => onSelect(item, event.currentTarget))
+              }
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <AssetIcon symbol={item.symbol} name={item.name} />
+                  <div className="min-w-0">
+                    <p className="font-semibold">{item.symbol}</p>
+                    <p className="truncate text-xs text-muted-foreground">{item.name}</p>
+                  </div>
+                </div>
                 <span className="font-mono text-sm tabular-nums">
-                  {formatScore(opinion.quantScore)}
+                  {opinion ? formatScore(opinion.quantScore) : "—"}
                 </span>
-              </span>
-              <OpinionState opinion={opinion} locale={locale} />
-              <span className="text-sm font-normal">
-                {actionLabel(opinion.personalizedAction, locale)}
-              </span>
-              {explanationLabel(opinion, locale) ? (
-                <span className="text-xs font-normal text-muted-foreground">
-                  {explanationLabel(opinion, locale)}
-                </span>
+              </div>
+              <div className="mt-3">
+                {opinion ? (
+                  <OpinionState opinion={opinion} locale={locale} />
+                ) : (
+                  <PendingOpinion locale={locale} />
+                )}
+              </div>
+              {opinion ? (
+                <div className="mt-3 text-sm">
+                  <p>{actionLabel(opinion.personalizedAction, locale)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {explanationLabel(opinion, locale)}
+                  </p>
+                  {opinion.evidence.length ? (
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {opinion.evidence
+                        .slice(0, 3)
+                        .map((evidence) =>
+                          evidenceValuesBySymbol.get(item.symbol)?.get(evidence.id),
+                        )
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                    {locale === "vi" ? "Chạm để xem phân tích" : "Tap to view analysis"}
+                    <ChevronRight aria-hidden="true" />
+                  </p>
+                </div>
               ) : null}
-              {opinion.evidence.length ? (
-                <span className="truncate text-xs font-normal text-muted-foreground">
-                  {opinion.evidence
-                    .slice(0, 3)
-                    .map((item) => evidenceValuesBySymbol.get(opinion.symbol)?.get(item.id))
-                    .join(" · ")}
-                </span>
-              ) : null}
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
-                {locale === "vi" ? "Xem phân tích" : "View analysis"}
-                <ChevronRight aria-hidden="true" />
-              </span>
-            </span>
-          </Button>
-        ))}
+              <div className="mt-4">
+                <ItemActions
+                  item={item}
+                  locale={locale}
+                  tradingAvailable={tradingAvailable}
+                  onTrade={onTrade}
+                  onRemove={onRemove}
+                />
+              </div>
+            </article>
+          );
+        })}
       </div>
     </>
   );

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { PortfolioResponse, WatchlistItemResponse } from "@/lib/backend/types";
 import type { AssetOpinionModel, EvidenceModel } from "@/lib/smart-insights-client";
 
 import { AssetOpinionFormula } from "./AssetOpinionCalculation";
@@ -116,7 +117,92 @@ function opinion(overrides: Partial<AssetOpinionModel> = {}): AssetOpinionModel 
   };
 }
 
+const watchlist: WatchlistItemResponse[] = [
+  {
+    id: "watch-eth",
+    sym: "ETH",
+    name: "Ethereum",
+    price: 3_250,
+    chg: 2.1,
+    alert: 0,
+    sentiment: "bull",
+    datasetState: "ready",
+    ingestionRequestId: null,
+    backtestableTimeframes: ["1d"],
+    currency: "USDT",
+    hasMarketQuote: true,
+  },
+];
+
+const portfolio: PortfolioResponse = {
+  portfolioId: "portfolio-1",
+  portfolioName: "Main",
+  baseCurrency: "VND",
+  totalValue: 100_000_000,
+  totalCost: 90_000_000,
+  unrealizedPnL: 10_000_000,
+  realizedPnL: 0,
+  totalPnL: 10_000_000,
+  totalPnLPct: 11.11,
+  cumulativeBuyCapital: 90_000_000,
+  dayChangePct: 0.5,
+  allocation: [{ category: "Stocks", value: 100_000_000 }],
+  holdings: [
+    {
+      assetId: "asset-fpt",
+      ticker: "FPT",
+      name: "FPT Corporation",
+      qty: 100,
+      price: 100_000,
+      cost: 90_000,
+      value: 10_000_000,
+      pnl: 1_000_000,
+      pnlPct: 11.11,
+      alloc: 10,
+      sentiment: "Bullish",
+      category: "Stocks",
+      currency: "VND",
+    },
+  ],
+  transactions: [],
+  performance: [],
+  riskMetrics: [],
+  dataAsOf: "2026-08-16T00:00:00Z",
+  dataSource: "test",
+};
+
 describe("AssetOpinions", () => {
+  it("merges followed assets with opinion actions and protects holdings and representatives", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[opinion()]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+        watchlist={watchlist}
+        watchlistAvailable
+        watchlistError={null}
+        portfolio={portfolio}
+        portfolioAvailable
+        onWatchlistSaved={() => undefined}
+        onRemoveTrackedAsset={async () => undefined}
+        onPortfolioRecorded={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Thêm mã");
+    expect(html).toContain('data-asset-icon="BTC"');
+    expect(html).toContain('data-asset-icon="ETH"');
+    expect(html).toContain('data-asset-icon="FPT"');
+    expect(html).toContain('aria-label="Mua ETH"');
+    expect(html).toContain('aria-label="Backtest ETH"');
+    expect(html).toContain('aria-label="Xóa ETH"');
+    expect(html).toContain('aria-label="Bán FPT"');
+    expect(html).not.toContain('aria-label="Xóa FPT"');
+    expect(html).not.toContain('aria-label="Xóa BTC"');
+    expect(html).toContain("Đang chuẩn bị phân tích");
+  });
+
   it("advertises row and card analysis while keeping details closed by default", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions

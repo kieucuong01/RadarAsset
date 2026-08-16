@@ -86,7 +86,7 @@ export const viPortfolio = {
     loadError: "Không thể tải tài sản yêu thích.",
     removeError: "Không thể xóa tài sản.",
     backtest: "Backtest",
-    dialogTitle: "Thêm tài sản yêu thích",
+    dialogTitle: "Thêm mã theo dõi",
     dialogDescription:
       "Tìm trong catalog Binance, chứng khoán Việt Nam và XAU đã đồng bộ. Hệ thống không nhận URL tự do.",
     searchAria: "Tìm tài sản trong catalog",
@@ -97,7 +97,7 @@ export const viPortfolio = {
     save: "Thêm và chuẩn bị dữ liệu",
     invalidCatalog: "Catalog tài sản trả về dữ liệu không hợp lệ.",
     searchError: "Không thể tìm tài sản.",
-    addError: "Không thể thêm tài sản yêu thích.",
+    addError: "Không thể thêm mã theo dõi.",
   },
   transactionsDialog: {
     add: "Thêm giao dịch",

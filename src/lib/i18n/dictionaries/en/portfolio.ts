@@ -88,7 +88,7 @@ export const enPortfolio = {
     loadError: "Unable to load favorite assets.",
     removeError: "Unable to remove asset.",
     backtest: "Backtest",
-    dialogTitle: "Add favorite asset",
+    dialogTitle: "Add tracked asset",
     dialogDescription:
       "Search the synchronized Binance, Vietnam equities and XAU catalog. Free-form URLs are not accepted.",
     searchAria: "Search asset catalog",
@@ -99,7 +99,7 @@ export const enPortfolio = {
     save: "Add and prepare data",
     invalidCatalog: "Asset catalog returned invalid data.",
     searchError: "Unable to search assets.",
-    addError: "Unable to add favorite asset.",
+    addError: "Unable to add tracked asset.",
   },
   transactionsDialog: {
     add: "Add Transaction",
