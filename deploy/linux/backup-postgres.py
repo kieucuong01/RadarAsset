@@ -17,6 +17,8 @@ from urllib.parse import unquote, urlparse
 BACKUP_PREFIX = "operations/backups/postgres"
 RESTORE_DATABASE = "datavest_restore_test"
 ADMIN_PREFIX = ["runuser", "-u", "postgres", "--"]
+PG_DUMP = "/usr/lib/postgresql/16/bin/pg_dump"
+PG_RESTORE = "/usr/lib/postgresql/16/bin/pg_restore"
 
 
 def _required(settings: Mapping[str, str], name: str) -> str:
@@ -151,7 +153,7 @@ def create_backup(
     try:
         runner.run(
             [
-                "pg_dump",
+                PG_DUMP,
                 "--format=custom",
                 "--no-owner",
                 "--file",
@@ -298,7 +300,7 @@ def restore_drill(
             runner.run(
                 ADMIN_PREFIX
                 + [
-                    "pg_restore",
+                    PG_RESTORE,
                     "--exit-on-error",
                     "--no-owner",
                     "--dbname",

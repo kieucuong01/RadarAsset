@@ -50,11 +50,12 @@ class FakeRunner:
             }
         )
         effective_args = args[4:] if args[:4] == ["runuser", "-u", "postgres", "--"] else args
-        if effective_args[0] == "pg_dump":
+        command = Path(effective_args[0]).name
+        if command == "pg_dump":
             output = Path(effective_args[effective_args.index("--file") + 1])
             self.plaintext_path = output
             output.write_bytes(b"plain-postgres-dump")
-        elif effective_args[0] == "openssl":
+        elif command == "openssl":
             source = Path(effective_args[effective_args.index("-in") + 1])
             output = Path(effective_args[effective_args.index("-out") + 1])
             if "-d" in effective_args:
@@ -63,7 +64,7 @@ class FakeRunner:
                 output.write_bytes(b"encrypted:" + source.read_bytes())
                 if self.fail_encrypt:
                     raise RuntimeError("encryption failed")
-        elif effective_args[0] == "psql" and capture_output:
+        elif command == "psql" and capture_output:
             query = effective_args[effective_args.index("--command") + 1]
             stdout = "t\n" if "to_regclass" in query else "3\n"
             return SimpleNamespace(stdout=stdout)
@@ -127,7 +128,11 @@ def test_create_encrypts_uploads_verifies_and_removes_plaintext(tmp_path: Path) 
         "20260817T010203Z.dump.enc"
     )
     pg_dump = runner.calls[0]
-    assert pg_dump["args"][:3] == ["pg_dump", "--format=custom", "--no-owner"]
+    assert pg_dump["args"][:3] == [
+        "/usr/lib/postgresql/16/bin/pg_dump",
+        "--format=custom",
+        "--no-owner",
+    ]
     assert BASE_ENV["DATABASE_URL"] not in pg_dump["args"]
     expected_pg_environment = {
         "PGHOST": "127.0.0.1",
@@ -218,7 +223,7 @@ def test_restore_drill_uses_exact_isolated_database_and_drops_it(
         command[:9]
         == admin_prefix
         + [
-            "pg_restore",
+            "/usr/lib/postgresql/16/bin/pg_restore",
             "--exit-on-error",
             "--no-owner",
             "--dbname",
