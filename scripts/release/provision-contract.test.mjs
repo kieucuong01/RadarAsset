@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
@@ -11,5 +12,11 @@ describe("DataVest provisioning entry point", () => {
     const result = spawnSync(bash, ["-n", scriptPath], { encoding: "utf8" });
 
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("installs the credential-safe S3 verifier for post-provision checks", async () => {
+    const source = await readFile(scriptUrl, "utf8");
+    expect(source).toContain('"${script_dir}/verify-s3-access.py"');
+    expect(source).toContain("/usr/local/libexec/datavest/verify-s3-access.py");
   });
 });

@@ -150,6 +150,12 @@ if [[ -f "${script_dir}/backup-postgres.py" ]]; then
     /usr/local/libexec/datavest/backup-postgres.py
 fi
 
+if [[ -f "${script_dir}/verify-s3-access.py" ]]; then
+  install -o root -g root -m 0755 \
+    "${script_dir}/verify-s3-access.py" \
+    /usr/local/libexec/datavest/verify-s3-access.py
+fi
+
 if [[ -f "${script_dir}/nginx/datavest.conf" ]]; then
   install -o root -g root -m 0644 \
     "${script_dir}/nginx/datavest.conf" \
