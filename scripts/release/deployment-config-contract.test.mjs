@@ -66,7 +66,7 @@ describe("DataVest production service configuration", () => {
   });
 
   it("exposes only the scheduled-job allowlist and fixed commands", () => {
-    const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
     const runner = fileURLToPath(new URL("deploy/linux/run-scheduled-job.sh", root));
     const listed = spawnSync(bash, [runner, "--list"], { encoding: "utf8" });
     expect(listed.status, listed.stderr).toBe(0);

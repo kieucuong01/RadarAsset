@@ -8,7 +8,7 @@ const scriptUrl = new URL("../../deploy/linux/provision-datavest.sh", import.met
 describe("DataVest provisioning entry point", () => {
   it("passes a real Bash syntax check", async () => {
     const scriptPath = decodeURIComponent(scriptUrl.pathname).replace(/^\/(?:([A-Za-z]:))/, "$1");
-    const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
     const result = spawnSync(bash, ["-n", scriptPath], { encoding: "utf8" });
 
     expect(result.status, result.stderr).toBe(0);

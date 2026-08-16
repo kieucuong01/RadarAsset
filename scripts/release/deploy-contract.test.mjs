@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = new URL("../../", import.meta.url);
-const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
 const runner = fileURLToPath(new URL("deploy/linux/deploy-datavest.sh", root));
 const gitSha = "0123456789abcdef0123456789abcdef01234567";
 
