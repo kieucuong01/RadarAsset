@@ -72,6 +72,38 @@ systemctl is-enabled datavest-web datavest-quant-engine datavest-worker
 
 The environment file must be `root:datavest 640`. Unit definitions may be installed but must remain inactive before the first release. A successful provisioning command is not deployment evidence.
 
+## Scheduled collectors
+
+All collector timers target the same hardened `datavest-job@.service`. The runner accepts only the documented job names and takes one non-blocking lock at `/run/lock/datavest-heavy-jobs.lock`. If another DataVest collector is still running, the new invocation records `scheduled_job=skipped_lock` and exits successfully instead of competing for VPS memory.
+
+The Bangkok schedules are:
+
+| Timer                              | Schedule                      |
+| ---------------------------------- | ----------------------------- |
+| `datavest-market-daily.timer`      | Daily at 01:15                |
+| `datavest-smart-four-hourly.timer` | Every four hours at minute 20 |
+| `datavest-smart-daily.timer`       | Daily at 02:30                |
+| `datavest-smart-weekly.timer`      | Monday at 03:30               |
+| `datavest-calendar-current.timer`  | Every two hours at minute 10  |
+| `datavest-calendar-next.timer`     | Daily at 00:45                |
+| `datavest-briefing.timer`          | Daily at 06:15                |
+
+Before enabling these timers, inventory Radar BDS cron entries, systemd timers, and PM2 scheduled processes on the live VPS. Move a DataVest schedule if its collection window overlaps a known Radar BDS crawl or backup. Provisioning installs timer definitions but deliberately does not enable them.
+
+After the first healthy release and the live overlap review:
+
+```bash
+systemctl list-timers --all 'datavest-*'
+sudo systemctl enable --now \
+  datavest-market-daily.timer \
+  datavest-smart-four-hourly.timer \
+  datavest-smart-daily.timer \
+  datavest-smart-weekly.timer \
+  datavest-calendar-current.timer \
+  datavest-calendar-next.timer \
+  datavest-briefing.timer
+```
+
 ## Shared PostgreSQL listener audit
 
 Port 5432 was publicly listening during the design audit. Before launch, inspect `SHOW listen_addresses`, `pg_hba_file_rules`, firewall rules, and recent remote connection sources. If no approved remote consumer exists, close public access. If one exists, restrict it to explicit source IPs and roles/databases. Verify Radar BDS and La So Tinh Hoa database-backed pages immediately after any shared PostgreSQL or firewall change.

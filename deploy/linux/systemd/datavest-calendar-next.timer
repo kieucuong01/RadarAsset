@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh next DataVest economic calendar window
+
+[Timer]
+OnCalendar=*-*-* 00:45:00 Asia/Bangkok
+Unit=datavest-job@calendar-next.service
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

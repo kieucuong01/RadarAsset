@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +60,84 @@ describe("DataVest production service configuration", () => {
       "PORT=4200",
       "HOSTNAME=127.0.0.1",
     ]);
+  });
+
+  it("exposes only the scheduled-job allowlist and fixed commands", () => {
+    const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const runner = fileURLToPath(new URL("deploy/linux/run-scheduled-job.sh", root));
+    const listed = spawnSync(bash, [runner, "--list"], { encoding: "utf8" });
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout.trim().split(/\r?\n/)).toEqual([
+      "market-daily",
+      "smart-four-hourly",
+      "smart-daily",
+      "smart-weekly",
+      "calendar-current",
+      "calendar-next",
+      "briefing",
+    ]);
+
+    const command = spawnSync(bash, [runner, "--print-command", "market-daily"], {
+      encoding: "utf8",
+    });
+    expect(command.status, command.stderr).toBe(0);
+    expect(command.stdout.trim()).toBe(
+      "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/ingest_market_data.py daily --env-file /opt/datavest/shared/.env",
+    );
+
+    const invalid = spawnSync(bash, [runner, "not-a-job"], { encoding: "utf8" });
+    expect(invalid.status).toBe(2);
+    expect(invalid.stderr.trim()).toBe("scheduled_job=invalid");
+  });
+
+  it("serializes bounded timer jobs on explicit Bangkok schedules", async () => {
+    const service = parseUnit(await read("deploy/linux/systemd/datavest-job@.service"));
+    expect(service.Service).toMatchObject({
+      User: "datavest",
+      Group: "datavest",
+      ExecStart: "/usr/local/libexec/datavest/run-scheduled-job %i",
+      TimeoutStartSec: "45min",
+      MemoryMax: "900M",
+      Nice: "10",
+      IOSchedulingClass: "best-effort",
+    });
+
+    const expected = {
+      "datavest-market-daily.timer": [
+        "*-*-* 01:15:00 Asia/Bangkok",
+        "datavest-job@market-daily.service",
+      ],
+      "datavest-smart-four-hourly.timer": [
+        "*-*-* 00,04,08,12,16,20:20:00 Asia/Bangkok",
+        "datavest-job@smart-four-hourly.service",
+      ],
+      "datavest-smart-daily.timer": [
+        "*-*-* 02:30:00 Asia/Bangkok",
+        "datavest-job@smart-daily.service",
+      ],
+      "datavest-smart-weekly.timer": [
+        "Mon *-*-* 03:30:00 Asia/Bangkok",
+        "datavest-job@smart-weekly.service",
+      ],
+      "datavest-calendar-current.timer": [
+        "*-*-* 00,02,04,06,08,10,12,14,16,18,20,22:10:00 Asia/Bangkok",
+        "datavest-job@calendar-current.service",
+      ],
+      "datavest-calendar-next.timer": [
+        "*-*-* 00:45:00 Asia/Bangkok",
+        "datavest-job@calendar-next.service",
+      ],
+      "datavest-briefing.timer": ["*-*-* 06:15:00 Asia/Bangkok", "datavest-job@briefing.service"],
+    };
+    for (const [file, [calendar, target]] of Object.entries(expected)) {
+      const timer = parseUnit(await read(`deploy/linux/systemd/${file}`));
+      expect(timer.Timer).toMatchObject({
+        OnCalendar: calendar,
+        Unit: target,
+        Persistent: "true",
+        RandomizedDelaySec: "10m",
+      });
+    }
   });
 
   it("runs the quant API and worker from the shared offline Python environment", async () => {

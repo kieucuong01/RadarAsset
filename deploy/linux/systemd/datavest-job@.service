@@ -1,0 +1,29 @@
+[Unit]
+Description=DataVest scheduled job (%i)
+Wants=network-online.target
+After=network-online.target postgresql.service datavest-quant-engine.service
+
+[Service]
+Type=oneshot
+User=datavest
+Group=datavest
+WorkingDirectory=/opt/datavest/current/quant-worker
+EnvironmentFile=/opt/datavest/shared/.env
+ExecStart=/usr/local/libexec/datavest/run-scheduled-job %i
+TimeoutStartSec=45min
+MemoryMax=900M
+Nice=10
+IOSchedulingClass=best-effort
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/datavest/shared/spool /run/lock
+RuntimeDirectory=datavest
+RuntimeDirectoryMode=0750

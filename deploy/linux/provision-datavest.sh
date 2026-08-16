@@ -111,7 +111,18 @@ install -o root -g datavest -m 0640 "${temporary_env}" /opt/datavest/shared/.env
 
 install -o root -g root -m 0755 "${script_dir}/datavest_env.py" /usr/local/libexec/datavest/datavest_env.py
 install -o root -g root -m 0755 "${helper}" /usr/local/libexec/datavest/provision_datavest.py
-for unit in datavest-web.service datavest-quant-engine.service datavest-worker.service; do
+for unit in \
+  datavest-web.service \
+  datavest-quant-engine.service \
+  datavest-worker.service \
+  datavest-job@.service \
+  datavest-market-daily.timer \
+  datavest-smart-four-hourly.timer \
+  datavest-smart-daily.timer \
+  datavest-smart-weekly.timer \
+  datavest-calendar-current.timer \
+  datavest-calendar-next.timer \
+  datavest-briefing.timer; do
   install -o root -g root -m 0644 "${script_dir}/systemd/${unit}" "/etc/systemd/system/${unit}"
 done
 
