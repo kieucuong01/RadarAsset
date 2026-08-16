@@ -11,7 +11,8 @@ from uuid import uuid4
 import psycopg
 import pytest
 
-from worker import PostgresWorkerRepository, QueuedRun
+from backtest.run_contracts import QueuedRun
+from backtest.run_repository import PostgresWorkerRepository
 
 
 def _test_database_url() -> str:

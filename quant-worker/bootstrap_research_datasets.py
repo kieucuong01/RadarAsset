@@ -17,7 +17,7 @@ from backtest.publication import (
     prepare_dataset_publication,
     publish_dataset,
 )
-from worker import database_url
+from backtest.run_repository import database_url
 
 
 FIXTURE_BASE_PRICES = {

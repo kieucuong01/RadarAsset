@@ -120,7 +120,7 @@ repository root, never the process working directory.
 
 ### Phase 2: Server and worker boundaries
 
-**Backend repository boundary: complete. Python worker split: pending.**
+**Backend repository boundary: complete. Python worker split: complete.**
 
 Split `src/lib/backend/db.ts` by existing business responsibility:
 
@@ -144,6 +144,7 @@ Split `quant-worker/worker.py` into:
 quant-worker/
   worker.py                 # CLI and process loop only
   backtest/
+    run_contracts.py        # immutable queued-run contracts and repository protocol
     run_repository.py       # claim, lease, checkpoint, finish
     run_execution.py        # dataset loading and run orchestration
     run_contracts.py        # queued-run data structures and protocol
