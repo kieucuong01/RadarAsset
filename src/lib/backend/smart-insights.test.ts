@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     metricObservation: { findMany: vi.fn() },
-    dailyBriefing: { findFirst: vi.fn() },
+    dailyBriefing: { findFirst: vi.fn(), groupBy: vi.fn() },
     evidenceItem: { findMany: vi.fn() },
     $queryRaw: vi.fn(),
   },
@@ -12,9 +12,11 @@ const { prisma } = vi.hoisted(() => ({
 vi.mock("@/lib/db/prisma", () => ({ getPrisma: () => prisma }));
 
 import {
+  loadBriefingDateCatalog,
   loadBriefingEnvelope,
   loadMetrics,
   parseInsightWindow,
+  smartInsightsToday,
   SmartInsightsInputError,
 } from "./smart-insights";
 
@@ -23,8 +25,54 @@ describe("Smart Insights read bounds", () => {
     vi.clearAllMocks();
     prisma.metricObservation.findMany.mockResolvedValue([]);
     prisma.dailyBriefing.findFirst.mockResolvedValue(null);
+    prisma.dailyBriefing.groupBy.mockResolvedValue([]);
     prisma.evidenceItem.findMany.mockResolvedValue([]);
     prisma.$queryRaw.mockResolvedValue([]);
+    vi.stubEnv("SMART_INSIGHTS_TIMEZONE", "Asia/Bangkok");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns Bangkok today and the newest tenant-member briefing dates", async () => {
+    prisma.dailyBriefing.groupBy.mockResolvedValue([
+      { effectiveDate: new Date("2026-08-16T00:00:00.000Z") },
+      { effectiveDate: new Date("2026-08-15T00:00:00.000Z") },
+    ]);
+
+    await expect(
+      loadBriefingDateCatalog(
+        { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
+        new Date("2026-08-16T18:30:00.000Z"),
+      ),
+    ).resolves.toEqual({
+      today: "2026-08-17",
+      dates: ["2026-08-16", "2026-08-15"],
+    });
+    expect(smartInsightsToday(new Date("2026-08-16T18:30:00.000Z"))).toBe("2026-08-17");
+    expect(prisma.dailyBriefing.groupBy).toHaveBeenCalledWith({
+      by: ["effectiveDate"],
+      where: { organizationId: "org-a", userId: "user-a" },
+      orderBy: { effectiveDate: "desc" },
+      take: 90,
+    });
+  });
+
+  it("deduplicates and caps the catalog at 90 dates", async () => {
+    const rows = Array.from({ length: 91 }, (_, index) => {
+      const effectiveDate = new Date("2026-08-17T00:00:00.000Z");
+      effectiveDate.setUTCDate(effectiveDate.getUTCDate() - index);
+      return { effectiveDate };
+    });
+    prisma.dailyBriefing.groupBy.mockResolvedValue([rows[0], ...rows]);
+
+    const result = await loadBriefingDateCatalog(
+      { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
+    );
+
+    expect(result.dates).toHaveLength(90);
+    expect(new Set(result.dates).size).toBe(90);
   });
 
   it("loads 25 embedded asset opinions with one tenant-scoped briefing query", async () => {

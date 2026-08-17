@@ -76,6 +76,34 @@ function dateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+export type BriefingDateCatalog = { today: string; dates: string[] };
+
+export function smartInsightsToday(now = new Date()): string {
+  const timeZone = process.env.SMART_INSIGHTS_TIMEZONE?.trim() || "Asia/Bangkok";
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+export async function loadBriefingDateCatalog(
+  context: TenantContext,
+  now = new Date(),
+): Promise<BriefingDateCatalog> {
+  const rows = await getPrisma().dailyBriefing.groupBy({
+    by: ["effectiveDate"],
+    where: { organizationId: context.organizationId, userId: context.userId },
+    orderBy: { effectiveDate: "desc" },
+    take: 90,
+  });
+  const dates = [...new Set(rows.map((row) => dateOnly(row.effectiveDate)))].slice(0, 90);
+  return { today: smartInsightsToday(now), dates };
+}
+
 export function parseInsightWindow(url: URL): { from: Date; to: Date } {
   const now = new Date();
   const from = new Date(
