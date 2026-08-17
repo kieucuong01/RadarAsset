@@ -5,6 +5,7 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 
 import { EconomicCalendar } from "@/components/smart-insights/EconomicCalendar";
 import { EvidenceDrawer } from "@/components/smart-insights/EvidenceDrawer";
+import { AnalysisDateControl } from "@/components/smart-insights/AnalysisDateControl";
 import { AssetOpinions } from "@/components/smart-insights/AssetOpinions";
 import { LegacyDailyHero } from "@/components/smart-insights/LegacyDailyHero";
 import { LegacyMarketPulse } from "@/components/smart-insights/LegacyMarketPulse";
@@ -22,6 +23,7 @@ import {
   evidenceSchema,
   fetchParsed,
   fetchBriefing,
+  fetchBriefingDates,
   energyPulseSchema,
   macroEventRiskSchema,
   metricsSchema,
@@ -30,6 +32,7 @@ import {
   requestBriefingRefresh,
   regimesSchema,
   type BriefingModel,
+  type BriefingDatesModel,
   type BriefingGenerationState,
   type CalendarModel,
   type EvidenceModel,
@@ -60,6 +63,12 @@ export function SmartInsights() {
   const [briefing, setBriefing] = useState<BriefingModel | null>(null);
   const [briefingState, setBriefingState] = useState<BriefingGenerationState>("idle");
   const [briefingRefreshPending, setBriefingRefreshPending] = useState(false);
+  const [dateCatalog, setDateCatalog] = useState<BriefingDatesModel | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [dateCatalogState, setDateCatalogState] = useState<"idle" | "loading" | "ready" | "failed">(
+    "idle",
+  );
   const [regimes, setRegimes] = useState<RegimeModel[]>([]);
   const [metrics, setMetrics] = useState<MetricModel[]>([]);
   const [events, setEvents] = useState<CalendarModel[]>([]);
@@ -82,6 +91,10 @@ export function SmartInsights() {
     if (!authenticatedUserId) {
       setBriefing(null);
       setBriefingState("idle");
+      setDateCatalog(null);
+      setSelectedDate(null);
+      setBriefingLoading(false);
+      setDateCatalogState("idle");
       setRegimes([]);
       setMetrics([]);
       setEvents([]);
@@ -101,24 +114,58 @@ export function SmartInsights() {
     }
     const controller = new AbortController();
     setState("loading");
+    setDateCatalogState("loading");
     Promise.allSettled([
-      fetchBriefing(controller.signal),
+      fetchBriefingDates(controller.signal),
       fetchParsed("/api/smart-insights/regimes", regimesSchema, controller.signal),
       fetchParsed("/api/smart-insights/preferences", preferencesSchema, controller.signal),
     ]).then((results) => {
       if (controller.signal.aborted) return;
-      const [briefingResult, regimeResult, preferenceResult] = results;
-      if (briefingResult.status === "fulfilled") {
-        setBriefing(briefingResult.value.briefing);
-        setBriefingState(briefingResult.value.state);
+      const [catalogResult, regimeResult, preferenceResult] = results;
+      if (catalogResult.status === "fulfilled") {
+        setDateCatalog(catalogResult.value);
+        setBriefingLoading(true);
+        setSelectedDate((current) => current ?? catalogResult.value.today);
+        setDateCatalogState("ready");
+      } else {
+        setDateCatalogState("failed");
       }
       if (regimeResult.status === "fulfilled") setRegimes(regimeResult.value.regimes);
       if (preferenceResult.status === "fulfilled") setPreferences(preferenceResult.value);
-      const usable = regimeResult.status === "fulfilled" || briefingResult.status === "fulfilled";
+      const usable = regimeResult.status === "fulfilled" || catalogResult.status === "fulfilled";
       setState(usable ? "ready" : "error");
     });
     return () => controller.abort();
   }, [authenticatedUserId, refresh, sessionPending]);
+
+  useEffect(() => {
+    if (!authenticatedUserId || !selectedDate) return;
+    const controller = new AbortController();
+    setBriefing(null);
+    setBriefingLoading(true);
+    setEvidence(null);
+    setEvidenceId(null);
+    void fetchBriefing(selectedDate, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setBriefing(result.briefing);
+        setBriefingState(result.state);
+        if (result.errorCode === "BRIEFING_NOT_GENERATED_FOR_DATE") {
+          void fetchBriefingDates(controller.signal)
+            .then((catalog) => {
+              if (!controller.signal.aborted) setDateCatalog(catalog);
+            })
+            .catch(() => undefined);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setBriefingState("failed");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBriefingLoading(false);
+      });
+    return () => controller.abort();
+  }, [authenticatedUserId, refresh, selectedDate]);
 
   useEffect(() => {
     if (!authenticatedUserId) return;
@@ -137,15 +184,31 @@ export function SmartInsights() {
   }, [authenticatedUserId, refresh]);
 
   useEffect(() => {
-    if (!authenticatedUserId || briefingState !== "generating") return;
+    const today = dateCatalog?.today;
+    if (
+      !authenticatedUserId ||
+      !selectedDate ||
+      selectedDate !== today ||
+      briefingState !== "generating"
+    )
+      return;
     const controller = new AbortController();
     let timer = 0;
     const poll = async () => {
       try {
-        const result = await fetchBriefing(controller.signal);
+        const result = await fetchBriefing(selectedDate, controller.signal);
+        if (controller.signal.aborted) return;
         setBriefing(result.briefing);
         setBriefingState(result.state);
-        if (result.state === "generating") timer = window.setTimeout(poll, 5_000);
+        if (result.state === "generating") {
+          timer = window.setTimeout(poll, 5_000);
+        } else if (result.state === "ready") {
+          void fetchBriefingDates(controller.signal)
+            .then((catalog) => {
+              if (!controller.signal.aborted) setDateCatalog(catalog);
+            })
+            .catch(() => undefined);
+        }
       } catch {
         if (!controller.signal.aborted) setBriefingState("failed");
       }
@@ -155,9 +218,10 @@ export function SmartInsights() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [authenticatedUserId, briefingState]);
+  }, [authenticatedUserId, briefingState, dateCatalog?.today, selectedDate]);
 
   async function refreshBriefing() {
+    if (!selectedDate || selectedDate !== dateCatalog?.today) return;
     setBriefingRefreshPending(true);
     try {
       await requestBriefingRefresh();
@@ -169,17 +233,24 @@ export function SmartInsights() {
     }
   }
 
+  function handleAnalysisDateChange(date: string) {
+    if (date === selectedDate) return;
+    setBriefing(null);
+    setBriefingLoading(true);
+    setSelectedDate(date);
+  }
+
   function handleWatchlistSaved(items: WatchlistItemResponse[]) {
     setWatchlist(items);
     setWatchlistAvailable(true);
     setWatchlistError(null);
-    setBriefingState("generating");
+    if (selectedDate === dateCatalog?.today) setBriefingState("generating");
   }
 
   async function handleRemoveTrackedAsset(id: string) {
     const result = await removeFavoriteAsset(id);
     setWatchlist((items) => items.filter((item) => item.id !== id));
-    if (result.refreshQueued) setBriefingState("generating");
+    if (result.refreshQueued && selectedDate === dateCatalog?.today) setBriefingState("generating");
   }
 
   function handlePortfolioRecorded(nextPortfolio: PortfolioResponse) {
@@ -293,7 +364,80 @@ export function SmartInsights() {
 
   return (
     <main className="mx-auto min-w-0 max-w-7xl space-y-10 px-4 py-8 sm:px-6">
-      <LegacyDailyHero briefing={briefing} regimes={regimes} />
+      {!authenticatedUserId ? (
+        <>
+          <LegacyDailyHero briefing={briefing} regimes={regimes} />
+          <AssetOpinions
+            opinions={[]}
+            portfolioState="missing"
+            locale={locale}
+            onEvidence={setEvidenceId}
+          />
+        </>
+      ) : dateCatalog && selectedDate ? (
+        <>
+          <AnalysisDateControl
+            locale={locale}
+            today={dateCatalog.today}
+            dates={dateCatalog.dates}
+            value={selectedDate}
+            loading={briefingLoading}
+            onChange={handleAnalysisDateChange}
+          />
+          {briefingLoading ? (
+            <>
+              <Skeleton className="h-64 w-full rounded-3xl" />
+              <Skeleton className="h-96 w-full rounded-xl" />
+            </>
+          ) : (
+            <>
+              {briefing ? <LegacyDailyHero briefing={briefing} regimes={regimes} /> : null}
+              <AssetOpinions
+                opinions={briefing?.assetOpinions ?? []}
+                portfolioState={briefing?.portfolioState ?? "missing"}
+                locale={locale}
+                onEvidence={setEvidenceId}
+                generationState={briefingState}
+                onRefresh={selectedDate === dateCatalog.today ? refreshBriefing : undefined}
+                refreshPending={briefingRefreshPending}
+                watchlist={watchlist}
+                watchlistAvailable={watchlistAvailable}
+                watchlistError={watchlistError}
+                portfolio={portfolio}
+                portfolioAvailable={portfolioAvailable}
+                onWatchlistSaved={handleWatchlistSaved}
+                onRemoveTrackedAsset={handleRemoveTrackedAsset}
+                onPortfolioRecorded={handlePortfolioRecorded}
+                portfolioChanges={briefing?.portfolioChanges ?? []}
+                portfolioChangesStatus={briefing?.portfolioChangesStatus ?? "accumulating"}
+                analysisDate={selectedDate}
+                today={dateCatalog.today}
+                briefingAvailable={Boolean(briefing)}
+              />
+            </>
+          )}
+        </>
+      ) : dateCatalogState === "failed" && state !== "error" ? (
+        <Alert variant="destructive">
+          <AlertCircle />
+          <AlertTitle>
+            {locale === "vi" ? "Không thể tải ngày phân tích" : "Analysis dates unavailable"}
+          </AlertTitle>
+          <AlertDescription>
+            {locale === "vi"
+              ? "Dữ liệu thị trường hiện tại vẫn hoạt động. Hãy thử tải lại phần phân tích."
+              : "Current market data remains available. Retry the analysis section."}
+          </AlertDescription>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => setRefresh((value) => value + 1)}
+          >
+            <RefreshCw data-icon="inline-start" />
+            {locale === "vi" ? "Thử lại" : "Retry"}
+          </Button>
+        </Alert>
+      ) : null}
       {state === "error" ? (
         <Alert variant="destructive">
           <AlertCircle />
@@ -311,25 +455,6 @@ export function SmartInsights() {
           </Button>
         </Alert>
       ) : null}
-      <AssetOpinions
-        opinions={briefing?.assetOpinions ?? []}
-        portfolioState={briefing?.portfolioState ?? "missing"}
-        locale={locale}
-        onEvidence={setEvidenceId}
-        generationState={briefingState}
-        onRefresh={authenticatedUserId ? refreshBriefing : undefined}
-        refreshPending={briefingRefreshPending}
-        watchlist={watchlist}
-        watchlistAvailable={watchlistAvailable}
-        watchlistError={watchlistError}
-        portfolio={portfolio}
-        portfolioAvailable={portfolioAvailable}
-        onWatchlistSaved={authenticatedUserId ? handleWatchlistSaved : undefined}
-        onRemoveTrackedAsset={authenticatedUserId ? handleRemoveTrackedAsset : undefined}
-        onPortfolioRecorded={authenticatedUserId ? handlePortfolioRecorded : undefined}
-        portfolioChanges={briefing?.portfolioChanges ?? []}
-        portfolioChangesStatus={briefing?.portfolioChangesStatus ?? "accumulating"}
-      />
       <LegacyMarketPulse
         authenticated={Boolean(authenticatedUserId)}
         market={market}

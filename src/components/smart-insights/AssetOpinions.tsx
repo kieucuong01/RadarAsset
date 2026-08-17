@@ -301,7 +301,7 @@ export function AssetOpinions({
                 : "Tracked assets could not load. Other data remains available."}
             </p>
           ) : null}
-          {generationState === "generating" ? (
+          {isToday && generationState === "generating" ? (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <LoaderCircle className="size-3.5 animate-spin" />
               {locale === "vi"
@@ -309,7 +309,7 @@ export function AssetOpinions({
                 : "Generating quant opinions for new symbols…"}
             </p>
           ) : null}
-          {generationState === "failed" ? (
+          {isToday && generationState === "failed" ? (
             <p className="text-xs text-bear">
               {locale === "vi"
                 ? "Không thể tạo quan điểm. Dữ liệu hiện có vẫn được giữ nguyên."

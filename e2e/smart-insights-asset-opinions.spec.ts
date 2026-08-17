@@ -162,7 +162,23 @@ function factorDefinitions(symbol: string, index: number) {
   ] as const;
 }
 
-async function seedBriefing(email: string) {
+function bangkokDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function displayDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+async function seedBriefing(email: string): Promise<{ today: string; historical: string }> {
   const fileEnv: Record<string, string> = {};
   const envFile = resolveLocalEnvFile(process.cwd(), existsSync);
   if (envFile) loadEnvFile({ path: envFile, processEnv: fileEnv, quiet: true });
@@ -186,9 +202,8 @@ async function seedBriefing(email: string) {
     const organizationId = user.memberships[0]?.organizationId;
     if (!organizationId) throw new Error("E2E workspace membership was not created.");
     const asOf = new Date();
-    const effectiveDate = new Date(
-      Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()),
-    );
+    const today = bangkokDate(asOf);
+    const effectiveDate = new Date(`${today}T00:00:00.000Z`);
     const run = await prisma.researchRun.create({
       data: {
         organizationId,
@@ -412,6 +427,46 @@ async function seedBriefing(email: string) {
       where: { id: briefing.id },
       data: { marketSummary: { portfolioState: "available", assetOpinions } },
     });
+    const historicalDate = new Date(effectiveDate);
+    historicalDate.setUTCDate(historicalDate.getUTCDate() - 1);
+    const historicalRun = await prisma.researchRun.create({
+      data: {
+        organizationId,
+        userId: user.id,
+        source: "smart-insights-e2e-history",
+        kind: "daily_asset_opinion",
+        status: "succeeded",
+        parameters: { fixture: true, historical: true },
+        startedAt: asOf,
+        finishedAt: asOf,
+      },
+    });
+    await prisma.dailyBriefing.create({
+      data: {
+        organizationId,
+        userId: user.id,
+        researchRunId: historicalRun.id,
+        effectiveDate: historicalDate,
+        effectiveAt: new Date(asOf.getTime() - 86_400_000),
+        timezone: "Asia/Bangkok",
+        revision: 1,
+        fingerprint: historicalRun.id.replaceAll("-", "").padEnd(64, "0").slice(0, 64),
+        modelName: "e2e-grounded-fixture",
+        promptVersion: "asset-opinion-v1",
+        methodologyVersion: "asset-opinion-quant-v1",
+        status: "complete",
+        marketSummary: {
+          portfolioState: "available",
+          assetOpinions: assetOpinions.map((item, index) =>
+            index === 0 ? { ...item, thesis: "Bản phân tích lịch sử E2E" } : item,
+          ),
+        },
+        dataConfidence: 76,
+        portfolioSnapshot: { portfolioState: "available" },
+        preferenceSnapshot: { locale: "vi", riskTolerance: "moderate" },
+      },
+    });
+    return { today, historical: historicalDate.toISOString().slice(0, 10) };
   } finally {
     await prisma.$disconnect();
   }
@@ -476,7 +531,7 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
   await page.getByLabel("Workspace name").fill(`Smart Insights ${suffix}`);
   await page.getByRole("button", { name: "Create workspace" }).click();
   await expect(page).toHaveURL(/\/portfolio/, { timeout: 30_000 });
-  await seedBriefing(email);
+  const { today, historical } = await seedBriefing(email);
   authenticated = true;
 
   await page.goto("/", { waitUntil: "networkidle" });
@@ -507,6 +562,37 @@ test("Smart Insights asset opinions are responsive, bounded, and request-efficie
     await page.keyboard.press("Escape");
     await expect(detail).toHaveCount(0);
   };
+
+  const currentDataRequest = (url: string) =>
+    [
+      "/api/smart-insights/metrics",
+      "/api/smart-insights/calendar",
+      "/api/smart-insights/macro/",
+      "/api/smart-insights/crypto/",
+      "/api/smart-insights/forecast/",
+    ].some((path) => url.includes(path));
+  const currentRequestsBeforeDateChange = requests.filter(currentDataRequest).length;
+  await expect(page.getByLabel("Ngày phân tích")).toBeVisible();
+  await page.getByLabel("Ngày phân tích").click();
+  await page.getByRole("option", { name: displayDate(historical) }).click();
+  await expect(page.locator(`[data-analysis-date="${historical}"]`)).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  await openAsset("BTC", "Bitcoin");
+  await expect(detail).toContainText("Bản phân tích lịch sử E2E");
+  await closeAsset();
+  await expect(page.getByRole("button", { name: "Cập nhật AI" })).toHaveCount(0);
+  await expect(page.getByText("Dữ liệu hiện tại").first()).toBeVisible();
+  await page.getByRole("button", { name: "Hôm nay" }).click();
+  await expect(page.locator(`[data-analysis-date="${today}"]`)).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  expect(requests.filter(currentDataRequest)).toHaveLength(currentRequestsBeforeDateChange);
+  expect(
+    requests.some((url) => url.includes(`/api/smart-insights/briefing?date=${historical}`)),
+  ).toBe(true);
 
   await expect(detail).toHaveCount(0);
   const btcTrigger = await openAsset("BTC", "Bitcoin");
