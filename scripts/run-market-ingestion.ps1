@@ -17,12 +17,23 @@ Set-StrictMode -Version Latest
 
 $taskRepositoryRoot = Split-Path -Parent $PSScriptRoot
 $taskCatalogSyncPath = Join-Path $taskRepositoryRoot "quant-worker\sync_provider_instruments.py"
+$taskFxRatePath = Join-Path $taskRepositoryRoot "quant-worker\sync_fx_rates.py"
 $taskRequestCliPath = Join-Path $taskRepositoryRoot "quant-worker\process_ingestion_requests.py"
 $taskCorporateActionPath = Join-Path $taskRepositoryRoot "quant-worker\sync_corporate_actions.py"
 $taskAdjustedDatasetPath = Join-Path $taskRepositoryRoot "quant-worker\publish_adjusted_datasets.py"
 $taskOperationsCliPath = Join-Path $taskRepositoryRoot "quant-worker\verify_market_ingestion.py"
 $taskEnvPath = Join-Path $taskRepositoryRoot ".env.local"
 $taskVenvPython = Join-Path $taskRepositoryRoot ".venv\Scripts\python.exe"
+if ($DryRun) {
+    $taskStages = if ($Command -in @("daily", "all")) {
+        @("fx-rate-sync", "catalog-sync", "corporate-actions", "adjusted-publication")
+    }
+    else {
+        @("catalog-sync")
+    }
+    [pscustomobject]@{ command = $Command; stages = $taskStages } | ConvertTo-Json -Compress | Write-Output
+    exit 0
+}
 $taskPython = if ($PythonExecutable -eq "python" -and (Test-Path -LiteralPath $taskVenvPython -PathType Leaf)) {
     $taskVenvPython
 }
@@ -47,6 +58,19 @@ if (-not $DryRun) {
     $schedulerRunId = ($schedulerRun | ConvertFrom-Json).runId
 }
 try {
+if ($Command -in @("daily", "all")) {
+    Push-Location $taskRuntimeDirectory
+    try {
+        & $taskPython $taskFxRatePath "--mode" "daily" "--env-file" $taskEnvPath
+        if ($LASTEXITCODE -ne 0) {
+            if ($taskExitCode -eq 0) { $taskExitCode = $LASTEXITCODE }
+            $taskErrorCode = "fx_rate_sync_failed"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
 if (-not $DryRun) {
     Push-Location $taskRuntimeDirectory
     try {

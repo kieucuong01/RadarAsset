@@ -23,6 +23,17 @@ The key needs access only to the `datavest` bucket and the `operations/dataset-s
 
 ## Operator sequence
 
+After database migrations and before validating multi-currency portfolios, bootstrap the official
+Vietcombank USD/VND midpoint series directly into PostgreSQL:
+
+```powershell
+.\.venv\Scripts\python.exe quant-worker\sync_fx_rates.py --mode backfill --env-file .env.local
+```
+
+The command is idempotent and reports requested/stored/deduplicated/failed counts plus coverage
+dates. It stores only parsed provider observations. A parser or network failure remains retryable
+and never writes the `26,000 VND/USD` application fallback into `fx_rates`.
+
 From the repository root on the local source machine:
 
 ```powershell

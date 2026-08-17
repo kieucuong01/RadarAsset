@@ -33,15 +33,24 @@ WITH latest_market AS (
    AND membership.user_id = briefing.user_id
   WHERE briefing.effective_date = %s
     AND briefing.status IN ('complete', 'quant_only')
+), fx_coverage AS (
+  SELECT MAX(effective_date) AS effective_date
+  FROM fx_rates
+  WHERE base_currency = 'USD'
+    AND quote_currency = 'VND'
+    AND source = 'vietcombank'
+    AND effective_date <= %s
 )
 SELECT market.id AS market_run_id,
        market.status AS market_run_status,
        market.finished_at AS market_finished_at,
        membership.count AS membership_count,
        briefing.count AS briefing_count,
-       briefing.latest_at AS latest_briefing_at
+       briefing.latest_at AS latest_briefing_at,
+       fx.effective_date AS fx_effective_date
 FROM membership_total AS membership
 CROSS JOIN briefing_coverage AS briefing
+CROSS JOIN fx_coverage AS fx
 LEFT JOIN latest_market AS market ON true
 """
 
@@ -58,20 +67,28 @@ def load_daily_pipeline_health(
 ) -> dict[str, Any]:
     start, end = _day_bounds(local_date, timezone_name)
     with connection.cursor(row_factory=dict_row) as cursor:
-        cursor.execute(DAILY_PIPELINE_SQL, (start, end, local_date))
+        cursor.execute(DAILY_PIPELINE_SQL, (start, end, local_date, local_date))
         row = cursor.fetchone()
     if row is None:
         raise RuntimeError("Daily pipeline health query returned no result.")
     return dict(row)
 
 
-def verify_daily_pipeline_health(row: Mapping[str, Any]) -> list[str]:
+def verify_daily_pipeline_health(
+    row: Mapping[str, Any], *, local_date: date | None = None
+) -> list[str]:
     if row.get("market_run_id") is None:
         return ["DAILY_MARKET_RUN_MISSING"]
     if row.get("market_run_status") != "succeeded" or row.get("market_finished_at") is None:
         return ["DAILY_MARKET_RUN_FAILED"]
     if int(row.get("briefing_count") or 0) < int(row.get("membership_count") or 0):
         return ["DAILY_BRIEFING_INCOMPLETE"]
+    fx_effective_date = row.get("fx_effective_date")
+    if not isinstance(fx_effective_date, date):
+        return ["DAILY_FX_RATE_MISSING"]
+    effective_local_date = local_date or date.today()
+    if (effective_local_date - fx_effective_date).days > 4:
+        return ["DAILY_FX_RATE_STALE"]
     return []
 
 
@@ -104,6 +121,10 @@ def build_output(
             "published": int(row.get("briefing_count") or 0),
             "latestAt": _serialized(row.get("latest_briefing_at")),
         },
+        "fx": {
+            "effectiveDate": _serialized(row.get("fx_effective_date")),
+            "source": "vietcombank",
+        },
         "errors": list(errors),
     }
 
@@ -124,7 +145,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         url = psycopg_connection_url(load_database_url(Path(args.env_file)))
         with psycopg.connect(url, row_factory=dict_row) as connection:
             row = load_daily_pipeline_health(connection, local_date, args.timezone)
-        errors = verify_daily_pipeline_health(row)
+        errors = verify_daily_pipeline_health(row, local_date=local_date)
         print(
             json.dumps(
                 build_output(

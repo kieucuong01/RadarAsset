@@ -44,6 +44,7 @@ def healthy_row():
         "membership_count": 3,
         "briefing_count": 3,
         "latest_briefing_at": datetime(2026, 8, 16, 1, 30, tzinfo=timezone.utc),
+        "fx_effective_date": date(2026, 8, 16),
     }
 
 
@@ -58,9 +59,11 @@ def test_loader_bounds_market_run_to_requested_local_day_and_counts_memberships(
     assert "market_ingestion_scheduler_runs" in connection.value.query
     assert "daily_briefings" in connection.value.query
     assert "organization_memberships" in connection.value.query
+    assert "fx_rates" in connection.value.query
     assert connection.value.params == (
         datetime(2026, 8, 15, 17, tzinfo=timezone.utc),
         datetime(2026, 8, 16, 17, tzinfo=timezone.utc),
+        date(2026, 8, 16),
         date(2026, 8, 16),
     )
 
@@ -81,6 +84,18 @@ def test_verifier_rejects_incomplete_member_briefing_coverage() -> None:
     row = {**healthy_row(), "membership_count": 3, "briefing_count": 2}
 
     assert verify_daily_pipeline_health(row) == ["DAILY_BRIEFING_INCOMPLETE"]
+
+
+def test_verifier_rejects_missing_or_stale_fx_rate() -> None:
+    missing = {**healthy_row(), "fx_effective_date": None}
+    stale = {**healthy_row(), "fx_effective_date": date(2026, 8, 11)}
+
+    assert verify_daily_pipeline_health(missing, local_date=date(2026, 8, 16)) == [
+        "DAILY_FX_RATE_MISSING"
+    ]
+    assert verify_daily_pipeline_health(stale, local_date=date(2026, 8, 16)) == [
+        "DAILY_FX_RATE_STALE"
+    ]
 
 
 def test_output_serializes_database_uuid_and_timestamps() -> None:
