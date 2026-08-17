@@ -372,6 +372,7 @@ export function SmartInsights() {
             portfolioState="missing"
             locale={locale}
             onEvidence={setEvidenceId}
+            guestPreview
           />
         </>
       ) : dateCatalog && selectedDate ? (

@@ -112,16 +112,12 @@ function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale:
   );
 }
 
-function PendingOpinion({ locale, label }: { locale: Locale; label: string | null }) {
+function PendingOpinion({ label, detail }: { label: string | null; detail: string | null }) {
   if (!label) return <span className="text-muted-foreground">—</span>;
   return (
     <div>
       <Badge variant="secondary">{label}</Badge>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {locale === "vi"
-          ? "Bản phân tích không có đủ bằng chứng định lượng cho tài sản này."
-          : "The analysis did not have enough quantitative evidence for this asset."}
-      </p>
+      {detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }
@@ -205,6 +201,7 @@ export function AssetOpinionList({
   locale,
   tradingAvailable,
   missingOpinionLabel,
+  missingOpinionDetail,
   onSelect,
   onTrade,
   onRemove,
@@ -213,6 +210,7 @@ export function AssetOpinionList({
   locale: Locale;
   tradingAvailable: boolean;
   missingOpinionLabel: string | null;
+  missingOpinionDetail: string | null;
   onSelect: (item: AssetOpinionWorkspaceItem, trigger: HTMLElement) => void;
   onTrade: (item: AssetOpinionWorkspaceItem, side: TradeSide) => void;
   onRemove: (item: AssetOpinionWorkspaceItem) => void;
@@ -302,7 +300,7 @@ export function AssetOpinionList({
                     {opinion ? (
                       <OpinionState opinion={opinion} locale={locale} />
                     ) : (
-                      <PendingOpinion locale={locale} label={missingOpinionLabel} />
+                      <PendingOpinion label={missingOpinionLabel} detail={missingOpinionDetail} />
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
@@ -375,7 +373,7 @@ export function AssetOpinionList({
                 {opinion ? (
                   <OpinionState opinion={opinion} locale={locale} />
                 ) : (
-                  <PendingOpinion locale={locale} label={missingOpinionLabel} />
+                  <PendingOpinion label={missingOpinionLabel} detail={missingOpinionDetail} />
                 )}
               </div>
               {opinion ? (

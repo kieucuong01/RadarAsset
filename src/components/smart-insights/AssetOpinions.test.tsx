@@ -538,6 +538,7 @@ describe("AssetOpinions", () => {
         onEvidence={() => undefined}
         generationState="idle"
         onRefresh={() => undefined}
+        guestPreview
       />,
     );
     expect(html).toContain("Quan điểm AI theo tài sản");
@@ -546,7 +547,9 @@ describe("AssetOpinions", () => {
     expect(html).toContain("VNINDEX");
     expect(html).toContain("VN30");
     expect(html).toContain("XAU");
-    expect(html).toContain("Chưa có quan điểm hôm nay");
+    expect(html).toContain("Đăng nhập để xem quan điểm định lượng");
+    expect(html).toContain("Nội dung minh họa không thay thế phân tích theo tài khoản của bạn.");
+    expect(html).not.toContain("Chưa có quan điểm hôm nay");
   });
 
   it("explains generating and failed states with a retry action", () => {

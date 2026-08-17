@@ -51,6 +51,7 @@ type Props = {
   analysisDate?: string;
   today?: string;
   briefingAvailable?: boolean;
+  guestPreview?: boolean;
 };
 
 function EmptyOpinions({
@@ -161,6 +162,7 @@ export function AssetOpinions({
   analysisDate,
   today,
   briefingAvailable = true,
+  guestPreview = false,
 }: Props) {
   const items = useMemo(
     () =>
@@ -184,15 +186,28 @@ export function AssetOpinions({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const activeOpinion = items.find((item) => item.symbol === activeSymbol)?.opinion ?? null;
   const isToday = !analysisDate || !today || analysisDate === today;
-  const missingOpinionLabel = briefingAvailable
-    ? isToday
+  const missingOpinionLabel = guestPreview
+    ? locale === "vi"
+      ? "Đăng nhập để xem quan điểm định lượng"
+      : "Sign in to view quantitative opinions"
+    : briefingAvailable
+      ? isToday
+        ? locale === "vi"
+          ? "Chưa có quan điểm hôm nay"
+          : "No opinion today"
+        : locale === "vi"
+          ? "Chưa có quan điểm cho ngày đã chọn"
+          : "No opinion for selected date"
+      : null;
+  const missingOpinionDetail = guestPreview
+    ? locale === "vi"
+      ? "Nội dung minh họa không thay thế phân tích theo tài khoản của bạn."
+      : "Sample data does not replace analysis for your account."
+    : briefingAvailable
       ? locale === "vi"
-        ? "Chưa có quan điểm hôm nay"
-        : "No opinion today"
-      : locale === "vi"
-        ? "Chưa có quan điểm cho ngày đã chọn"
-        : "No opinion for selected date"
-    : null;
+        ? "Bản phân tích không có đủ bằng chứng định lượng cho tài sản này."
+        : "The analysis did not have enough quantitative evidence for this asset."
+      : null;
 
   async function confirmRemove() {
     const candidate = removeCandidate;
@@ -332,6 +347,7 @@ export function AssetOpinions({
             locale={locale}
             tradingAvailable={portfolioAvailable && Boolean(portfolio)}
             missingOpinionLabel={missingOpinionLabel}
+            missingOpinionDetail={missingOpinionDetail}
             onSelect={(item, trigger) => {
               returnFocusRef.current = trigger;
               setActiveSymbol(item.symbol);
