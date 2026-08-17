@@ -67,7 +67,7 @@ Contract rules:
 - Results are scoped by both `organizationId` and `userId`; another tenant or member's dates must never be exposed.
 - The response is private and not shared-cacheable.
 
-This separate, small endpoint preserves the existing briefing payload and allows the date list to refresh independently after generation. It is fetched concurrently with the existing initial page requests, not per asset.
+This separate, small endpoint preserves the existing briefing payload and allows the date list to refresh independently after generation. It is fetched concurrently with the existing non-briefing page requests, not per asset. The exact today briefing starts as soon as the server-provided `today` value is known, avoiding duplicated client timezone logic.
 
 ### Briefing read
 
@@ -94,7 +94,7 @@ Smart Insights adds these independent states:
 - `selectedDate`: initialized to `today`;
 - current briefing lifecycle and payload for `selectedDate`.
 
-Initial load fetches dates, today's briefing, regimes, and preferences concurrently. Briefing-date failure is isolated from current market sections. Selecting a historical date only replaces the briefing-bound payload. Refresh success triggers a fresh today read and a refresh of available dates so the newly published date becomes selectable.
+Initial load fetches the date catalog, regimes, and preferences concurrently, then fetches the exact today briefing using the server-provided date. Briefing-date failure is isolated from current market sections. Selecting a historical date only replaces the briefing-bound payload. Refresh success triggers a fresh today read and a refresh of available dates so the newly published date becomes selectable.
 
 The generation poll captures the selected date and stops when selection changes, the component unmounts, or the state leaves `generating`. This prevents a late today response from overwriting a historical selection.
 
