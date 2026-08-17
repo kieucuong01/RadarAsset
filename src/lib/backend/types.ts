@@ -121,11 +121,18 @@ export type PortfolioTransactionCreateInput = {
   quantity: number;
   price: number;
   fee?: number;
+  currency?: "USD" | "VND";
+  reportingCurrency?: "USD" | "VND";
   sourceSignalId?: string;
   executedAt?: string;
   note?: string | null;
   timeframe?: PortfolioTimeframe;
 };
+
+export type PortfolioTransactionUpdateInput = Omit<
+  PortfolioTransactionCreateInput,
+  "sourceSignalId"
+>;
 
 export type WatchlistMutationInput = {
   symbol?: string;
@@ -303,6 +310,13 @@ export type PortfolioTransactionResponse = PortfolioLedgerTransaction & {
   releasedCostBasis: number;
   realizedPnL: number;
   remainingQuantity: number;
+  rawPrice?: number;
+  rawFee?: number;
+  rawCurrency?: "USD" | "VND";
+  fxRateToVnd?: number;
+  fxEffectiveDate?: string | null;
+  fxSource?: string | null;
+  fxFallback?: boolean;
 };
 
 export type PortfolioLedgerReplayResult = {
@@ -368,6 +382,7 @@ export type PortfolioResponse = {
   holdings: PortfolioHoldingResponse[];
   transactions: PortfolioTransactionResponse[];
   performance: PortfolioPerformancePoint[];
+  benchmark?: PortfolioBenchmarkSummary;
   riskMetrics: PortfolioRiskMetricResponse[];
   dataAsOf: string | null;
   dataSource: string;

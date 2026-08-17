@@ -55,6 +55,7 @@ export function buildPortfolioResponse(input: {
   positions: PortfolioPositionInput[];
   transactions: PortfolioTransactionResponse[];
   performance: PortfolioPerformancePoint[];
+  benchmark?: PortfolioBenchmarkSummary;
   realizedPnL?: number;
   cumulativeBuyCapital?: number;
   dataAsOf?: string | null;
@@ -127,6 +128,15 @@ export function buildPortfolioResponse(input: {
     holdings,
     transactions: input.transactions,
     performance: input.performance,
+    benchmark: input.benchmark ?? {
+      symbol: "VNINDEX",
+      portfolioValue: round(totalValue),
+      benchmarkValue: null,
+      excessValue: null,
+      portfolioReturnPct: round(totalPnLPct, 4),
+      benchmarkReturnPct: null,
+      excessReturnPct: null,
+    },
     riskMetrics: calculateRiskMetrics({
       totalValue: round(totalValue),
       allocation,
@@ -155,7 +165,7 @@ export class PortfolioDomainError extends Error {
 export class PortfolioInputError extends Error {
   constructor(
     message: string,
-    readonly code: "ASSET_NOT_FOUND" | "ASSET_UNSUPPORTED",
+    readonly code: "ASSET_NOT_FOUND" | "ASSET_UNSUPPORTED" | "TRANSACTION_NOT_FOUND",
   ) {
     super(message);
     this.name = "PortfolioInputError";
