@@ -1,0 +1,15 @@
+{
+  "Count": 1,
+  "Date": "2026-08-15T00:00:00",
+  "UpdatedDate": "2026-08-15T23:00:00+07:00",
+  "Data": [
+    {
+      "currencyName": "US DOLLAR",
+      "currencyCode": "USD",
+      "cash": "25920.00",
+      "transfer": "25950.00",
+      "sell": "26330.00",
+      "icon": "/flags/usa.svg"
+    }
+  ]
+}
