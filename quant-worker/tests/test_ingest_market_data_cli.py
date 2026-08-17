@@ -24,8 +24,8 @@ NOW = datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
 
 
 def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
-    daily = build_selections("daily", asset=None, timeframe=None)
-    all_selections = build_selections("all", asset=None, timeframe=None)
+    daily = build_selections("daily", asset=None, timeframe=None, profile=None)
+    all_selections = build_selections("all", asset=None, timeframe=None, profile=None)
 
     assert [(item.asset, item.timeframe) for item in daily] == [
         (symbol, "1d") for symbol in FEEDS
@@ -35,10 +35,114 @@ def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
     ]
 
     with pytest.raises(ValueError, match="Unsupported"):
-        build_selections("hourly", asset=None, timeframe=None)
+        build_selections("hourly", asset=None, timeframe=None, profile=None)
 
     with pytest.raises(ValueError, match="retired"):
-        build_selections("all", asset="BTC", timeframe="1h")
+        build_selections("all", asset="BTC", timeframe="1h", profile=None)
+
+
+def test_profile_selection_is_exact_and_rejects_mixed_scope() -> None:
+    selections = build_selections(
+        "all", asset=None, timeframe=None, profile="vn-core-2016"
+    )
+
+    assert [(item.asset, item.timeframe) for item in selections] == [
+        (symbol, "1d")
+        for symbol in (
+            "VNINDEX",
+            "VN30",
+            "FPT",
+            "VCB",
+            "HPG",
+            "VNM",
+            "MWG",
+            "SSI",
+            "VIC",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        build_selections(
+            "all", asset="FPT", timeframe="1d", profile="vn-core-2016"
+        )
+
+    with pytest.raises(ValueError, match="requires the all command"):
+        build_selections(
+            "daily", asset=None, timeframe=None, profile="vn-core-2016"
+        )
+
+
+def test_profile_dry_run_uses_exact_nine_daily_selections(capsys: Any) -> None:
+    captured: list[Any] = []
+
+    def fake_run(selections: list[Any], **kwargs: Any):
+        captured.extend(selections)
+        return (
+            [
+                IngestionOutcome(
+                    asset=item.asset,
+                    timeframe=item.timeframe,
+                    status="succeeded",
+                    fetched_row_count=10,
+                    error_code=None,
+                )
+                for item in selections
+            ],
+            0,
+        )
+
+    exit_code = main(
+        ["all", "--profile", "vn-core-2016", "--dry-run"],
+        now=NOW,
+        run_ingestion_fn=fake_run,
+        provider_factory=object(),
+    )
+
+    assert exit_code == 0
+    assert [(item.asset, item.timeframe) for item in captured] == [
+        (symbol, "1d")
+        for symbol in (
+            "VNINDEX",
+            "VN30",
+            "FPT",
+            "VCB",
+            "HPG",
+            "VNM",
+            "MWG",
+            "SSI",
+            "VIC",
+        )
+    ]
+    assert json.loads(capsys.readouterr().out.splitlines()[-1]) == {
+        "status": "succeeded",
+        "selected": 9,
+        "succeeded": 9,
+        "degraded": 0,
+    }
+
+
+def test_profile_combined_with_asset_returns_sanitized_configuration_error(
+    capsys: Any,
+) -> None:
+    exit_code = main(
+        [
+            "all",
+            "--profile",
+            "vn-core-2016",
+            "--asset",
+            "FPT",
+            "--timeframe",
+            "1d",
+            "--dry-run",
+        ],
+        now=NOW,
+    )
+
+    assert exit_code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "fatal",
+        "errorCode": "configuration_error",
+    }
 
 
 def test_main_returns_one_for_an_incomplete_single_feed_selection(capsys: Any) -> None:

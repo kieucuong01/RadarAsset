@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
 
+from backtest.backfill_profiles import resolve_backfill_profile
 from backtest.catalog import FEEDS
 from backtest.ingestion import IngestionSelection, run_ingestion
 from backtest.ingestion_repository import PostgresIngestionRepository
@@ -93,7 +94,25 @@ def build_selections(
     *,
     asset: str | None,
     timeframe: str | None,
+    profile: str | None = None,
 ) -> list[IngestionSelection]:
+    if profile is not None:
+        if asset is not None or timeframe is not None:
+            raise ValueError("Backfill profile cannot be combined with asset or timeframe.")
+        if command != "all":
+            raise ValueError("Backfill profile requires the all command.")
+        resolved = resolve_backfill_profile(profile)
+        selections: list[IngestionSelection] = []
+        for symbol in resolved.symbols:
+            feed = FEEDS.get(symbol)
+            if (
+                feed is None
+                or feed.market != resolved.market
+                or resolved.timeframe != "1d"
+            ):
+                raise ValueError("Backfill profile is inconsistent with the feed catalog.")
+            selections.append(IngestionSelection(symbol, resolved.timeframe))
+        return selections
     if (asset is None) != (timeframe is None):
         raise ValueError("Single-feed ingestion requires both asset and timeframe.")
     if asset is not None and timeframe is not None:
@@ -112,6 +131,7 @@ def _argument_parser() -> StrictArgumentParser:
     parser.add_argument("command", nargs="?", choices=("all", "daily"), default="all")
     parser.add_argument("--asset", choices=tuple(FEEDS))
     parser.add_argument("--timeframe", choices=("1d",))
+    parser.add_argument("--profile")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--env-file", default=".env.local")
     return parser
@@ -176,6 +196,7 @@ def main(
             args.command,
             asset=args.asset,
             timeframe=args.timeframe,
+            profile=args.profile,
         )
         max_pages = read_bounded_environment_integer(
             "MARKET_INGEST_MAX_PAGES", default=128, minimum=1, maximum=512
