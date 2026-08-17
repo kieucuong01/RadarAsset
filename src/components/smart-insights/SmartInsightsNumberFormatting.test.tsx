@@ -582,6 +582,7 @@ describe("Smart Insights number formatting", () => {
     const text = textContent(
       renderToStaticMarkup(
         <EconomicCalendar
+          locale="vi"
           impact="all"
           onImpactChange={() => undefined}
           events={[
@@ -610,5 +611,27 @@ describe("Smart Insights number formatting", () => {
     );
 
     expect(text).toContain("Actual 123K · Forecast 120K · Previous 98K revised");
+  });
+
+  it("labels Market Pulse and the calendar as current data", () => {
+    const pulse = renderToStaticMarkup(
+      <I18nProvider>
+        <LegacyMarketPulse
+          market="macro"
+          metrics={[]}
+          regimes={[]}
+          macroEventRisk={null}
+          energyPulse={null}
+          macroPulseState="idle"
+          onMarketChange={() => undefined}
+        />
+      </I18nProvider>,
+    );
+    const calendar = renderToStaticMarkup(
+      <EconomicCalendar locale="en" events={[]} impact="all" onImpactChange={() => undefined} />,
+    );
+
+    expect(pulse).toContain("Dữ liệu hiện tại");
+    expect(calendar).toContain("Current data");
   });
 });

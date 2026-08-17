@@ -341,7 +341,12 @@ export function SmartInsights() {
         onMarketChange={setMarket}
       />
       <section className="min-w-0">
-        <EconomicCalendar events={events} impact={impact} onImpactChange={setImpact} />
+        <EconomicCalendar
+          locale={locale}
+          events={events}
+          impact={impact}
+          onImpactChange={setImpact}
+        />
       </section>
       <EvidenceDrawer
         evidence={evidence}

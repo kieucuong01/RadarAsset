@@ -38,10 +38,12 @@ function countdown(value: string | null): string {
 }
 
 export function EconomicCalendar({
+  locale,
   events,
   impact,
   onImpactChange,
 }: {
+  locale: "vi" | "en";
   events: CalendarModel[];
   impact: "all" | "high" | "medium" | "low";
   onImpactChange: (impact: "all" | "high" | "medium" | "low") => void;
@@ -55,6 +57,9 @@ export function EconomicCalendar({
             <div className="flex items-center gap-2">
               <CalendarClock className="size-5 text-primary" />
               <CardTitle>CryptoCraft Economic Calendar</CardTitle>
+              <Badge variant="outline">
+                {locale === "vi" ? "Dữ liệu hiện tại" : "Current data"}
+              </Badge>
               {!events.length ? <DataStatusBadge status="SAMPLE" /> : null}
             </div>
             <CardDescription className="mt-2">

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import {
   buildAssetOpinionWorkspace,
   type AssetOpinionWorkspaceItem,
@@ -48,6 +48,9 @@ type Props = {
   onPortfolioRecorded?: (portfolio: PortfolioResponse) => void;
   portfolioChanges?: PortfolioOpinionChange[];
   portfolioChangesStatus?: "accumulating" | "ready";
+  analysisDate?: string;
+  today?: string;
+  briefingAvailable?: boolean;
 };
 
 function EmptyOpinions({
@@ -55,12 +58,25 @@ function EmptyOpinions({
   generationState,
   onRefresh,
   refreshPending,
-}: Pick<Props, "locale" | "generationState" | "onRefresh" | "refreshPending">) {
+  isToday,
+}: Pick<Props, "locale" | "generationState" | "onRefresh" | "refreshPending"> & {
+  isToday: boolean;
+}) {
   const state = generationState ?? "idle";
-  const content =
-    state === "generating"
+  const content = !isToday
+    ? {
+        title:
+          locale === "vi"
+            ? "Không có bản phân tích cho ngày đã chọn"
+            : "No analysis for the selected date",
+        detail:
+          locale === "vi"
+            ? "Ngày này không còn bản phân tích khả dụng. Hãy chọn ngày khác hoặc quay về hôm nay."
+            : "This date is no longer available. Choose another date or return to Today.",
+      }
+    : state === "generating"
       ? {
-          title: locale === "vi" ? "Đang tổng hợp dữ liệu định lượng" : "Generating quant opinions",
+          title: locale === "vi" ? "Đang tạo bản phân tích hôm nay" : "Generating today's analysis",
           detail:
             locale === "vi"
               ? "Hệ thống đang kiểm tra dữ liệu danh mục, mã đang theo dõi và BTC/ETH/VNINDEX/VN30/XAU."
@@ -83,8 +99,7 @@ function EmptyOpinions({
                   : "No asset passed the evidence threshold for an opinion.",
             }
           : {
-              title:
-                locale === "vi" ? "Chưa tạo quan điểm theo tài sản" : "No asset opinions generated",
+              title: locale === "vi" ? "Chưa có bản phân tích hôm nay" : "No analysis for today",
               detail:
                 locale === "vi"
                   ? "Tạo phân tích cho danh mục, mã đang theo dõi và các tài sản đại diện BTC/ETH/VNINDEX/VN30/XAU."
@@ -92,48 +107,36 @@ function EmptyOpinions({
             };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{locale === "vi" ? "Quan điểm AI theo tài sản" : "AI asset opinions"}</CardTitle>
-        <CardDescription>
-          {locale === "vi"
-            ? "Phân tích danh mục, mã đang theo dõi và BTC/ETH/VNINDEX/VN30/XAU dựa trên dữ liệu định lượng."
-            : "Quant analysis for your portfolio, tracked assets, and BTC/ETH/VNINDEX/VN30/XAU."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed p-5">
-          <div className="flex items-start gap-3">
-            {state === "generating" ? (
-              <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
-            ) : (
-              <BrainCircuit className="mt-0.5 size-5 shrink-0 text-primary" />
-            )}
-            <div>
-              <p className="text-sm font-medium">{content.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{content.detail}</p>
-            </div>
-          </div>
-          {state !== "generating" && onRefresh ? (
-            <Button
-              size="sm"
-              variant={state === "failed" ? "outline" : "default"}
-              onClick={onRefresh}
-              disabled={refreshPending}
-            >
-              <RefreshCw className={refreshPending ? "animate-spin" : undefined} />
-              {state === "failed"
-                ? locale === "vi"
-                  ? "Thử lại"
-                  : "Retry"
-                : locale === "vi"
-                  ? "Tạo quan điểm AI"
-                  : "Generate AI opinions"}
-            </Button>
-          ) : null}
+    <div className="m-4 flex flex-col items-start gap-4 rounded-xl border border-dashed p-5">
+      <div className="flex items-start gap-3">
+        {state === "generating" && isToday ? (
+          <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
+        ) : (
+          <BrainCircuit className="mt-0.5 size-5 shrink-0 text-primary" />
+        )}
+        <div>
+          <p className="text-sm font-medium">{content.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{content.detail}</p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      {isToday && state !== "generating" && onRefresh ? (
+        <Button
+          size="sm"
+          variant={state === "failed" ? "outline" : "default"}
+          onClick={onRefresh}
+          disabled={refreshPending}
+        >
+          <RefreshCw className={refreshPending ? "animate-spin" : undefined} />
+          {state === "failed"
+            ? locale === "vi"
+              ? "Thử lại"
+              : "Retry"
+            : locale === "vi"
+              ? "Tạo phân tích AI"
+              : "Generate AI analysis"}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -155,6 +158,9 @@ export function AssetOpinions({
   onPortfolioRecorded,
   portfolioChanges = [],
   portfolioChangesStatus = "accumulating",
+  analysisDate,
+  today,
+  briefingAvailable = true,
 }: Props) {
   const items = useMemo(
     () =>
@@ -177,6 +183,16 @@ export function AssetOpinions({
   const [removing, setRemoving] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const activeOpinion = items.find((item) => item.symbol === activeSymbol)?.opinion ?? null;
+  const isToday = !analysisDate || !today || analysisDate === today;
+  const missingOpinionLabel = briefingAvailable
+    ? isToday
+      ? locale === "vi"
+        ? "Chưa có quan điểm hôm nay"
+        : "No opinion today"
+      : locale === "vi"
+        ? "Chưa có quan điểm cho ngày đã chọn"
+        : "No opinion for selected date"
+    : null;
 
   async function confirmRemove() {
     const candidate = removeCandidate;
@@ -205,15 +221,17 @@ export function AssetOpinions({
 
   return (
     <section className="flex min-w-0 flex-col gap-5" aria-labelledby="asset-opinions-title">
-      <PortfolioChangeDigest
-        changes={portfolioChanges}
-        status={portfolioChangesStatus}
-        locale={locale}
-        onSelect={(symbol, trigger) => {
-          returnFocusRef.current = trigger;
-          setActiveSymbol(symbol);
-        }}
-      />
+      {briefingAvailable ? (
+        <PortfolioChangeDigest
+          changes={portfolioChanges}
+          status={portfolioChangesStatus}
+          locale={locale}
+          onSelect={(symbol, trigger) => {
+            returnFocusRef.current = trigger;
+            setActiveSymbol(symbol);
+          }}
+        />
+      ) : null}
       <Card className="min-w-0 overflow-hidden shadow-none">
         <CardHeader className="gap-3 border-b bg-muted/20">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -236,7 +254,7 @@ export function AssetOpinions({
               <Badge variant="secondary">
                 {items.length} {locale === "vi" ? "tài sản" : "assets"}
               </Badge>
-              {onRefresh ? (
+              {briefingAvailable && isToday && onRefresh ? (
                 <Button
                   size="sm"
                   variant={generationState === "failed" ? "outline" : "secondary"}
@@ -300,10 +318,20 @@ export function AssetOpinions({
           ) : null}
         </CardHeader>
         <CardContent className="p-0">
+          {!briefingAvailable ? (
+            <EmptyOpinions
+              locale={locale}
+              generationState={generationState}
+              onRefresh={isToday ? onRefresh : undefined}
+              refreshPending={refreshPending}
+              isToday={isToday}
+            />
+          ) : null}
           <AssetOpinionList
             items={items}
             locale={locale}
             tradingAvailable={portfolioAvailable && Boolean(portfolio)}
+            missingOpinionLabel={missingOpinionLabel}
             onSelect={(item, trigger) => {
               returnFocusRef.current = trigger;
               setActiveSymbol(item.symbol);

@@ -232,6 +232,46 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Chưa có quan điểm hôm nay");
   });
 
+  it("shows one today-level notice when the entire briefing is missing", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[]}
+        portfolioState="missing"
+        locale="vi"
+        onEvidence={() => undefined}
+        generationState="idle"
+        analysisDate="2026-08-17"
+        today="2026-08-17"
+        briefingAvailable={false}
+        watchlist={watchlist}
+        watchlistAvailable
+      />,
+    );
+
+    expect(html.match(/Chưa có bản phân tích hôm nay/g)).toHaveLength(1);
+    expect(html).not.toContain("Chưa có quan điểm hôm nay");
+  });
+
+  it("labels an omitted symbol against the selected historical date", () => {
+    const html = renderToStaticMarkup(
+      <AssetOpinions
+        opinions={[opinion()]}
+        portfolioState="available"
+        locale="vi"
+        onEvidence={() => undefined}
+        analysisDate="2026-08-16"
+        today="2026-08-17"
+        briefingAvailable
+        watchlist={watchlist}
+        watchlistAvailable
+        onRefresh={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Chưa có quan điểm cho ngày đã chọn");
+    expect(html).not.toContain("Cập nhật AI");
+  });
+
   it("advertises row and card analysis while keeping details closed by default", () => {
     const html = renderToStaticMarkup(
       <AssetOpinions

@@ -11,6 +11,7 @@ import {
   MacroQuantPulseTabs,
   type MacroPulseState,
 } from "@/components/smart-insights/MacroQuantPulseTabs";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InsightMarket } from "@/lib/backend/smart-insights-types";
 import {
@@ -124,9 +125,12 @@ export function LegacyMarketPulse({
     <section className="space-y-6" aria-labelledby="market-pulse-heading">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 id="market-pulse-heading" className="text-2xl font-bold tracking-tight">
-            Market Pulse
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="market-pulse-heading" className="text-2xl font-bold tracking-tight">
+              Market Pulse
+            </h2>
+            <Badge variant="outline">{locale === "vi" ? "Dữ liệu hiện tại" : "Current data"}</Badge>
+          </div>
           <p className="text-sm text-muted-foreground">
             {locale === "vi"
               ? "Dữ liệu định lượng theo từng thị trường."
