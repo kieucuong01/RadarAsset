@@ -7,22 +7,22 @@ datasource db {
 }
 
 model AppUser {
-  id                      String                   @id @default(uuid()) @db.Uuid
-  email                   String                   @unique
-  emailVerified           Boolean                  @default(false) @map("email_verified")
+  id                      String                       @id @default(uuid()) @db.Uuid
+  email                   String                       @unique
+  emailVerified           Boolean                      @default(false) @map("email_verified")
   name                    String
   image                   String?
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  createdAt               DateTime                     @default(now()) @map("created_at")
+  updatedAt               DateTime                     @updatedAt @map("updated_at")
   sessions                Session[]
   accounts                Account[]
   memberships             Membership[]
-  invitationsSent         Invitation[]             @relation("InvitationInviter")
+  invitationsSent         Invitation[]                 @relation("InvitationInviter")
   portfolios              Portfolio[]
   watchlistItems          WatchlistItem[]
   quantRuns               QuantRun[]
   researchRuns            ResearchRun[]
-  customStrategies        CustomStrategy[]         @relation("CustomStrategyCreator")
+  customStrategies        CustomStrategy[]             @relation("CustomStrategyCreator")
   notifications           Notification[]
   marketIngestionRequests MarketIngestionRequest[]
   insightPreferences      UserInsightPreference[]
@@ -83,12 +83,12 @@ model Verification {
 }
 
 model Organization {
-  id                       String                    @id @default(uuid()) @db.Uuid
+  id                       String                       @id @default(uuid()) @db.Uuid
   name                     String
-  slug                     String                    @unique
+  slug                     String                       @unique
   logo                     String?
-  metadata                 String?                   @db.Text
-  createdAt                DateTime                  @default(now()) @map("created_at")
+  metadata                 String?                      @db.Text
+  createdAt                DateTime                     @default(now()) @map("created_at")
   memberships              Membership[]
   invitations              Invitation[]
   portfolios               Portfolio[]
@@ -97,7 +97,7 @@ model Organization {
   quantRuns                QuantRun[]
   quantRunArtifacts        QuantRunArtifact[]
   customStrategies         CustomStrategy[]
-  customStrategyVersions   StrategyVersion[]         @relation("StrategyVersionOrganization")
+  customStrategyVersions   StrategyVersion[]            @relation("StrategyVersionOrganization")
   strategyAssignments      StrategyAssignment[]
   strategySignals          StrategySignal[]
   strategyEvaluationJobs   StrategyEvaluationJob[]
@@ -203,6 +203,24 @@ model MarketBar {
   @@map("market_bars")
 }
 
+model FxRate {
+  id            String   @id @default(uuid()) @db.Uuid
+  baseCurrency  String   @map("base_currency")
+  quoteCurrency String   @map("quote_currency")
+  effectiveDate DateTime @map("effective_date") @db.Date
+  transferBuy   Decimal  @map("transfer_buy") @db.Decimal(20, 8)
+  sell          Decimal  @db.Decimal(20, 8)
+  mid           Decimal  @db.Decimal(20, 8)
+  source        String
+  fetchedAt     DateTime @map("fetched_at") @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([baseCurrency, quoteCurrency, effectiveDate, source])
+  @@index([baseCurrency, quoteCurrency, effectiveDate(sort: Desc)])
+  @@map("fx_rates")
+}
+
 model Portfolio {
   id                  String                 @id @default(uuid()) @db.Uuid
   organizationId      String                 @map("organization_id") @db.Uuid
@@ -240,20 +258,25 @@ model PortfolioPosition {
 }
 
 model PortfolioTransaction {
-  id             String          @id @default(uuid()) @db.Uuid
-  portfolioId    String          @map("portfolio_id") @db.Uuid
-  assetId        String          @map("asset_id") @db.Uuid
-  sourceSignalId String?         @unique @map("source_signal_id") @db.Uuid
-  type           String
-  quantity       Decimal         @db.Decimal(28, 10)
-  price          Decimal         @db.Decimal(20, 8)
-  fee            Decimal         @default(0) @db.Decimal(20, 8)
-  note           String?
-  executedAt     DateTime        @map("executed_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  portfolio      Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  sourceSignal   StrategySignal? @relation(fields: [sourceSignalId], references: [id], onDelete: Restrict)
+  id              String          @id @default(uuid()) @db.Uuid
+  portfolioId     String          @map("portfolio_id") @db.Uuid
+  assetId         String          @map("asset_id") @db.Uuid
+  sourceSignalId  String?         @unique @map("source_signal_id") @db.Uuid
+  type            String
+  quantity        Decimal         @db.Decimal(28, 10)
+  price           Decimal         @db.Decimal(20, 8)
+  fee             Decimal         @default(0) @db.Decimal(20, 8)
+  currency        String          @default("USD")
+  fxRateToVnd     Decimal         @default(26000) @map("fx_rate_to_vnd") @db.Decimal(20, 8)
+  fxEffectiveDate DateTime?       @map("fx_effective_date") @db.Date
+  fxSource        String?         @map("fx_source")
+  fxFallback      Boolean         @default(true) @map("fx_fallback")
+  note            String?
+  executedAt      DateTime        @map("executed_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  portfolio       Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  asset           Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  sourceSignal    StrategySignal? @relation(fields: [sourceSignalId], references: [id], onDelete: Restrict)
 
   @@index([portfolioId, executedAt(sort: Desc)])
   @@index([assetId])

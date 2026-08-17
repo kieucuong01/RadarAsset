@@ -1,8 +1,23 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { assertSeedDatabaseAllowed, resetDemoIdentity } from "./seed-safety";
 
 describe("development seed safety", () => {
+  it("keeps dated FX rates and transaction FX audit fields in the database contract", () => {
+    const schema = readFileSync(resolve("prisma/schema.prisma"), "utf8");
+
+    expect(schema).toMatch(/model FxRate\s*\{/);
+    expect(schema).toContain('@@map("fx_rates")');
+    expect(schema).toMatch(/currency\s+String\s+@default\("USD"\)/);
+    expect(schema).toMatch(/fxRateToVnd\s+Decimal/);
+    expect(schema).toMatch(/fxEffectiveDate\s+DateTime\?/);
+    expect(schema).toMatch(/fxSource\s+String\?/);
+    expect(schema).toMatch(/fxFallback\s+Boolean\s+@default\(true\)/);
+  });
+
   it("requires an exact local database allowlist match", () => {
     expect(() =>
       assertSeedDatabaseAllowed(
