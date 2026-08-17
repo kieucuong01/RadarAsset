@@ -316,6 +316,18 @@ export type PortfolioPerformancePoint = {
   label: string;
   Portfolio: number;
   Benchmark: number;
+  portfolioValue?: number;
+  benchmarkValue?: number | null;
+};
+
+export type PortfolioBenchmarkSummary = {
+  symbol: "VNINDEX";
+  portfolioValue: number;
+  benchmarkValue: number | null;
+  excessValue: number | null;
+  portfolioReturnPct: number;
+  benchmarkReturnPct: number | null;
+  excessReturnPct: number | null;
 };
 
 export type PortfolioHistoricalBar = {

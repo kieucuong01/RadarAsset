@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPortfolioTransaction,
+  buildPortfolioPerformance,
   buildPortfolioResponse,
   buildTradeAwarePerformance,
   calculateRiskMetrics,
@@ -587,6 +588,48 @@ describe("portfolio backend domain", () => {
       });
 
       expect(points).toEqual([]);
+    });
+
+    it("values a cash-flow-matched VNINDEX counterfactual in portfolio money", () => {
+      const result = buildPortfolioPerformance({
+        assets,
+        transactions: [
+          transaction({}),
+          transaction({
+            id: "tx-2",
+            createdAt: "2026-01-02T00:00:00.000Z",
+            executedAt: "2026-01-02T00:00:00.000Z",
+            quantity: 1,
+            price: 110,
+          }),
+          transaction({
+            id: "tx-3",
+            createdAt: "2026-01-03T00:00:00.000Z",
+            executedAt: "2026-01-03T00:00:00.000Z",
+            type: "sell",
+            quantity: 0.5,
+            price: 121,
+            fee: 1,
+          }),
+        ],
+        bars,
+        benchmarkAssetId: "asset-vnindex",
+        limit: 30,
+      });
+
+      expect(result.performance.at(-1)).toMatchObject({
+        portfolioValue: 181.5,
+        benchmarkValue: 153.61,
+      });
+      expect(result.benchmark).toMatchObject({
+        symbol: "VNINDEX",
+        portfolioValue: 181.5,
+        benchmarkValue: 153.61,
+        excessValue: 27.89,
+      });
+      expect(result.benchmark.portfolioReturnPct).toBeCloseTo(14.7619, 4);
+      expect(result.benchmark.benchmarkReturnPct).toBeCloseTo(1.481, 4);
+      expect(result.benchmark.excessReturnPct).toBeCloseTo(13.281, 4);
     });
   });
 });

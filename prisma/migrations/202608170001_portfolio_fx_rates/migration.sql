@@ -33,14 +33,10 @@ SET "currency" = CASE
       WHEN UPPER(asset."currency") = 'VND' THEN 'VND'
       ELSE 'USD'
     END,
-    "fx_rate_to_vnd" = CASE
-      WHEN UPPER(asset."currency") = 'VND' THEN 1
-      ELSE 26000
-    END,
-    "fx_source" = CASE
-      WHEN UPPER(asset."currency") = 'VND' THEN 'identity'
-      ELSE 'fallback'
-    END,
-    "fx_fallback" = UPPER(asset."currency") <> 'VND'
+    -- This snapshot always means USD/VND, even when the transaction itself is VND.
+    -- That invariant is required to render the same ledger in either reporting currency.
+    "fx_rate_to_vnd" = 26000,
+    "fx_source" = 'fallback',
+    "fx_fallback" = true
 FROM "assets" AS asset
 WHERE asset."id" = transaction."asset_id";

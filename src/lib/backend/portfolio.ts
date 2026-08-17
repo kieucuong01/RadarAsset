@@ -1,5 +1,6 @@
 import type {
   PortfolioHoldingResponse,
+  PortfolioBenchmarkSummary,
   PortfolioHistoricalBar,
   PortfolioLedgerAsset,
   PortfolioLedgerReplayResult,
@@ -270,7 +271,30 @@ export function buildTradeAwarePerformance(input: {
   benchmarkAssetId: string | null;
   limit: number;
 }): PortfolioPerformancePoint[] {
-  if (input.limit <= 0) return [];
+  return buildPortfolioPerformance(input).performance.map((point) => ({
+    label: point.label,
+    Portfolio: point.Portfolio,
+    Benchmark: point.Benchmark,
+  }));
+}
+
+export function buildPortfolioPerformance(input: {
+  assets: PortfolioLedgerAsset[];
+  transactions: PortfolioLedgerTransaction[];
+  bars: PortfolioHistoricalBar[];
+  benchmarkAssetId: string | null;
+  limit: number;
+}): { performance: PortfolioPerformancePoint[]; benchmark: PortfolioBenchmarkSummary } {
+  const emptyBenchmark: PortfolioBenchmarkSummary = {
+    symbol: "VNINDEX",
+    portfolioValue: 0,
+    benchmarkValue: null,
+    excessValue: null,
+    portfolioReturnPct: 0,
+    benchmarkReturnPct: null,
+    excessReturnPct: null,
+  };
+  if (input.limit <= 0) return { performance: [], benchmark: emptyBenchmark };
 
   const assets = new Map(input.assets.map((asset) => [asset.assetId, asset]));
   const portfolioAssetIds = new Set(input.transactions.map((transaction) => transaction.assetId));
@@ -285,7 +309,7 @@ export function buildTradeAwarePerformance(input: {
   const dates = Array.from(barsByDate.keys())
     .filter((key) => barsByDate.get(key)?.some((bar) => portfolioAssetIds.has(bar.assetId)))
     .sort();
-  if (!dates.length) return [];
+  if (!dates.length) return { performance: [], benchmark: emptyBenchmark };
 
   const transactions = [...input.transactions].sort(compareLedgerTransactions);
   const positions = new Map<string, PortfolioPositionInput>();
@@ -295,7 +319,12 @@ export function buildTradeAwarePerformance(input: {
   let previousValue: number | null = null;
   let portfolioIndex = 100;
   let benchmarkBase: number | null = null;
-  let pendingExternalFlow = 0;
+  let pendingPortfolioFlow = 0;
+  let pendingBenchmarkFlow = 0;
+  let benchmarkUnits = 0;
+  let benchmarkCash = 0;
+  let totalContributions = 0;
+  let totalWithdrawals = 0;
 
   for (const key of dates) {
     for (const bar of barsByDate.get(key) ?? []) {
@@ -325,8 +354,12 @@ export function buildTradeAwarePerformance(input: {
       }
 
       const gross = transaction.quantity * transaction.price;
-      pendingExternalFlow +=
+      const externalFlow =
         transaction.type === "buy" ? gross + transaction.fee : -(gross - transaction.fee);
+      pendingPortfolioFlow += externalFlow;
+      pendingBenchmarkFlow += externalFlow;
+      if (externalFlow > 0) totalContributions += externalFlow;
+      else totalWithdrawals += -externalFlow;
       transactionIndex += 1;
     }
 
@@ -338,7 +371,7 @@ export function buildTradeAwarePerformance(input: {
       0,
     );
     if (positions.size && currentValue <= 0) continue;
-    if (!positions.size && (previousValue === null || pendingExternalFlow === 0)) continue;
+    if (!positions.size && (previousValue === null || pendingPortfolioFlow === 0)) continue;
 
     const benchmarkPrice = input.benchmarkAssetId
       ? (latestPrices.get(input.benchmarkAssetId) ?? null)
@@ -346,15 +379,26 @@ export function buildTradeAwarePerformance(input: {
     if (benchmarkBase === null && benchmarkPrice !== null) {
       benchmarkBase = benchmarkPrice;
     }
+    if (benchmarkPrice !== null && pendingBenchmarkFlow !== 0) {
+      if (pendingBenchmarkFlow > 0) {
+        benchmarkUnits += pendingBenchmarkFlow / benchmarkPrice;
+      } else {
+        const withdrawal = -pendingBenchmarkFlow;
+        const unitsToSell = Math.min(benchmarkUnits, withdrawal / benchmarkPrice);
+        benchmarkUnits -= unitsToSell;
+        benchmarkCash -= withdrawal - unitsToSell * benchmarkPrice;
+      }
+      pendingBenchmarkFlow = 0;
+    }
     if (previousValue === null) {
       previousValue = currentValue;
     } else if (previousValue > 0) {
-      portfolioIndex *= (currentValue - pendingExternalFlow) / previousValue;
+      portfolioIndex *= (currentValue - pendingPortfolioFlow) / previousValue;
       previousValue = currentValue;
     } else if (currentValue > 0) {
       previousValue = currentValue;
     }
-    pendingExternalFlow = 0;
+    pendingPortfolioFlow = 0;
 
     const benchmarkIndex =
       benchmarkPrice !== null && benchmarkBase ? (benchmarkPrice / benchmarkBase) * 100 : 100;
@@ -362,17 +406,51 @@ export function buildTradeAwarePerformance(input: {
       label: performanceLabel(key),
       Portfolio: round(portfolioIndex, 2),
       Benchmark: round(benchmarkIndex, 2),
+      portfolioValue: round(currentValue, 2),
+      benchmarkValue:
+        benchmarkPrice === null ? null : round(benchmarkUnits * benchmarkPrice + benchmarkCash, 2),
     });
   }
 
   const visible = points.slice(-input.limit);
   const portfolioBase = visible[0]?.Portfolio ?? 100;
   const benchmarkVisibleBase = visible[0]?.Benchmark ?? 100;
-  return visible.map((point) => ({
+  const performance = visible.map((point) => ({
     label: point.label,
     Portfolio: round((point.Portfolio / portfolioBase) * 100, 2),
     Benchmark: round((point.Benchmark / benchmarkVisibleBase) * 100, 2),
+    portfolioValue: point.portfolioValue,
+    benchmarkValue: point.benchmarkValue,
   }));
+  const latest = points.at(-1);
+  if (!latest) return { performance, benchmark: emptyBenchmark };
+
+  const portfolioValue = latest.portfolioValue ?? 0;
+  const benchmarkValue = latest.benchmarkValue ?? null;
+  const portfolioReturnPct =
+    totalContributions > 0
+      ? ((portfolioValue + totalWithdrawals - totalContributions) / totalContributions) * 100
+      : 0;
+  const benchmarkReturnPct =
+    benchmarkValue !== null && totalContributions > 0
+      ? ((benchmarkValue + totalWithdrawals - totalContributions) / totalContributions) * 100
+      : null;
+
+  return {
+    performance,
+    benchmark: {
+      symbol: "VNINDEX",
+      portfolioValue: round(portfolioValue, 2),
+      benchmarkValue: benchmarkValue === null ? null : round(benchmarkValue, 2),
+      excessValue:
+        benchmarkValue === null ? null : round(portfolioValue - benchmarkValue, 2),
+      portfolioReturnPct: round(portfolioReturnPct, 4),
+      benchmarkReturnPct:
+        benchmarkReturnPct === null ? null : round(benchmarkReturnPct, 4),
+      excessReturnPct:
+        benchmarkReturnPct === null ? null : round(portfolioReturnPct - benchmarkReturnPct, 4),
+    },
+  };
 }
 
 export function applyPortfolioTransaction(

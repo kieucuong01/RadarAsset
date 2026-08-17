@@ -8,6 +8,10 @@ import { assertSeedDatabaseAllowed, resetDemoIdentity } from "./seed-safety";
 describe("development seed safety", () => {
   it("keeps dated FX rates and transaction FX audit fields in the database contract", () => {
     const schema = readFileSync(resolve("prisma/schema.prisma"), "utf8");
+    const migration = readFileSync(
+      resolve("prisma/migrations/202608170001_portfolio_fx_rates/migration.sql"),
+      "utf8",
+    );
 
     expect(schema).toMatch(/model FxRate\s*\{/);
     expect(schema).toContain('@@map("fx_rates")');
@@ -16,6 +20,8 @@ describe("development seed safety", () => {
     expect(schema).toMatch(/fxEffectiveDate\s+DateTime\?/);
     expect(schema).toMatch(/fxSource\s+String\?/);
     expect(schema).toMatch(/fxFallback\s+Boolean\s+@default\(true\)/);
+    expect(migration).toContain('"fx_rate_to_vnd" = 26000');
+    expect(migration).not.toContain("THEN 1");
   });
 
   it("requires an exact local database allowlist match", () => {
