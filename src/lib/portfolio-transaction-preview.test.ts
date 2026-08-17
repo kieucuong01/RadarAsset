@@ -7,9 +7,15 @@ import {
   getTransactionValueError,
   isSellSelectionDisabled,
   toLocalDateInputValue,
+  transactionCurrencyForAsset,
 } from "./portfolio-transaction-preview";
 
 describe("portfolio transaction preview", () => {
+  it("defaults Vietnam equities to VND and crypto or gold to USD", () => {
+    expect(transactionCurrencyForAsset({ assetClass: "equity", currency: "VND" })).toBe("VND");
+    expect(transactionCurrencyForAsset({ assetClass: "crypto", currency: "USDT" })).toBe("USD");
+    expect(transactionCurrencyForAsset({ assetClass: "commodity", currency: "USD" })).toBe("USD");
+  });
   it("formats transaction dates in the user's local calendar day", () => {
     expect(toLocalDateInputValue(new Date(2026, 7, 9, 5, 30))).toBe("2026-08-09");
   });

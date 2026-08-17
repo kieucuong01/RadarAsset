@@ -111,7 +111,7 @@ export const viPortfolio = {
     available: "Khả dụng",
     averageCost: "giá vốn trung bình",
     executionDate: "Ngày khớp",
-    executionPrice: "Giá khớp (USD)",
+    executionPrice: "Giá khớp",
     totalCost: "Tổng chi phí",
     netProceeds: "Tiền bán ròng",
     backdatedTrade:

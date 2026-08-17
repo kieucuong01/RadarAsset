@@ -15,6 +15,7 @@ import {
 } from "recharts";
 
 import { AssetIcon } from "@/components/AssetIcon";
+import { PortfolioBenchmarkSummary } from "@/components/mock-portfolio/PortfolioBenchmarkSummary";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import type { PortfolioResponse, PortfolioTimeframe } from "@/lib/backend/types";
 import { defaultCurrency, formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
@@ -257,6 +258,8 @@ export function PortfolioOverviewPanel({
           </div>
         </div>
 
+        <PortfolioBenchmarkSummary benchmark={portfolio?.benchmark} currency={currency} />
+
         <div className="mt-4 flex items-center gap-6 text-xs">
           <span className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-primary" /> {t("common.portfolio")}
@@ -300,7 +303,20 @@ export function PortfolioOverviewPanel({
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                formatter={(value) => formatNumber(Number(value))}
+                formatter={(value, name, item) => {
+                  const payload = (item?.payload ?? {}) as {
+                    portfolioValue?: number;
+                    benchmarkValue?: number | null;
+                  };
+                  const cashValue =
+                    name === "Portfolio" ? payload.portfolioValue : payload.benchmarkValue;
+                  return [
+                    cashValue === null || cashValue === undefined
+                      ? formatNumber(Number(value))
+                      : `${formatNumber(Number(value))} · ${money(cashValue)}`,
+                    name,
+                  ];
+                }}
               />
               <Area
                 type="monotone"

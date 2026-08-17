@@ -199,9 +199,9 @@ describe("Portfolio number formatting", () => {
     expect(text).toContain("portfolio.transactions.title");
     expect(text).toContain("1,250,000 VND");
     expect(text).toContain("12,345.6789 BTC");
-    expect(text).toContain("56,200,000 USDT");
+    expect(text).toContain("56,200,000 VND");
     expect(text).toContain("1,234,567 VND");
-    expect(text).toContain("0 USDT");
+    expect(text).not.toContain("USDT");
     expect(text).not.toContain("common.fee-");
     expect(text).not.toContain("$1,250,000.00");
     state.portfolioMode = true;
@@ -214,7 +214,7 @@ describe("Portfolio number formatting", () => {
   it("preserves an explicit USD portfolio when the UI locale is Vietnamese", () => {
     const text = renderPortfolio("USD");
 
-    expect(text).toContain("56,200,000 USDT");
+    expect(text).toContain("56,200,000 USD");
     expect(text).toContain("+12.34%");
     expect(text).toContain("1.2346");
     expect(text).not.toContain("56.200.000");

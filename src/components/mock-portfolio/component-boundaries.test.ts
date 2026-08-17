@@ -11,6 +11,7 @@ const PANEL_NAMES = [
   "PortfolioHoldingsTable",
   "PortfolioRiskMetrics",
   "PortfolioTransactionLog",
+  "PortfolioBenchmarkSummary",
 ] as const;
 
 describe("Mock Portfolio component boundaries", () => {
@@ -60,5 +61,7 @@ describe("Mock Portfolio component boundaries", () => {
     expect(overview).toContain("PortfolioTransactionDialog");
     expect(overview).toContain("AssetIcon");
     expect(transactionLog).not.toContain("PortfolioTransactionDialog");
+    expect(transactionLog).toContain("deletePortfolioTransactionRequest");
+    expect(overview).toContain("PortfolioBenchmarkSummary");
   });
 });

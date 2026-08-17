@@ -71,7 +71,6 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
             )}
             {holdings.map((holding) => {
               const up = holding.pnl >= 0;
-              const holdingCurrency = holding.currency ?? currency;
               return (
                 <tr
                   key={holding.ticker}
@@ -90,13 +89,13 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
                     {formatMetricValue(holding.qty, { locale, unit: holding.ticker })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {formatPrice(holding.cost, { locale, currency: holdingCurrency })}
+                    {formatPrice(holding.cost, { locale, currency })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4">
-                    {formatPrice(holding.price, { locale, currency: holdingCurrency })}
+                    {formatPrice(holding.price, { locale, currency })}
                   </td>
                   <td className="text-right tabular-nums px-5 py-4 font-medium">
-                    {formatMoney(holding.value, { locale, currency: holdingCurrency })}
+                    {formatMoney(holding.value, { locale, currency })}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -114,7 +113,7 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
                   <td className="text-right px-5 py-4">
                     <div className={`font-semibold tabular-nums ${up ? "text-bull" : "text-bear"}`}>
                       {holding.pnl > 0 ? "+" : ""}
-                      {formatMoney(holding.pnl, { locale, currency: holdingCurrency })}
+                      {formatMoney(holding.pnl, { locale, currency })}
                     </div>
                     <div className={`text-xs tabular-nums ${up ? "text-bull" : "text-bear"}`}>
                       {formatPercent(holding.pnlPct, { sign: true })}

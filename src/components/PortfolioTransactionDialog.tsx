@@ -22,6 +22,7 @@ import type {
   PortfolioHoldingResponse,
   PortfolioResponse,
   PortfolioTimeframe,
+  PortfolioTransactionResponse,
 } from "@/lib/backend/types";
 import {
   buildExecutionDateRequest,
@@ -30,6 +31,7 @@ import {
   getTransactionValueError,
   isSellSelectionDisabled,
   toLocalDateInputValue,
+  transactionCurrencyForAsset,
 } from "@/lib/portfolio-transaction-preview";
 import { useI18n } from "@/lib/i18n/context";
 import {
@@ -62,6 +64,7 @@ export function PortfolioTransactionDialog({
   open: controlledOpen,
   onOpenChange,
   trigger,
+  editingTransaction,
 }: {
   holdings: PortfolioHoldingResponse[];
   disabled: boolean;
@@ -80,6 +83,7 @@ export function PortfolioTransactionDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   trigger?: ReactNode | null;
+  editingTransaction?: PortfolioTransactionResponse | null;
 }) {
   const { t, locale } = useI18n();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -94,6 +98,19 @@ export function PortfolioTransactionDialog({
   const [price, setPrice] = useState("");
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(() => toLocalDateInputValue(new Date()));
+  const [transactionCurrency, setTransactionCurrency] = useState<"USD" | "VND">("USD");
+
+  useEffect(() => {
+    if (!open || !editingTransaction) return;
+    setSide(editingTransaction.type);
+    setSymbol(editingTransaction.symbol ?? "BTC");
+    setQuantity(String(editingTransaction.quantity));
+    setPrice(String(editingTransaction.rawPrice ?? editingTransaction.price));
+    setFee(String(editingTransaction.rawFee ?? editingTransaction.fee));
+    setDate(editingTransaction.executedAt.slice(0, 10));
+    setTransactionCurrency(editingTransaction.rawCurrency ?? "USD");
+    setFormError(null);
+  }, [editingTransaction, open]);
 
   useEffect(() => {
     if (!open || !preset) return;
@@ -135,11 +152,11 @@ export function PortfolioTransactionDialog({
 
   const selectedHolding = holdings.find((holding) => holding.ticker === symbol) ?? null;
   const selectedAsset = assets?.find((asset) => asset.symbol === symbol) ?? null;
-  const currency =
-    selectedAsset?.currency?.trim() ||
-    selectedHolding?.currency?.trim() ||
-    portfolioCurrency?.trim() ||
-    defaultCurrency(locale);
+  useEffect(() => {
+    if (!selectedAsset || editingTransaction) return;
+    setTransactionCurrency(transactionCurrencyForAsset(selectedAsset));
+  }, [editingTransaction, selectedAsset]);
+  const currency = transactionCurrency;
   const numericQuantity = Number(quantity);
   const numericPrice = Number(price);
   const numericFee = Number(fee);
@@ -216,21 +233,28 @@ export function PortfolioTransactionDialog({
     setSaving(true);
     setFormError(null);
     try {
-      const response = await fetch("/api/portfolio/transactions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          symbol,
-          type: side,
-          quantity: numericQuantity,
-          price: numericPrice,
-          fee: numericFee,
-          ...buildExecutionDateRequest(date, new Date().getTimezoneOffset()),
-          timeframe,
-          note: null,
-          sourceSignalId: preset?.signalId,
-        }),
-      });
+      const response = await fetch(
+        editingTransaction?.id
+          ? `/api/portfolio/transactions/${editingTransaction.id}`
+          : "/api/portfolio/transactions",
+        {
+          method: editingTransaction?.id ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            symbol,
+            type: side,
+            quantity: numericQuantity,
+            price: numericPrice,
+            fee: numericFee,
+            currency: transactionCurrency,
+            reportingCurrency: portfolioCurrency === "VND" ? "VND" : "USD",
+            ...buildExecutionDateRequest(date, new Date().getTimezoneOffset()),
+            timeframe,
+            note: null,
+            sourceSignalId: editingTransaction ? undefined : preset?.signalId,
+          }),
+        },
+      );
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error ?? t("transactionsDialog.saveError"));
@@ -276,7 +300,13 @@ export function PortfolioTransactionDialog({
 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{t("transactionsDialog.title")}</DialogTitle>
+          <DialogTitle>
+            {editingTransaction
+              ? locale === "vi"
+                ? "Sửa giao dịch"
+                : "Edit transaction"
+              : t("transactionsDialog.title")}
+          </DialogTitle>
           <DialogDescription>{t("transactionsDialog.description")}</DialogDescription>
         </DialogHeader>
 
@@ -314,7 +344,10 @@ export function PortfolioTransactionDialog({
                 id="tx-asset"
                 value={symbol}
                 onChange={(event) => {
-                  setSymbol(event.target.value);
+                  const nextSymbol = event.target.value;
+                  setSymbol(nextSymbol);
+                  const nextAsset = options.find((asset) => asset.symbol === nextSymbol);
+                  if (nextAsset) setTransactionCurrency(transactionCurrencyForAsset(nextAsset));
                   setFormError(null);
                 }}
                 disabled={saving || options.length === 0}
@@ -402,6 +435,21 @@ export function PortfolioTransactionDialog({
                 placeholder={selectedHolding ? String(selectedHolding.price) : "67000"}
                 className="min-h-11"
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="tx-currency">
+                {locale === "vi" ? "Đơn vị giao dịch" : "Transaction currency"}
+              </Label>
+              <select
+                id="tx-currency"
+                value={transactionCurrency}
+                onChange={(event) => setTransactionCurrency(event.target.value as "USD" | "VND")}
+                disabled={saving}
+                className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value="VND">VND</option>
+                <option value="USD">USD</option>
+              </select>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="tx-fee">

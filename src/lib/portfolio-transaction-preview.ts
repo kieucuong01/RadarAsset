@@ -6,6 +6,12 @@ export type TransactionPreviewInput = {
   holding: { qty: number; cost: number } | null;
 };
 
+export function transactionCurrencyForAsset(input: { assetClass: string; currency: string }) {
+  return input.currency.trim().toUpperCase() === "VND" || input.assetClass === "vn_equity"
+    ? ("VND" as const)
+    : ("USD" as const);
+}
+
 export type TransactionPreview =
   | { valid: false; error: string }
   | {

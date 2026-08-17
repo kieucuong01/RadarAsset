@@ -42,7 +42,7 @@ describe("PortfolioTransactionDialog", () => {
     state.useStateCall = 0;
   });
 
-  it("keeps the holding currency in a preview when it differs from the portfolio base", () => {
+  it("normalizes a USDT holding to the supported USD transaction currency", () => {
     const html = renderToStaticMarkup(
       <PortfolioTransactionDialog
         holdings={[
@@ -69,8 +69,8 @@ describe("PortfolioTransactionDialog", () => {
       />,
     );
 
-    expect(html).toContain("common.fee (USDT)");
-    expect(html).toContain("200 USDT");
+    expect(html).toContain("common.fee (USD)");
+    expect(html).toContain("200 USD");
     expect(html).not.toContain("200 VND");
   });
 

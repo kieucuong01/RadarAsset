@@ -113,7 +113,7 @@ export const enPortfolio = {
     available: "Available",
     averageCost: "average cost",
     executionDate: "Execution date",
-    executionPrice: "Execution price (USD)",
+    executionPrice: "Execution price",
     totalCost: "Total cost",
     netProceeds: "Net proceeds",
     backdatedTrade:

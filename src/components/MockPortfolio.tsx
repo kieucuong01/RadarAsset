@@ -9,10 +9,14 @@ import { PortfolioOverviewPanel } from "@/components/mock-portfolio/PortfolioOve
 import { PortfolioRiskMetrics } from "@/components/mock-portfolio/PortfolioRiskMetrics";
 import { PortfolioTransactionLog } from "@/components/mock-portfolio/PortfolioTransactionLog";
 import { PortfolioStrategyForwardTests } from "@/components/PortfolioStrategyForwardTests";
+import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import { StrategyAssignmentPanel } from "@/components/StrategyAssignmentPanel";
 import { Button } from "@/components/ui/button";
-import type { PortfolioResponse, PortfolioTimeframe } from "@/lib/backend/types";
-import { defaultCurrency } from "@/lib/financial-format";
+import type {
+  PortfolioResponse,
+  PortfolioTimeframe,
+  PortfolioTransactionResponse,
+} from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
 import { clearCachedPortfolio, getCachedPortfolio } from "@/lib/portfolio-client";
 
@@ -22,6 +26,10 @@ export function MockPortfolio() {
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<PortfolioTransactionResponse | null>(
+    null,
+  );
+  const reportingCurrency = locale === "vi" ? "VND" : "USD";
 
   const loadPortfolio = useCallback(
     async (nextTimeframe = timeframe) => {
@@ -29,7 +37,7 @@ export function MockPortfolio() {
       setError(null);
       const toastId = toast.loading(t("portfolio.toasts.loading"));
       try {
-        setPortfolio(await getCachedPortfolio(nextTimeframe));
+        setPortfolio(await getCachedPortfolio(nextTimeframe, reportingCurrency));
         toast.success(t("portfolio.toasts.loaded"), { id: toastId });
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : t("portfolio.toasts.error");
@@ -39,7 +47,7 @@ export function MockPortfolio() {
         setLoading(false);
       }
     },
-    [timeframe, t],
+    [timeframe, t, reportingCurrency],
   );
 
   const handlePortfolioRecorded = useCallback((nextPortfolio: PortfolioResponse) => {
@@ -77,7 +85,7 @@ export function MockPortfolio() {
   }
 
   const holdings = portfolio?.holdings ?? [];
-  const currency = portfolio?.baseCurrency ?? defaultCurrency(locale);
+  const currency = portfolio?.baseCurrency === "VND" ? "VND" : "USD";
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
@@ -105,7 +113,24 @@ export function MockPortfolio() {
         portfolioCurrency={currency}
       />
       <PortfolioStrategyForwardTests currency={currency} />
-      <PortfolioTransactionLog transactions={portfolio?.transactions ?? []} currency={currency} />
+      <PortfolioTransactionLog
+        transactions={portfolio?.transactions ?? []}
+        currency={currency}
+        timeframe={timeframe}
+        onEdit={setEditingTransaction}
+        onRecorded={handlePortfolioRecorded}
+      />
+      <PortfolioTransactionDialog
+        holdings={holdings}
+        disabled={!portfolio}
+        timeframe={timeframe}
+        onRecorded={handlePortfolioRecorded}
+        portfolioCurrency={currency}
+        editingTransaction={editingTransaction}
+        open={Boolean(editingTransaction)}
+        onOpenChange={(open) => !open && setEditingTransaction(null)}
+        trigger={null}
+      />
     </main>
   );
 }
