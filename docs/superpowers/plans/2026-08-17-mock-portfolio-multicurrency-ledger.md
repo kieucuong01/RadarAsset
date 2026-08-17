@@ -34,7 +34,7 @@
 - `quant-worker/sync_fx_rates.py` — resumable ten-year/current-day CLI.
 - `quant-worker/tests/fixtures/fx/vietcombank-usd-vnd.json` — captured provider-shape fixture.
 - `quant-worker/tests/test_fx_rates.py` — parser, date range, fallback, and repository tests.
-- `scripts/run-market-ingestion.test.mjs` — scheduler integration contract.
+- `scripts/run-market-ingestion.node-test.mjs` — scheduler integration contract.
 - `src/lib/backend/fx-rates.ts` — pure conversion and latest-on-or-before selection.
 - `src/lib/backend/fx-rates.test.ts` — FX domain tests.
 - `src/app/api/portfolio/transactions/[id]/route.ts` — PATCH/DELETE route.
@@ -250,7 +250,7 @@ git commit -m "feat: collect dated Vietcombank fx rates"
 
 **Files:**
 - Modify: `scripts/run-market-ingestion.ps1`
-- Create: `scripts/run-market-ingestion.test.mjs`
+- Create: `scripts/run-market-ingestion.node-test.mjs`
 - Modify: `quant-worker/verify_daily_pipeline.py`
 - Modify: `quant-worker/tests/test_verify_daily_pipeline.py`
 - Modify: `README.md`
@@ -277,7 +277,7 @@ def test_daily_pipeline_requires_fresh_fx_rate() -> None:
 Run:
 
 ```powershell
-node --test scripts/run-market-ingestion.test.mjs
+node --test scripts/run-market-ingestion.node-test.mjs
 npm run test:python -- quant-worker/tests/test_verify_daily_pipeline.py -q
 ```
 
@@ -311,7 +311,7 @@ Run the two focused commands from Step 2. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add scripts/run-market-ingestion.ps1 scripts/run-market-ingestion.test.mjs quant-worker/verify_daily_pipeline.py quant-worker/tests/test_verify_daily_pipeline.py README.md docs/operations/dataset-bootstrap-runbook.md
+git add scripts/run-market-ingestion.ps1 scripts/run-market-ingestion.node-test.mjs quant-worker/verify_daily_pipeline.py quant-worker/tests/test_verify_daily_pipeline.py README.md docs/operations/dataset-bootstrap-runbook.md
 git commit -m "feat: refresh fx rates in daily pipeline"
 ```
 

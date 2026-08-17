@@ -1,0 +1,22 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "VND",
+          "symbol": "USDVND=X",
+          "gmtoffset": 25200
+        },
+        "timestamp": [1471388400, 1471474800],
+        "indicators": {
+          "quote": [
+            {
+              "close": [22290.0, 22300.0]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

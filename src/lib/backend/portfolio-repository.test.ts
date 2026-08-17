@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { rebuildPortfolioPositions } from "./portfolio-repository";
+import { normalizeNativeAssetPrice, rebuildPortfolioPositions } from "./portfolio-repository";
 
 function asset(symbol: string) {
   return {
@@ -37,6 +37,20 @@ function row(overrides: Record<string, unknown>) {
 }
 
 describe("portfolio repository replay", () => {
+  it("converts Vietnam equity quote units from thousands into VND without changing VNINDEX", () => {
+    expect(
+      normalizeNativeAssetPrice(
+        { market: "vn_equity", assetClass: "equity", currency: "VND" },
+        68.3,
+      ),
+    ).toBe(68_300);
+    expect(
+      normalizeNativeAssetPrice(
+        { market: "vn_equity", assetClass: "index", currency: "VND" },
+        1_280,
+      ),
+    ).toBe(1_280);
+  });
   it("normalizes USD and VND trades into one persisted VND position ledger", async () => {
     const fpt = asset("FPT");
     const tx = {

@@ -452,11 +452,9 @@ export function buildPortfolioPerformance(input: {
       symbol: "VNINDEX",
       portfolioValue: round(portfolioValue, 2),
       benchmarkValue: benchmarkValue === null ? null : round(benchmarkValue, 2),
-      excessValue:
-        benchmarkValue === null ? null : round(portfolioValue - benchmarkValue, 2),
+      excessValue: benchmarkValue === null ? null : round(portfolioValue - benchmarkValue, 2),
       portfolioReturnPct: round(portfolioReturnPct, 4),
-      benchmarkReturnPct:
-        benchmarkReturnPct === null ? null : round(benchmarkReturnPct, 4),
+      benchmarkReturnPct: benchmarkReturnPct === null ? null : round(benchmarkReturnPct, 4),
       excessReturnPct:
         benchmarkReturnPct === null ? null : round(portfolioReturnPct - benchmarkReturnPct, 4),
     },

@@ -45,6 +45,7 @@ def healthy_row():
         "briefing_count": 3,
         "latest_briefing_at": datetime(2026, 8, 16, 1, 30, tzinfo=timezone.utc),
         "fx_effective_date": date(2026, 8, 16),
+        "fx_source": "yahoo_finance",
     }
 
 

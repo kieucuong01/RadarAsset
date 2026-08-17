@@ -34,12 +34,15 @@ WITH latest_market AS (
   WHERE briefing.effective_date = %s
     AND briefing.status IN ('complete', 'quant_only')
 ), fx_coverage AS (
-  SELECT MAX(effective_date) AS effective_date
+  SELECT effective_date, source
   FROM fx_rates
   WHERE base_currency = 'USD'
     AND quote_currency = 'VND'
-    AND source = 'vietcombank'
     AND effective_date <= %s
+  ORDER BY effective_date DESC,
+           CASE WHEN source = 'vietcombank' THEN 0 ELSE 1 END,
+           fetched_at DESC
+  LIMIT 1
 )
 SELECT market.id AS market_run_id,
        market.status AS market_run_status,
@@ -47,7 +50,8 @@ SELECT market.id AS market_run_id,
        membership.count AS membership_count,
        briefing.count AS briefing_count,
        briefing.latest_at AS latest_briefing_at,
-       fx.effective_date AS fx_effective_date
+       fx.effective_date AS fx_effective_date,
+       fx.source AS fx_source
 FROM membership_total AS membership
 CROSS JOIN briefing_coverage AS briefing
 CROSS JOIN fx_coverage AS fx
@@ -123,7 +127,7 @@ def build_output(
         },
         "fx": {
             "effectiveDate": _serialized(row.get("fx_effective_date")),
-            "source": "vietcombank",
+            "source": row.get("fx_source"),
         },
         "errors": list(errors),
     }

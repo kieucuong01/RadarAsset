@@ -102,19 +102,19 @@ Live ingestion supports the selected Binance USDT spot universe
 Vnstock-listed HOSE equities discovered from the current provider catalog, and Dukascopy
 XAU/USD candles. HOSE daily backfills target ten years; crypto and XAU request the longest
 approved free-provider daily history the adapter can fetch.
-Portfolio accounting also keeps a dedicated Vietcombank USD/VND daily series. Bootstrap its
-ten-year history once after applying migrations; the normal daily market wrapper then owns
-incremental refreshes:
+Portfolio accounting keeps a dedicated USD/VND daily series. The one-time ten-year history comes
+from the public Yahoo Finance `USDVND=X` daily chart; the normal market wrapper then prefers the
+Vietcombank transfer-buy/sell midpoint for incremental refreshes and falls back to the dated Yahoo
+quote when the bank endpoint is unavailable:
 
 ```powershell
 python quant-worker\sync_fx_rates.py --mode backfill --env-file .env.local
 powershell.exe -NoProfile -File scripts\run-market-ingestion.ps1 -Command daily
 ```
 
-The stored portfolio rate is the midpoint of Vietcombank's USD transfer-buy and sell quotes.
 Weekend and holiday accounting uses the newest observation on or before the requested date; the
-system never looks ahead. `26,000 VND/USD` remains an explicitly labelled emergency fallback, not a
-provider observation.
+system never looks ahead. Vietcombank wins when both sources have the same date. `26,000 VND/USD`
+remains an explicitly labelled emergency fallback, not a provider observation.
 Successful feeds publish immutable dataset versions; an upstream failure leaves the last
 known-good version active and never substitutes a fixture. Quant Lab shows provider, coverage,
 version, row count, and `LIVE DATA` / `STALE` / `UNAVAILABLE` / `FIXTURE` state from

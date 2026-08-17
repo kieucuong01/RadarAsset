@@ -26,6 +26,18 @@ describe("portfolio FX conversion", () => {
     });
   });
 
+  it("prefers Vietcombank over a same-day historical market quote", () => {
+    expect(
+      selectRateOnOrBefore(
+        [
+          { effectiveDate: "2026-08-15", rate: 26_100, source: "yahoo_finance" },
+          { effectiveDate: "2026-08-15", rate: 26_140, source: "vietcombank" },
+        ],
+        "2026-08-15",
+      ),
+    ).toMatchObject({ rate: 26_140, source: "vietcombank" });
+  });
+
   it("uses the declared 26,000 fallback when no prior observation exists", () => {
     expect(
       selectRateOnOrBefore(

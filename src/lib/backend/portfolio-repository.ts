@@ -58,7 +58,9 @@ function transactionSnapshot(transaction: {
   };
 }
 
-function ratePoints(rows: Array<{ effectiveDate: Date; mid: unknown; source: string }>): FxRatePoint[] {
+function ratePoints(
+  rows: Array<{ effectiveDate: Date; mid: unknown; source: string }>,
+): FxRatePoint[] {
   return rows.map((row) => ({
     effectiveDate: isoDate(row.effectiveDate),
     rate: numberFromDecimal(row.mid),
@@ -68,6 +70,15 @@ function ratePoints(rows: Array<{ effectiveDate: Date; mid: unknown; source: str
 
 function convertAt(value: number, from: string, to: PortfolioCurrency, rate: ResolvedFxRate) {
   return convertMoney(value, from, to, rate.rate);
+}
+
+export function normalizeNativeAssetPrice(
+  asset: { market: string; assetClass: string; currency: string },
+  value: number,
+) {
+  return asset.market === "vn_equity" && asset.assetClass === "equity" && asset.currency === "VND"
+    ? value * 1_000
+    : value;
 }
 
 async function latestFxSnapshot(
@@ -194,7 +205,7 @@ export async function loadPortfolioResponse(
       assetId: bar.assetId,
       ts: bar.ts.toISOString(),
       close: convertAt(
-        numberFromDecimal(bar.close),
+        normalizeNativeAssetPrice(asset, numberFromDecimal(bar.close)),
         asset.currency,
         reportingCurrency,
         selectRateOnOrBefore(fx, isoDate(bar.ts)),
@@ -245,7 +256,8 @@ export async function loadPortfolioResponse(
     };
   });
   const latestTransactionPrices = new Map<string, number>();
-  for (const transaction of transactions) latestTransactionPrices.set(transaction.assetId, transaction.price);
+  for (const transaction of transactions)
+    latestTransactionPrices.set(transaction.assetId, transaction.price);
   const ledgerAssets: PortfolioLedgerAsset[] = Array.from(assetRows.entries())
     .filter(([assetId]) => assetIds.includes(assetId))
     .map(([assetId, asset]) => ({
@@ -253,7 +265,8 @@ export async function loadPortfolioResponse(
       symbol: asset.symbol,
       name: asset.name,
       assetClass: assertAssetClass(asset.assetClass),
-      latestPrice: latestConvertedBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
+      latestPrice:
+        latestConvertedBars.get(assetId)?.close ?? latestTransactionPrices.get(assetId) ?? 0,
       currency: reportingCurrency,
     }));
   const ledger = replayPortfolioLedger({ assets: ledgerAssets, transactions });
@@ -296,7 +309,10 @@ export function validateSourceSignalExecution(
   if (signal.status === "executed" || signal.status === "dismissed") {
     throw new PortfolioDomainError("SIGNAL_ALREADY_ACTED", "SIGNAL_ALREADY_ACTED");
   }
-  if (signal.assignment.portfolioId !== expected.portfolioId || signal.assetId !== expected.assetId) {
+  if (
+    signal.assignment.portfolioId !== expected.portfolioId ||
+    signal.assetId !== expected.assetId
+  ) {
     throw new PortfolioDomainError("SIGNAL_SCOPE_MISMATCH", "SIGNAL_SCOPE_MISMATCH");
   }
   if (signal.signalType !== expected.side) {
@@ -314,7 +330,10 @@ async function portfolioAndAsset(context: TenantContext, symbol: string) {
   const asset = await prisma.asset.findUnique({ where: { symbol: symbol.trim().toUpperCase() } });
   if (!asset) throw new PortfolioInputError(`Asset ${symbol} not found.`, "ASSET_NOT_FOUND");
   if (!isSupportedPortfolioAsset(asset)) {
-    throw new PortfolioInputError(`Asset ${symbol} is outside the supported markets.`, "ASSET_UNSUPPORTED");
+    throw new PortfolioInputError(
+      `Asset ${symbol} is outside the supported markets.`,
+      "ASSET_UNSUPPORTED",
+    );
   }
   return { prisma, portfolio, asset };
 }

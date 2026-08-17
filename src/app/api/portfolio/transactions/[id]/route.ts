@@ -11,11 +11,7 @@ import {
 import { PortfolioDomainError, PortfolioInputError } from "@/lib/backend/portfolio";
 import { enqueueBriefingRefresh } from "@/lib/backend/smart-insights-refresh";
 
-import {
-  parseReportingCurrency,
-  transactionIdSchema,
-  transactionSchema,
-} from "../schema";
+import { parseReportingCurrency, transactionIdSchema, transactionSchema } from "../schema";
 
 export const dynamic = "force-dynamic";
 

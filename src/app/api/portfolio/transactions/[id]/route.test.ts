@@ -65,10 +65,9 @@ describe("portfolio transaction item API", () => {
 
   it("deletes and returns the rebuilt portfolio", async () => {
     const response = await DELETE(
-      new Request(
-        `http://localhost/api/portfolio/transactions/${id}?timeframe=1M&currency=VND`,
-        { method: "DELETE" },
-      ),
+      new Request(`http://localhost/api/portfolio/transactions/${id}?timeframe=1M&currency=VND`, {
+        method: "DELETE",
+      }),
       routeContext,
     );
 

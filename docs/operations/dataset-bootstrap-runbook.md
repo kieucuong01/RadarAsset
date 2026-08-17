@@ -23,8 +23,9 @@ The key needs access only to the `datavest` bucket and the `operations/dataset-s
 
 ## Operator sequence
 
-After database migrations and before validating multi-currency portfolios, bootstrap the official
-Vietcombank USD/VND midpoint series directly into PostgreSQL:
+After database migrations and before validating multi-currency portfolios, bootstrap the public
+Yahoo Finance `USDVND=X` daily history directly into PostgreSQL. Daily refresh subsequently prefers
+the Vietcombank midpoint and uses Yahoo only when that endpoint is unavailable:
 
 ```powershell
 .\.venv\Scripts\python.exe quant-worker\sync_fx_rates.py --mode backfill --env-file .env.local

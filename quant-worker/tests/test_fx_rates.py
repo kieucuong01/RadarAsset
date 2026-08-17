@@ -7,16 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from fx_rates.repository import PostgresFxRateRepository
+from fx_rates.repository import BACKFILL_TRANSACTION_SNAPSHOTS_SQL, PostgresFxRateRepository
+from fx_rates.yahoo import parse_yahoo_chart
 from fx_rates.vietcombank import (
     FxObservation,
     FxSchemaDrift,
     backfill_window,
+    inclusive_dates,
     parse_vietcombank_response,
 )
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "fx" / "vietcombank-usd-vnd.json"
+YAHOO_FIXTURE = Path(__file__).parent / "fixtures" / "fx" / "yahoo-usdvnd-chart.json"
 
 
 def fixture_payload() -> dict[str, object]:
@@ -64,6 +67,26 @@ def test_backfill_window_is_exactly_ten_years_and_inclusive() -> None:
     assert end == date(2026, 8, 17)
 
 
+def test_backfill_requests_business_dates_only() -> None:
+    assert inclusive_dates(date(2026, 8, 14), date(2026, 8, 17)) == [
+        date(2026, 8, 14),
+        date(2026, 8, 17),
+    ]
+
+
+def test_yahoo_parser_extracts_dated_usd_vnd_history() -> None:
+    rows = parse_yahoo_chart(
+        json.loads(YAHOO_FIXTURE.read_text(encoding="utf-8")),
+        start=date(2016, 8, 17),
+        end=date(2016, 8, 18),
+    )
+
+    assert [(row.effective_date, row.mid, row.source) for row in rows] == [
+        (date(2016, 8, 17), Decimal("22290.0"), "yahoo_finance"),
+        (date(2016, 8, 18), Decimal("22300.0"), "yahoo_finance"),
+    ]
+
+
 class RecordingCursor:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...]]] = []
@@ -100,3 +123,8 @@ def test_repository_upserts_one_immutable_effective_date_without_fallback_data()
     assert "ON CONFLICT (base_currency, quote_currency, effective_date, source)" in sql
     assert params[0:4] == ("USD", "VND", date(2026, 8, 15), Decimal("25950.00"))
     assert Decimal("26000") not in params
+
+
+def test_transaction_snapshot_backfill_never_looks_ahead() -> None:
+    assert 'rate.effective_date <= transaction.executed_at::date' in BACKFILL_TRANSACTION_SNAPSHOTS_SQL
+    assert 'WHERE transaction.fx_fallback = true' in BACKFILL_TRANSACTION_SNAPSHOTS_SQL

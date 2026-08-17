@@ -60,7 +60,11 @@ export function createPortfolioTransactionRequest(
 ) {
   return portfolioMutation(
     "/api/portfolio/transactions",
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) },
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
     fetcher,
   );
 }
@@ -72,7 +76,11 @@ export function updatePortfolioTransactionRequest(
 ) {
   return portfolioMutation(
     `/api/portfolio/transactions/${id}`,
-    { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(input) },
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
     fetcher,
   );
 }

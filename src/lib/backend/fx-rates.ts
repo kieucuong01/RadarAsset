@@ -22,12 +22,7 @@ export function normalizeCurrency(value: string): PortfolioCurrency {
   throw new Error(`Unsupported portfolio currency: ${value}.`);
 }
 
-export function convertMoney(
-  value: number,
-  from: string,
-  to: string,
-  usdVndRate: number,
-): number {
+export function convertMoney(value: number, from: string, to: string, usdVndRate: number): number {
   const source = normalizeCurrency(from);
   const target = normalizeCurrency(to);
   if (!Number.isFinite(value)) throw new Error("Money value must be finite.");
@@ -48,7 +43,15 @@ export function selectRateOnOrBefore(
     if (!Number.isFinite(rate.rate) || rate.rate <= 0) {
       throw new Error("Invalid USD/VND observation.");
     }
-    if (!selected || rate.effectiveDate > selected.effectiveDate) selected = rate;
+    if (
+      !selected ||
+      rate.effectiveDate > selected.effectiveDate ||
+      (rate.effectiveDate === selected.effectiveDate &&
+        rate.source === "vietcombank" &&
+        selected.source !== "vietcombank")
+    ) {
+      selected = rate;
+    }
   }
   if (!selected) {
     return {

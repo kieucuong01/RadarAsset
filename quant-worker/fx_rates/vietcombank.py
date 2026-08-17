@@ -111,4 +111,8 @@ def backfill_window(today: date) -> tuple[date, date]:
 def inclusive_dates(start: date, end: date) -> list[date]:
     if end < start:
         raise ValueError("End date must not precede start date.")
-    return [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
+    return [
+        current
+        for offset in range((end - start).days + 1)
+        if (current := start + timedelta(days=offset)).weekday() < 5
+    ]
