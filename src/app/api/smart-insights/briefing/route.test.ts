@@ -66,6 +66,54 @@ describe("Smart Insights briefing lifecycle", () => {
     await expect(response.json()).resolves.toMatchObject({ state: "generating" });
   });
 
+  it("does not project today's queued refresh onto a missing historical date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-17T05:00:00.000Z"));
+    mocks.loadBriefingRefreshState.mockResolvedValue({
+      state: "generating",
+      requestedAt: "2026-08-17T04:00:00.000Z",
+      finishedAt: null,
+      errorCode: null,
+    });
+
+    try {
+      const response = await GET(
+        new Request("http://localhost/api/smart-insights/briefing?date=2026-08-15"),
+      );
+
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({
+        state: "idle",
+        errorCode: "BRIEFING_NOT_GENERATED_FOR_DATE",
+      });
+      expect(mocks.loadBriefingRefreshState).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the queued lifecycle for an exact missing today briefing", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-17T05:00:00.000Z"));
+    mocks.loadBriefingRefreshState.mockResolvedValue({
+      state: "generating",
+      requestedAt: "2026-08-17T04:00:00.000Z",
+      finishedAt: null,
+      errorCode: null,
+    });
+
+    try {
+      const response = await GET(
+        new Request("http://localhost/api/smart-insights/briefing?date=2026-08-17"),
+      );
+
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toMatchObject({ state: "generating" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns a sanitized 503 when generation exhausted retries", async () => {
     mocks.loadBriefingRefreshState.mockResolvedValue({
       state: "failed",

@@ -473,6 +473,15 @@ function storedAssetOpinion(raw: unknown): AssetOpinionReadModel {
 
 export type BriefingEnvelope = { briefing: BriefingReadModel; fingerprint: string };
 
+function parseBriefingLocalDate(value?: string | null): Date | null {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new SmartInsightsInputError("Invalid local date.");
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || dateOnly(parsed) !== value)
+    throw new SmartInsightsInputError("Invalid local date.");
+  return parsed;
+}
+
 type AssetOpinionPerformanceRow = {
   symbol: string;
   horizonSessions: number;
@@ -535,9 +544,7 @@ export async function loadBriefingEnvelope(
   context: TenantContext,
   localDate?: string | null,
 ): Promise<BriefingEnvelope | null> {
-  const parsedDate = localDate ? new Date(`${localDate}T00:00:00.000Z`) : null;
-  if (parsedDate && Number.isNaN(parsedDate.getTime()))
-    throw new SmartInsightsInputError("Invalid local date.");
+  const parsedDate = parseBriefingLocalDate(localDate);
   const row = await getPrisma().dailyBriefing.findFirst({
     where: {
       organizationId: context.organizationId,

@@ -67,13 +67,28 @@ describe("Smart Insights read bounds", () => {
     });
     prisma.dailyBriefing.groupBy.mockResolvedValue([rows[0], ...rows]);
 
-    const result = await loadBriefingDateCatalog(
-      { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
-    );
+    const result = await loadBriefingDateCatalog({
+      organizationId: "org-a",
+      userId: "user-a",
+      role: "viewer",
+    } as never);
 
     expect(result.dates).toHaveLength(90);
     expect(new Set(result.dates).size).toBe(90);
   });
+
+  it.each(["2026-8-01", "2026-02-30", "17-08-2026", "2026-08-17T00:00:00Z"])(
+    "rejects malformed or impossible exact date %s before querying",
+    async (value) => {
+      await expect(
+        loadBriefingEnvelope(
+          { organizationId: "org-a", userId: "user-a", role: "viewer" } as never,
+          value,
+        ),
+      ).rejects.toBeInstanceOf(SmartInsightsInputError);
+      expect(prisma.dailyBriefing.findFirst).not.toHaveBeenCalled();
+    },
+  );
 
   it("loads 25 embedded asset opinions with one tenant-scoped briefing query", async () => {
     const storedOpinion = {

@@ -7,7 +7,11 @@ import {
   requireTenantContext,
   resolvePublicMarketTenantContext,
 } from "@/lib/auth/tenant-context";
-import { loadBriefingEnvelope, SmartInsightsInputError } from "@/lib/backend/smart-insights";
+import {
+  loadBriefingEnvelope,
+  smartInsightsToday,
+  SmartInsightsInputError,
+} from "@/lib/backend/smart-insights";
 import {
   enqueueBriefingRefresh,
   loadBriefingRefreshState,
@@ -26,9 +30,12 @@ export async function GET(request: Request) {
       throw error;
     });
     if (personalContext) requireTenantCapability(context, "research", "read");
+    const requestedDate = new URL(request.url).searchParams.get("date");
+    const today = smartInsightsToday();
+    const tracksCurrentRefresh = personalContext && (!requestedDate || requestedDate === today);
     const [envelope, refresh] = await Promise.all([
-      loadBriefingEnvelope(context, new URL(request.url).searchParams.get("date")),
-      personalContext
+      loadBriefingEnvelope(context, requestedDate),
+      tracksCurrentRefresh
         ? loadBriefingRefreshState(context)
         : Promise.resolve({ state: "idle" as const, errorCode: null }),
     ]);
@@ -37,6 +44,12 @@ export async function GET(request: Request) {
         "Cache-Control": "private, no-cache",
         "X-Smart-Insights-Briefing-State": refresh.state,
       };
+      if (requestedDate && requestedDate !== today) {
+        return NextResponse.json(
+          { state: "idle", errorCode: "BRIEFING_NOT_GENERATED_FOR_DATE" },
+          { status: 404, headers },
+        );
+      }
       if (refresh.state === "generating") {
         return NextResponse.json(refresh, { status: 202, headers });
       }

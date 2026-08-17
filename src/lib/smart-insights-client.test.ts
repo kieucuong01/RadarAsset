@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { briefingSchema, fetchBriefing } from "./smart-insights-client";
+import { briefingSchema, fetchBriefing, fetchBriefingDates } from "./smart-insights-client";
 
 const base = {
   id: "briefing-a",
@@ -212,7 +212,7 @@ describe("Smart Insights briefing contract", () => {
       ),
     );
 
-    await expect(fetchBriefing()).resolves.toEqual({
+    await expect(fetchBriefing("2026-08-17")).resolves.toEqual({
       state: "generating",
       briefing: null,
       errorCode: null,
@@ -229,10 +229,42 @@ describe("Smart Insights briefing contract", () => {
         ),
     );
 
-    await expect(fetchBriefing()).resolves.toMatchObject({
+    await expect(fetchBriefing("2026-08-15")).resolves.toMatchObject({
       state: "ready",
       briefing: { id: "briefing-a" },
       errorCode: null,
+    });
+  });
+
+  it("requests one exact analysis date", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ...base, localDate: "2026-08-15", assetOpinions: [] }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchBriefing("2026-08-15");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/smart-insights/briefing?date=2026-08-15",
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+  });
+
+  it("loads the bounded date catalog", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ today: "2026-08-17", dates: ["2026-08-16"] })),
+        ),
+    );
+
+    await expect(fetchBriefingDates()).resolves.toEqual({
+      today: "2026-08-17",
+      dates: ["2026-08-16"],
     });
   });
 });

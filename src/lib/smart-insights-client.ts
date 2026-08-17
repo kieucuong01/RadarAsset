@@ -545,6 +545,13 @@ export type BriefingFetchResult = {
   errorCode: string | null;
 };
 
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const briefingDatesSchema = z.object({
+  today: isoDateSchema,
+  dates: z.array(isoDateSchema).max(90),
+});
+export type BriefingDatesModel = z.infer<typeof briefingDatesSchema>;
+
 const briefingLifecycleSchema = z
   .object({
     state: z.enum(["idle", "generating", "failed"]),
@@ -552,8 +559,11 @@ const briefingLifecycleSchema = z
   })
   .passthrough();
 
-export async function fetchBriefing(signal?: AbortSignal): Promise<BriefingFetchResult> {
-  const response = await fetch("/api/smart-insights/briefing", {
+export async function fetchBriefing(
+  date: string,
+  signal?: AbortSignal,
+): Promise<BriefingFetchResult> {
+  const response = await fetch(`/api/smart-insights/briefing?date=${encodeURIComponent(date)}`, {
     signal,
     headers: { Accept: "application/json" },
   });
@@ -573,6 +583,10 @@ export async function fetchBriefing(signal?: AbortSignal): Promise<BriefingFetch
     };
   }
   throw new Error(`Smart Insights briefing request failed (${response.status}).`);
+}
+
+export async function fetchBriefingDates(signal?: AbortSignal): Promise<BriefingDatesModel> {
+  return fetchParsed("/api/smart-insights/briefing/dates", briefingDatesSchema, signal);
 }
 
 export async function requestBriefingRefresh(): Promise<void> {
