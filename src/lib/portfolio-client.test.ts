@@ -32,9 +32,11 @@ describe("portfolio client", () => {
   it("loads a portfolio timeframe without caching by default", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(portfolio)));
 
-    await expect(getPortfolio("1M", fetcher)).resolves.toEqual(portfolio);
+    await expect(getPortfolio("1M", "VND", fetcher)).resolves.toEqual(portfolio);
 
-    expect(fetcher).toHaveBeenCalledWith("/api/portfolio?timeframe=1M", { cache: "no-store" });
+    expect(fetcher).toHaveBeenCalledWith("/api/portfolio?timeframe=1M&currency=VND", {
+      cache: "no-store",
+    });
   });
 
   it("deduplicates cached portfolio requests by timeframe", async () => {
@@ -42,8 +44,8 @@ describe("portfolio client", () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(portfolio)));
 
     const [first, second] = await Promise.all([
-      getCachedPortfolio("1M", fetcher),
-      getCachedPortfolio("1M", fetcher),
+      getCachedPortfolio("1M", "USD", fetcher),
+      getCachedPortfolio("1M", "USD", fetcher),
     ]);
 
     expect(first).toEqual(portfolio);
