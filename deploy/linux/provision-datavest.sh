@@ -122,6 +122,7 @@ for unit in \
   datavest-web.service \
   datavest-quant-engine.service \
   datavest-worker.service \
+  datavest-smart-insights-refresh.service \
   datavest-job@.service \
   datavest-postgres-backup.service \
   datavest-postgres-backup.timer \

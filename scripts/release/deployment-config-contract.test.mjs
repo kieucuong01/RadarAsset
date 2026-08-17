@@ -161,6 +161,9 @@ describe("DataVest production service configuration", () => {
   it("runs the quant API and worker from the shared offline Python environment", async () => {
     const engine = parseUnit(await read("deploy/linux/systemd/datavest-quant-engine.service"));
     const worker = parseUnit(await read("deploy/linux/systemd/datavest-worker.service"));
+    const smartInsightsWorker = parseUnit(
+      await read("deploy/linux/systemd/datavest-smart-insights-refresh.service"),
+    );
 
     expect(engine.Service.ExecStart).toBe(
       "/opt/datavest/shared/python-venv/bin/python -m uvicorn service:app --app-dir /opt/datavest/current/quant-worker --host 127.0.0.1 --port 8200",
@@ -170,7 +173,11 @@ describe("DataVest production service configuration", () => {
       "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/process_ingestion_requests.py --watch --limit 20 --env-file /opt/datavest/shared/.env",
     );
     expect(worker.Service.MemoryMax).toBe("750M");
-    for (const unit of [engine, worker]) {
+    expect(smartInsightsWorker.Service.ExecStart).toBe(
+      "/opt/datavest/shared/python-venv/bin/python /opt/datavest/current/quant-worker/process_smart_insight_refreshes.py --watch --limit 20 --poll-seconds 5 --env-file /opt/datavest/shared/.env",
+    );
+    expect(smartInsightsWorker.Service.MemoryMax).toBe("750M");
+    for (const unit of [engine, worker, smartInsightsWorker]) {
       expect(unit.Service).toMatchObject({
         User: "datavest",
         Group: "datavest",

@@ -281,6 +281,7 @@ write_release_env() {
 restart_services() {
   systemctl restart datavest-quant-engine.service
   systemctl restart datavest-worker.service
+  systemctl restart datavest-smart-insights-refresh.service
   systemctl restart datavest-web.service
 }
 
@@ -308,7 +309,7 @@ rollback_release() {
     wait_for_url "http://127.0.0.1:4200/api/health/ready" 10
   else
     rm -f -- "${current_link}" "${shared_root}/release.env"
-    systemctl stop datavest-web.service datavest-worker.service datavest-quant-engine.service
+    systemctl stop datavest-web.service datavest-smart-insights-refresh.service datavest-worker.service datavest-quant-engine.service
   fi
   echo "deploy_status=rolled_back" >&2
 }
@@ -341,11 +342,16 @@ switch_link "${release_dir}" "${current_link}"
 switched=true
 write_release_env "${git_sha}"
 
+install -o root -g root -m 0644 "${release_dir}/deploy/linux/systemd/datavest-smart-insights-refresh.service" "/etc/systemd/system/datavest-smart-insights-refresh.service"
+install -o root -g root -m 0755 "${release_dir}/deploy/linux/deploy-datavest.sh" /usr/local/sbin/deploy-datavest
+systemctl daemon-reload
+
 restart_services
 wait_for_url "http://127.0.0.1:8200/healthz" 10
 wait_for_url "http://127.0.0.1:4200/api/health/ready" 10
 wait_for_url "https://datavest.vn/api/health/ready" 15
-systemctl enable datavest-quant-engine.service datavest-worker.service datavest-web.service >/dev/null
+systemctl is-active --quiet datavest-smart-insights-refresh.service
+systemctl enable datavest-smart-insights-refresh.service datavest-quant-engine.service datavest-worker.service datavest-web.service >/dev/null
 
 printf '%s\n' "${requirements_hash}" > "${shared_root}/requirements.sha256"
 printf '%s\n' "${migration_hash}" > "${shared_root}/migration-tooling.sha256"

@@ -87,7 +87,15 @@ describe("DataVest atomic deploy", () => {
     expect(source).toContain('chown -R root:datavest "${python_target}"');
     expect(source).toContain('chmod -R u+rwX,g+rX,o-rwx "${python_target}"');
     expect(source).toContain("systemctl restart datavest-quant-engine.service");
+    expect(source).toContain("systemctl restart datavest-smart-insights-refresh.service");
     expect(source).toContain("systemctl restart datavest-web.service");
+    expect(source).toContain(
+      'install -o root -g root -m 0644 "${release_dir}/deploy/linux/systemd/datavest-smart-insights-refresh.service" "/etc/systemd/system/datavest-smart-insights-refresh.service"',
+    );
+    expect(source).toContain("systemctl is-active --quiet datavest-smart-insights-refresh.service");
+    expect(source).toContain(
+      "systemctl enable datavest-smart-insights-refresh.service datavest-quant-engine.service datavest-worker.service datavest-web.service",
+    );
     expect(source).not.toMatch(/git\s+pull|npm\s+(ci|install)|pip\s+install\s+-r/);
     expect(source).not.toMatch(/rm\s+-rf\s+[^\"]*\*/);
     expect(source).not.toContain("eval ");

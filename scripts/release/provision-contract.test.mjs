@@ -21,5 +21,6 @@ describe("DataVest provisioning entry point", () => {
     expect(source).toContain("setfacl -m u:datavest-deploy:--x /opt/datavest");
     expect(source).toContain('"${script_dir}/verify-s3-access.py"');
     expect(source).toContain("/usr/local/libexec/datavest/verify-s3-access.py");
+    expect(source).toContain("datavest-smart-insights-refresh.service");
   });
 });
