@@ -41,7 +41,9 @@ export function EventRiskPanel({
     return (
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">Macro Event Risk</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Rủi ro sự kiện vĩ mô" : "Macro Event Risk"}
+          </h3>
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
@@ -52,27 +54,43 @@ export function EventRiskPanel({
   }
   const impacts = new Map(data.assetImpacts.map((impact) => [impact.asset, impact]));
   const cards = [
-    { label: "Event Risk", value: formatScore(data.score), unit: "/100" },
     {
-      label: "Fresh weight",
+      label: locale === "vi" ? "Rủi ro sự kiện" : "Event Risk",
+      value: formatScore(data.score),
+      unit: "/100",
+    },
+    {
+      label: locale === "vi" ? "Trọng số dữ liệu mới" : "Fresh weight",
       value: formatPercent(data.freshWeight, { multiplier: 100 }),
       unit: "",
     },
-    { label: "BTC impact", value: formatScore(impacts.get("BTC")?.score), unit: "score" },
-    { label: "XAU impact", value: formatScore(impacts.get("XAU")?.score), unit: "score" },
+    {
+      label: locale === "vi" ? "Tác động BTC" : "BTC impact",
+      value: formatScore(impacts.get("BTC")?.score),
+      unit: "score",
+    },
+    {
+      label: locale === "vi" ? "Tác động XAU" : "XAU impact",
+      value: formatScore(impacts.get("XAU")?.score),
+      unit: "score",
+    },
   ];
   return (
     <section className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Macro Event Risk → BTC/XAU</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Rủi ro sự kiện vĩ mô → BTC/XAU" : "Macro Event Risk → BTC/XAU"}
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Stress intensity, không phải dự báo hướng giá · {data.methodology}
+            {locale === "vi"
+              ? "Cường độ căng thẳng, không phải dự báo hướng giá · "
+              : "Stress intensity, not price-direction forecast · "}
+            {data.methodology}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <DataStatusBadge status={data.status === "UNAVAILABLE" ? "UNAVAILABLE" : "SYSTEM"} />
-          <span className="text-xs font-medium text-muted-foreground">{data.status}</span>
         </div>
       </div>
 
@@ -91,8 +109,15 @@ export function EventRiskPanel({
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.6fr)]">
         <div className="min-w-0 rounded-xl border bg-background/40 p-3">
           <div className="mb-2 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-            <span>Event severity trend · unit: score /100</span>
-            <time dateTime={data.asOf}>As of {dateLabel(data.asOf, locale)}</time>
+            <span>
+              {locale === "vi"
+                ? "Xu hướng mức độ nghiêm trọng · đơn vị: điểm /100"
+                : "Event severity trend · unit: score /100"}
+            </span>
+            <time dateTime={data.asOf}>
+              {locale === "vi" ? "Tính đến " : "As of "}
+              {dateLabel(data.asOf, locale)}
+            </time>
           </div>
           <div className="h-[260px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -107,7 +132,10 @@ export function EventRiskPanel({
                 <YAxis domain={[0, 100]} fontSize={11} />
                 <Tooltip
                   labelFormatter={(value) => dateLabel(String(value), locale)}
-                  formatter={(value) => [formatScore(Number(value)), "Severity /100"]}
+                  formatter={(value) => [
+                    formatScore(Number(value)),
+                    locale === "vi" ? "Mức độ /100" : "Severity /100",
+                  ]}
                 />
                 <Line
                   type="monotone"
@@ -123,7 +151,7 @@ export function EventRiskPanel({
         </div>
         <div className="rounded-xl border bg-background/40 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Components
+            {locale === "vi" ? "Thành phần" : "Components"}
           </p>
           <dl className="mt-3 space-y-3">
             {data.components.map((component) => (
@@ -151,8 +179,8 @@ export function EventRiskPanel({
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {event.country ?? "Global"} · {dateLabel(event.occurredAt, locale)} ·{" "}
-              {formatCount(event.corroborationCount)} nguồn
+              {event.country ?? (locale === "vi" ? "Toàn cầu" : "Global")} ·{" "}
+              {dateLabel(event.occurredAt, locale)} · {formatCount(event.corroborationCount)} nguồn
             </p>
           </div>
         ))}
@@ -164,7 +192,9 @@ export function EventRiskPanel({
               <th className="px-4 py-2 text-left">Sự kiện</th>
               <th className="px-4 py-2 text-left">Loại</th>
               <th className="px-4 py-2 text-left">Khu vực</th>
-              <th className="px-4 py-2 text-right">Severity /100</th>
+              <th className="px-4 py-2 text-right">
+                {locale === "vi" ? "Mức độ /100" : "Severity /100"}
+              </th>
               <th className="px-4 py-2 text-right">Nguồn</th>
             </tr>
           </thead>
@@ -173,7 +203,9 @@ export function EventRiskPanel({
               <tr key={event.id} className="border-t">
                 <td className="px-4 py-2 font-medium">{event.title}</td>
                 <td className="px-4 py-2">{event.category}</td>
-                <td className="px-4 py-2">{event.country ?? "Global"}</td>
+                <td className="px-4 py-2">
+                  {event.country ?? (locale === "vi" ? "Toàn cầu" : "Global")}
+                </td>
                 <td className="px-4 py-2 text-right font-mono">{formatScore(event.severity)}</td>
                 <td className="px-4 py-2 text-right">
                   {event.sources[0]?.sourceUrl ? (

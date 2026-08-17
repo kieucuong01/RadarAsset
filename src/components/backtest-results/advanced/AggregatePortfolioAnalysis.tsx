@@ -71,13 +71,13 @@ export function AggregatePortfolioAnalysis({
           timestamp: event.timestamp,
           type: t("backtestResults.advanced.contributionEvent"),
           amount: event.amount,
-          detail: `Cash ${formatMoney(event.cashAmount, { locale, currency })}`,
+          detail: `${locale === "vi" ? "Tiền mặt" : "Cash"} ${formatMoney(event.cashAmount, { locale, currency })}`,
         })),
         ...model.aggregate.rebalance.map((event) => ({
           timestamp: event.timestamp,
           type: t("backtestResults.advanced.rebalanceEvent"),
           amount: event.turnover,
-          detail: `Cost ${formatMoney(event.cost, { locale, currency })}`,
+          detail: `${locale === "vi" ? "Chi phí" : "Cost"} ${formatMoney(event.cost, { locale, currency })}`,
         })),
       ].sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
     [currency, locale, model.aggregate.cashFlow, model.aggregate.rebalance, t],
@@ -154,7 +154,9 @@ export function AggregatePortfolioAnalysis({
                 <TableBody>
                   {componentKeys.map((key) => (
                     <TableRow key={key}>
-                      <TableCell className="font-medium">{key === "cash" ? "Cash" : key}</TableCell>
+                      <TableCell className="font-medium">
+                        {key === "cash" ? (locale === "vi" ? "Tiền mặt" : "Cash") : key}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatMoney(latestContribution?.components[key], { locale, currency })}
                       </TableCell>
@@ -175,8 +177,9 @@ export function AggregatePortfolioAnalysis({
         <CardHeader>
           <CardTitle>{t("backtestResults.advanced.cashFlowTitle")}</CardTitle>
           <CardDescription>
-            {model.aggregate.assumptions.rebalanceFrequency} rebalance ·{" "}
-            {model.aggregate.assumptions.dividendMode} dividends · normalized FX
+            {locale === "vi"
+              ? `${model.aggregate.assumptions.rebalanceFrequency === "none" ? "Không tái cân bằng" : `Tái cân bằng ${model.aggregate.assumptions.rebalanceFrequency}`} · ${model.aggregate.assumptions.dividendMode === "exclude" ? "Không tính cổ tức" : "Giá đã điều chỉnh theo cổ tức"} · Tỷ giá chuẩn hóa`
+              : `${model.aggregate.assumptions.rebalanceFrequency} rebalance · ${model.aggregate.assumptions.dividendMode} dividends · normalized FX`}
           </CardDescription>
         </CardHeader>
         <CardContent>

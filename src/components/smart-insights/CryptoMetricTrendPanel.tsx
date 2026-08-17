@@ -32,11 +32,27 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
-function metricLabel(series: CryptoMetricSeries) {
+function metricLabel(series: CryptoMetricSeries, locale: "vi" | "en") {
   const name = series.metricCode
     .replace(/^crypto\.(?:onchain|derivatives|stablecoin)\./, "")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  if (locale === "vi") {
+    const translated =
+      (
+        {
+          "open interest": "Lãi suất mở",
+          "funding rate": "Phí funding",
+          "liquidation volume": "Khối lượng thanh lý",
+          "active addresses": "Địa chỉ hoạt động",
+          "transaction count": "Số giao dịch",
+          nvt: "Định giá NVT",
+          "stablecoin supply": "Nguồn cung stablecoin",
+          "stablecoin liquidity": "Thanh khoản stablecoin",
+        } as Record<string, string>
+      )[name.toLowerCase()] ?? name;
+    return series.asset ? `${series.asset} · ${translated}` : translated;
+  }
   return series.asset ? `${series.asset} · ${name}` : name;
 }
 
@@ -91,7 +107,7 @@ function TrendChart({ series, locale }: { series: CryptoMetricSeries[]; locale: 
               const item = series.find((candidate) => candidate.key === name) ?? series[0];
               return [
                 value == null ? "—" : formatMetric(Number(value), item, locale),
-                metricLabel(item),
+                metricLabel(item, locale),
               ];
             }}
           />
@@ -167,7 +183,7 @@ export function CryptoMetricTrendPanel({
                   className="size-2 rounded-full"
                   style={{ backgroundColor: SERIES_COLORS[index % SERIES_COLORS.length] }}
                 />
-                {metricLabel(item)}
+                {metricLabel(item, locale)}
               </span>
             ))}
           </div>
@@ -179,7 +195,7 @@ export function CryptoMetricTrendPanel({
         {series.map((item) => (
           <article key={item.key} className="rounded-xl border bg-background/50 p-4">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-xs text-muted-foreground">{metricLabel(item)}</p>
+              <p className="text-xs text-muted-foreground">{metricLabel(item, locale)}</p>
               <FreshnessBadge state={item.latest.freshness} />
             </div>
             <p className="mt-2 font-mono text-xl font-semibold tabular-nums">

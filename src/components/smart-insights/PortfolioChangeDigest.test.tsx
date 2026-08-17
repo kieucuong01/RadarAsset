@@ -33,7 +33,7 @@ describe("PortfolioChangeDigest", () => {
     );
 
     expect(html).toContain("Thay đổi quan trọng với danh mục");
-    expect(html).toContain("NEUTRAL → CONSTRUCTIVE");
+    expect(html).toContain("Trung tính → Có cơ sở tăng");
     expect(html).toContain("25%");
     expect(html).toContain("120 triệu USD");
     expect(html).toContain("Mở phân tích chi tiết");
@@ -49,6 +49,6 @@ describe("PortfolioChangeDigest", () => {
       />,
     );
 
-    expect(html).toContain("Cần thêm một briefing daily");
+    expect(html).toContain("Cần thêm một bản tin hằng ngày");
   });
 });

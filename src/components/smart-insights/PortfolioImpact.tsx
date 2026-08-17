@@ -3,6 +3,7 @@ import { CircleAlert, WalletCards } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BriefingModel, PreferencesModel } from "@/lib/smart-insights-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export function PortfolioImpact({
   briefing,
@@ -11,17 +12,28 @@ export function PortfolioImpact({
   briefing: BriefingModel | null;
   preferences: PreferencesModel | null;
 }) {
+  const { locale } = useI18n();
   if (!briefing || briefing.portfolioState === "missing") {
     return (
       <Alert>
         <CircleAlert />
-        <AlertTitle>Portfolio exposure is not available</AlertTitle>
+        <AlertTitle>
+          {locale === "vi"
+            ? "Chưa có dữ liệu phân bổ danh mục"
+            : "Portfolio exposure is not available"}
+        </AlertTitle>
         <AlertDescription>
-          Ranking currently uses your market interests
+          {locale === "vi"
+            ? "Xếp hạng hiện dùng các thị trường bạn quan tâm"
+            : "Ranking currently uses your market interests"}
           {preferences?.preference.assets.length
-            ? ` and ${preferences.preference.assets.join(", ")}`
+            ? locale === "vi"
+              ? ` và ${preferences.preference.assets.join(", ")}`
+              : ` and ${preferences.preference.assets.join(", ")}`
             : ""}
-          . Add positions to quantify exposure impact.
+          {locale === "vi"
+            ? ". Thêm vị thế để định lượng tác động phân bổ."
+            : ". Add positions to quantify exposure impact."}
         </AlertDescription>
       </Alert>
     );
@@ -32,10 +44,12 @@ export function PortfolioImpact({
       <CardHeader>
         <div className="flex items-center gap-2">
           <WalletCards className="size-5 text-primary" />
-          <CardTitle>Portfolio Impact</CardTitle>
+          <CardTitle>{locale === "vi" ? "Tác động lên danh mục" : "Portfolio Impact"}</CardTitle>
         </div>
         <CardDescription>
-          Relevance is exposure-aware and never changes the underlying signal.
+          {locale === "vi"
+            ? "Mức độ liên quan có xét phân bổ và không thay đổi tín hiệu gốc."
+            : "Relevance is exposure-aware and never changes the underlying signal."}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -46,8 +60,8 @@ export function PortfolioImpact({
               <span>{item.relevanceScore}</span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Exposure {item.relevanceComponents.exposure} · magnitude{" "}
-              {item.relevanceComponents.magnitude}
+              {locale === "vi" ? "Phơi nhiễm" : "Exposure"} {item.relevanceComponents.exposure} ·{" "}
+              {locale === "vi" ? "mức ảnh hưởng" : "magnitude"} {item.relevanceComponents.magnitude}
             </p>
           </div>
         ))}

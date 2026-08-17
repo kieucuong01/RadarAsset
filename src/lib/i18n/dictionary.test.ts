@@ -47,7 +47,9 @@ describe("i18n dictionary", () => {
     expect(translate("en", "optimizer.title")).toBe("Awesome-Quant Optimizer");
     expect(translate("vi", "strategyLab.title")).toBe("Thư viện chiến lược");
     expect(translate("en", "strategyLab.title")).toBe("Strategy Lab");
-    expect(translate("vi", "factorLab.loading")).toBe("Đang tải universe factor Việt Nam…");
+    expect(translate("vi", "factorLab.loading")).toBe(
+      "Đang tải nhóm tài sản cho phân tích yếu tố Việt Nam…",
+    );
     expect(translate("en", "factorLab.loading")).toBe("Loading VN factor universe…");
     expect(translate("vi", "backtestResults.tradeList.title")).toBe("Danh sách lệnh");
     expect(translate("en", "backtestResults.tradeList.title")).toBe("Trade List");

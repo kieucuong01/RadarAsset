@@ -45,6 +45,18 @@ const ACTIONS: Record<string, { vi: string; en: string }> = {
   NO_ACTION_INSUFFICIENT_DATA: { vi: "Chưa hành động", en: "No action yet" },
 };
 
+const STANCES: Record<string, { vi: string; en: string }> = {
+  bullish: { vi: "Tăng giá", en: "Bullish" },
+  bearish: { vi: "Giảm giá", en: "Bearish" },
+  cautious: { vi: "Thận trọng", en: "Cautious" },
+  neutral: { vi: "Trung tính", en: "Neutral" },
+};
+
+function stanceLabel(value: string, locale: Locale) {
+  const normalized = value.toLowerCase();
+  return STANCES[value]?.[locale] ?? STANCES[normalized]?.[locale] ?? value.replaceAll("_", " ");
+}
+
 const INVALIDATION_LABELS: Record<string, { vi: string; en: string }> = {
   ASSET_SCORE_BELOW_40: { vi: "Điểm tài sản giảm xuống dưới 40", en: "Asset score falls below 40" },
   ASSET_SCORE_BELOW_15: { vi: "Điểm tài sản giảm xuống dưới 15", en: "Asset score falls below 15" },
@@ -304,7 +316,7 @@ function HistoricalPerformance({
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">
-                    {locale === "vi" ? "Vượt benchmark" : "Excess return"}
+                    {locale === "vi" ? "Vượt mốc tham chiếu" : "Excess return"}
                   </dt>
                   <dd className="font-mono tabular-nums">
                     {formatPercent(row.averageExcessReturn, { multiplier: 100, sign: true })}
@@ -317,7 +329,7 @@ function HistoricalPerformance({
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
           {locale === "vi"
-            ? "Chưa có quan điểm đủ tuổi để chấm điểm. Hệ thống sẽ tự cập nhật sau mỗi phiên daily."
+            ? "Chưa có quan điểm đủ tuổi để chấm điểm. Hệ thống sẽ tự cập nhật sau mỗi phiên hằng ngày."
             : "No opinion has matured yet. This updates automatically after each daily session."}
         </p>
       )}
@@ -405,7 +417,7 @@ export function AssetOpinionDetailContent({
               <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
                 {opinion.symbol} · {opinion.assetName}
               </h2>
-              <Badge variant="outline">{opinion.stance.replaceAll("_", " ")}</Badge>
+              <Badge variant="outline">{stanceLabel(opinion.stance, locale)}</Badge>
               <Badge variant={opinion.explanationStatus === "accepted" ? "default" : "secondary"}>
                 {analysisStatus(opinion, locale)}
               </Badge>
@@ -420,7 +432,9 @@ export function AssetOpinionDetailContent({
             <p className="font-mono text-2xl font-semibold tabular-nums">
               {formatScore(opinion.quantScore)}
             </p>
-            <p className="text-xs text-muted-foreground">Quant score</p>
+            <p className="text-xs text-muted-foreground">
+              {locale === "vi" ? "Điểm Quant" : "Quant score"}
+            </p>
           </div>
         </div>
 

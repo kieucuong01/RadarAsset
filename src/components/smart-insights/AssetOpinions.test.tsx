@@ -198,7 +198,7 @@ describe("AssetOpinions", () => {
     expect(html).toContain("Hiệu quả lịch sử · Shadow");
     expect(html).toContain("Mẫu còn ít");
     expect(html).toContain("58.33%");
-    expect(html).toContain("Vượt benchmark");
+    expect(html).toContain("Vượt mốc tham chiếu");
   });
 
   it("merges followed assets with opinion actions and protects holdings and representatives", () => {
@@ -224,7 +224,7 @@ describe("AssetOpinions", () => {
     expect(html).toContain('data-asset-icon="ETH"');
     expect(html).toContain('data-asset-icon="FPT"');
     expect(html).toContain('aria-label="Mua ETH"');
-    expect(html).toContain('aria-label="Backtest ETH"');
+    expect(html).toContain('aria-label="Kiểm định ETH"');
     expect(html).toContain('aria-label="Xóa ETH"');
     expect(html).toContain('aria-label="Bán FPT"');
     expect(html).not.toContain('aria-label="Xóa FPT"');

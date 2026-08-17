@@ -239,7 +239,9 @@ export function KronosShadowPanel({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Beaker className="size-4 text-chart-4" aria-hidden="true" />
-              <h3 className="font-semibold">Kronos BTC Forecast</h3>
+              <h3 className="font-semibold">
+                {locale === "vi" ? "Dự báo BTC bằng Kronos" : "Kronos BTC Forecast"}
+              </h3>
               <Badge
                 variant="outline"
                 className="border-chart-4/40 bg-chart-4/10 font-mono text-[10px] text-chart-4"
@@ -261,12 +263,28 @@ export function KronosShadowPanel({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            [locale === "vi" ? "Trạng thái" : "State", data.state],
+            [
+              locale === "vi" ? "Trạng thái" : "State",
+              locale === "vi"
+                ? ((
+                    {
+                      READY: "Sẵn sàng",
+                      READY_SHADOW: "Sẵn sàng (shadow)",
+                      ACCUMULATING: "Đang tích lũy",
+                      FAILED: "Thất bại",
+                      UNAVAILABLE: "Chưa có",
+                    } as Record<string, string>
+                  )[data.state] ?? data.state)
+                : data.state,
+            ],
             [
               locale === "vi" ? "Tiến độ OOS" : "OOS progress",
               `${data.completedOos} / ${data.minimumOos}`,
             ],
-            ["Kronos MASE", kronos ? formatRatio(kronos.mase) : "—"],
+            [
+              locale === "vi" ? "MASE của Kronos" : "Kronos MASE",
+              kronos ? formatRatio(kronos.mase) : "—",
+            ],
             [
               locale === "vi" ? "Đúng hướng" : "Direction accuracy",
               kronos ? formatPercent(kronos.directionalAccuracy, { multiplier: 100 }) : "—",
@@ -315,12 +333,12 @@ export function KronosShadowPanel({
         <Table className="mt-4 min-w-[620px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Model</TableHead>
+              <TableHead>{locale === "vi" ? "Mô hình" : "Model"}</TableHead>
               <TableHead>MAE</TableHead>
               <TableHead>MASE</TableHead>
               <TableHead>{locale === "vi" ? "Đúng hướng" : "Direction"}</TableHead>
               <TableHead>Spearman IC</TableHead>
-              <TableHead>Coverage 80%</TableHead>
+              <TableHead>{locale === "vi" ? "Độ phủ 80%" : "Coverage 80%"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -382,7 +400,7 @@ export function KronosShadowPanel({
             <TableHeader>
               <TableRow>
                 <TableHead>{locale === "vi" ? "Ngày đích" : "Target date"}</TableHead>
-                <TableHead>Horizon</TableHead>
+                <TableHead>{locale === "vi" ? "Khoảng dự báo" : "Horizon"}</TableHead>
                 <TableHead>{locale === "vi" ? "Dự báo" : "Forecast"}</TableHead>
                 <TableHead>{locale === "vi" ? "Thực tế" : "Realized"}</TableHead>
                 <TableHead>{locale === "vi" ? "Sai số" : "Error"}</TableHead>

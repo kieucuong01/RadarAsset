@@ -44,13 +44,13 @@ export function MetricPanel({
             </div>
             <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>
-                {row.asset ?? "Global"} · {row.sourceCode}
+                {row.asset ?? (locale === "vi" ? "Toàn cầu" : "Global")} · {row.sourceCode}
               </span>
               <a
                 href={row.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={`Open ${row.sourceCode}`}
+                aria-label={`${locale === "vi" ? "Mở" : "Open"} ${row.sourceCode}`}
               >
                 <ExternalLink className="size-3.5" />
               </a>
@@ -59,7 +59,9 @@ export function MetricPanel({
         ))}
         {latest.size === 0 ? (
           <p className="text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">
-            No accepted observations in the selected window.
+            {locale === "vi"
+              ? "Không có quan sát đạt chuẩn trong khoảng đã chọn."
+              : "No accepted observations in the selected window."}
           </p>
         ) : null}
       </CardContent>

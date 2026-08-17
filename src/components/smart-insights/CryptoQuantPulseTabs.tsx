@@ -60,7 +60,9 @@ function CryptoOverviewSummary({
     <section className="min-w-0 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Crypto Quant Pulse</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Nhịp Quant Crypto" : "Crypto Quant Pulse"}
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
             {locale === "vi"
               ? "Ảnh chụp định lượng theo nguồn và thời điểm hiệu lực."
@@ -72,8 +74,12 @@ function CryptoOverviewSummary({
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border bg-background/50 p-4">
-          <p className="text-xs text-muted-foreground">Regime</p>
-          <p className="mt-2 text-lg font-semibold">{regime?.label ?? "Unavailable"}</p>
+          <p className="text-xs text-muted-foreground">
+            {locale === "vi" ? "Chế độ thị trường" : "Regime"}
+          </p>
+          <p className="mt-2 text-lg font-semibold">
+            {regime?.label ?? (locale === "vi" ? "Chưa có dữ liệu" : "Unavailable")}
+          </p>
           {regime?.effectiveAt ? (
             <time
               dateTime={regime.effectiveAt}
@@ -84,11 +90,13 @@ function CryptoOverviewSummary({
           ) : null}
           <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div>
-              <dt className="text-muted-foreground">Confidence</dt>
+              <dt className="text-muted-foreground">
+                {locale === "vi" ? "Độ tin cậy" : "Confidence"}
+              </dt>
               <dd className="mt-1 font-mono font-semibold">{regime?.dataConfidence ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Coverage</dt>
+              <dt className="text-muted-foreground">{locale === "vi" ? "Độ phủ" : "Coverage"}</dt>
               <dd className="mt-1 font-mono font-semibold">{regime?.coverage ?? "—"}</dd>
             </div>
           </dl>
@@ -188,9 +196,11 @@ export function CryptoQuantPulseTabs({
           <TabsTrigger value="flows">Dòng tiền</TabsTrigger>
           <TabsTrigger value="sentiment">Tâm lý &amp; Phái sinh</TabsTrigger>
           <TabsTrigger value="cycle">Chu kỳ</TabsTrigger>
-          <TabsTrigger value="onchain">On-chain</TabsTrigger>
+          <TabsTrigger value="onchain">{locale === "vi" ? "Chuỗi khối" : "On-chain"}</TabsTrigger>
           <TabsTrigger value="whales">Cá voi BTC</TabsTrigger>
-          <TabsTrigger value="forecast">BTC Forecast</TabsTrigger>
+          <TabsTrigger value="forecast">
+            {locale === "vi" ? "Dự báo BTC" : "BTC Forecast"}
+          </TabsTrigger>
         </TabsList>
       </div>
 

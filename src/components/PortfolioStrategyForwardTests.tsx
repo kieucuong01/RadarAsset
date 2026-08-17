@@ -56,6 +56,14 @@ export function PortfolioStrategyForwardTests({ currency }: { currency?: string 
 
 function ForwardCard({ item, currency }: { item: ForwardTest; currency?: string | null }) {
   const { t, locale } = useI18n();
+  const statusLabel =
+    locale === "vi"
+      ? {
+          active: "Đang theo dõi",
+          paused: "Tạm dừng",
+          evaluation_failed: "Đánh giá thất bại",
+        }[item.status]
+      : item.status;
   const chart = useMemo(() => buildForwardChart(item.snapshots), [item.snapshots]);
   const comparison = useMemo(
     () => buildForwardComparison(item.snapshots, item.backtestBaseline),
@@ -67,7 +75,7 @@ function ForwardCard({ item, currency }: { item: ForwardTest; currency?: string 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-xs font-mono text-primary">
-            {item.symbol} · {item.status}
+            {item.symbol} · {statusLabel}
           </div>
           <h3 className="mt-1 font-semibold">
             {item.strategy.name}{" "}

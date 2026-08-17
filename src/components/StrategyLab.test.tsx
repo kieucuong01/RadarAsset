@@ -113,9 +113,9 @@ describe("StrategyBuilderPanel", () => {
 
     expect(html).toContain("Tên chiến lược");
     expect(html).toContain("Mã tài sản");
-    expect(html).toContain("Indicator kỹ thuật");
+    expect(html).toContain("Chỉ báo kỹ thuật");
     expect(html).toContain("MA Crossover");
-    expect(html).toContain("Rule đã chuẩn hóa");
+    expect(html).toContain("Quy tắc đã chuẩn hóa");
     expect(html).toContain("Lưu chiến lược");
   });
 });
@@ -140,7 +140,7 @@ describe("SavedStrategiesPanel", () => {
       </I18nProvider>,
     );
 
-    expect(loading).toContain("Đang tải chiến lược từ workspace…");
+    expect(loading).toContain("Đang tải chiến lược từ không gian làm việc…");
     expect(empty).toContain("Chưa có chiến lược tự thiết kế");
   });
 

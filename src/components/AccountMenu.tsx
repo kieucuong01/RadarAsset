@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
+import { useI18n } from "@/lib/i18n/context";
 
 function userInitials(name: string | undefined, email: string): string {
   const parts = name?.trim().split(/\s+/).filter(Boolean) ?? [];
@@ -31,6 +32,7 @@ function userInitials(name: string | undefined, email: string): string {
 
 export function AccountMenu() {
   const { data: session, isPending } = authClient.useSession();
+  const { t } = useI18n();
 
   if (isPending) {
     return <Skeleton className="size-9 rounded-full" />;
@@ -39,7 +41,7 @@ export function AccountMenu() {
   if (!session) {
     return (
       <Button asChild size="sm" variant="outline">
-        <Link href="/sign-in">Sign in</Link>
+        <Link href="/sign-in">{t("auth.signIn")}</Link>
       </Button>
     );
   }
@@ -56,6 +58,7 @@ function AuthenticatedAccountMenu({
   };
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const { data: organizations } = authClient.useListOrganizations();
 
   const organizationList = organizations ?? [];
@@ -85,7 +88,7 @@ function AuthenticatedAccountMenu({
           variant="ghost"
           size="icon"
           className="rounded-full"
-          aria-label="Open account menu"
+          aria-label={t("account.openMenu")}
         >
           <Avatar className="size-9">
             <AvatarImage src={session.user.image ?? undefined} alt="" />
@@ -103,7 +106,7 @@ function AuthenticatedAccountMenu({
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Workspaces
+            {t("account.workspaces")}
           </DropdownMenuLabel>
           {organizationList.map((organization) => (
             <DropdownMenuItem
@@ -117,13 +120,13 @@ function AuthenticatedAccountMenu({
           ))}
           {activeOrganization ? (
             <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-              Active: {activeOrganization.name}
+              {t("account.active", { name: activeOrganization.name })}
             </DropdownMenuLabel>
           ) : null}
           <DropdownMenuItem asChild>
             <Link href="/onboarding?create=1">
               <Plus />
-              Create workspace
+              {t("auth.createWorkspace")}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -131,7 +134,7 @@ function AuthenticatedAccountMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={() => void signOut()}>
             <LogOut />
-            Sign out
+            {t("account.signOut")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

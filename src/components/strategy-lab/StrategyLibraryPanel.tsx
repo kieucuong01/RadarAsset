@@ -103,7 +103,7 @@ export function StrategyLibraryPanel({
                     className="pl-9"
                     value={query}
                     onChange={(event) => onQueryChange(event.target.value)}
-                    placeholder="MA, RSI, breakout..."
+                    placeholder="MA, RSI, bứt phá..."
                   />
                 </div>
               </Field>

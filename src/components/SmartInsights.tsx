@@ -442,17 +442,23 @@ export function SmartInsights() {
       {state === "error" ? (
         <Alert variant="destructive">
           <AlertCircle />
-          <AlertTitle>Smart Insights live data is unavailable</AlertTitle>
+          <AlertTitle>
+            {locale === "vi"
+              ? "Dữ liệu Smart Insights trực tiếp chưa khả dụng"
+              : "Smart Insights live data is unavailable"}
+          </AlertTitle>
           <AlertDescription>
-            The original page layout remains available. Blocks using illustrative values are marked
-            as sample data.
+            {locale === "vi"
+              ? "Bố cục trang vẫn hiển thị. Các khối dùng giá trị minh họa đều được đánh dấu là dữ liệu mẫu."
+              : "The original page layout remains available. Blocks using illustrative values are marked as sample data."}
           </AlertDescription>
           <Button
             variant="outline"
             className="mt-4"
             onClick={() => setRefresh((value) => value + 1)}
           >
-            <RefreshCw data-icon="inline-start" /> Retry live data
+            <RefreshCw data-icon="inline-start" />
+            {locale === "vi" ? "Thử lại dữ liệu trực tiếp" : "Retry live data"}
           </Button>
         </Alert>
       ) : null}

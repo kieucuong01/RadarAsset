@@ -20,7 +20,7 @@ import { updateStrategySignalStatusClient } from "@/lib/strategy-forward/client"
 function loadAssignments() {
   return fetch("/api/portfolio/strategy-assignments", { cache: "no-store" }).then(
     async (response) => {
-      if (!response.ok) throw new Error("Unable to load portfolio strategy assignments.");
+      if (!response.ok) throw new Error("Không thể tải các chiến lược đã gán cho danh mục.");
       return (await response.json()) as StrategyAssignmentResponse[];
     },
   );
@@ -315,7 +315,15 @@ export function StrategyAssignmentPanel({
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">{signal.status}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {locale === "vi"
+                              ? ({
+                                  reviewed: "Đã xem xét",
+                                  executed: "Đã thực hiện",
+                                  dismissed: "Đã bỏ qua",
+                                }[signal.status] ?? signal.status)
+                              : signal.status}
+                          </span>
                         )}
                       </div>
                     ))}

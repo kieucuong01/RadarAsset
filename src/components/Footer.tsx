@@ -4,8 +4,10 @@ import { ShieldAlert } from "lucide-react";
 import { DataVestLogo } from "@/components/DataVestLogo";
 import { BRAND } from "@/lib/brand";
 import { APP_ROUTES } from "@/lib/navigation";
+import { useI18n } from "@/lib/i18n/context";
 
 export function Footer() {
+  const { t } = useI18n();
   return (
     <footer className="mt-16 border-t border-border bg-card/40">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -20,13 +22,13 @@ export function Footer() {
 
         <div className="min-w-0 md:justify-self-end">
           <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Product
+            {t("footer.product")}
           </h3>
           <ul className="flex flex-col gap-2 text-sm">
             {APP_ROUTES.map((route) => (
               <li key={route.id}>
                 <Link href={route.href} className="transition-colors hover:text-primary">
-                  {route.label}
+                  {t(`routes.${route.id}`)}
                 </Link>
               </li>
             ))}
@@ -44,10 +46,10 @@ export function Footer() {
           <div className="flex max-w-3xl items-start gap-2">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-bear" />
             <p>
-              <span className="font-semibold text-foreground">Not financial advice.</span> DataVest
-              cung cấp thông tin và công cụ phân tích cho mục đích giáo dục, không phải tư vấn tài
-              chính cá nhân hóa. Thị trường luôn có rủi ro; hiệu quả trong quá khứ không đảm bảo kết
-              quả tương lai.
+              <span className="font-semibold text-foreground">{t("footer.disclaimerTitle")}</span>{" "}
+              DataVest cung cấp thông tin và công cụ phân tích cho mục đích giáo dục, không phải tư
+              vấn tài chính cá nhân hóa. Thị trường luôn có rủi ro; hiệu quả trong quá khứ không đảm
+              bảo kết quả tương lai.
             </p>
           </div>
           <p className="shrink-0">© {new Date().getFullYear()} DataVest.vn.</p>

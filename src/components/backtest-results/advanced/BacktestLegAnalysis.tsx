@@ -49,7 +49,10 @@ function EquityChart({
   const rows = data.map((point) => ({ ...point, date: dateLabel(point.timestamp) }));
   const moneyLabel = (value: number) => formatMoney(value, { locale, currency });
   return (
-    <div className="h-72 min-w-0" aria-label="Leg equity curve">
+    <div
+      className="h-72 min-w-0"
+      aria-label={locale === "vi" ? "Đường vốn của nhánh giao dịch" : "Leg equity curve"}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <defs>
@@ -105,8 +108,8 @@ export function BacktestLegAnalysis({
           <div className="min-w-0">
             <CardTitle>{leg.label}</CardTitle>
             <CardDescription>
-              v{leg.strategyVersion} · {formatPercent(leg.allocationBps / 100)} · dataset{" "}
-              {leg.datasetVersionId.slice(0, 8)}
+              v{leg.strategyVersion} · {formatPercent(leg.allocationBps / 100)} ·{" "}
+              {locale === "vi" ? "bộ dữ liệu" : "dataset"} {leg.datasetVersionId.slice(0, 8)}
             </CardDescription>
           </div>
           <Button onClick={onApply} disabled={applyDisabled}>

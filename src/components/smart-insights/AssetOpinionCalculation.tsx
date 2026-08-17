@@ -165,7 +165,7 @@ export function AssetOpinionFormula({
         <Calculator className="size-4 text-primary" aria-hidden="true" />
         {locale === "vi" ? "Cách tính chi tiết" : "Detailed calculation"}
         <Badge variant="secondary" className="ml-auto">
-          {opinion.decisionInputs.length} input
+          {opinion.decisionInputs.length} {locale === "vi" ? "đầu vào" : "input"}
         </Badge>
       </div>
       <div className="p-4">
@@ -176,9 +176,10 @@ export function AssetOpinionFormula({
               : "Asset score = Σ(pillar score × weight) ÷ data coverage"}
           </p>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
-            Σ contribution = {formatScore(opinion.totalContribution)} · coverage ={" "}
-            {formatPercent(Number(opinion.dataCoverage) * 100)} · score ={" "}
-            {formatScore(opinion.quantScore)}
+            {locale === "vi" ? "Σ đóng góp" : "Σ contribution"} ={" "}
+            {formatScore(opinion.totalContribution)} · {locale === "vi" ? "độ phủ" : "coverage"} ={" "}
+            {formatPercent(Number(opinion.dataCoverage) * 100)} ·{" "}
+            {locale === "vi" ? "điểm" : "score"} = {formatScore(opinion.quantScore)}
           </p>
         </div>
         <div className="mt-4 overflow-x-auto">
@@ -188,7 +189,7 @@ export function AssetOpinionFormula({
                 <TableHead>{locale === "vi" ? "Chỉ số" : "Metric"}</TableHead>
                 <TableHead>{locale === "vi" ? "Dữ liệu gốc" : "Raw"}</TableHead>
                 <TableHead>{locale === "vi" ? "Điểm chuẩn hóa" : "Normalized"}</TableHead>
-                <TableHead>{locale === "vi" ? "Trọng số input" : "Input weight"}</TableHead>
+                <TableHead>{locale === "vi" ? "Trọng số đầu vào" : "Input weight"}</TableHead>
                 <TableHead>{locale === "vi" ? "Trọng số trụ cột" : "Pillar weight"}</TableHead>
                 <TableHead className="text-right">
                   {locale === "vi" ? "Đóng góp" : "Contribution"}

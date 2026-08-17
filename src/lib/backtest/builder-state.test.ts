@@ -137,7 +137,7 @@ describe("portfolio backtest builder state", () => {
     const state = createInitialBuilderState(new Date("2026-08-11T00:00:00.000Z"));
 
     expect(builderValidationReasons(state, "vi")).toContain(
-      "Thêm ít nhất một tài sản có thể backtest.",
+      "Thêm ít nhất một tài sản có thể kiểm định.",
     );
     expect(builderValidationReasons(state, "en")).toContain("Add at least one backtestable asset.");
   });

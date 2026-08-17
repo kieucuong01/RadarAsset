@@ -17,7 +17,7 @@ export function PortfolioBenchmarkSummary({
   return (
     <div
       className="mt-5 grid gap-3 md:grid-cols-3"
-      aria-label={locale === "vi" ? "So sánh tiền với VNINDEX" : "Money comparison with VNINDEX"}
+      aria-label={locale === "vi" ? "So sánh giá trị với VNINDEX" : "Money comparison with VNINDEX"}
     >
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
         <div className="text-xs text-muted-foreground">
@@ -45,7 +45,7 @@ export function PortfolioBenchmarkSummary({
         className={`rounded-xl border p-4 ${excessPositive ? "border-bull/25 bg-bull/5" : "border-bear/25 bg-bear/5"}`}
       >
         <div className="text-xs text-muted-foreground">
-          {locale === "vi" ? "Vượt benchmark" : "Excess vs benchmark"}
+          {locale === "vi" ? "Vượt mốc tham chiếu" : "Excess vs benchmark"}
         </div>
         <div
           className={`mt-1 text-lg font-bold tabular-nums ${excessPositive ? "text-bull" : "text-bear"}`}

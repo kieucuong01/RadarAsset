@@ -43,6 +43,15 @@ const ACTIONS: Record<string, { vi: string; en: string }> = {
   NO_ACTION_INSUFFICIENT_DATA: { vi: "Chưa hành động", en: "No action yet" },
 };
 
+const STANCES: Record<string, { vi: string; en: string }> = {
+  POSITIVE: { vi: "Tích cực", en: "Positive" },
+  CONSTRUCTIVE: { vi: "Có cơ sở tăng", en: "Constructive" },
+  NEGATIVE: { vi: "Tiêu cực", en: "Negative" },
+  STRONGLY_NEGATIVE: { vi: "Rất tiêu cực", en: "Strongly negative" },
+  CAUTIOUS: { vi: "Thận trọng", en: "Cautious" },
+  INSUFFICIENT_DATA: { vi: "Chưa đủ dữ liệu", en: "Insufficient data" },
+};
+
 function stanceIcon(stance: string) {
   if (stance === "POSITIVE" || stance === "CONSTRUCTIVE") return TrendingUp;
   if (stance === "NEGATIVE" || stance === "STRONGLY_NEGATIVE") return TrendingDown;
@@ -61,6 +70,10 @@ function stanceClass(stance: string) {
 
 function actionLabel(action: string, locale: Locale) {
   return ACTIONS[action]?.[locale] ?? action.replaceAll("_", " ");
+}
+
+function stanceLabel(stance: string, locale: Locale) {
+  return STANCES[stance]?.[locale] ?? stance.replaceAll("_", " ");
 }
 
 function activateOnKeyboard(event: KeyboardEvent, activate: () => void) {
@@ -102,7 +115,7 @@ function OpinionState({ opinion, locale }: { opinion: AssetOpinionModel; locale:
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Badge variant="outline" className={cn("gap-1", stanceClass(opinion.stance))}>
-        <Icon aria-hidden="true" /> {opinion.stance.replaceAll("_", " ")}
+        <Icon aria-hidden="true" /> {stanceLabel(opinion.stance, locale)}
       </Badge>
       <FreshnessBadge state={opinion.freshness} />
       <span className="text-xs text-muted-foreground">
@@ -137,6 +150,7 @@ function ItemActions({
 }) {
   const buy = locale === "vi" ? "Mua" : "Buy";
   const sell = locale === "vi" ? "Bán" : "Sell";
+  const backtest = locale === "vi" ? "Kiểm định" : "Backtest";
   return (
     <div className="flex flex-wrap items-center gap-1.5" onClick={stopRowActivation}>
       <Button
@@ -167,19 +181,19 @@ function ItemActions({
       </Button>
       {item.backtestHref ? (
         <Button size="sm" variant="secondary" asChild>
-          <Link href={item.backtestHref} aria-label={`Backtest ${item.symbol}`}>
-            <FlaskConical aria-hidden="true" /> Backtest
+          <Link href={item.backtestHref} aria-label={`${backtest} ${item.symbol}`}>
+            <FlaskConical aria-hidden="true" /> {backtest}
           </Link>
         </Button>
       ) : (
         <Button
           size="sm"
           variant="secondary"
-          aria-label={`Backtest ${item.symbol}`}
+          aria-label={`${backtest} ${item.symbol}`}
           title={locale === "vi" ? "Đang chuẩn bị dữ liệu backtest" : "Preparing backtest data"}
           disabled
         >
-          <FlaskConical aria-hidden="true" /> Backtest
+          <FlaskConical aria-hidden="true" /> {backtest}
         </Button>
       )}
       {item.canRemove ? (
@@ -251,7 +265,9 @@ export function AssetOpinionList({
             <TableRow>
               <TableHead>{locale === "vi" ? "Tài sản" : "Asset"}</TableHead>
               <TableHead>{locale === "vi" ? "Quan điểm" : "Stance"}</TableHead>
-              <TableHead className="text-right">Quant</TableHead>
+              <TableHead className="text-right">
+                {locale === "vi" ? "Điểm Quant" : "Quant"}
+              </TableHead>
               <TableHead className="text-right">
                 {locale === "vi" ? "Tỷ trọng" : "Weight"}
               </TableHead>

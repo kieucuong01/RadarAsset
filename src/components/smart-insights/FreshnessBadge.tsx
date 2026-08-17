@@ -1,5 +1,9 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { I18nContext } from "@/lib/i18n/context";
+import { useContext } from "react";
 import type { FreshnessState } from "@/lib/backend/smart-insights-types";
 
 const styles: Record<FreshnessState, string> = {
@@ -10,21 +14,22 @@ const styles: Record<FreshnessState, string> = {
   unavailable: "border-border bg-muted text-muted-foreground",
 };
 
-const labels: Record<FreshnessState, string> = {
-  fresh: "Fresh",
-  stale: "Stale",
-  conflicting: "Conflicting",
-  partial: "Partial",
-  unavailable: "Unavailable",
+const labels: Record<FreshnessState, { vi: string; en: string }> = {
+  fresh: { vi: "Mới", en: "Fresh" },
+  stale: { vi: "Cũ", en: "Stale" },
+  conflicting: { vi: "Mâu thuẫn", en: "Conflicting" },
+  partial: { vi: "Một phần", en: "Partial" },
+  unavailable: { vi: "Chưa có", en: "Unavailable" },
 };
 
 export function FreshnessBadge({ state }: { state: FreshnessState }) {
+  const locale = useContext(I18nContext)?.locale ?? "vi";
   return (
     <Badge
       variant="outline"
       className={cn("font-mono text-[10px] uppercase tracking-wider", styles[state])}
     >
-      {labels[state]}
+      {labels[state][locale]}
     </Badge>
   );
 }

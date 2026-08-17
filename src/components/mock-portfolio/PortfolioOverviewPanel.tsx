@@ -310,11 +310,19 @@ export function PortfolioOverviewPanel({
                   };
                   const cashValue =
                     name === "Portfolio" ? payload.portfolioValue : payload.benchmarkValue;
+                  const label =
+                    name === "Portfolio"
+                      ? locale === "vi"
+                        ? "Danh mục"
+                        : name
+                      : locale === "vi"
+                        ? "Mốc tham chiếu"
+                        : name;
                   return [
                     cashValue === null || cashValue === undefined
                       ? formatNumber(Number(value))
                       : `${formatNumber(Number(value))} · ${money(cashValue)}`,
-                    name,
+                    label,
                   ];
                 }}
               />

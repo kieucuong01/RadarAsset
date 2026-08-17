@@ -50,6 +50,21 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
+function classificationLabel(value: string, locale: "vi" | "en") {
+  if (locale !== "vi") return value;
+  return (
+    (
+      {
+        "Extreme Fear": "Cực kỳ sợ hãi",
+        Fear: "Sợ hãi",
+        Neutral: "Trung tính",
+        Greed: "Tham lam",
+        "Extreme Greed": "Cực kỳ tham lam",
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+
 export function CryptoFearGreedPanel({
   data,
   mode,
@@ -94,7 +109,11 @@ export function CryptoFearGreedPanel({
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
-        <FearGreedGauge value={latest.value} label={latest.classification} locale={locale} />
+        <FearGreedGauge
+          value={latest.value}
+          label={classificationLabel(latest.classification, locale)}
+          locale={locale}
+        />
         <div className="h-[280px] min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={visible.series} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
@@ -125,7 +144,7 @@ export function CryptoFearGreedPanel({
                     locale,
                     unit: "INDEX",
                   }),
-                  "Fear & Greed",
+                  locale === "vi" ? "Sợ hãi & Tham lam" : "Fear & Greed",
                 ]}
               />
               <Line
@@ -169,7 +188,7 @@ export function CryptoFearGreedPanel({
                 <td className="px-4 py-2 text-right font-semibold tabular-nums">
                   {formatMetricValue(row.value, { locale, unit: "INDEX" })}
                 </td>
-                <td className="px-4 py-2">{row.classification}</td>
+                <td className="px-4 py-2">{classificationLabel(row.classification, locale)}</td>
                 <td className="px-4 py-2">
                   <DataStatusBadge status={mode === "sample" ? "SAMPLE" : "SYSTEM"} />
                 </td>
@@ -208,7 +227,11 @@ function FearGreedGauge({
   const y = 90 - radius * Math.sin(radians);
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 180 110" className="h-32 w-52" aria-label={`Fear and Greed ${value}`}>
+      <svg
+        viewBox="0 0 180 110"
+        className="h-32 w-52"
+        aria-label={`${locale === "vi" ? "Chỉ số Sợ hãi & Tham lam" : "Fear and Greed"} ${value}`}
+      >
         <defs>
           <linearGradient id="cryptoFearGreedGradient" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#ef4444" />

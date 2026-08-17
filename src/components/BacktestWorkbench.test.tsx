@@ -136,14 +136,14 @@ describe("BacktestWorkbench", () => {
     expect(html).toContain('aria-label="Cấu hình backtest"');
     expect(html).toContain('aria-label="Kết quả backtest"');
     expect(html).toContain("Danh mục đang chạy");
-    expect(html).toContain("Equity Curve &amp; Drawdown");
+    expect(html).toContain("Đường vốn &amp; sụt giảm");
     expect(html).toContain("Danh sách lệnh");
     expect(html).toContain("Tổng vốn");
     expect(html).toContain("Chế độ phân bổ");
-    expect(html).toContain("Trọng số cash (%)");
+    expect(html).toContain("Trọng số tiền mặt (%)");
     expect(html).toContain("Góp vốn hàng tháng");
-    expect(html).toContain("Chưa thể chạy backtest");
-    expect(html).toContain("Run Portfolio Backtest");
+    expect(html).toContain("Chưa thể chạy kiểm định");
+    expect(html).toContain("Chạy kiểm định danh mục");
   });
 
   it("initializes builder state lazily from the active locale", () => {
@@ -171,7 +171,7 @@ describe("BacktestWorkbench", () => {
     );
 
     expect(text).toContain("1,250,000 VND");
-    expect(text).toContain("12,450 bars");
+    expect(text).toContain("12,450 phiên");
     expect(text).not.toContain("1,250,000 USD");
   });
 

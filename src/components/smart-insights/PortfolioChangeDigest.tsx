@@ -8,6 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { PortfolioOpinionChange } from "@/lib/asset-opinion-changes";
 import { formatMetricValue, formatPercent, formatScore } from "@/lib/financial-format";
 
+function stanceLabel(value: string, locale: "vi" | "en") {
+  if (locale !== "vi") return value.replaceAll("_", " ");
+  const labels: Record<string, string> = {
+    POSITIVE: "Tích cực",
+    CONSTRUCTIVE: "Có cơ sở tăng",
+    NEGATIVE: "Tiêu cực",
+    STRONGLY_NEGATIVE: "Rất tiêu cực",
+    CAUTIOUS: "Thận trọng",
+    NEUTRAL: "Trung tính",
+    INSUFFICIENT_DATA: "Chưa đủ dữ liệu",
+  };
+  return labels[value] ?? labels[value.toUpperCase()] ?? value.replaceAll("_", " ");
+}
+
 export function PortfolioChangeDigest({
   changes,
   status,
@@ -32,7 +46,7 @@ export function PortfolioChangeDigest({
             </CardTitle>
             <CardDescription className="mt-1">
               {locale === "vi"
-                ? "So với briefing ngày trước · tối đa 3 thay đổi có ảnh hưởng lớn nhất."
+                ? "So với bản tin ngày trước · tối đa 3 thay đổi có ảnh hưởng lớn nhất."
                 : "Versus the prior daily briefing · at most three highest-impact changes."}
             </CardDescription>
           </div>
@@ -66,7 +80,7 @@ export function PortfolioChangeDigest({
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {change.changeType === "stance_action"
-                        ? `${change.previousStance.replaceAll("_", " ")} → ${change.currentStance.replaceAll("_", " ")}`
+                        ? `${stanceLabel(change.previousStance, locale)} → ${stanceLabel(change.currentStance, locale)}`
                         : locale === "vi"
                           ? `Điểm Quant thay đổi ${formatScore(change.scoreDelta)}`
                           : `Quant score changed ${formatScore(change.scoreDelta)}`}
@@ -100,10 +114,10 @@ export function PortfolioChangeDigest({
           <p className="px-4 py-5 text-sm text-muted-foreground">
             {status === "accumulating"
               ? locale === "vi"
-                ? "Cần thêm một briefing daily để bắt đầu so sánh thay đổi."
+                ? "Cần thêm một bản tin hằng ngày để bắt đầu so sánh thay đổi."
                 : "One more daily briefing is needed before changes can be compared."
               : locale === "vi"
-                ? "Không có thay đổi định lượng quan trọng so với briefing ngày trước."
+                ? "Không có thay đổi định lượng quan trọng so với bản tin ngày trước."
                 : "No material quant change versus the prior daily briefing."}
           </p>
         )}

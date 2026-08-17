@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BriefingModel } from "@/lib/smart-insights-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export function DecisionBrief({
   briefing,
@@ -13,13 +14,16 @@ export function DecisionBrief({
   briefing: BriefingModel | null;
   onEvidence: (id: string) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
       <CardHeader className="gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BrainCircuit className="size-5 text-primary" />
-            <CardTitle>Daily Decision Brief</CardTitle>
+            <CardTitle>
+              {locale === "vi" ? "Bản tin quyết định hằng ngày" : "Daily Decision Brief"}
+            </CardTitle>
           </div>
           <div className="flex items-center gap-2">
             <FreshnessBadge
@@ -27,13 +31,19 @@ export function DecisionBrief({
                 briefing ? (briefing.status === "complete" ? "fresh" : "partial") : "unavailable"
               }
             />
-            {briefing ? <Badge variant="outline">Revision {briefing.revision}</Badge> : null}
+            {briefing ? (
+              <Badge variant="outline">
+                {locale === "vi" ? "Bản sửa" : "Revision"} {briefing.revision}
+              </Badge>
+            ) : null}
           </div>
         </div>
         <CardDescription>
           {briefing
-            ? `Point-in-time briefing · ${briefing.localDate} · Data Confidence ${briefing.overallDataConfidence}`
-            : "No generated briefing is available. Deterministic market panels remain usable below."}
+            ? `${locale === "vi" ? "Bản tin theo thời điểm" : "Point-in-time briefing"} · ${briefing.localDate} · ${locale === "vi" ? "Độ tin cậy dữ liệu" : "Data Confidence"} ${briefing.overallDataConfidence}`
+            : locale === "vi"
+              ? "Chưa có bản tin được tạo. Các bảng thị trường định lượng bên dưới vẫn có thể sử dụng."
+              : "No generated briefing is available. Deterministic market panels remain usable below."}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 lg:grid-cols-3">
@@ -49,7 +59,7 @@ export function DecisionBrief({
                   {item.asset ? ` · ${item.asset}` : ""}
                 </Badge>
                 <span className="font-mono text-xs text-muted-foreground">
-                  Score {item.score ?? "—"}
+                  {locale === "vi" ? "Điểm" : "Score"} {item.score ?? "—"}
                 </span>
               </div>
               <h3 className="text-base font-semibold leading-snug">
@@ -57,7 +67,9 @@ export function DecisionBrief({
               </h3>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {item.whatChanged ??
-                  "AI explanation unavailable; showing deterministic signal only."}
+                  (locale === "vi"
+                    ? "Chưa có diễn giải AI; chỉ hiển thị tín hiệu định lượng."
+                    : "AI explanation unavailable; showing deterministic signal only.")}
               </p>
               <div className="mt-auto flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -69,7 +81,8 @@ export function DecisionBrief({
                     size="sm"
                     onClick={() => onEvidence(item.supportingEvidenceIds[0])}
                   >
-                    Evidence <ArrowUpRight data-icon="inline-end" />
+                    {locale === "vi" ? "Bằng chứng" : "Evidence"}{" "}
+                    <ArrowUpRight data-icon="inline-end" />
                   </Button>
                 ) : null}
               </div>
@@ -77,7 +90,9 @@ export function DecisionBrief({
           ))
         ) : (
           <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground lg:col-span-3">
-            No ranked change passed the current evidence and coverage gates.
+            {locale === "vi"
+              ? "Chưa có thay đổi nào vượt qua các điều kiện bằng chứng và độ phủ hiện tại."
+              : "No ranked change passed the current evidence and coverage gates."}
           </div>
         )}
       </CardContent>

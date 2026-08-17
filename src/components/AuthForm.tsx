@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { safeReturnTo } from "@/lib/auth/navigation";
-import { AUTH_PAGE_COPY } from "@/lib/mvp-ui";
+import { useI18n } from "@/lib/i18n/context";
 
 type AuthFormProps = {
   mode: "sign-in" | "sign-up";
@@ -30,7 +30,10 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isSignUp = mode === "sign-up";
-  const copy = isSignUp ? AUTH_PAGE_COPY.signUp : AUTH_PAGE_COPY.signIn;
+  const { t } = useI18n();
+  const copy = isSignUp
+    ? { heading: t("auth.signUpHeading"), description: t("auth.signUpDescription") }
+    : { heading: t("auth.signInHeading"), description: t("auth.signInDescription") };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,7 +52,7 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
       : await authClient.signIn.email({ email, password });
 
     if (result.error) {
-      setError(result.error.message ?? "Authentication failed. Please try again.");
+      setError(result.error.message ?? t("auth.authenticationError"));
       setPending(false);
       return;
     }
@@ -69,7 +72,7 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
           <form className="flex flex-col gap-5" onSubmit={submit}>
             {isSignUp ? (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name">{t("auth.name")}</Label>
                 <Input
                   id="name"
                   name="name"
@@ -81,7 +84,7 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
               </div>
             ) : null}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("auth.email")}</Label>
               <Input
                 id="email"
                 name="email"
@@ -94,7 +97,7 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("auth.password")}</Label>
               <Input
                 id="password"
                 name="password"
@@ -114,15 +117,15 @@ export function AuthForm({ mode, returnTo }: AuthFormProps) {
             ) : null}
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-              {isSignUp ? "Create account" : "Sign in"}
+              {isSignUp ? t("auth.createAccount") : t("auth.signIn")}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="justify-center text-sm text-muted-foreground">
-          {isSignUp ? "Already have an account?" : "New to DataVest?"}
+          {isSignUp ? t("auth.alreadyHaveAccount") : t("auth.newToDataVest")}
           <Button asChild variant="link" className="px-2">
             <Link href={isSignUp ? "/sign-in" : "/sign-up"}>
-              {isSignUp ? "Sign in" : "Create account"}
+              {isSignUp ? t("auth.signIn") : t("auth.createAccount")}
             </Link>
           </Button>
         </CardFooter>

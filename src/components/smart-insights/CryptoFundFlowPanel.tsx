@@ -52,6 +52,17 @@ function formatFlow(value: number, locale: "vi" | "en"): string {
   return formatMetricValue(value / 1_000_000, { locale, unit: "USD_MILLION" });
 }
 
+function displayAssetLabel(label: string, locale: "vi" | "en") {
+  if (locale !== "vi") return label;
+  return (
+    (
+      {
+        "Multi-asset": "Đa tài sản",
+      } as Record<string, string>
+    )[label] ?? label
+  );
+}
+
 export function CryptoFundFlowPanel({
   data,
   mode,
@@ -81,7 +92,9 @@ export function CryptoFundFlowPanel({
     return (
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">CoinShares Fund Flows</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Dòng vốn CoinShares" : "CoinShares Fund Flows"}
+          </h3>
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
@@ -95,7 +108,9 @@ export function CryptoFundFlowPanel({
     <section className="min-w-0 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">CoinShares Fund Flows</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Dòng vốn CoinShares" : "CoinShares Fund Flows"}
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
             Dòng vốn tài sản số · 12 tuần báo cáo
           </p>
@@ -115,7 +130,7 @@ export function CryptoFundFlowPanel({
               className="size-2 rounded-full"
               style={{ backgroundColor: COLORS[index % COLORS.length] }}
             />
-            {label}
+            {displayAssetLabel(label, locale)}
           </span>
         ))}
       </div>
@@ -173,7 +188,7 @@ export function CryptoFundFlowPanel({
               const total = series.at(-1)?.total ?? 0;
               return (
                 <tr key={row.label} className="border-t">
-                  <td className="px-4 py-2 font-medium">{row.label}</td>
+                  <td className="px-4 py-2 font-medium">{displayAssetLabel(row.label, locale)}</td>
                   <td
                     className={cn(
                       "px-4 py-2 text-right font-semibold tabular-nums",

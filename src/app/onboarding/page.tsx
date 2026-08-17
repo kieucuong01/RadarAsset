@@ -7,8 +7,8 @@ import { provisionOrganizationDefaults } from "@/lib/backend/organization-provis
 import { shouldCreateWorkspace } from "@/lib/auth/navigation";
 
 export const metadata: Metadata = {
-  title: "Thiết lập workspace",
-  description: "Tạo hoặc kích hoạt workspace DataVest của bạn.",
+  title: "Thiết lập không gian làm việc",
+  description: "Tạo hoặc kích hoạt không gian làm việc DataVest của bạn.",
   robots: { index: false, follow: false },
 };
 

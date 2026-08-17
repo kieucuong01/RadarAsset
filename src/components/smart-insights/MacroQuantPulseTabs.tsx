@@ -27,9 +27,13 @@ export function MacroQuantPulseTabs({
     <Tabs defaultValue="regime" className="min-w-0">
       <div className="overflow-x-auto pb-1">
         <TabsList className="h-auto min-w-max justify-start">
-          <TabsTrigger value="regime">Regime</TabsTrigger>
-          <TabsTrigger value="events">Event Risk</TabsTrigger>
-          <TabsTrigger value="energy">Energy</TabsTrigger>
+          <TabsTrigger value="regime">
+            {locale === "vi" ? "Chế độ thị trường" : "Regime"}
+          </TabsTrigger>
+          <TabsTrigger value="events">
+            {locale === "vi" ? "Rủi ro sự kiện" : "Event Risk"}
+          </TabsTrigger>
+          <TabsTrigger value="energy">{locale === "vi" ? "Năng lượng" : "Energy"}</TabsTrigger>
         </TabsList>
       </div>
       <TabsContent value="regime" className="mt-4 min-w-0">

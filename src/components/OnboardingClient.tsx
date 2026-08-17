@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
-import { AUTH_PAGE_COPY } from "@/lib/mvp-ui";
+import { useI18n } from "@/lib/i18n/context";
 
 type OrganizationSummary = {
   id: string;
@@ -36,6 +36,7 @@ export function OnboardingClient({
   createNew: boolean;
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const activationStarted = useRef(false);
   const [pending, setPending] = useState(organizations.length > 0 && !createNew);
   const [error, setError] = useState<string | null>(null);
@@ -50,9 +51,7 @@ export function OnboardingClient({
       .setActive({ organizationId: existingOrganization.id })
       .then((result) => {
         if (result.error) {
-          setError(
-            result.error.message ?? "We could not activate your workspace. Please try again.",
-          );
+          setError(result.error.message ?? t("auth.activationError"));
           setPending(false);
           return;
         }
@@ -60,7 +59,7 @@ export function OnboardingClient({
         router.replace("/portfolio");
         router.refresh();
       });
-  }, [createNew, organizations, router]);
+  }, [createNew, organizations, router, t]);
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,14 +70,14 @@ export function OnboardingClient({
     const name = String(formData.get("organizationName") ?? "").trim();
     const slug = organizationSlug(name);
     if (!slug) {
-      setError("Enter a workspace name with at least one letter or number.");
+      setError(t("auth.workspaceNameError"));
       setPending(false);
       return;
     }
 
     const created = await authClient.organization.create({ name, slug });
     if (created.error || !created.data) {
-      setError(created.error?.message ?? "We could not create your workspace. Please try again.");
+      setError(created.error?.message ?? t("auth.workspaceCreateError"));
       setPending(false);
       return;
     }
@@ -87,9 +86,7 @@ export function OnboardingClient({
       organizationId: created.data.id,
     });
     if (activated.error) {
-      setError(
-        activated.error.message ?? "Workspace created. Reload this page to finish activation.",
-      );
+      setError(activated.error.message ?? t("auth.workspaceReloadError"));
       setPending(false);
       return;
     }
@@ -102,27 +99,27 @@ export function OnboardingClient({
     <main className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-lg items-center px-4 py-12">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="text-2xl">{AUTH_PAGE_COPY.onboarding.heading}</CardTitle>
+          <CardTitle className="text-2xl">{t("auth.onboardingHeading")}</CardTitle>
           <CardDescription>
             {organizations.length > 0 && !createNew
-              ? "Activating your existing workspace."
-              : AUTH_PAGE_COPY.onboarding.description}
+              ? t("auth.activatingWorkspace")
+              : t("auth.onboardingDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {organizations.length > 0 && !createNew ? (
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <LoaderCircle className="animate-spin" />
-              Opening {organizations[0]?.name}
+              {t("auth.openingWorkspace", { name: organizations[0]?.name ?? "" })}
             </div>
           ) : (
             <form className="flex flex-col gap-5" onSubmit={createWorkspace}>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="organizationName">Workspace name</Label>
+                <Label htmlFor="organizationName">{t("auth.workspaceName")}</Label>
                 <Input
                   id="organizationName"
                   name="organizationName"
-                  placeholder="My investment workspace"
+                  placeholder={t("auth.workspacePlaceholder")}
                   required
                   minLength={2}
                   maxLength={80}
@@ -139,7 +136,7 @@ export function OnboardingClient({
                 {pending ? (
                   <LoaderCircle data-icon="inline-start" className="animate-spin" />
                 ) : null}
-                Create workspace
+                {t("auth.createWorkspace")}
               </Button>
             </form>
           )}
@@ -149,7 +146,7 @@ export function OnboardingClient({
                 {error}
               </p>
               <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-                Try again
+                {t("auth.tryAgain")}
               </Button>
             </div>
           ) : null}

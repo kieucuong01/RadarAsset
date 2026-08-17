@@ -94,7 +94,9 @@ export function CryptoEtfFlowPanel({
     return (
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">ETF Flow · BTC, ETH, SOL</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Dòng tiền ETF · BTC, ETH, SOL" : "ETF Flow · BTC, ETH, SOL"}
+          </h3>
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
@@ -108,8 +110,12 @@ export function CryptoEtfFlowPanel({
     <section className="min-w-0 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">ETF Flow · BTC, ETH, SOL</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Dòng tiền ETF hằng ngày · Farside</p>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Dòng tiền ETF · BTC, ETH, SOL" : "ETF Flow · BTC, ETH, SOL"}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {locale === "vi" ? "Dòng tiền ETF hằng ngày · Farside" : "Daily ETF flows · Farside"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <DataStatusBadge status={mode === "sample" ? "SAMPLE" : "SYSTEM"} />
@@ -156,7 +162,10 @@ export function CryptoEtfFlowPanel({
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2" aria-label="ETF chart legend">
+      <div
+        className="mt-5 flex flex-wrap gap-2"
+        aria-label={locale === "vi" ? "Chú giải biểu đồ ETF" : "ETF chart legend"}
+      >
         {ASSETS.map((asset) => {
           const active = visibleAssets.has(asset.key);
           return (
@@ -225,7 +234,10 @@ export function CryptoEtfFlowPanel({
         <table className="min-w-[760px] w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
-              {["Date", "BTC", "ETH", "SOL", "Total"].map((header) => (
+              {(locale === "vi"
+                ? ["Ngày", "BTC", "ETH", "SOL", "Tổng"]
+                : ["Date", "BTC", "ETH", "SOL", "Total"]
+              ).map((header) => (
                 <th key={header} className="px-4 py-2 text-right first:text-left font-medium">
                   {header}
                 </th>

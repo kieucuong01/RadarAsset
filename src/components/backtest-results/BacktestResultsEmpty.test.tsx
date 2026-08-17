@@ -14,8 +14,8 @@ describe("BacktestResultsEmpty", () => {
     );
 
     expect(html).toContain("Danh mục đang chạy");
-    expect(html).toContain("Chạy portfolio backtest");
-    expect(html).toContain("Equity Curve &amp; Drawdown");
+    expect(html).toContain("Chạy kiểm định danh mục");
+    expect(html).toContain("Đường vốn &amp; sụt giảm");
     expect(html).toContain("Danh sách lệnh");
     expect(html).not.toMatch(/\+\d|Sharpe\s+\d|BTC.*PnL/);
   });

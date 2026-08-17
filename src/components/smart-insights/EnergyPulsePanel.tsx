@@ -38,7 +38,7 @@ export function EnergyPulsePanel({
     return (
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">Energy Pulse</h3>
+          <h3 className="font-semibold">{locale === "vi" ? "Nhịp năng lượng" : "Energy Pulse"}</h3>
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
@@ -50,14 +50,18 @@ export function EnergyPulsePanel({
     <section className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Energy &amp; Oil Shock</h3>
+          <h3 className="font-semibold">
+            {locale === "vi" ? "Năng lượng & cú sốc dầu" : "Energy & Oil Shock"}
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Giá dầu, spread và shock score · {data.methodology}
+            {locale === "vi"
+              ? "Giá dầu, chênh lệch và điểm cú sốc · "
+              : "Oil prices, spread and shock score · "}
+            {data.methodology}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <DataStatusBadge status={data.status === "UNAVAILABLE" ? "UNAVAILABLE" : "SYSTEM"} />
-          <span className="text-xs font-medium text-muted-foreground">{data.status}</span>
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -68,15 +72,24 @@ export function EnergyPulsePanel({
               {formatMetricValue(card.value, { locale, unit: card.unit })}
             </p>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {card.asOf ? `As of ${dateLabel(card.asOf, locale)}` : "Unavailable"}
+              {card.asOf
+                ? `${locale === "vi" ? "Tính đến " : "As of "}${dateLabel(card.asOf, locale)}`
+                : locale === "vi"
+                  ? "Chưa có dữ liệu"
+                  : "Unavailable"}
             </p>
           </article>
         ))}
       </div>
       <div className="min-w-0 rounded-xl border bg-background/40 p-3">
         <div className="mb-2 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-          <span>Brent &amp; WTI · unit: USD/barrel</span>
-          <time dateTime={data.asOf}>As of {dateLabel(data.asOf, locale)}</time>
+          <span>
+            {locale === "vi" ? "Brent & WTI · đơn vị: USD/thùng" : "Brent & WTI · unit: USD/barrel"}
+          </span>
+          <time dateTime={data.asOf}>
+            {locale === "vi" ? "Tính đến " : "As of "}
+            {dateLabel(data.asOf, locale)}
+          </time>
         </div>
         <div className="h-[300px] min-w-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -102,7 +115,13 @@ export function EnergyPulsePanel({
                     locale,
                     unit: "USD/barrel",
                   }),
-                  name === "brent" ? "Brent USD/barrel" : "WTI USD/barrel",
+                  name === "brent"
+                    ? locale === "vi"
+                      ? "Brent USD/thùng"
+                      : "Brent USD/barrel"
+                    : locale === "vi"
+                      ? "WTI USD/thùng"
+                      : "WTI USD/barrel",
                 ]}
               />
               <Line
@@ -141,9 +160,9 @@ export function EnergyPulsePanel({
         <table className="w-full min-w-[680px] text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
-              <th className="px-4 py-2 text-left">Metric</th>
+              <th className="px-4 py-2 text-left">{locale === "vi" ? "Chỉ số" : "Metric"}</th>
               <th className="px-4 py-2 text-left">Nguồn</th>
-              <th className="px-4 py-2 text-left">Observed</th>
+              <th className="px-4 py-2 text-left">{locale === "vi" ? "Quan sát" : "Observed"}</th>
               <th className="px-4 py-2 text-right">Trạng thái</th>
             </tr>
           </thead>
@@ -153,7 +172,9 @@ export function EnergyPulsePanel({
                 <td className="px-4 py-2 font-medium">{row.metricCode}</td>
                 <td className="px-4 py-2">{row.sourceCode}</td>
                 <td className="px-4 py-2">{dateLabel(row.observedAt, locale)}</td>
-                <td className="px-4 py-2 text-right">System data</td>
+                <td className="px-4 py-2 text-right">
+                  {locale === "vi" ? "Dữ liệu hệ thống" : "System data"}
+                </td>
               </tr>
             ))}
           </tbody>

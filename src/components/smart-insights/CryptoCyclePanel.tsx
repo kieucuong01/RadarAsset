@@ -40,10 +40,10 @@ function dateLabel(value: string, locale: "vi" | "en") {
   }).format(new Date(value));
 }
 
-function classificationLabel(value: string | null): string {
-  if (value === "bitcoin_season") return "Bitcoin Season";
-  if (value === "altcoin_season") return "Altcoin Season";
-  return "Neutral";
+function classificationLabel(value: string | null, locale: "vi" | "en"): string {
+  if (value === "bitcoin_season") return locale === "vi" ? "Mùa Bitcoin" : "Bitcoin Season";
+  if (value === "altcoin_season") return locale === "vi" ? "Mùa Altcoin" : "Altcoin Season";
+  return locale === "vi" ? "Trung tính" : "Neutral";
 }
 
 function freshness(status: "system" | "partial" | "unavailable") {
@@ -76,7 +76,9 @@ export function CryptoCyclePanel({
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
-          Unavailable — chưa có quan sát BlockchainCenter hoặc CBBI đạt kiểm định.
+          {locale === "vi"
+            ? "Chưa có dữ liệu — chưa có quan sát BlockchainCenter hoặc CBBI đạt kiểm định."
+            : "Unavailable — no validated BlockchainCenter or CBBI observation."}
         </p>
       </section>
     );
@@ -88,7 +90,9 @@ export function CryptoCyclePanel({
         <article className="rounded-2xl border border-border bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold">Altcoin Season Index</h3>
+              <h3 className="font-semibold">
+                {locale === "vi" ? "Chỉ số mùa Altcoin" : "Altcoin Season Index"}
+              </h3>
               <p className="mt-1 text-xs text-muted-foreground">
                 Ba cửa sổ độc lập; ngưỡng 25 và 75 áp dụng cho chỉ số 90 ngày.
               </p>
@@ -125,12 +129,16 @@ export function CryptoCyclePanel({
                 />
               </div>
               <div className="mt-2 grid grid-cols-3 text-[11px] text-muted-foreground">
-                <span>Bitcoin Season · ≤25</span>
-                <span className="text-center">Neutral · 26–74</span>
-                <span className="text-right">Altcoin Season · ≥75</span>
+                <span>{locale === "vi" ? "Mùa Bitcoin" : "Bitcoin Season"} · ≤25</span>
+                <span className="text-center">
+                  {locale === "vi" ? "Trung tính" : "Neutral"} · 26–74
+                </span>
+                <span className="text-right">
+                  {locale === "vi" ? "Mùa Altcoin" : "Altcoin Season"} · ≥75
+                </span>
               </div>
               <p className="mt-3 text-sm font-semibold">
-                90D: {classificationLabel(altcoin.classification)}
+                90D: {classificationLabel(altcoin.classification, locale)}
               </p>
             </div>
           ) : null}
@@ -153,9 +161,13 @@ export function CryptoCyclePanel({
         <article className="rounded-2xl border border-border bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold">CBBI Confidence</h3>
+              <h3 className="font-semibold">
+                {locale === "vi" ? "Độ tin cậy CBBI" : "CBBI Confidence"}
+              </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Confidence lịch sử và chín thành phần công khai mới nhất.
+                {locale === "vi"
+                  ? "Độ tin cậy lịch sử và chín thành phần công khai mới nhất."
+                  : "Historical confidence and the latest nine public components."}
               </p>
             </div>
             <FreshnessBadge state={freshness(visible!.cbbi.status)} />
@@ -163,7 +175,9 @@ export function CryptoCyclePanel({
 
           <div className="mt-5 grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
             <div className="rounded-xl border bg-background/50 p-5 text-center">
-              <p className="text-xs text-muted-foreground">Confidence</p>
+              <p className="text-xs text-muted-foreground">
+                {locale === "vi" ? "Độ tin cậy" : "Confidence"}
+              </p>
               <p className="mt-2 font-mono text-4xl font-bold tabular-nums">
                 {formatPercent(cbbi.confidence)}
               </p>
@@ -196,7 +210,7 @@ export function CryptoCyclePanel({
                       labelFormatter={(value) => dateLabel(String(value), locale)}
                       formatter={(value) => [
                         formatPercent(value == null ? null : Number(value)),
-                        "CBBI Confidence",
+                        locale === "vi" ? "Độ tin cậy CBBI" : "CBBI Confidence",
                       ]}
                     />
                     <Line

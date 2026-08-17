@@ -40,7 +40,7 @@ export function DataHealthPanel({ sources }: { sources: HealthModel["sources"] }
       <CardHeader className="border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
           <DatabaseZap className="size-5 text-primary" />
-          <CardTitle>Data Health</CardTitle>
+          <CardTitle>Sức khỏe dữ liệu</CardTitle>
           {!sources.length ? <DataStatusBadge status="SAMPLE" /> : null}
         </div>
         <CardDescription>

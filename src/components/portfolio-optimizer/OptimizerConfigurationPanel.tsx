@@ -77,7 +77,7 @@ export function OptimizerConfigurationPanel({
   onAssetRemove,
   onOptimize,
 }: OptimizerConfigurationPanelProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <Card className="h-fit lg:sticky lg:top-20">
@@ -236,7 +236,16 @@ export function OptimizerConfigurationPanel({
                 <span className="min-w-0">
                   <span className="block font-semibold">{asset.symbol}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {asset.market} · {formatCount(asset.rowCount)} {t("optimizer.bars")}
+                    {locale === "vi"
+                      ? asset.market === "vn_equity"
+                        ? "Chứng khoán Việt Nam"
+                        : asset.market === "crypto_spot"
+                          ? "Crypto giao ngay"
+                          : asset.market === "metal_spot"
+                            ? "XAU/USD giao ngay"
+                            : asset.market
+                      : asset.market}{" "}
+                    · {formatCount(asset.rowCount)} {t("optimizer.bars")}
                   </span>
                 </span>
                 <Button

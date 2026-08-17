@@ -70,7 +70,7 @@ export function CryptoDerivativesPressurePanel({
           <DataStatusBadge status="UNAVAILABLE" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
-          Unavailable — chưa có bảng công khai CoinGlass đạt kiểm định.
+          Chưa có dữ liệu — chưa có bảng công khai CoinGlass đạt kiểm định.
         </p>
       </section>
     );
@@ -97,9 +97,9 @@ export function CryptoDerivativesPressurePanel({
         <div className="mt-5">
           <div className="grid gap-3 sm:grid-cols-3">
             {[
-              ["Annualized", latestMargin.annualizedRate],
-              ["Daily", latestMargin.dailyRate],
-              ["Hourly", latestMargin.hourlyRate],
+              [locale === "vi" ? "Theo năm" : "Annualized", latestMargin.annualizedRate],
+              [locale === "vi" ? "Theo ngày" : "Daily", latestMargin.dailyRate],
+              [locale === "vi" ? "Theo giờ" : "Hourly", latestMargin.hourlyRate],
             ].map(([label, value]) => (
               <article key={String(label)} className="rounded-xl border bg-background/50 p-4">
                 <p className="text-xs text-muted-foreground">{label}</p>
@@ -131,7 +131,7 @@ export function CryptoDerivativesPressurePanel({
                     labelFormatter={(value) => dateLabel(String(value), locale)}
                     formatter={(value) => [
                       rate(value == null ? null : Number(value)),
-                      "Annualized",
+                      locale === "vi" ? "Quy đổi theo năm" : "Annualized",
                     ]}
                   />
                   <Line
@@ -156,7 +156,8 @@ export function CryptoDerivativesPressurePanel({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
-              CoinGlass Margin Fee Chart <ExternalLink className="size-3" />
+              {locale === "vi" ? "Biểu đồ phí ký quỹ CoinGlass" : "CoinGlass Margin Fee Chart"}{" "}
+              <ExternalLink className="size-3" />
             </a>
           </div>
         </div>
@@ -167,17 +168,30 @@ export function CryptoDerivativesPressurePanel({
           <table className="min-w-[920px] w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
-                {[
-                  "Asset",
-                  "Current",
-                  "Long price",
-                  "Long distance",
-                  "Long level",
-                  "Short price",
-                  "Short distance",
-                  "Short level",
-                  "Effective",
-                ].map((header) => (
+                {(locale === "vi"
+                  ? [
+                      "Tài sản",
+                      "Hiện tại",
+                      "Giá Long",
+                      "Khoảng cách Long",
+                      "Mức Long",
+                      "Giá Short",
+                      "Khoảng cách Short",
+                      "Mức Short",
+                      "Hiệu lực",
+                    ]
+                  : [
+                      "Asset",
+                      "Current",
+                      "Long price",
+                      "Long distance",
+                      "Long level",
+                      "Short price",
+                      "Short distance",
+                      "Short level",
+                      "Effective",
+                    ]
+                ).map((header) => (
                   <th key={header} className="px-3 py-2 text-right first:text-left font-medium">
                     {header}
                   </th>
@@ -226,7 +240,8 @@ export function CryptoDerivativesPressurePanel({
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-primary hover:underline"
           >
-            CoinGlass Liquidation Max Pain <ExternalLink className="size-3" />
+            {locale === "vi" ? "Mức thanh lý tối đa CoinGlass" : "CoinGlass Liquidation Max Pain"}{" "}
+            <ExternalLink className="size-3" />
           </a>
         </div>
       ) : null}

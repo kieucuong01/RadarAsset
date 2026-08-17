@@ -34,10 +34,14 @@ export function EvidenceDrawer({
         <SheetHeader>
           <div className="flex items-center gap-2">
             <FileSearch className="size-5 text-primary" />
-            <SheetTitle>Evidence & Methodology</SheetTitle>
+            <SheetTitle>
+              {locale === "vi" ? "Bằng chứng & phương pháp" : "Evidence & Methodology"}
+            </SheetTitle>
           </div>
           <SheetDescription>
-            Tenant-scoped point-in-time provenance for the selected briefing fact.
+            {locale === "vi"
+              ? "Nguồn gốc theo thời điểm của dữ kiện bản tin đã chọn trong không gian làm việc."
+              : "Tenant-scoped point-in-time provenance for the selected briefing fact."}
           </SheetDescription>
         </SheetHeader>
         {evidence ? (
@@ -48,13 +52,17 @@ export function EvidenceDrawer({
                 {formatEvidenceDisplayValue(evidence, locale)}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="outline">{evidence.asset ?? "Global"}</Badge>
+                <Badge variant="outline">
+                  {evidence.asset ?? (locale === "vi" ? "Toàn cầu" : "Global")}
+                </Badge>
                 <Badge variant="outline">{evidence.sourceCode}</Badge>
               </div>
             </div>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-muted-foreground">Effective period</dt>
+                <dt className="text-muted-foreground">
+                  {locale === "vi" ? "Khoảng hiệu lực" : "Effective period"}
+                </dt>
                 <dd>
                   {evidence.effectiveStart}
                   <br />
@@ -62,21 +70,27 @@ export function EvidenceDrawer({
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Observed at</dt>
+                <dt className="text-muted-foreground">
+                  {locale === "vi" ? "Thời điểm quan sát" : "Observed at"}
+                </dt>
                 <dd>{evidence.observedAt}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Methodology</dt>
+                <dt className="text-muted-foreground">
+                  {locale === "vi" ? "Phương pháp" : "Methodology"}
+                </dt>
                 <dd>{evidence.methodologyVersion}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Formatting rule</dt>
+                <dt className="text-muted-foreground">
+                  {locale === "vi" ? "Quy tắc định dạng" : "Formatting rule"}
+                </dt>
                 <dd>{evidence.formula ?? "—"}</dd>
               </div>
             </dl>
             {evidence.warnings.length ? (
               <div>
-                <h3 className="font-semibold">Warnings</h3>
+                <h3 className="font-semibold">{locale === "vi" ? "Cảnh báo" : "Warnings"}</h3>
                 <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
                   {evidence.warnings.map((warning) => (
                     <li key={warning}>{warning}</li>
@@ -91,13 +105,16 @@ export function EvidenceDrawer({
                 target="_blank"
                 rel="noreferrer"
               >
-                Open source <ExternalLink className="size-4" />
+                {locale === "vi" ? "Mở nguồn dữ liệu" : "Open source"}{" "}
+                <ExternalLink className="size-4" />
               </a>
             ) : null}
           </div>
         ) : (
           <p className="mt-6 text-sm text-muted-foreground">
-            Evidence is loading or no longer accessible.
+            {locale === "vi"
+              ? "Bằng chứng đang tải hoặc không còn truy cập được."
+              : "Evidence is loading or no longer accessible."}
           </p>
         )}
       </SheetContent>

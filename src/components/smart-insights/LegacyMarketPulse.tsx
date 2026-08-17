@@ -29,9 +29,18 @@ import type {
 import { fetchParsed, kronosShadowSchema } from "@/lib/smart-insights-client";
 
 const SAMPLE_MARKET_METRICS = {
-  crypto: ["ETF Flow", "On-chain Activity", "Stablecoin Liquidity"],
-  macro: ["Real Yield", "USD Liquidity", "Inflation Trend"],
-  gold: ["XAU Momentum", "CFTC Positioning", "Central-bank Demand"],
+  crypto: {
+    vi: ["Dòng tiền ETF", "Hoạt động on-chain", "Thanh khoản stablecoin"],
+    en: ["ETF Flow", "On-chain Activity", "Stablecoin Liquidity"],
+  },
+  macro: {
+    vi: ["Lợi suất thực", "Thanh khoản USD", "Xu hướng lạm phát"],
+    en: ["Real Yield", "USD Liquidity", "Inflation Trend"],
+  },
+  gold: {
+    vi: ["Động lượng XAU", "Vị thế CFTC", "Nhu cầu ngân hàng trung ương"],
+    en: ["XAU Momentum", "CFTC Positioning", "Central-bank Demand"],
+  },
 };
 
 export function LegacyMarketPulse({
@@ -127,7 +136,7 @@ export function LegacyMarketPulse({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 id="market-pulse-heading" className="text-2xl font-bold tracking-tight">
-              Market Pulse
+              {locale === "vi" ? "Nhịp thị trường" : "Market Pulse"}
             </h2>
             <Badge variant="outline">{locale === "vi" ? "Dữ liệu hiện tại" : "Current data"}</Badge>
           </div>
@@ -138,8 +147,12 @@ export function LegacyMarketPulse({
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-xs">
-          <span className="uppercase text-muted-foreground">Regime</span>
-          <strong>{selectedRegime?.label ?? "Unavailable"}</strong>
+          <span className="uppercase text-muted-foreground">
+            {locale === "vi" ? "Chế độ" : "Regime"}
+          </span>
+          <strong>
+            {selectedRegime?.label ?? (locale === "vi" ? "Chưa có dữ liệu" : "Unavailable")}
+          </strong>
           <FreshnessBadge state={selectedRegime?.freshness ?? "unavailable"} />
         </div>
       </div>
@@ -147,8 +160,8 @@ export function LegacyMarketPulse({
       <Tabs value={market} onValueChange={(value) => onMarketChange(value as InsightMarket)}>
         <TabsList className="grid w-full grid-cols-3 sm:w-fit">
           <TabsTrigger value="crypto">Crypto</TabsTrigger>
-          <TabsTrigger value="macro">Macro</TabsTrigger>
-          <TabsTrigger value="gold">Gold</TabsTrigger>
+          <TabsTrigger value="macro">{locale === "vi" ? "Vĩ mô" : "Macro"}</TabsTrigger>
+          <TabsTrigger value="gold">{locale === "vi" ? "Vàng" : "Gold"}</TabsTrigger>
         </TabsList>
         <TabsContent value="crypto" className="mt-4">
           <CryptoQuantPulseTabs
@@ -197,10 +210,14 @@ function MetricGrid({
     <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold capitalize">{market} Quant Pulse</h3>
+          <h3 className="font-semibold capitalize">
+            {locale === "vi"
+              ? `Nhịp Quant ${market === "gold" ? "vàng" : market === "macro" ? "vĩ mô" : "crypto"}`
+              : `${market} Quant Pulse`}
+          </h3>
           <p className="text-xs text-muted-foreground">
             {locale === "vi"
-              ? "Quan sát point-in-time mới nhất."
+              ? "Quan sát mới nhất theo thời điểm."
               : "Latest point-in-time observations."}
           </p>
         </div>
@@ -224,20 +241,21 @@ function MetricGrid({
                 </p>
                 <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span className="truncate">
-                    {metric.asset ?? "Global"} · {metric.sourceCode}
+                    {metric.asset ?? (locale === "vi" ? "Toàn cầu" : "Global")} ·{" "}
+                    {metric.sourceCode}
                   </span>
                   <a
                     href={metric.sourceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`Open ${metric.sourceCode}`}
+                    aria-label={`${locale === "vi" ? "Mở" : "Open"} ${metric.sourceCode}`}
                   >
                     <ExternalLink className="size-3.5" />
                   </a>
                 </div>
               </article>
             ))
-          : SAMPLE_MARKET_METRICS[market].map((label, index) => (
+          : SAMPLE_MARKET_METRICS[market][locale].map((label, index) => (
               <article key={label} className="rounded-xl border bg-background/50 p-4">
                 <p className="text-xs text-muted-foreground">{label}</p>
                 <p className="mt-2 font-mono text-xl font-semibold">{[50, 0, 100][index]}</p>

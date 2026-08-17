@@ -60,10 +60,36 @@ export function BacktestLegCard({
               <span
                 className={cn(compact && "font-mono text-xs uppercase tracking-wider text-primary")}
               >
-                {compact ? `Leg #${leg.symbol}` : leg.symbol}
+                {compact
+                  ? locale === "vi"
+                    ? `Nhánh #${leg.symbol}`
+                    : `Leg #${leg.symbol}`
+                  : leg.symbol}
               </span>
-              {!compact ? <Badge variant="secondary">{leg.market}</Badge> : null}
-              <Badge variant="outline">{leg.freshness}</Badge>
+              {!compact ? (
+                <Badge variant="secondary">
+                  {locale === "vi"
+                    ? leg.market === "vn_equity"
+                      ? "Chứng khoán Việt Nam"
+                      : leg.market === "crypto_spot"
+                        ? "Crypto giao ngay"
+                        : leg.market === "metal_spot"
+                          ? "XAU/USD giao ngay"
+                          : leg.market
+                    : leg.market}
+                </Badge>
+              ) : null}
+              <Badge variant="outline">
+                {locale === "vi"
+                  ? leg.freshness === "fresh"
+                    ? "Mới"
+                    : leg.freshness === "stale"
+                      ? "Cũ"
+                      : leg.freshness === "unavailable"
+                        ? "Chưa có"
+                        : "Dữ liệu mẫu"
+                  : leg.freshness}
+              </Badge>
             </CardTitle>
             <CardDescription className={cn("mt-1", compact ? "line-clamp-2" : "truncate")}>
               {leg.name} · {leg.currency} · {formatCount(leg.rowCount)} {t("backtest.builder.bars")}
@@ -248,8 +274,15 @@ export function BacktestLegCard({
       </CardContent>
 
       <CardFooter className="justify-between gap-3 text-xs text-muted-foreground">
-        <span>Dataset {leg.datasetVersionId}</span>
-        <span>{timeframe} · long-only · next-bar open</span>
+        <span>
+          {locale === "vi" ? "Bộ dữ liệu" : "Dataset"} {leg.datasetVersionId}
+        </span>
+        <span>
+          {timeframe} ·{" "}
+          {locale === "vi"
+            ? "chỉ mua · khớp giá mở cửa phiên kế tiếp"
+            : "long-only · next-bar open"}
+        </span>
       </CardFooter>
     </Card>
   );

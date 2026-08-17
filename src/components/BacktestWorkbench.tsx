@@ -32,7 +32,20 @@ export function BacktestWorkbench({
   const [run, setRun] = useState<BacktestRun | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const outputState = backtestOutputState(run?.status ?? null);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const runStatusLabel = (status: BacktestRun["status"]) => {
+    if (locale !== "vi") return status;
+    const labels: Partial<Record<BacktestRun["status"], string>> = {
+      queued: "Đang chờ",
+      running: "Đang chạy",
+      cancel_requested: "Đang yêu cầu hủy",
+      cancelled: "Đã hủy",
+      succeeded: "Đã hoàn tất",
+      failed: "Thất bại",
+      timed_out: "Quá thời gian",
+    };
+    return labels[status] ?? status;
+  };
 
   useEffect(() => {
     if (!run || !isActiveRun(run.status)) return;
@@ -87,7 +100,7 @@ export function BacktestWorkbench({
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Activity />
-                    Run {run.id.slice(0, 8)}
+                    {locale === "vi" ? "Lần chạy" : "Run"} {run.id.slice(0, 8)}
                   </CardTitle>
                   <CardDescription className="mt-1">
                     {t("backtest.activeRunDescription", {
@@ -97,7 +110,7 @@ export function BacktestWorkbench({
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{run.status}</Badge>
+                  <Badge variant="secondary">{runStatusLabel(run.status)}</Badge>
                   <Button
                     type="button"
                     variant="outline"

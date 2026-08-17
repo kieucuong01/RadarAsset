@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/command";
 import { APP_ROUTES, type AppRouteId } from "@/lib/navigation";
 import { useTheme } from "@/lib/theme";
+import { useI18n } from "@/lib/i18n/context";
 
 const OPEN_EVENT = "radar:command-palette:open";
 
@@ -39,6 +40,7 @@ function openCommandPalette() {
 }
 
 export function CommandPaletteTrigger() {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -47,7 +49,7 @@ export function CommandPaletteTrigger() {
       className="hidden w-56 items-center gap-2 rounded-full bg-muted/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted sm:flex"
     >
       <Sparkles className="size-4" />
-      <span className="flex-1 text-left">Search pages…</span>
+      <span className="flex-1 text-left">{t("command.searchPages")}</span>
       <kbd className="hidden items-center gap-0.5 rounded border border-border bg-background/60 px-1.5 py-0.5 font-mono text-[10px] md:inline-flex">
         Ctrl K
       </kbd>
@@ -59,6 +61,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { theme, toggle } = useTheme();
+  const { t } = useI18n();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -83,17 +86,17 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search pages or commands…" />
+      <CommandInput placeholder={t("command.searchPlaceholder")} />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>{t("command.noResults")}</CommandEmpty>
 
-        <CommandGroup heading="Navigation">
+        <CommandGroup heading={t("command.navigation")}>
           {APP_ROUTES.map((route) => {
             const Icon = routeIcons[route.id];
             return (
               <CommandItem key={route.id} onSelect={() => go(route.href)}>
                 <Icon className="mr-2 size-4" />
-                {route.label}
+                {t(`routes.${route.id}`)}
               </CommandItem>
             );
           })}
@@ -101,7 +104,7 @@ export function CommandPalette() {
 
         <CommandSeparator />
 
-        <CommandGroup heading="Actions">
+        <CommandGroup heading={t("command.actions")}>
           <CommandItem
             onSelect={() => {
               toggle();
@@ -109,7 +112,7 @@ export function CommandPalette() {
             }}
           >
             {theme === "dark" ? <Sun className="mr-2 size-4" /> : <Moon className="mr-2 size-4" />}
-            Toggle theme
+            {t("command.toggleTheme")}
           </CommandItem>
         </CommandGroup>
       </CommandList>

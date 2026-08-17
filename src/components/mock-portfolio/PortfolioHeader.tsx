@@ -5,14 +5,14 @@ import type { PortfolioResponse } from "@/lib/backend/types";
 import { useI18n } from "@/lib/i18n/context";
 
 export function PortfolioHeader({ portfolio }: { portfolio: PortfolioResponse | null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const asOf = portfolio?.dataAsOf
-    ? new Date(portfolio.dataAsOf).toLocaleString("en-US", {
+    ? new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-      })
+      }).format(new Date(portfolio.dataAsOf))
     : t("portfolio.header.notLoaded");
 
   return (
@@ -31,7 +31,7 @@ export function PortfolioHeader({ portfolio }: { portfolio: PortfolioResponse | 
               {t("portfolio.header.dataSource")}
             </div>
             <div className="mt-1 text-foreground">
-              {portfolio?.dataSource ?? "local"} - {asOf}
+              {portfolio?.dataSource ?? (locale === "vi" ? "cục bộ" : "local")} - {asOf}
             </div>
           </div>
         </div>

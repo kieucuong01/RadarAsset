@@ -110,7 +110,7 @@ describe("PortfolioOptimizerWorkbench formatting", () => {
     expect(html.match(/data-axis="true">5%<\/span>/g) ?? []).toHaveLength(2);
     expect(html).toContain("Phân bổ tối ưu");
     expect(html).toContain("Phân bổ tài sản");
-    expect(html).toContain("Risk / Return — Expected Return vs Volatility");
+    expect(html).toContain("Rủi ro / Lợi nhuận — Lợi nhuận kỳ vọng và biến động");
     expect(html).toContain("Ma trận tương quan lịch sử");
     expect(html).toContain("Chi tiết phân bổ");
   });
@@ -122,7 +122,7 @@ describe("PortfolioOptimizerWorkbench formatting", () => {
       </I18nProvider>,
     );
 
-    expect(html).toContain("Risk tolerance: 1.2346");
-    expect(html).not.toContain("Risk tolerance: 1.234567");
+    expect(html).toContain("Mức chịu rủi ro: 1.2346");
+    expect(html).not.toContain("Mức chịu rủi ro: 1.234567");
   });
 });

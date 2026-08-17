@@ -37,7 +37,7 @@ export function PortfolioAssumptionsPanel({
   dispatch,
   isSidebar,
 }: PortfolioAssumptionsPanelProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const selectedAdjustmentPolicy =
     state.assumptions.dividendMode === "adjusted_prices" ? "total_return" : "raw";
   const adjustmentUnavailableSymbols = state.legs
@@ -131,7 +131,11 @@ export function PortfolioAssumptionsPanel({
           </Field>
           <Field>
             <FieldLabel>{t("backtest.builder.fxPolicy")}</FieldLabel>
-            <Input value="Normalized returns" readOnly aria-readonly="true" />
+            <Input
+              value={locale === "vi" ? "Lợi suất đã chuẩn hóa" : "Normalized returns"}
+              readOnly
+              aria-readonly="true"
+            />
             <FieldDescription>{t("backtest.builder.fxDescription")}</FieldDescription>
           </Field>
         </div>

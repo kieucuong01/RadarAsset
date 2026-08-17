@@ -28,10 +28,10 @@ const SAMPLE_CALENDAR_EVENTS: CalendarModel[] = [
   },
 ];
 
-function countdown(value: string | null): string {
-  if (!value) return "Time pending";
+function countdown(value: string | null, locale: "vi" | "en"): string {
+  if (!value) return locale === "vi" ? "Chưa xác định giờ" : "Time pending";
   const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60_000);
-  if (minutes < 0) return "Released";
+  if (minutes < 0) return locale === "vi" ? "Đã công bố" : "Released";
   if (minutes < 60) return `T-${minutes}m`;
   if (minutes < 1_440) return `T-${Math.round(minutes / 60)}h`;
   return `T-${Math.round(minutes / 1_440)}d`;
@@ -56,22 +56,26 @@ export function EconomicCalendar({
           <div>
             <div className="flex items-center gap-2">
               <CalendarClock className="size-5 text-primary" />
-              <CardTitle>CryptoCraft Economic Calendar</CardTitle>
+              <CardTitle>
+                {locale === "vi" ? "Lịch kinh tế CryptoCraft" : "CryptoCraft Economic Calendar"}
+              </CardTitle>
               <Badge variant="outline">
                 {locale === "vi" ? "Dữ liệu hiện tại" : "Current data"}
               </Badge>
               {!events.length ? <DataStatusBadge status="SAMPLE" /> : null}
             </div>
             <CardDescription className="mt-2">
-              Point-in-time revisions, actual/forecast/previous and source attribution.
+              {locale === "vi"
+                ? "Điều chỉnh theo thời điểm công bố, số thực tế/dự báo/trước đó và nguồn dữ liệu."
+                : "Point-in-time revisions, actual/forecast/previous and source attribution."}
             </CardDescription>
           </div>
           <Tabs value={impact} onValueChange={(value) => onImpactChange(value as typeof impact)}>
             <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="high">High</TabsTrigger>
-              <TabsTrigger value="medium">Medium</TabsTrigger>
-              <TabsTrigger value="low">Low</TabsTrigger>
+              <TabsTrigger value="all">{locale === "vi" ? "Tất cả" : "All"}</TabsTrigger>
+              <TabsTrigger value="high">{locale === "vi" ? "Cao" : "High"}</TabsTrigger>
+              <TabsTrigger value="medium">{locale === "vi" ? "Vừa" : "Medium"}</TabsTrigger>
+              <TabsTrigger value="low">{locale === "vi" ? "Thấp" : "Low"}</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -87,7 +91,7 @@ export function EconomicCalendar({
                 {event.eventAt ? new Date(event.eventAt).toLocaleString() : event.eventDate}
               </p>
               <p className="text-xs text-muted-foreground">
-                {countdown(event.eventAt)} · {event.currency}
+                {countdown(event.eventAt, locale)} · {event.currency}
               </p>
             </div>
             <div>
@@ -98,13 +102,21 @@ export function EconomicCalendar({
                 </Badge>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Actual {event.actual ?? "—"} · Forecast {event.forecast ?? "—"} · Previous{" "}
-                {event.previous ?? "—"}
+                {locale === "vi" ? "Thực tế" : "Actual"} {event.actual ?? "—"} ·{" "}
+                {locale === "vi" ? "Dự báo" : "Forecast"} {event.forecast ?? "—"} ·{" "}
+                {locale === "vi" ? "Trước đó" : "Previous"} {event.previous ?? "—"}
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline">research_only</Badge>
-              <a href={event.sourceUrl} target="_blank" rel="noreferrer" aria-label="Open source">
+              <Badge variant="outline">
+                {locale === "vi" ? "chỉ nghiên cứu" : "research_only"}
+              </Badge>
+              <a
+                href={event.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={locale === "vi" ? "Mở nguồn dữ liệu" : "Open source"}
+              >
                 <ExternalLink className="size-3.5" />
               </a>
             </div>

@@ -27,13 +27,40 @@ function dateLabel(value: string) {
   return value.slice(0, 10);
 }
 
+function translateRobustnessStatus(value: string, locale: "vi" | "en") {
+  if (locale !== "vi") return value;
+  return (
+    (
+      {
+        fragile: "Mong manh",
+        robust: "Vững",
+        mixed: "Hỗn hợp",
+        stable: "Ổn định",
+        not_evaluated: "Chưa đánh giá",
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+
 export function AdvancedAnalysisSummary({
   model,
   availability,
   onDownloadReport,
 }: AdvancedAnalysisSummaryProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const robustness = model.aggregate.robustness;
+  const robustnessStatusValue = robustness ? robustnessStatus(robustness) : "not_evaluated";
+  const robustnessLabel = translateRobustnessStatus(robustnessStatusValue, locale);
+  const sectionLabels: Record<string, string> =
+    locale === "vi"
+      ? {
+          quantStats: "Thống kê định lượng",
+          contribution: "Đóng góp",
+          cashFlowOrRebalance: "Dòng tiền & tái cân bằng",
+          robustness: "Độ vững",
+          perLeg: "Theo nhánh",
+        }
+      : {};
 
   return (
     <>
@@ -56,7 +83,7 @@ export function AdvancedAnalysisSummary({
           .filter(([, available]) => available)
           .map(([section]) => (
             <Badge key={section} variant="secondary">
-              {section}
+              {sectionLabels[section] ?? section}
             </Badge>
           ))}
       </div>
@@ -86,10 +113,10 @@ export function AdvancedAnalysisSummary({
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <Badge
-              variant={robustnessStatus(robustness) === "fragile" ? "destructive" : "secondary"}
+              variant={robustnessStatusValue === "fragile" ? "destructive" : "secondary"}
               className="w-fit uppercase"
             >
-              {robustnessStatus(robustness)}
+              {robustnessLabel}
             </Badge>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <RobustnessMetric
@@ -152,8 +179,10 @@ export function AdvancedAnalysisSummary({
               <p className="font-medium">{t("backtestResults.advanced.parameterRobustness")}</p>
               <p className="mt-1 text-muted-foreground">
                 {robustness.parameterStability.status === "not_evaluated"
-                  ? "Not evaluated: this run did not execute neighboring parameter sets."
-                  : `${robustness.parameterStability.status} · score ${formatNumber(robustness.parameterStability.score, { maximumFractionDigits: 1 })}/100`}
+                  ? locale === "vi"
+                    ? "Chưa đánh giá: lần chạy này không kiểm tra các bộ tham số lân cận."
+                    : "Not evaluated: this run did not execute neighboring parameter sets."
+                  : `${translateRobustnessStatus(robustness.parameterStability.status, locale)} · ${locale === "vi" ? "điểm" : "score"} ${formatNumber(robustness.parameterStability.score, { maximumFractionDigits: 1 })}/100`}
               </p>
               {robustness.warnings.length > 0 ? (
                 <p className="mt-2 text-amber-600 dark:text-amber-400">

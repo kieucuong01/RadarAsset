@@ -121,7 +121,7 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-center">
-                      <SentimentBadge sentiment={holding.sentiment} />
+                      <SentimentBadge sentiment={holding.sentiment} locale={locale} />
                     </div>
                   </td>
                 </tr>
@@ -134,7 +134,13 @@ export function PortfolioHoldingsTable({ holdings, currency }: PortfolioHoldings
   );
 }
 
-function SentimentBadge({ sentiment }: { sentiment: "Bullish" | "Bearish" | "Neutral" }) {
+function SentimentBadge({
+  sentiment,
+  locale,
+}: {
+  sentiment: "Bullish" | "Bearish" | "Neutral";
+  locale: "vi" | "en";
+}) {
   const map = {
     Bullish: { cls: "bg-bull/15 text-bull", Icon: TrendingUp },
     Bearish: { cls: "bg-bear/15 text-bear", Icon: TrendingDown },
@@ -147,7 +153,13 @@ function SentimentBadge({ sentiment }: { sentiment: "Bullish" | "Bearish" | "Neu
       className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}
     >
       <Icon className="w-3.5 h-3.5" />
-      {sentiment}
+      {locale === "vi"
+        ? sentiment === "Bullish"
+          ? "Tích cực"
+          : sentiment === "Bearish"
+            ? "Tiêu cực"
+            : "Trung tính"
+        : sentiment}
     </span>
   );
 }

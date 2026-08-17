@@ -257,7 +257,9 @@ export function CryptoLargeAddressPanel({
           note={
             visible.calibrationStatus === "calibrated"
               ? "btc-large-address-action-v1"
-              : "Calibrating"
+              : locale === "vi"
+                ? "Đang hiệu chỉnh"
+                : "Calibrating"
           }
           tone="neutral"
         />
@@ -432,7 +434,7 @@ export function CryptoLargeAddressPanel({
                         href={row.explorerUrl}
                         target="_blank"
                         rel="noreferrer"
-                        aria-label={`Open transaction ${row.txid}`}
+                        aria-label={`${locale === "vi" ? "Mở giao dịch" : "Open transaction"} ${row.txid}`}
                         className="text-primary"
                       >
                         <ExternalLink className="size-3.5" />

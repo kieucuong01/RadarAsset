@@ -610,7 +610,7 @@ describe("Smart Insights number formatting", () => {
       ),
     );
 
-    expect(text).toContain("Actual 123K · Forecast 120K · Previous 98K revised");
+    expect(text).toContain("Thực tế 123K · Dự báo 120K · Trước đó 98K revised");
   });
 
   it("labels Market Pulse and the calendar as current data", () => {
