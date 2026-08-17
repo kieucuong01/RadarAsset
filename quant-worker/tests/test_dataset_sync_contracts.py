@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dataset_sync.contracts import BatchManifest, DatasetKey, DatasetManifest
+from dataset_sync.contracts import (
+    BatchManifest,
+    DatasetKey,
+    DatasetManifest,
+    parse_manifest,
+    serialize_manifest,
+)
 
 
 UTC = timezone.utc
@@ -63,3 +69,17 @@ def test_batch_manifest_rejects_duplicate_dataset_key() -> None:
             status="complete",
             datasets=(dataset, dataset),
         )
+
+
+def test_manifest_round_trip_rejects_unknown_fields() -> None:
+    manifest = BatchManifest(
+        schema_version=1,
+        batch_id="20260817T010203Z-0123456789ab",
+        exported_at=datetime(2026, 8, 17, 1, 2, 3, tzinfo=UTC),
+        status="complete",
+        datasets=(_dataset(),),
+    )
+
+    assert parse_manifest(serialize_manifest(manifest)) == manifest
+    with pytest.raises(ValueError, match="unknown"):
+        parse_manifest(serialize_manifest(manifest)[:-1] + b',"other":true}')
