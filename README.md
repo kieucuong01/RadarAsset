@@ -7,6 +7,7 @@ Vietnamese-first quantitative data platform for individual investors, built on N
 - [Architecture map](docs/architecture.md)
 - [Documentation index](docs/README.md)
 - [Smart Insights operations runbook](docs/operations/smart-insights-runbook.md)
+- [Verified dataset bootstrap runbook](docs/operations/dataset-bootstrap-runbook.md)
 
 ## Stack
 

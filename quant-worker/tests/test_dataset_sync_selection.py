@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -117,3 +117,57 @@ def test_scanner_counts_stored_bars_before_marking_dataset_eligible() -> None:
     assert report.decisions[0].status == "eligible"
     assert "version.is_active = true" in connection.cursor_instance.query
     assert "COUNT(bar.id)::int AS actual_row_count" in connection.cursor_instance.query
+
+
+def test_scanner_treats_database_date_coverage_as_midnight_utc() -> None:
+    connection = _Connection(
+        [
+            {
+                "dataset_version_id": "00000000-0000-0000-0000-000000000001",
+                "provider_code": "binance-public",
+                "provider_active": True,
+                "instrument_active": True,
+                "canonical_key": "CRYPTO:BTC",
+                "symbol": "BTC",
+                "market": "crypto_spot",
+                "timeframe": "1d",
+                "adjustment_policy": "raw",
+                "coverage_end": date(2026, 8, 15),
+                "declared_row_count": 3,
+                "actual_row_count": 3,
+                "quality_status": "passed",
+                "source_metadata": {"mode": "live"},
+                "row_sources": ["binance-public"],
+            }
+        ]
+    )
+
+    report = scan_datasets(connection, now=NOW)
+
+    assert report.counts == {"eligible": 1}
+    assert report.decisions[0].candidate.coverage_end == datetime(2026, 8, 15, tzinfo=timezone.utc)
+
+
+def test_scanner_treats_naive_database_timestamp_as_utc() -> None:
+    row = {
+        "dataset_version_id": "00000000-0000-0000-0000-000000000001",
+        "provider_code": "binance-public",
+        "provider_active": True,
+        "instrument_active": True,
+        "canonical_key": "CRYPTO:BTC",
+        "symbol": "BTC",
+        "market": "crypto_spot",
+        "timeframe": "1d",
+        "adjustment_policy": "raw",
+        "coverage_end": datetime(2026, 8, 15),
+        "declared_row_count": 3,
+        "actual_row_count": 3,
+        "quality_status": "passed",
+        "source_metadata": {"mode": "live"},
+        "row_sources": ["binance-public"],
+    }
+
+    report = scan_datasets(_Connection([row]), now=NOW)
+
+    assert report.counts == {"eligible": 1}
+    assert report.decisions[0].candidate.coverage_end.tzinfo is timezone.utc

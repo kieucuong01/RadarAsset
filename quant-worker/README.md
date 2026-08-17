@@ -41,6 +41,14 @@ python quant-worker\bootstrap_research_datasets.py --mode fixture
 `fixture` mode is deterministic and explicitly stored as `research_fixture`. Fixtures are for
 local bootstrap/tests only. Scheduled live ingestion never falls back to these generated rows.
 
+## Verified production dataset bootstrap
+
+Use `sync_dataset_bootstrap.py` only for the audited, one-time local-to-production history
+transfer. It selects fresh 1D raw live datasets, transfers checksummed packages through private S3,
+and publishes them to production PostgreSQL after a no-write preflight. The website never serves
+bars from S3. Follow the [operator runbook](../docs/operations/dataset-bootstrap-runbook.md); S3
+credentials must remain in an ignored local file or the production shared environment.
+
 ## Scheduled Market Data Ingestion
 
 The live ingestion CLIs publish immutable, research-only datasets independently for every feed:

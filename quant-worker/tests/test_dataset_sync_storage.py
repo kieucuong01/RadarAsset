@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from backtest.models import Bar
+from backtest.quality import canonical_bar_checksum
 from dataset_sync.exporter import DatasetExportRecord, build_exported_batch
 from dataset_sync.selection import EligibilityCandidate
 from dataset_sync.storage import DatasetSyncS3Store
@@ -75,6 +76,7 @@ def _batch(tmp_path: Path):
         (
             DatasetExportRecord(
                 candidate=candidate,
+                declared_dataset_checksum=canonical_bar_checksum(list(rows)),
                 provider_name="Binance public",
                 provider_symbol="BTCUSDT",
                 terms_url=None,

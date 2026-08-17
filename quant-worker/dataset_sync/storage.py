@@ -15,6 +15,9 @@ class DatasetSyncStorageError(RuntimeError):
     pass
 
 
+MAX_MANIFEST_BYTES = 1_000_000
+
+
 @dataclass(frozen=True, slots=True)
 class StoredBatch:
     manifest_locator: str
@@ -193,12 +196,26 @@ class DatasetSyncS3Store:
             raise DatasetSyncStorageError("Dataset sync manifest is not complete.")
         expected_size = int(response["ContentLength"])
         expected_sha256 = self._metadata(response).get("sha256", "")
-        destination = Path.cwd() / ".dataset-sync-manifest.tmp"
+        if expected_size < 1 or expected_size > MAX_MANIFEST_BYTES:
+            raise DatasetSyncStorageError("Dataset sync manifest size is invalid.")
         try:
-            self._download(key, destination, expected_size=expected_size, expected_sha256=expected_sha256)
-            return parse_manifest(destination.read_bytes())
-        finally:
-            destination.unlink(missing_ok=True)
+            downloaded = self._client.get_object(Bucket=self._bucket, Key=key)
+            if downloaded.get("ContentLength") != expected_size:
+                raise DatasetSyncStorageError("Dataset sync manifest length does not match metadata.")
+            if self._metadata(downloaded).get("sha256") != expected_sha256:
+                raise DatasetSyncStorageError("Dataset sync manifest metadata does not match.")
+            payload = downloaded["Body"].read(MAX_MANIFEST_BYTES + 1)
+        except DatasetSyncStorageError:
+            raise
+        except Exception as error:
+            raise DatasetSyncStorageError("Dataset sync manifest download failed.") from error
+        if len(payload) != expected_size or hashlib.sha256(payload).hexdigest() != expected_sha256:
+            raise DatasetSyncStorageError("Dataset sync manifest checksum verification failed.")
+        manifest = parse_manifest(payload)
+        expected_key = f"{self._prefix}/{manifest.batch_id}/manifest.json"
+        if key != expected_key:
+            raise DatasetSyncStorageError("Dataset sync manifest locator does not match its batch identifier.")
+        return manifest
 
     def download_dataset(self, manifest: DatasetManifest, destination: Path) -> Path:
         key = self._validate_key(manifest.object_key)

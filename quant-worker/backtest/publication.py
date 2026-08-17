@@ -225,7 +225,10 @@ class PostgresDatasetPublisher:
         )
 
     def publish_if_changed(
-        self, prepared: PreparedDatasetPublication
+        self,
+        prepared: PreparedDatasetPublication,
+        *,
+        enqueue_evaluations: bool = True,
     ) -> PublicationResult:
         active = self.load_active(
             prepared.asset, prepared.timeframe, prepared.adjustment_policy
@@ -240,7 +243,7 @@ class PostgresDatasetPublisher:
                 missing_bar_count=active.missing_bar_count,
                 quality_status=active.quality_status,
             )
-        published = self.publish(prepared)
+        published = self.publish(prepared, enqueue_evaluations=enqueue_evaluations)
         return PublicationResult(
             status="succeeded",
             dataset_version_id=str(published["datasetVersionId"]),
@@ -251,7 +254,12 @@ class PostgresDatasetPublisher:
             quality_status=str(published["qualityStatus"]),
         )
 
-    def publish(self, prepared: PreparedDatasetPublication) -> dict[str, Any]:
+    def publish(
+        self,
+        prepared: PreparedDatasetPublication,
+        *,
+        enqueue_evaluations: bool = True,
+    ) -> dict[str, Any]:
         with self.connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
                 """
@@ -451,7 +459,8 @@ class PostgresDatasetPublisher:
                 "UPDATE dataset_versions SET is_active = true WHERE id = %s",
                 (version_id,),
             )
-            enqueue_strategy_evaluations(cursor, version_id, asset_id)
+            if enqueue_evaluations:
+                enqueue_strategy_evaluations(cursor, version_id, asset_id)
         return {
             "datasetVersionId": version_id,
             "version": version_number,

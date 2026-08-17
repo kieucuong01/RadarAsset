@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from psycopg.rows import dict_row
+
 from backtest.models import Bar
 
 from .codec import DatasetSyncError, encode_dataset
@@ -21,6 +23,7 @@ _SAFE_SYMBOL = re.compile(r"[^A-Za-z0-9._-]+")
 @dataclass(frozen=True, slots=True)
 class DatasetExportRecord:
     candidate: EligibilityCandidate
+    declared_dataset_checksum: str
     provider_name: str
     provider_symbol: str
     terms_url: str | None
@@ -42,6 +45,106 @@ class ExportedBatch:
     manifest_bytes: bytes
     manifest_path: Path
     dataset_paths: tuple[Path, ...]
+
+
+def _json_safe(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+class PostgresDatasetExportRepository:
+    def __init__(self, connection: Any) -> None:
+        self._connection = connection
+
+    def load(self, candidate: EligibilityCandidate) -> DatasetExportRecord:
+        with self._connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT provider.name AS provider_name,
+                       instrument.provider_symbol,
+                       provider.terms_url,
+                       asset.name AS asset_name,
+                       COALESCE(asset.venue, '') AS venue,
+                       asset.currency,
+                       asset.timezone AS timezone_name,
+                       asset.max_leverage AS maximum_leverage,
+                       version.coverage_start,
+                       version.missing_bar_count,
+                       version.quality_summary,
+                       version.checksum AS declared_dataset_checksum
+                FROM dataset_versions AS version
+                JOIN datasets AS dataset ON dataset.id = version.dataset_id
+                JOIN assets AS asset ON asset.id = dataset.asset_id
+                JOIN data_providers AS provider ON provider.id = version.provider_id
+                JOIN provider_instruments AS instrument
+                  ON instrument.asset_id = asset.id AND instrument.provider_id = provider.id
+                WHERE version.id = %s AND version.is_active = true
+                """,
+                (candidate.dataset_version_id,),
+            )
+            metadata = cursor.fetchone()
+            if metadata is None:
+                raise DatasetSyncError("Selected dataset version is no longer active.")
+            cursor.execute(
+                """
+                SELECT ts, open, high, low, close, volume, source
+                FROM dataset_bars
+                WHERE dataset_version_id = %s
+                ORDER BY ts
+                """,
+                (candidate.dataset_version_id,),
+            )
+            stored_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT code, severity, ts, classification, range_start, range_end, details
+                FROM data_quality_issues
+                WHERE dataset_version_id = %s
+                ORDER BY created_at, id
+                """,
+                (candidate.dataset_version_id,),
+            )
+            issue_rows = cursor.fetchall()
+        rows = tuple(
+            Bar(
+                asset=candidate.symbol,
+                timestamp=row["ts"].astimezone(timezone.utc),
+                timeframe="1d",
+                open=Decimal(str(row["open"])),
+                high=Decimal(str(row["high"])),
+                low=Decimal(str(row["low"])),
+                close=Decimal(str(row["close"])),
+                volume=None if row["volume"] is None else Decimal(str(row["volume"])),
+                source=str(row["source"]),
+            )
+            for row in stored_rows
+        )
+        if not rows:
+            raise DatasetSyncError("Selected dataset does not contain bars.")
+        return DatasetExportRecord(
+            candidate=candidate,
+            declared_dataset_checksum=str(metadata["declared_dataset_checksum"]),
+            provider_name=str(metadata["provider_name"]),
+            provider_symbol=str(metadata["provider_symbol"]),
+            terms_url=None if metadata["terms_url"] is None else str(metadata["terms_url"]),
+            asset_name=str(metadata["asset_name"]),
+            venue=str(metadata["venue"]),
+            currency=str(metadata["currency"]),
+            timezone_name=str(metadata["timezone_name"]),
+            maximum_leverage=Decimal(str(metadata["maximum_leverage"])),
+            coverage_start=metadata["coverage_start"].astimezone(timezone.utc),
+            missing_bar_count=int(metadata["missing_bar_count"]),
+            quality_summary=_json_safe(metadata["quality_summary"]),
+            quality_issues=tuple(_json_safe(dict(issue)) for issue in issue_rows),
+            rows=rows,
+        )
 
 
 def _batch_id(records: tuple[DatasetExportRecord, ...], now: datetime) -> str:
@@ -79,9 +182,13 @@ def build_exported_batch(
                 digest.row_count != record.candidate.actual_row_count
                 or digest.coverage_start != record.coverage_start
                 or digest.coverage_end != record.candidate.coverage_end
+                or digest.dataset_checksum != record.declared_dataset_checksum
             ):
-                raise DatasetSyncError("Exported rows do not match the selected dataset metadata.")
-            object_key = f"operations/dataset-sync/{batch_id}/datasets/{package_path.name}"
+                raise DatasetSyncError("Exported rows do not match the selected dataset metadata or checksum.")
+            object_key = (
+                f"operations/dataset-sync/{batch_id}/datasets/"
+                f"{symbol}-{digest.dataset_checksum}.csv.gz"
+            )
             manifests.append(
                 DatasetManifest(
                     key=DatasetKey(

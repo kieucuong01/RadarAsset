@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 import json
 import re
 from typing import Any, Literal
@@ -110,6 +110,18 @@ def _metadata(value: object) -> dict[str, Any]:
     return {}
 
 
+def _as_utc_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            # Historical dataset columns are stored as PostgreSQL timestamps
+            # without timezone. Their contract is UTC, matching dataset bars.
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, date):
+        return datetime.combine(value, time.min, tzinfo=timezone.utc)
+    raise ValueError("Dataset coverage timestamp is invalid.")
+
+
 def scan_datasets(connection: Any, *, now: datetime) -> EligibilityReport:
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
@@ -117,7 +129,13 @@ def scan_datasets(connection: Any, *, now: datetime) -> EligibilityReport:
             SELECT version.id AS dataset_version_id,
                    provider.code AS provider_code,
                    provider.status = 'active' AS provider_active,
-                   instrument.is_active AS instrument_active,
+                   EXISTS (
+                       SELECT 1
+                       FROM provider_instruments AS instrument
+                       WHERE instrument.asset_id = asset.id
+                         AND instrument.provider_id = provider.id
+                         AND instrument.is_active = true
+                   ) AS instrument_active,
                    asset.canonical_key,
                    asset.symbol,
                    asset.market,
@@ -133,11 +151,9 @@ def scan_datasets(connection: Any, *, now: datetime) -> EligibilityReport:
             JOIN datasets AS dataset ON dataset.id = version.dataset_id
             JOIN assets AS asset ON asset.id = dataset.asset_id
             JOIN data_providers AS provider ON provider.id = version.provider_id
-            JOIN provider_instruments AS instrument
-              ON instrument.asset_id = asset.id AND instrument.provider_id = provider.id
             LEFT JOIN dataset_bars AS bar ON bar.dataset_version_id = version.id
             WHERE version.is_active = true
-            GROUP BY version.id, provider.id, instrument.id, asset.id, dataset.id
+            GROUP BY version.id, provider.id, asset.id, dataset.id
             ORDER BY asset.market, asset.symbol
             """
         )
@@ -154,7 +170,7 @@ def scan_datasets(connection: Any, *, now: datetime) -> EligibilityReport:
                 market=str(row["market"]),
                 timeframe=str(row["timeframe"]),
                 adjustment_policy=str(row["adjustment_policy"]),
-                coverage_end=row["coverage_end"],
+                coverage_end=_as_utc_datetime(row["coverage_end"]),
                 declared_row_count=int(row["declared_row_count"]),
                 actual_row_count=int(row["actual_row_count"]),
                 quality_status=str(row["quality_status"]),
