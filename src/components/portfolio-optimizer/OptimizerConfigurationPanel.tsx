@@ -40,6 +40,7 @@ type OptimizerConfigurationPanelProps = {
   targetVolatilityPct: number;
   markowitzRiskTolerance: number;
   maxWeightPct: number;
+  selectedSymbols: string[];
   assets: QuantAssetCatalogItem[];
   loading: boolean;
   editingAssets: boolean;
@@ -66,6 +67,7 @@ export function OptimizerConfigurationPanel({
   targetVolatilityPct,
   markowitzRiskTolerance,
   maxWeightPct,
+  selectedSymbols,
   assets,
   loading,
   editingAssets,
@@ -83,6 +85,9 @@ export function OptimizerConfigurationPanel({
   onOptimize,
 }: OptimizerConfigurationPanelProps) {
   const { t, locale } = useI18n();
+  const assetBySymbol = new Map(assets.map((asset) => [asset.symbol, asset]));
+  const symbolsToRender =
+    selectedSymbols.length > 0 ? selectedSymbols : assets.map((asset) => asset.symbol);
 
   return (
     <Card className="h-fit lg:sticky lg:top-20">
@@ -222,7 +227,7 @@ export function OptimizerConfigurationPanel({
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium">
-                {t("optimizer.assets", { count: formatCount(assets.length) })}
+                {t("optimizer.assets", { count: formatCount(symbolsToRender.length) })}
               </span>
               <Button type="button" variant="outline" size="sm" onClick={onEditAssets}>
                 {editingAssets ? (
@@ -244,50 +249,63 @@ export function OptimizerConfigurationPanel({
                   timeframe={timeframe}
                   from={from}
                   to={to}
-                  selectedSymbols={assets.map((asset) => asset.symbol)}
-                  disabled={assets.length >= 10}
+                  selectedSymbols={symbolsToRender}
+                  disabled={symbolsToRender.length >= 10}
                   onAdd={onAssetAdd}
                 />
               </>
             ) : null}
-            {assets.map((asset) => (
-              <div
-                key={asset.symbol}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3"
-              >
-                <span className="min-w-0">
-                  <span className="block font-semibold">{asset.symbol}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {locale === "vi"
-                      ? asset.market === "vn_equity"
-                        ? "Chứng khoán Việt Nam"
-                        : asset.market === "crypto_spot"
-                          ? "Crypto giao ngay"
-                          : asset.market === "metal_spot"
-                            ? "XAU/USD giao ngay"
-                            : asset.market
-                      : asset.market}{" "}
-                    · {formatCount(asset.rowCount)} {t("optimizer.bars")}
+            {symbolsToRender.map((symbol) => {
+              const asset = assetBySymbol.get(symbol);
+              return (
+                <div
+                  key={symbol}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                >
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{symbol}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {asset ? (
+                        <>
+                          {locale === "vi"
+                            ? asset.market === "vn_equity"
+                              ? "Chứng khoán Việt Nam"
+                              : asset.market === "crypto_spot"
+                                ? "Crypto giao ngay"
+                                : asset.market === "metal_spot"
+                                  ? "XAU/USD giao ngay"
+                                  : asset.market
+                            : asset.market}{" "}
+                          · {formatCount(asset.rowCount)} {t("optimizer.bars")}
+                        </>
+                      ) : (
+                        t("optimizer.assetPending")
+                      )}
+                    </span>
                   </span>
-                </span>
-                {editingAssets ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t("optimizer.removeAsset", { symbol: asset.symbol })}
-                    onClick={() => onAssetRemove(asset.symbol)}
-                  >
-                    <Trash2 />
-                  </Button>
-                ) : null}
-              </div>
-            ))}
+                  {editingAssets ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("optimizer.removeAsset", { symbol })}
+                      onClick={() => onAssetRemove(symbol)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </FieldGroup>
       </CardContent>
       <CardFooter>
-        <Button className="w-full" disabled={loading || assets.length === 0} onClick={onOptimize}>
+        <Button
+          className="w-full"
+          disabled={loading || symbolsToRender.length === 0}
+          onClick={onOptimize}
+        >
           {loading ? (
             <Loader2 data-icon="inline-start" className="animate-spin" />
           ) : (

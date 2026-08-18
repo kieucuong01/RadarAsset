@@ -88,6 +88,7 @@ export const enQuant = {
     maxWeightAria: "Maximum optimizer weight",
     assets: "Assets ({count})",
     bars: "bars",
+    assetPending: "Loading dataset status",
     editAssets: "Edit portfolio",
     closeAssetEditor: "Close editing",
     assetEditGuideTitle: "How to edit the portfolio",

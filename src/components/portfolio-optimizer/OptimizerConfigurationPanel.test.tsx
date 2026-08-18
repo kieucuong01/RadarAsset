@@ -18,6 +18,7 @@ describe("OptimizerConfigurationPanel asset editing", () => {
           targetVolatilityPct={20}
           markowitzRiskTolerance={1}
           maxWeightPct={70}
+          selectedSymbols={["VNINDEX", "XAU", "BTC"]}
           assets={[]}
           loading={false}
           editingAssets
@@ -39,5 +40,8 @@ describe("OptimizerConfigurationPanel asset editing", () => {
 
     expect(html).toContain("Cách chỉnh sửa danh mục");
     expect(html).toContain("Thêm hoặc xóa mã rồi bấm Tính phân bổ tối ưu");
+    expect(html).toContain("VNINDEX");
+    expect(html).toContain("XAU");
+    expect(html).toContain("BTC");
   });
 });

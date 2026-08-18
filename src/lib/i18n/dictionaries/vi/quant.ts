@@ -86,6 +86,7 @@ export const viQuant = {
     maxWeightAria: "Trọng số tối đa của bộ tối ưu",
     assets: "Tài sản ({count})",
     bars: "phiên",
+    assetPending: "Đang nạp trạng thái dữ liệu",
     editAssets: "Chỉnh sửa danh mục",
     closeAssetEditor: "Đóng chỉnh sửa",
     assetEditGuideTitle: "Cách chỉnh sửa danh mục",

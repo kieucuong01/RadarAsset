@@ -138,5 +138,8 @@ describe("PortfolioOptimizerWorkbench formatting", () => {
     expect(html).toContain('id="optimizer-to"');
     expect(html).toContain('value="2026-01-01"');
     expect(html).toContain("Chỉnh sửa danh mục");
+    expect(html).toContain("VNINDEX");
+    expect(html).toContain("XAU");
+    expect(html).toContain("BTC");
   });
 });

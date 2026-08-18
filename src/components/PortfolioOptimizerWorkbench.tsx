@@ -42,6 +42,7 @@ export function PortfolioOptimizerWorkbench({
   const [timeframe, setTimeframe] = useState<"1d">("1d");
   const [from, setFrom] = useState(initialSelection.from);
   const [to, setTo] = useState(initialSelection.to);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(initialSelection.symbols);
   const [assets, setAssets] = useState<QuantAssetCatalogItem[]>([]);
   const [method, setMethod] = useState<OptimizerMethod>(DEFAULT_OPTIMIZER_METHOD);
   const [targetReturnPct, setTargetReturnPct] = useState(8);
@@ -74,14 +75,10 @@ export function PortfolioOptimizerWorkbench({
       .then(async (catalogs) => {
         const resolved = catalogs.flatMap((catalog, index) => {
           const asset = catalog.items.find((item) => item.symbol === symbols[index]);
-          return asset?.backtestable ? [asset] : [];
+          return asset ? [asset] : [];
         });
         setAssets(resolved);
-        if (
-          !initialSelection.usesDefaults ||
-          autoOptimizedDefaults.current ||
-          resolved.length !== symbols.length
-        ) {
+        if (!initialSelection.usesDefaults || autoOptimizedDefaults.current) {
           return;
         }
 
@@ -90,7 +87,7 @@ export function PortfolioOptimizerWorkbench({
         try {
           const result = await requestOptimizedAllocation(
             buildOptimizerRequest({
-              symbols: resolved.map((asset) => asset.symbol),
+              symbols,
               method: DEFAULT_OPTIMIZER_METHOD,
               from: DEFAULT_OPTIMIZER_FROM,
               to: DEFAULT_OPTIMIZER_TO,
@@ -113,12 +110,12 @@ export function PortfolioOptimizerWorkbench({
   }, [from, initialSelection, initialSymbolKey, maxWeightPct, t, timeframe, to]);
 
   async function optimize() {
-    if (assets.length === 0) return;
+    if (selectedSymbols.length === 0) return;
     setLoading(true);
     try {
       const result = await requestOptimizedAllocation(
         buildOptimizerRequest({
-          symbols: assets.map((asset) => asset.symbol),
+          symbols: selectedSymbols,
           method,
           from,
           to,
@@ -153,6 +150,7 @@ export function PortfolioOptimizerWorkbench({
         targetVolatilityPct={targetVolatilityPct}
         markowitzRiskTolerance={markowitzRiskTolerance}
         maxWeightPct={maxWeightPct}
+        selectedSymbols={selectedSymbols}
         assets={assets}
         loading={loading}
         editingAssets={editingAssets}
@@ -166,16 +164,20 @@ export function PortfolioOptimizerWorkbench({
         onMaxWeightChange={(value) => updateAndClear(() => setMaxWeightPct(value))}
         onEditAssets={() => setEditingAssets((current) => !current)}
         onAssetAdd={(asset) =>
-          updateAndClear(() =>
+          updateAndClear(() => {
+            setSelectedSymbols((current) =>
+              [...current, asset.symbol].sort((left, right) => left.localeCompare(right)),
+            );
             setAssets((current) =>
               [...current, asset].sort((left, right) => left.symbol.localeCompare(right.symbol)),
-            ),
-          )
+            );
+          })
         }
         onAssetRemove={(symbol) =>
-          updateAndClear(() =>
-            setAssets((current) => current.filter((item) => item.symbol !== symbol)),
-          )
+          updateAndClear(() => {
+            setSelectedSymbols((current) => current.filter((item) => item !== symbol));
+            setAssets((current) => current.filter((item) => item.symbol !== symbol));
+          })
         }
         onOptimize={() => void optimize()}
       />
