@@ -57,7 +57,7 @@ def test_vietnam_market_date_uses_asia_ho_chi_minh_not_utc() -> None:
 
 
 def test_calendar_version_is_explicit_and_future_dates_are_not_silently_certified() -> None:
-    assert HOSE_CALENDAR_VERSION == "hose-official-closures-2024-2026-v1"
+    assert HOSE_CALENDAR_VERSION == "hose-reviewed-closures-2018-2026-v2"
     try:
         is_session_day(date(2027, 1, 4), "vn_equity", strict=True)
     except ValueError as error:
@@ -72,11 +72,16 @@ def test_market_calendar_contracts_declare_certified_ranges_and_sessions() -> No
     gold = MARKET_CALENDARS["metal_spot"]
 
     assert hose.version == HOSE_CALENDAR_VERSION
-    assert hose.certified_from == date(2024, 1, 1)
+    assert hose.certified_from == date(2018, 8, 20)
     assert hose.certified_to == date(2026, 12, 31)
     assert hose.hourly_opens_utc == ()
     assert crypto.weekdays == frozenset(range(7))
     assert gold.rollover_utc_hour == 22
+
+
+def test_hose_calendar_covers_the_2018_source_boundary_and_excludes_tet() -> None:
+    assert is_session_day(date(2018, 8, 20), "vn_equity", strict=True)
+    assert not is_session_day(date(2019, 2, 4), "vn_equity", strict=True)
 
 
 def test_gold_daily_calendar_excludes_weekends() -> None:

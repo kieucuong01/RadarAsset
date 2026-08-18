@@ -1,5 +1,9 @@
 # HOSE Core 2016 Production Backfill Implementation Plan
 
+> Superseded on 2026-08-18: Vnstock Community live smoke returned no data
+> before 2018-08-20. Follow the implemented `vn-core-2018` boundary instead;
+> this historical plan remains as an audit record and must not be executed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Publish verified daily raw datasets from `2016-01-01` through the latest closed HOSE session for `VNINDEX`, `VN30`, `FPT`, `VCB`, `HPG`, `VNM`, `MWG`, `SSI`, and `VIC` on production, while leaving one reusable path for later selected-symbol and full-HOSE expansion.
@@ -25,12 +29,14 @@
 ### Task 1: Add a reusable, bounded backfill profile contract
 
 **Files:**
+
 - Create: `quant-worker/backtest/backfill_profiles.py`
 - Modify: `quant-worker/ingest_market_data.py`
 - Test: `quant-worker/tests/test_backfill_profiles.py`
 - Test: `quant-worker/tests/test_ingest_market_data_cli.py`
 
 **Interfaces:**
+
 - Produces: `BackfillProfile(name: str, market: str, timeframe: str, start: date, symbols: tuple[str, ...])`.
 - Produces: `resolve_backfill_profile(name: str) -> BackfillProfile`.
 - Produces: CLI `python quant-worker/ingest_market_data.py all --profile vn-core-2016 [--dry-run] --env-file <path>`.
@@ -130,6 +136,7 @@ git commit -m "feat: define reusable HOSE backfill profile"
 ### Task 2: Extend the verified HOSE calendar and provider boundary to 2016
 
 **Files:**
+
 - Modify: `quant-worker/backtest/market_calendar.py`
 - Modify: `quant-worker/backtest/ingestion.py`
 - Modify: `quant-worker/backtest/providers.py`
@@ -138,6 +145,7 @@ git commit -m "feat: define reusable HOSE backfill profile"
 - Test: `quant-worker/tests/test_providers.py`
 
 **Interfaces:**
+
 - Produces: `HOSE_VERIFIED_FROM = date(2016, 1, 1)` and `HOSE_CALENDAR_VERSION = "hose-reviewed-closures-2016-2026-v2"`.
 - Produces: initial Vietnam `IngestionWindow.fetch_start == 2016-01-01T00:00:00Z`.
 - Consumes: profile start from Task 1 only as a stricter override; no request may precede the verified calendar boundary.
@@ -239,11 +247,13 @@ git commit -m "feat: certify HOSE daily history from 2016"
 ### Task 3: Add a read-only profile verifier and production evidence contract
 
 **Files:**
+
 - Create: `quant-worker/verify_market_backfill.py`
 - Create: `quant-worker/tests/test_verify_market_backfill.py`
 - Modify: `quant-worker/backtest/market_calendar.py`
 
 **Interfaces:**
+
 - Produces: `load_profile_coverage(connection, profile) -> tuple[ProfileCoverageRow, ...]`.
 - Produces: `verify_profile_coverage(rows, profile, now) -> tuple[str, ...]` with stable failure codes.
 - Produces: CLI `python quant-worker/verify_market_backfill.py --profile vn-core-2016 --env-file <path>`.
@@ -308,6 +318,7 @@ git commit -m "feat: verify bounded HOSE backfill coverage"
 ### Task 4: Wire a bounded production one-shot without changing the daily timer
 
 **Files:**
+
 - Modify: `deploy/linux/run-scheduled-job.sh`
 - Modify: `deploy/linux/deploy-datavest.sh`
 - Modify: `.github/workflows/build-production-artifact.yml`
@@ -316,6 +327,7 @@ git commit -m "feat: verify bounded HOSE backfill coverage"
 - Modify: `scripts/release/workflow-contract.test.mjs`
 
 **Interfaces:**
+
 - Produces: allowlisted job `market-backfill-core`.
 - Produces command 1: `ingest_market_data.py all --profile vn-core-2016 --env-file /opt/datavest/shared/.env`.
 - Produces command 2: `verify_market_backfill.py --profile vn-core-2016 --env-file /opt/datavest/shared/.env`.
@@ -365,11 +377,13 @@ git commit -m "ops: run bounded HOSE core backfill in production"
 ### Task 5: Document future selected-symbol and full-HOSE expansion
 
 **Files:**
+
 - Create: `docs/operations/hose-backfill-runbook.md`
 - Modify: `README.md`
 - Modify: `quant-worker/README.md`
 
 **Interfaces:**
+
 - Documents the current profile command, production verifier, dynamic catalog queue, retry, batch caps, and stop conditions.
 - Reuses: `sync_provider_instruments.py --queue-ingestion all`, `process_ingestion_requests.py --limit 20 --drain --max-total <N>`, and `verify_market_backfill.py`.
 
@@ -419,9 +433,11 @@ git commit -m "docs: record reusable HOSE backfill operations"
 ### Task 6: Verify, release, run production backfill, and record database truth
 
 **Files:**
+
 - Create: `docs/verification/2026-08-17-hose-core-2016-production-backfill.md`
 
 **Interfaces:**
+
 - Consumes: all implementation tasks, the production workflow, production PostgreSQL, public health endpoints, and the quant engine.
 - Produces: sanitized production coverage evidence for all nine symbols and the final deployed SHA.
 

@@ -13,15 +13,15 @@ class BackfillProfile:
     symbols: tuple[str, ...]
 
 
-VN_CORE_2016 = BackfillProfile(
-    name="vn-core-2016",
+VN_CORE_2018 = BackfillProfile(
+    name="vn-core-2018",
     market="vn_equity",
     timeframe="1d",
-    start=date(2016, 1, 1),
+    start=date(2018, 8, 20),
     symbols=("VNINDEX", "VN30", "FPT", "VCB", "HPG", "VNM", "MWG", "SSI", "VIC"),
 )
 
-_PROFILES = {VN_CORE_2016.name: VN_CORE_2016}
+_PROFILES = {VN_CORE_2018.name: VN_CORE_2018}
 
 
 def resolve_backfill_profile(name: str) -> BackfillProfile:

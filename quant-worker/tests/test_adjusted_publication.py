@@ -50,7 +50,7 @@ def test_adjusted_publication_links_raw_manifest_actions_and_calendar() -> None:
     assert adjusted.rows[0].close == Decimal("90.00000000")
     assert adjusted.source_metadata["rawDatasetVersionId"] == "raw-version-1"
     assert adjusted.source_metadata["corporateActionChecksums"] == [action.checksum]
-    assert adjusted.source_metadata["calendarVersion"] == "hose-official-closures-2024-2026-v1"
+    assert adjusted.source_metadata["calendarVersion"] == "hose-reviewed-closures-2018-2026-v2"
     assert adjusted.source_metadata["corporateActionCoverageStart"] == "2025-01-02"
 
 

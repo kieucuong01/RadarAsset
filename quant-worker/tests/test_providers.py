@@ -568,7 +568,7 @@ def test_vnstock_caps_vnindex_history_to_the_verified_hose_calendar() -> None:
         now=utc(2026, 8, 12),
     )
 
-    assert market.instrument.calls[0]["start"] == "2024-01-01"
+    assert market.instrument.calls[0]["start"] == "2018-08-20"
 
 
 def test_vnstock_caps_equity_history_to_the_verified_hose_calendar() -> None:
@@ -594,7 +594,7 @@ def test_vnstock_caps_equity_history_to_the_verified_hose_calendar() -> None:
         now=utc(2026, 8, 12),
     )
 
-    assert market.instrument.calls[0]["start"] == "2024-01-01"
+    assert market.instrument.calls[0]["start"] == "2018-08-20"
 
 
 def test_vnstock_lists_current_hose_equities_from_listing_catalog() -> None:

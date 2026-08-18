@@ -6,15 +6,32 @@ from zoneinfo import ZoneInfo
 from .models import MarketCalendarContract
 
 
-HOSE_CALENDAR_VERSION = "hose-official-closures-2024-2026-v1"
+HOSE_CALENDAR_VERSION = "hose-reviewed-closures-2018-2026-v2"
 HOSE_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
-HOSE_VERIFIED_FROM = date(2024, 1, 1)
+HOSE_VERIFIED_FROM = date(2018, 8, 20)
 HOSE_VERIFIED_TO = date(2026, 12, 31)
 
 
 # Exchange closures used by the free-data MVP. Keep these explicit and reviewed yearly;
 # an unknown future weekday remains a session instead of silently inventing a holiday.
-_VN_HOLIDAYS = {
+_VN_HOLIDAYS_2018_2023 = frozenset(
+    date.fromisoformat(value)
+    for value in (
+        "2018-09-03", "2018-12-31",
+        "2019-01-01", "2019-02-04", "2019-02-05", "2019-02-06", "2019-02-07", "2019-02-08",
+        "2019-04-15", "2019-04-29", "2019-04-30", "2019-05-01", "2019-09-02",
+        "2020-01-01", "2020-01-23", "2020-01-24", "2020-01-27", "2020-01-28", "2020-01-29",
+        "2020-04-02", "2020-04-30", "2020-05-01", "2020-09-02",
+        "2021-01-01", "2021-02-10", "2021-02-11", "2021-02-12", "2021-02-15", "2021-02-16",
+        "2021-04-21", "2021-04-30", "2021-05-03", "2021-09-02", "2021-09-03",
+        "2022-01-03", "2022-01-31", "2022-02-01", "2022-02-02", "2022-02-03", "2022-02-04",
+        "2022-04-11", "2022-05-02", "2022-05-03", "2022-09-01", "2022-09-02",
+        "2023-01-02", "2023-01-20", "2023-01-23", "2023-01-24", "2023-01-25", "2023-01-26",
+        "2023-05-01", "2023-05-02", "2023-05-03", "2023-09-01", "2023-09-04",
+    )
+)
+
+_VN_HOLIDAYS_2024_2026 = {
     # 2024
     date(2024, 1, 1),
     *[date(2024, 2, day) for day in range(8, 15)],
@@ -43,6 +60,8 @@ _VN_HOLIDAYS = {
     date(2026, 9, 1),
     date(2026, 9, 2),
 }
+
+_VN_HOLIDAYS = _VN_HOLIDAYS_2018_2023 | frozenset(_VN_HOLIDAYS_2024_2026)
 
 # Full-session OTC gold closures observed in the certified Dukascopy daily
 # history. Partial sessions remain valid bars and are intentionally retained.

@@ -43,7 +43,7 @@ def test_build_selections_maps_scheduler_commands_to_the_allowlist() -> None:
 
 def test_profile_selection_is_exact_and_rejects_mixed_scope() -> None:
     selections = build_selections(
-        "all", asset=None, timeframe=None, profile="vn-core-2016"
+        "all", asset=None, timeframe=None, profile="vn-core-2018"
     )
 
     assert [(item.asset, item.timeframe) for item in selections] == [
@@ -63,12 +63,12 @@ def test_profile_selection_is_exact_and_rejects_mixed_scope() -> None:
 
     with pytest.raises(ValueError, match="cannot be combined"):
         build_selections(
-            "all", asset="FPT", timeframe="1d", profile="vn-core-2016"
+            "all", asset="FPT", timeframe="1d", profile="vn-core-2018"
         )
 
     with pytest.raises(ValueError, match="requires the all command"):
         build_selections(
-            "daily", asset=None, timeframe=None, profile="vn-core-2016"
+            "daily", asset=None, timeframe=None, profile="vn-core-2018"
         )
 
 
@@ -92,7 +92,7 @@ def test_profile_dry_run_uses_exact_nine_daily_selections(capsys: Any) -> None:
         )
 
     exit_code = main(
-        ["all", "--profile", "vn-core-2016", "--dry-run"],
+        ["all", "--profile", "vn-core-2018", "--dry-run"],
         now=NOW,
         run_ingestion_fn=fake_run,
         provider_factory=object(),
@@ -128,7 +128,7 @@ def test_profile_combined_with_asset_returns_sanitized_configuration_error(
         [
             "all",
             "--profile",
-            "vn-core-2016",
+            "vn-core-2018",
             "--asset",
             "FPT",
             "--timeframe",

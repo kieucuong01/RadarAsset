@@ -1,5 +1,10 @@
 # HOSE Core 2016 Production Backfill Design
 
+> Superseded on 2026-08-18: the Vnstock Community source was live-smoked and
+> only provides the nine core symbols back to 2018-08-20. The implemented
+> `vn-core-2018` profile keeps that truthful boundary; it does not claim 2016
+> coverage.
+
 **Date:** 2026-08-17
 
 **Status:** Approved for implementation

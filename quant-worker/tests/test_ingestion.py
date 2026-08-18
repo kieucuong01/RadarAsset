@@ -164,18 +164,18 @@ def test_vn_daily_publication_keeps_only_calendar_certified_active_history() -> 
     rows = (
         Bar(
             asset="HPG",
-            timestamp=datetime(2023, 12, 29, tzinfo=timezone.utc),
+            timestamp=datetime(2018, 8, 17, tzinfo=timezone.utc),
             timeframe="1d",
             open=Decimal("100"),
             high=Decimal("101"),
             low=Decimal("99"),
             close=Decimal("100"),
             volume=Decimal("10"),
-            source="legacy-live",
+            source="pre-certification-live",
         ),
         Bar(
             asset="HPG",
-            timestamp=datetime(2024, 1, 2, tzinfo=timezone.utc),
+            timestamp=datetime(2018, 8, 20, tzinfo=timezone.utc),
             timeframe="1d",
             open=Decimal("100"),
             high=Decimal("101"),
@@ -348,7 +348,7 @@ def test_ingestion_windows_use_initial_backfill_and_incremental_overlap() -> Non
     )
     incremental = ingestion_window("1d", now=NOW, active=snapshot("BTC"))
 
-    assert initial.fetch_start == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert initial.fetch_start == datetime(2018, 8, 20, tzinfo=timezone.utc)
     assert initial.overlap_start == initial.fetch_start
     assert crypto_initial.fetch_start == datetime(2017, 1, 1, tzinfo=timezone.utc)
     assert metal_daily_initial.fetch_start == datetime(1999, 6, 3, tzinfo=timezone.utc)
