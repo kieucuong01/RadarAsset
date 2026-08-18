@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Activity, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
 
 import { BacktestResults } from "@/components/BacktestResults";
 import { BacktestResultsEmpty } from "@/components/backtest-results/BacktestResultsEmpty";
@@ -11,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import { Progress } from "@/components/ui/progress";
 import {
   cancelBacktestRun,
@@ -31,6 +31,7 @@ export function BacktestWorkbench({
 }) {
   const [run, setRun] = useState<BacktestRun | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
   const outputState = backtestOutputState(run?.status ?? null);
   const { t, locale } = useI18n();
   const runStatusLabel = (status: BacktestRun["status"]) => {
@@ -55,7 +56,7 @@ export function BacktestWorkbench({
         .then(setRun)
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          toast.error(t("backtest.updateStatusError"));
+          setFeedback({ tone: "error", message: t("backtest.updateStatusError") });
         });
     }, 2_000);
     return () => {
@@ -67,10 +68,14 @@ export function BacktestWorkbench({
   async function cancelRun() {
     if (!run || run.status === "cancel_requested") return;
     setCancelling(true);
+    setFeedback(null);
     try {
       setRun(await cancelBacktestRun(run.id));
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : t("backtest.updateStatusError"));
+      setFeedback({
+        tone: "error",
+        message: caught instanceof Error ? caught.message : t("backtest.updateStatusError"),
+      });
     } finally {
       setCancelling(false);
     }
@@ -83,7 +88,10 @@ export function BacktestWorkbench({
         className="min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2"
       >
         <PortfolioBacktestBuilder
-          onRunCreated={setRun}
+          onRunCreated={(nextRun) => {
+            setFeedback(null);
+            setRun(nextRun);
+          }}
           initialSymbols={initialSymbols}
           strategyPreset={strategyPreset}
           layout="sidebar"
@@ -91,6 +99,7 @@ export function BacktestWorkbench({
       </aside>
 
       <main aria-label={t("backtest.outputAria")} className="min-w-0 space-y-5">
+        {feedback ? <InlineFeedback {...feedback} /> : null}
         {outputState === "empty" ? <BacktestResultsEmpty /> : null}
 
         {run && outputState === "active" ? (

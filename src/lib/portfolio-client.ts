@@ -1,4 +1,5 @@
 import type {
+  PortfolioChartTimeframe,
   PortfolioResponse,
   PortfolioTimeframe,
   PortfolioTransactionCreateInput,
@@ -11,12 +12,12 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 
 export type PortfolioFetchResponse = PortfolioResponse;
 
-function portfolioCacheKey(timeframe: PortfolioTimeframe, currency: PortfolioCurrency) {
+function portfolioCacheKey(timeframe: PortfolioChartTimeframe, currency: PortfolioCurrency) {
   return `portfolio:${timeframe}:${currency}`;
 }
 
 export async function getPortfolio(
-  timeframe: PortfolioTimeframe,
+  timeframe: PortfolioChartTimeframe,
   currency: PortfolioCurrency = "USD",
   fetcher: Fetcher = fetch,
 ): Promise<PortfolioResponse> {
@@ -31,7 +32,7 @@ export async function getPortfolio(
 }
 
 export function getCachedPortfolio(
-  timeframe: PortfolioTimeframe,
+  timeframe: PortfolioChartTimeframe,
   currency: PortfolioCurrency = "USD",
   fetcher: Fetcher = fetch,
 ): Promise<PortfolioResponse> {

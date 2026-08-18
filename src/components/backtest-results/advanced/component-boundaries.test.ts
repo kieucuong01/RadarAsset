@@ -28,13 +28,13 @@ describe("Backtest advanced analysis boundaries", () => {
     );
     expect(orchestrator).toContain('fetch("/api/portfolio/strategy-assignments"');
     expect(orchestrator).toContain("normalizeStrategyAssignment");
-    expect(orchestrator).toContain("toast.success");
+    expect(orchestrator).toContain("InlineFeedback");
 
     for (const name of MODULE_NAMES) {
       const path = resolve(ADVANCED_ROOT, `${name}.tsx`);
       if (!existsSync(path)) continue;
       const source = readFileSync(path, "utf8");
-      expect(source).not.toMatch(/\b(fetch|toast|normalizeStrategyAssignment)\b/);
+      expect(source).not.toMatch(/\b(fetch|normalizeStrategyAssignment)\b/);
     }
   });
 

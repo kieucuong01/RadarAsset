@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
 import { Button } from "@/components/ui/button";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import type {
   PortfolioHoldingResponse,
   PortfolioResponse,
@@ -54,7 +54,7 @@ export function StrategyAssignmentPanel({
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
 
   const heldAssets = useMemo(() => holdings.filter((holding) => holding.qty > 0), [holdings]);
   const selectedStrategy = strategies.find((strategy) => strategy.code === strategyCode) ?? null;
@@ -63,9 +63,12 @@ export function StrategyAssignmentPanel({
   async function refreshAssignments() {
     try {
       setAssignments(await loadAssignments());
-      setError(null);
+      setFeedback(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t("strategyAlerts.loadError"));
+      setFeedback({
+        tone: "error",
+        message: loadError instanceof Error ? loadError.message : t("strategyAlerts.loadError"),
+      });
     } finally {
       setLoading(false);
     }
@@ -82,9 +85,11 @@ export function StrategyAssignmentPanel({
         }
       })
       .catch((loadError: unknown) => {
-        setError(
-          loadError instanceof Error ? loadError.message : t("strategyAlerts.strategiesError"),
-        );
+        setFeedback({
+          tone: "error",
+          message:
+            loadError instanceof Error ? loadError.message : t("strategyAlerts.strategiesError"),
+        });
       })
       .finally(() => setLoading(false));
   }, [t]);
@@ -99,6 +104,7 @@ export function StrategyAssignmentPanel({
     const definition = selectedStrategy;
     if (!definition) return;
     setSaving(true);
+    setFeedback(null);
     try {
       const input = normalizeStrategyAssignment({
         symbol,
@@ -116,12 +122,14 @@ export function StrategyAssignmentPanel({
         throw new Error(payload?.error ?? t("strategyAlerts.applyError"));
       }
       await refreshAssignments();
-      toast.success(t("strategyAlerts.applied", { strategy: definition.name, symbol }));
+      setFeedback({
+        tone: "success",
+        message: t("strategyAlerts.applied", { strategy: definition.name, symbol }),
+      });
     } catch (assignError) {
       const message =
         assignError instanceof Error ? assignError.message : t("strategyAlerts.applyError");
-      setError(message);
-      toast.error(message);
+      setFeedback({ tone: "error", message });
     } finally {
       setSaving(false);
     }
@@ -136,9 +144,13 @@ export function StrategyAssignmentPanel({
       await updateStrategySignalStatusClient(assignmentId, signalId, status);
       await refreshAssignments();
     } catch (decisionError) {
-      toast.error(
-        decisionError instanceof Error ? decisionError.message : t("strategyAlerts.decisionError"),
-      );
+      setFeedback({
+        tone: "error",
+        message:
+          decisionError instanceof Error
+            ? decisionError.message
+            : t("strategyAlerts.decisionError"),
+      });
     }
   }
 
@@ -199,6 +211,8 @@ export function StrategyAssignmentPanel({
           </div>
         )}
 
+        {feedback ? <InlineFeedback {...feedback} /> : null}
+
         {parameterFields.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {parameterFields.map((field) => (
@@ -223,7 +237,6 @@ export function StrategyAssignmentPanel({
           </div>
         )}
 
-        {error && <p className="text-sm text-bear">{error}</p>}
         {assignments.length > 0 && (
           <div className="space-y-3">
             {assignments.map((assignment) => (

@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import { BrainCircuit, LoaderCircle, Plus, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
 
 import { AssetOpinionDetail } from "./AssetOpinionDetail";
 import { AssetOpinionList } from "./AssetOpinionList";
@@ -22,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import {
   buildAssetOpinionWorkspace,
   type AssetOpinionWorkspaceItem,
@@ -183,6 +183,7 @@ export function AssetOpinions({
   } | null>(null);
   const [removeCandidate, setRemoveCandidate] = useState<AssetOpinionWorkspaceItem | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const activeOpinion = items.find((item) => item.symbol === activeSymbol)?.opinion ?? null;
   const isToday = !analysisDate || !today || analysisDate === today;
@@ -213,22 +214,27 @@ export function AssetOpinions({
     const candidate = removeCandidate;
     if (!candidate?.watchlistItem || !onRemoveTrackedAsset) return;
     setRemoving(true);
+    setFeedback(null);
     try {
       await onRemoveTrackedAsset(candidate.watchlistItem.id);
-      toast.success(
-        locale === "vi"
-          ? `Đã xóa ${candidate.symbol} khỏi danh sách theo dõi.`
-          : `Removed ${candidate.symbol} from tracked assets.`,
-      );
+      setFeedback({
+        tone: "success",
+        message:
+          locale === "vi"
+            ? `Đã xóa ${candidate.symbol} khỏi danh sách theo dõi.`
+            : `Removed ${candidate.symbol} from tracked assets.`,
+      });
       setRemoveCandidate(null);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : locale === "vi"
-            ? "Không thể xóa mã."
-            : "Unable to remove asset.",
-      );
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : locale === "vi"
+              ? "Không thể xóa mã."
+              : "Unable to remove asset.",
+      });
     } finally {
       setRemoving(false);
     }
@@ -316,6 +322,7 @@ export function AssetOpinions({
                 : "Tracked assets could not load. Other data remains available."}
             </p>
           ) : null}
+          {feedback ? <InlineFeedback {...feedback} /> : null}
           {isToday && generationState === "generating" ? (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <LoaderCircle className="size-3.5 animate-spin" />

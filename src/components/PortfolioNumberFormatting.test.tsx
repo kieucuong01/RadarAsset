@@ -70,14 +70,6 @@ vi.mock("recharts", () => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: vi.fn(),
-    loading: vi.fn(),
-    success: vi.fn(),
-  },
-}));
-
 vi.mock("@/lib/i18n/context", () => ({
   useI18n: () => ({
     locale: "vi" as const,

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AlertCircle, Loader2, Play } from "lucide-react";
-import { toast } from "sonner";
 
 import { PortfolioAllocationPanel } from "@/components/portfolio-backtest-builder/PortfolioAllocationPanel";
 import { PortfolioAssumptionsPanel } from "@/components/portfolio-backtest-builder/PortfolioAssumptionsPanel";
@@ -10,6 +9,7 @@ import { PortfolioSetupPanel } from "@/components/portfolio-backtest-builder/Por
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter } from "@/components/ui/card";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import { getQuantAssets, type QuantAssetCatalogItem } from "@/lib/backtest/asset-client";
 import {
   builderValidationReasons,
@@ -54,6 +54,7 @@ export function PortfolioBacktestBuilder({
   const [targetVolatilityPct, setTargetVolatilityPct] = useState(20);
   const [markowitzRiskTolerance, setMarkowitzRiskTolerance] = useState(1);
   const [maxWeightPct, setMaxWeightPct] = useState(70);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
   const loadedInitialSymbols = useRef(false);
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export function PortfolioBacktestBuilder({
       .then(setStrategies)
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.error(t("backtest.builder.catalogError"));
+        setFeedback({ tone: "error", message: t("backtest.builder.catalogError") });
       })
       .finally(() => setLoadingCatalog(false));
     return () => controller.abort();
@@ -116,7 +117,7 @@ export function PortfolioBacktestBuilder({
       })
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.warning(t("backtest.builder.loadSymbolsError"));
+        setFeedback({ tone: "warning", message: t("backtest.builder.loadSymbolsError") });
       });
     return () => controller.abort();
   }, [initialSymbolKey, state.from, state.timeframe, state.to, strategies, strategyPreset, t]);
@@ -152,7 +153,7 @@ export function PortfolioBacktestBuilder({
         })
         .catch((caught: unknown) => {
           if (caught instanceof DOMException && caught.name === "AbortError") return;
-          toast.warning(t("backtest.builder.refreshDatasetError"));
+          setFeedback({ tone: "warning", message: t("backtest.builder.refreshDatasetError") });
         });
     }, 350);
     return () => {
@@ -193,20 +194,23 @@ export function PortfolioBacktestBuilder({
   function addAsset(asset: QuantAssetCatalogItem) {
     const strategy = defaultStrategyFor(asset.market);
     if (!strategy) {
-      toast.error(
-        t("backtest.builder.unsupportedStrategy", {
+      setFeedback({
+        tone: "error",
+        message: t("backtest.builder.unsupportedStrategy", {
           symbol: asset.symbol,
           timeframe: state.timeframe,
         }),
-      );
+      });
       return;
     }
+    setFeedback(null);
     dispatch({ type: "assetAdded", asset, strategy });
   }
 
   async function optimizeAllocation() {
     if (state.legs.length === 0) return;
     setOptimizing(true);
+    setFeedback(null);
     try {
       const minimumCap = Math.ceil(investableBps / state.legs.length);
       const requestedCap = Math.round(maxWeightPct * 100);
@@ -224,9 +228,12 @@ export function PortfolioBacktestBuilder({
         dividendMode: state.assumptions.dividendMode,
       });
       dispatch({ type: "optimizerApplied", proposal });
-      toast.success(t("backtest.builder.optimizerApplied"));
+      setFeedback({ tone: "success", message: t("backtest.builder.optimizerApplied") });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("backtest.builder.optimizerError"));
+      setFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("backtest.builder.optimizerError"),
+      });
     } finally {
       setOptimizing(false);
     }
@@ -234,12 +241,16 @@ export function PortfolioBacktestBuilder({
 
   async function submitPortfolio() {
     setSubmitting(true);
+    setFeedback(null);
     try {
       const run = await submitBacktest(toPortfolioBacktestSubmission(state, locale));
       onRunCreated(run);
-      toast.success(t("backtest.builder.queued"));
+      setFeedback({ tone: "success", message: t("backtest.builder.queued") });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("backtest.builder.createError"));
+      setFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("backtest.builder.createError"),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -247,6 +258,7 @@ export function PortfolioBacktestBuilder({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-5", isSidebar && "gap-4")}>
+      {feedback ? <InlineFeedback {...feedback} /> : null}
       <PortfolioSetupPanel state={state} dispatch={dispatch} isSidebar={isSidebar} />
       <PortfolioAllocationPanel
         state={state}

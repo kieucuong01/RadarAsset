@@ -122,6 +122,18 @@
   --shadow-glow: 0 0 40px rgb(242 184 75 / 0.22);
 }
 
+@keyframes datavest-top-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  50% {
+    transform: translateX(160%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

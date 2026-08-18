@@ -1,7 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useState } from "react";
 
 import { PortfolioHoldingsTable } from "@/components/mock-portfolio/PortfolioHoldingsTable";
 import { PortfolioHeader, PortfolioStatusPanel } from "@/components/mock-portfolio/PortfolioHeader";
@@ -13,6 +12,7 @@ import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDia
 import { StrategyAssignmentPanel } from "@/components/StrategyAssignmentPanel";
 import { Button } from "@/components/ui/button";
 import type {
+  PortfolioChartTimeframe,
   PortfolioResponse,
   PortfolioTimeframe,
   PortfolioTransactionResponse,
@@ -22,7 +22,8 @@ import { clearCachedPortfolio, getCachedPortfolio } from "@/lib/portfolio-client
 
 export function MockPortfolio() {
   const { t, locale } = useI18n();
-  const [timeframe, setTimeframe] = useState<PortfolioTimeframe>("1M");
+  const transactionTimeframe: PortfolioTimeframe = "1M";
+  const [performanceTimeframe, setPerformanceTimeframe] = useState<PortfolioChartTimeframe>("ALL");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,32 +33,33 @@ export function MockPortfolio() {
   const reportingCurrency = locale === "vi" ? "VND" : "USD";
 
   const loadPortfolio = useCallback(
-    async (nextTimeframe = timeframe) => {
+    async (nextTimeframe = performanceTimeframe) => {
       setLoading(true);
       setError(null);
-      const toastId = toast.loading(t("portfolio.toasts.loading"));
       try {
         setPortfolio(await getCachedPortfolio(nextTimeframe, reportingCurrency));
-        toast.success(t("portfolio.toasts.loaded"), { id: toastId });
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : t("portfolio.toasts.error");
         setError(message);
-        toast.error(message, { id: toastId });
       } finally {
         setLoading(false);
       }
     },
-    [timeframe, t, reportingCurrency],
+    [performanceTimeframe, t, reportingCurrency],
   );
 
-  const handlePortfolioRecorded = useCallback((nextPortfolio: PortfolioResponse) => {
-    clearCachedPortfolio();
-    setPortfolio(nextPortfolio);
-  }, []);
+  const handlePortfolioRecorded = useCallback(
+    (nextPortfolio: PortfolioResponse) => {
+      clearCachedPortfolio();
+      setPortfolio(nextPortfolio);
+      void loadPortfolio(performanceTimeframe);
+    },
+    [loadPortfolio, performanceTimeframe],
+  );
 
   useEffect(() => {
-    void loadPortfolio(timeframe);
-  }, [loadPortfolio, timeframe]);
+    void loadPortfolio(performanceTimeframe);
+  }, [loadPortfolio, performanceTimeframe]);
 
   if (loading && !portfolio) {
     return (
@@ -77,7 +79,9 @@ export function MockPortfolio() {
         <PortfolioStatusPanel title={t("portfolio.states.backendUnavailable")} tone="bear">
           {error}
           <div className="mt-4">
-            <Button onClick={() => void loadPortfolio()}>{t("common.retry")}</Button>
+            <Button onClick={() => void loadPortfolio(performanceTimeframe)}>
+              {t("common.retry")}
+            </Button>
           </div>
         </PortfolioStatusPanel>
       </main>
@@ -99,8 +103,9 @@ export function MockPortfolio() {
 
       <PortfolioOverviewPanel
         portfolio={portfolio}
-        timeframe={timeframe}
-        onTimeframeChange={(nextTimeframe) => startTransition(() => setTimeframe(nextTimeframe))}
+        timeframe={transactionTimeframe}
+        performanceTimeframe={performanceTimeframe}
+        onPerformanceTimeframeChange={setPerformanceTimeframe}
         onRecorded={handlePortfolioRecorded}
       />
       <PortfolioHoldingsTable holdings={holdings} currency={currency} />
@@ -108,7 +113,7 @@ export function MockPortfolio() {
       <StrategyAssignmentPanel
         holdings={holdings}
         disabled={!portfolio}
-        timeframe={timeframe}
+        timeframe={transactionTimeframe}
         onRecorded={handlePortfolioRecorded}
         portfolioCurrency={currency}
       />
@@ -116,14 +121,14 @@ export function MockPortfolio() {
       <PortfolioTransactionLog
         transactions={portfolio?.transactions ?? []}
         currency={currency}
-        timeframe={timeframe}
+        timeframe={transactionTimeframe}
         onEdit={setEditingTransaction}
         onRecorded={handlePortfolioRecorded}
       />
       <PortfolioTransactionDialog
         holdings={holdings}
         disabled={!portfolio}
-        timeframe={timeframe}
+        timeframe={transactionTimeframe}
         onRecorded={handlePortfolioRecorded}
         portfolioCurrency={currency}
         editingTransaction={editingTransaction}

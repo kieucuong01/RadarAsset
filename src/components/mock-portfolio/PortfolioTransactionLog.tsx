@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { LoaderCircle, Pencil, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { AssetIcon } from "@/components/AssetIcon";
 import {
@@ -16,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import type {
   PortfolioResponse,
   PortfolioTimeframe,
@@ -44,22 +44,29 @@ export function PortfolioTransactionLog({
   const { t, locale } = useI18n();
   const [deleting, setDeleting] = useState<PortfolioTransactionResponse | null>(null);
   const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
 
   const confirmDelete = async () => {
     if (!deleting?.id) return;
     setPending(true);
+    setFeedback(null);
     try {
       onRecorded(await deletePortfolioTransactionRequest(deleting.id, timeframe, currency));
-      toast.success(locale === "vi" ? "Đã xóa giao dịch." : "Transaction deleted.");
+      setFeedback({
+        tone: "success",
+        message: locale === "vi" ? "Đã xóa giao dịch." : "Transaction deleted.",
+      });
       setDeleting(null);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : locale === "vi"
-            ? "Không thể xóa giao dịch."
-            : "Unable to delete transaction.",
-      );
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : locale === "vi"
+              ? "Không thể xóa giao dịch."
+              : "Unable to delete transaction.",
+      });
     } finally {
       setPending(false);
     }
@@ -83,6 +90,7 @@ export function PortfolioTransactionLog({
           {t("portfolio.transactions.count", { count: transactions.length })}
         </span>
       </div>
+      {feedback ? <InlineFeedback {...feedback} className="m-4" /> : null}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

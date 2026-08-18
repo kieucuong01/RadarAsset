@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { normalizeNativeAssetPrice, rebuildPortfolioPositions } from "./portfolio-repository";
+import {
+  normalizeNativeAssetPrice,
+  performanceLimitForHistory,
+  rebuildPortfolioPositions,
+} from "./portfolio-repository";
 
 function asset(symbol: string) {
   return {
@@ -37,6 +41,12 @@ function row(overrides: Record<string, unknown>) {
 }
 
 describe("portfolio repository replay", () => {
+  it("keeps the full daily history when it exceeds the selected timeframe", () => {
+    expect(performanceLimitForHistory("1W", 2_500)).toBe(7);
+    expect(performanceLimitForHistory("1Y", 100)).toBe(252);
+    expect(performanceLimitForHistory("ALL", 2_500)).toBe(2_500);
+  });
+
   it("converts Vietnam equity quote units from thousands into VND without changing VNINDEX", () => {
     expect(
       normalizeNativeAssetPrice(

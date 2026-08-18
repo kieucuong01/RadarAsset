@@ -16,8 +16,6 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-
 vi.mock("@/lib/i18n/context", () => ({
   useI18n: () => ({ locale: "vi" as const, t: (key: string) => key }),
 }));

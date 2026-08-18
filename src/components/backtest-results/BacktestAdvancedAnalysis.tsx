@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { AdvancedAnalysisSummary } from "@/components/backtest-results/advanced/AdvancedAnalysisSummary";
 import { AggregatePortfolioAnalysis } from "@/components/backtest-results/advanced/AggregatePortfolioAnalysis";
 import { BacktestLegAnalysis } from "@/components/backtest-results/advanced/BacktestLegAnalysis";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import { normalizeStrategyAssignment } from "@/lib/backtest/assignment-contracts";
 import type { BacktestRun } from "@/lib/backtest/client";
 import type { BacktestResultModel } from "@/lib/backtest/result-model";
@@ -21,6 +21,7 @@ type BacktestAdvancedAnalysisProps = {
 
 export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvancedAnalysisProps) {
   const [applyingLegId, setApplyingLegId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
   const availability = advancedAnalysisAvailability(model);
   const { t } = useI18n();
 
@@ -44,16 +45,18 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error ?? t("backtest.builder.advanced.applyError"));
       }
-      toast.success(
-        t("backtest.builder.advanced.applySuccess", {
+      setFeedback({
+        tone: "success",
+        message: t("backtest.builder.advanced.applySuccess", {
           strategy: leg.strategyCode,
           symbol: leg.symbol,
         }),
-      );
+      });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("backtest.builder.advanced.applyError"),
-      );
+      setFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("backtest.builder.advanced.applyError"),
+      });
     } finally {
       setApplyingLegId(null);
     }
@@ -75,6 +78,7 @@ export function BacktestAdvancedAnalysis({ run, model, currency }: BacktestAdvan
         {t("backtestResults.advanced.title")}
       </summary>
       <div className="flex min-w-0 flex-col gap-5 px-6 pb-6">
+        {feedback ? <InlineFeedback {...feedback} /> : null}
         <AdvancedAnalysisSummary
           model={model}
           availability={availability}

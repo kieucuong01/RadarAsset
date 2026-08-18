@@ -1,9 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { startTransition, useCallback, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { Activity, BookOpen, Brain, ChartScatter, FlaskConical, Sliders } from "lucide-react";
-import { toast } from "sonner";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { QuantDataReadinessBadge } from "@/components/QuantDataReadinessBadge";
@@ -17,6 +16,8 @@ import {
   type QuantLabTab,
 } from "@/lib/backtest/preselection";
 import { useI18n } from "@/lib/i18n/context";
+
+import { TopLoadingBar } from "./TopLoadingBar";
 
 const PortfolioOptimizerWorkbench = dynamic(
   () =>
@@ -50,24 +51,27 @@ const TAB_LABEL_KEYS: Record<QuantLabTab, Parameters<ReturnType<typeof useI18n>[
 
 export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] }) {
   const [tab, setTab] = useState<QuantLabTab>(() => initialQuantLabTab(initialSymbols));
+  const [pendingTab, setPendingTab] = useState<QuantLabTab | null>(null);
   const [strategyPreset, setStrategyPreset] = useState<BacktestStrategyPreset | null>(null);
   const [strategySymbols, setStrategySymbols] = useState<string[]>([]);
+  const [isTabPending, startTabTransition] = useTransition();
   const { t } = useI18n();
   const changeTab = useCallback(
     (value: string) => {
       const nextTab = normalizeQuantLabTab(value);
       if (nextTab === tab) return;
-      toast.loading(t("quant.toasts.tabLoading", { tab: t(TAB_LABEL_KEYS[nextTab]) }), {
-        id: "quant-tab-loading",
-        duration: 900,
-      });
-      startTransition(() => setTab(nextTab));
+      setPendingTab(nextTab);
+      startTabTransition(() => setTab(nextTab));
     },
-    [t, tab],
+    [startTabTransition, tab],
   );
 
   return (
     <main className="mx-auto min-w-0 max-w-[1500px] px-4 py-6 sm:px-6">
+      <TopLoadingBar
+        active={isTabPending}
+        label={t("quant.toasts.tabLoading", { tab: t(TAB_LABEL_KEYS[pendingTab ?? tab]) })}
+      />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">

@@ -16,12 +16,15 @@ import {
 
 import { AssetIcon } from "@/components/AssetIcon";
 import { PortfolioBenchmarkSummary } from "@/components/mock-portfolio/PortfolioBenchmarkSummary";
+import { PortfolioPerformanceRangeSelector } from "@/components/mock-portfolio/PortfolioPerformanceRangeSelector";
 import { PortfolioTransactionDialog } from "@/components/PortfolioTransactionDialog";
-import type { PortfolioResponse, PortfolioTimeframe } from "@/lib/backend/types";
+import type {
+  PortfolioChartTimeframe,
+  PortfolioResponse,
+  PortfolioTimeframe,
+} from "@/lib/backend/types";
 import { defaultCurrency, formatMoney, formatNumber, formatPercent } from "@/lib/financial-format";
 import { useI18n } from "@/lib/i18n/context";
-
-const TIMEFRAMES = ["1W", "1M", "YTD", "1Y"] as const;
 
 const allocationColors: Record<string, string> = {
   Crypto: "var(--primary)",
@@ -32,14 +35,16 @@ const allocationColors: Record<string, string> = {
 type PortfolioOverviewPanelProps = {
   portfolio: PortfolioResponse | null;
   timeframe: PortfolioTimeframe;
-  onTimeframeChange: (timeframe: PortfolioTimeframe) => void;
+  performanceTimeframe: PortfolioChartTimeframe;
+  onPerformanceTimeframeChange: (timeframe: PortfolioChartTimeframe) => void;
   onRecorded: (portfolio: PortfolioResponse) => void;
 };
 
 export function PortfolioOverviewPanel({
   portfolio,
   timeframe,
-  onTimeframeChange,
+  performanceTimeframe,
+  onPerformanceTimeframeChange,
   onRecorded,
 }: PortfolioOverviewPanelProps) {
   const { t, locale } = useI18n();
@@ -241,22 +246,20 @@ export function PortfolioOverviewPanel({
               {t("portfolio.performance.description")}
             </p>
           </div>
-          <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-1">
-            {TIMEFRAMES.map((item) => (
-              <button
-                key={item}
-                onClick={() => onTimeframeChange(item)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                  timeframe === item
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+          <PortfolioPerformanceRangeSelector
+            value={performanceTimeframe}
+            onChange={onPerformanceTimeframeChange}
+          />
         </div>
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          {performanceTimeframe === "ALL"
+            ? locale === "vi"
+              ? `Biểu đồ bắt đầu từ giao dịch đầu tiên có dữ liệu giá hợp lệ${performance[0]?.label ? ` · ${performance[0].label}` : ""}.`
+              : `The chart starts at the first transaction with a valid price mark${performance[0]?.label ? ` · ${performance[0].label}` : ""}.`
+            : locale === "vi"
+              ? `Đang hiển thị ${performanceTimeframe} gần nhất.`
+              : `Showing the latest ${performanceTimeframe}.`}
+        </p>
 
         <PortfolioBenchmarkSummary benchmark={portfolio?.benchmark} currency={currency} />
 

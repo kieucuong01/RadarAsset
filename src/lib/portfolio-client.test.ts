@@ -39,6 +39,16 @@ describe("portfolio client", () => {
     });
   });
 
+  it("loads the complete portfolio history when the all-time chart is selected", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(portfolio)));
+
+    await expect(getPortfolio("ALL", "USD", fetcher)).resolves.toEqual(portfolio);
+
+    expect(fetcher).toHaveBeenCalledWith("/api/portfolio?timeframe=ALL&currency=USD", {
+      cache: "no-store",
+    });
+  });
+
   it("deduplicates cached portfolio requests by timeframe", async () => {
     clearCachedPortfolio();
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(portfolio)));

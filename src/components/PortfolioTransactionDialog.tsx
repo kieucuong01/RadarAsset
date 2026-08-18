@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -263,13 +262,6 @@ export function PortfolioTransactionDialog({
       const portfolio = (await response.json()) as PortfolioResponse;
       onRecorded(portfolio);
       if (preset?.signalId) onSignalExecuted?.(preset.signalId);
-      toast.success(
-        t("transactionsDialog.toastSuccess", {
-          side: side === "buy" ? t("common.buy") : t("common.sell"),
-          quantity: numericQuantity,
-          symbol,
-        }),
-      );
       setQuantity("");
       setPrice("");
       setFee("0");
@@ -278,7 +270,6 @@ export function PortfolioTransactionDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : t("transactionsDialog.saveError");
       setFormError(message);
-      toast.error(message);
     } finally {
       setSaving(false);
     }

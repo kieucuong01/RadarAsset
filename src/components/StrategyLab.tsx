@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { ArrowRight, BookOpen, CheckCircle2, Save, Wrench } from "lucide-react";
-import { toast } from "sonner";
 
 import { SavedStrategiesPanel } from "@/components/strategy-lab/SavedStrategiesPanel";
 import { StrategyBuilderPanel } from "@/components/strategy-lab/StrategyBuilderPanel";
@@ -12,6 +11,7 @@ import {
 } from "@/components/strategy-lab/StrategyLibraryPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BacktestStrategyPreset } from "@/lib/backtest/preselection";
 import { STRATEGY_CATALOG } from "@/lib/backtest/strategy-catalog";
@@ -55,18 +55,22 @@ export function StrategyLab({
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
 
   useEffect(() => {
     let active = true;
     void migrateLegacyStrategies(window.localStorage, (input) => createCustomStrategy(input))
       .then((result) => {
         if (result.skipped > 0) {
-          toast.warning(t("strategyLab.migrationSkipped", { count: result.skipped }));
+          setFeedback({
+            tone: "warning",
+            message: t("strategyLab.migrationSkipped", { count: result.skipped }),
+          });
         }
         return listCustomStrategies();
       })
       .then((strategies) => active && setSaved(strategies))
-      .catch(() => toast.error(t("strategyLab.loadError")))
+      .catch(() => setFeedback({ tone: "error", message: t("strategyLab.loadError") }))
       .finally(() => active && setLoadingSaved(false));
     return () => {
       active = false;
@@ -160,9 +164,10 @@ export function StrategyLab({
         return;
       }
       if (strategy.kind === "fundamental_threshold") {
-        toast.error(t("strategyLab.fundamentalUnavailable"));
+        setFeedback({ tone: "warning", message: t("strategyLab.fundamentalUnavailable") });
         return;
       }
+      setFeedback(null);
       setSaving(true);
       const rule =
         strategy.kind === "scheduled_dca"
@@ -189,9 +194,9 @@ export function StrategyLab({
       setSaved((current) => [result, ...current.filter((item) => item.id !== result.id)]);
       setEditingId(null);
       setSection("mine");
-      toast.success(t("strategyLab.saved"));
+      setFeedback({ tone: "success", message: t("strategyLab.saved") });
     } catch {
-      toast.error(t("strategyLab.saveError"));
+      setFeedback({ tone: "error", message: t("strategyLab.saveError") });
     } finally {
       setSaving(false);
     }
@@ -201,9 +206,9 @@ export function StrategyLab({
     try {
       const archived = await archiveCustomStrategy(id);
       setSaved((current) => current.map((item) => (item.id === archived.id ? archived : item)));
-      toast.success(t("strategyLab.archived"));
+      setFeedback({ tone: "success", message: t("strategyLab.archived") });
     } catch {
-      toast.error(t("strategyLab.archiveError"));
+      setFeedback({ tone: "error", message: t("strategyLab.archiveError") });
     }
   }
 
@@ -257,6 +262,7 @@ export function StrategyLab({
               </div>
             ))}
           </div>
+          {feedback ? <InlineFeedback {...feedback} className="mt-4" /> : null}
         </CardContent>
       </Card>
 

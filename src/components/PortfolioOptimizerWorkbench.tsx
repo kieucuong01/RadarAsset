@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { OptimizerConfigurationPanel } from "@/components/portfolio-optimizer/OptimizerConfigurationPanel";
 import { OptimizerResultsPanel } from "@/components/portfolio-optimizer/OptimizerResultsPanel";
+import { InlineFeedback, type InlineFeedbackState } from "@/components/ui/inline-feedback";
 import { getQuantAssets, type QuantAssetCatalogItem } from "@/lib/backtest/asset-client";
 import { createRollingBacktestRange } from "@/lib/backtest/contracts";
 import {
@@ -51,6 +51,7 @@ export function PortfolioOptimizerWorkbench({
   const [maxWeightPct, setMaxWeightPct] = useState(70);
   const [proposal, setProposal] = useState<OptimizerProposal | null>(null);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<InlineFeedbackState | null>(null);
   const [editingAssets, setEditingAssets] = useState(false);
   const loadedInitialSymbols = useRef(false);
   const autoOptimizedDefaults = useRef(false);
@@ -95,16 +96,19 @@ export function PortfolioOptimizerWorkbench({
             }),
           );
           setProposal(result);
-          toast.success(t("optimizer.success"));
+          setFeedback({ tone: "success", message: t("optimizer.success") });
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : t("optimizer.error"));
+          setFeedback({
+            tone: "error",
+            message: error instanceof Error ? error.message : t("optimizer.error"),
+          });
         } finally {
           setLoading(false);
         }
       })
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        toast.warning(t("optimizer.loadInitialError"));
+        setFeedback({ tone: "warning", message: t("optimizer.loadInitialError") });
       });
     return () => controller.abort();
   }, [from, initialSelection, initialSymbolKey, maxWeightPct, t, timeframe, to]);
@@ -112,6 +116,7 @@ export function PortfolioOptimizerWorkbench({
   async function optimize() {
     if (selectedSymbols.length === 0) return;
     setLoading(true);
+    setFeedback(null);
     try {
       const result = await requestOptimizedAllocation(
         buildOptimizerRequest({
@@ -126,9 +131,12 @@ export function PortfolioOptimizerWorkbench({
         }),
       );
       setProposal(result);
-      toast.success(t("optimizer.success"));
+      setFeedback({ tone: "success", message: t("optimizer.success") });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("optimizer.error"));
+      setFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("optimizer.error"),
+      });
     } finally {
       setLoading(false);
     }
@@ -137,10 +145,12 @@ export function PortfolioOptimizerWorkbench({
   function updateAndClear(action: () => void) {
     action();
     setProposal(null);
+    setFeedback(null);
   }
 
   return (
     <div className="grid min-w-0 gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
+      {feedback ? <InlineFeedback {...feedback} className="lg:col-span-2" /> : null}
       <OptimizerConfigurationPanel
         timeframe={timeframe}
         from={from}

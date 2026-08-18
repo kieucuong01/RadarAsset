@@ -21,6 +21,7 @@ import {
 } from "./portfolio";
 import type {
   PortfolioHistoricalBar,
+  PortfolioChartTimeframe,
   PortfolioLedgerAsset,
   PortfolioLedgerTransaction,
   PortfolioResponse,
@@ -32,6 +33,14 @@ import type {
 } from "./types";
 
 const TIMEFRAME_LIMITS = { "1W": 7, "1M": 30, YTD: 90, "1Y": 252 } as const;
+
+export function performanceLimitForHistory(
+  timeframe: PortfolioChartTimeframe,
+  historyDayCount: number,
+) {
+  if (timeframe === "ALL") return Math.max(0, Math.floor(historyDayCount));
+  return TIMEFRAME_LIMITS[timeframe];
+}
 
 function assertTransactionType(value: string): TransactionType {
   if (value === "buy" || value === "sell") return value;
@@ -156,7 +165,7 @@ export async function rebuildPortfolioPositions(
 
 export async function loadPortfolioResponse(
   context: TenantContext,
-  timeframe: PortfolioTimeframe = "1M",
+  timeframe: PortfolioChartTimeframe = "ALL",
   reportingCurrency: PortfolioCurrency = "USD",
 ): Promise<PortfolioResponse> {
   const prisma = getPrisma();
@@ -275,7 +284,10 @@ export async function loadPortfolioResponse(
     transactions,
     bars: convertedBars,
     benchmarkAssetId: benchmark?.id ?? null,
-    limit: TIMEFRAME_LIMITS[timeframe],
+    limit: performanceLimitForHistory(
+      timeframe,
+      new Set(convertedBars.map((bar) => bar.ts.slice(0, 10))).size,
+    ),
   });
   const responseTransactions = ledger.transactions.map((transaction) => ({
     ...transaction,
@@ -484,6 +496,11 @@ export async function loadPortfolioPerformance(
 
 export function normalizePortfolioTimeframe(value: string | null): PortfolioTimeframe {
   return value === "1W" || value === "1M" || value === "YTD" || value === "1Y" ? value : "1M";
+}
+
+export function normalizePortfolioChartTimeframe(value: string | null): PortfolioChartTimeframe {
+  if (value === null || value === "ALL") return "ALL";
+  return normalizePortfolioTimeframe(value);
 }
 
 export function normalizeReportingCurrency(value: string | null): PortfolioCurrency {

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Database, History, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,23 +30,19 @@ export function MarketDataHealthPanel() {
 
   useEffect(() => {
     let mounted = true;
-    const toastId = toast.loading(t("quant.toasts.dataLoading"));
     void getCachedQuantDataReadiness()
       .then((value) => {
         if (!mounted) return;
         setReadiness(value);
         setFailed(false);
-        toast.success(t("quant.toasts.dataLoaded"), { id: toastId });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (!mounted) return;
         setFailed(true);
-        toast.error(t("quant.toasts.dataError"), { id: toastId });
       });
     return () => {
       mounted = false;
-      toast.dismiss(toastId);
     };
   }, [t]);
 

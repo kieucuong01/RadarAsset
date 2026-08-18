@@ -4,7 +4,7 @@ import { apiError } from "@/app/api/_lib";
 import { requireTenantCapability, requireTenantContext } from "@/lib/auth/tenant-context";
 import {
   loadPortfolioResponse,
-  normalizePortfolioTimeframe,
+  normalizePortfolioChartTimeframe,
 } from "@/lib/backend/portfolio-repository";
 import { parseReportingCurrency } from "./transactions/schema";
 
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const context = await requireTenantContext();
     requireTenantCapability(context, "portfolio", "read");
     const url = new URL(request.url);
-    const timeframe = normalizePortfolioTimeframe(url.searchParams.get("timeframe"));
+    const timeframe = normalizePortfolioChartTimeframe(url.searchParams.get("timeframe"));
     const currency = parseReportingCurrency(url.searchParams.get("currency"));
     const portfolio = await loadPortfolioResponse(context, timeframe, currency);
     return NextResponse.json(portfolio);

@@ -4,6 +4,8 @@ export type TransactionType = "buy" | "sell";
 
 export type PortfolioTimeframe = "1W" | "1M" | "YTD" | "1Y";
 
+export type PortfolioChartTimeframe = PortfolioTimeframe | "ALL";
+
 export type QuantRunStatus =
   | "queued"
   | "running"
