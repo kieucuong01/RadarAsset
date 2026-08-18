@@ -104,6 +104,19 @@ describe("Quant data readiness client", () => {
       label: "No active datasets",
       detail: "Run ingestion before backtesting",
     });
+
+    expect(
+      quantDataReadinessSummary({
+        ...validReadiness,
+        readyForBacktest: false,
+        activeDatasetsByMarketTimeframe: [{ market: "vn_equity", timeframe: "1d", count: 9 }],
+        backlogCount: 0,
+      }),
+    ).toEqual({
+      tone: "ready",
+      label: "9 active datasets",
+      detail: "No ingestion backlog",
+    });
   });
 
   it("groups large active-dataset and backlog counts", () => {

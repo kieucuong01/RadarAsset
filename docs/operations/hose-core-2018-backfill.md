@@ -16,6 +16,21 @@ Publish one immutable raw daily version per symbol:
 python quant-worker/ingest_market_data.py all --profile vn-core-2018 --env-file .env.local
 ```
 
+## Production runtime preparation
+
+Before the first Vnstock run on a host, create its runtime directories with
+ownership restricted to the service user. This is an operational prerequisite,
+not market data, and is safe to repeat:
+
+```bash
+install -d -o datavest -g datavest -m 0750 \
+  /opt/datavest/.vnstock /opt/datavest/.config /opt/datavest/.cache
+```
+
+Run the production command from `current/quant-worker` as `datavest`, using
+the shared virtual environment and environment file. Do not run it as root or
+point it at a developer database.
+
 Then verify the active versions in PostgreSQL. Each must start on
 `2018-08-20`, have an end no earlier than the latest closed HOSE session, and
 retain every provider gap as a quality issue. Do not invent prices, fill gaps,

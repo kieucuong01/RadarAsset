@@ -63,4 +63,10 @@ describe("Quant UI copy", () => {
     expect(health).not.toContain("Intl.DateTimeFormat(undefined");
     expect(health).not.toContain(".toLocaleString()");
   });
+
+  it("keeps operational data health out of the user-facing Quant shell", () => {
+    const quantLab = readFileSync(resolve("src/components/QuantLab.tsx"), "utf8");
+    expect(quantLab).not.toContain("MarketDataHealthPanel");
+    expect(quantLab).not.toContain("<MarketDataHealthPanel");
+  });
 });

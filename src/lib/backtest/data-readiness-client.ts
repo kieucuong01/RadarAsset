@@ -95,7 +95,7 @@ export function quantDataReadinessSummary(readiness: QuantDataReadiness) {
     0,
   );
 
-  if (!readiness.readyForBacktest || activeDatasetCount === 0) {
+  if (activeDatasetCount === 0) {
     return {
       tone: "blocked" as const,
       label: "No active datasets",

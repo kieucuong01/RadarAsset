@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { DataStatusBadge } from "@/components/DataStatusBadge";
 import { QuantDataReadinessBadge } from "@/components/QuantDataReadinessBadge";
-import { MarketDataHealthPanel } from "@/components/MarketDataHealthPanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -88,8 +87,6 @@ export function QuantLab({ initialSymbols = [] }: { initialSymbols?: string[] })
           />
         </div>
       </div>
-
-      {tab === "predict" ? null : <MarketDataHealthPanel />}
 
       <Tabs value={tab} onValueChange={changeTab}>
         <div className="mb-6 overflow-x-auto pb-1">
