@@ -1,7 +1,8 @@
-import { Calculator, Loader2, Trash2 } from "lucide-react";
+import { Calculator, Info, Loader2, Pencil, Trash2, X } from "lucide-react";
 
 import { QuantAssetPickerDialog } from "@/components/QuantAssetPickerDialog";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -41,6 +42,7 @@ type OptimizerConfigurationPanelProps = {
   maxWeightPct: number;
   assets: QuantAssetCatalogItem[];
   loading: boolean;
+  editingAssets: boolean;
   onTimeframeChange: (value: "1d") => void;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
@@ -49,6 +51,7 @@ type OptimizerConfigurationPanelProps = {
   onTargetVolatilityChange: (value: number) => void;
   onRiskToleranceChange: (value: number) => void;
   onMaxWeightChange: (value: number) => void;
+  onEditAssets: () => void;
   onAssetAdd: (asset: QuantAssetCatalogItem) => void;
   onAssetRemove: (symbol: string) => void;
   onOptimize: () => void;
@@ -65,6 +68,7 @@ export function OptimizerConfigurationPanel({
   maxWeightPct,
   assets,
   loading,
+  editingAssets,
   onTimeframeChange,
   onFromChange,
   onToChange,
@@ -73,6 +77,7 @@ export function OptimizerConfigurationPanel({
   onTargetVolatilityChange,
   onRiskToleranceChange,
   onMaxWeightChange,
+  onEditAssets,
   onAssetAdd,
   onAssetRemove,
   onOptimize,
@@ -219,15 +224,32 @@ export function OptimizerConfigurationPanel({
               <span className="text-sm font-medium">
                 {t("optimizer.assets", { count: formatCount(assets.length) })}
               </span>
-              <QuantAssetPickerDialog
-                timeframe={timeframe}
-                from={from}
-                to={to}
-                selectedSymbols={assets.map((asset) => asset.symbol)}
-                disabled={assets.length >= 10}
-                onAdd={onAssetAdd}
-              />
+              <Button type="button" variant="outline" size="sm" onClick={onEditAssets}>
+                {editingAssets ? (
+                  <X data-icon="inline-start" />
+                ) : (
+                  <Pencil data-icon="inline-start" />
+                )}
+                {t(editingAssets ? "optimizer.closeAssetEditor" : "optimizer.editAssets")}
+              </Button>
             </div>
+            {editingAssets ? (
+              <>
+                <Alert className="bg-muted/30">
+                  <Info />
+                  <AlertTitle>{t("optimizer.assetEditGuideTitle")}</AlertTitle>
+                  <AlertDescription>{t("optimizer.assetEditGuide")}</AlertDescription>
+                </Alert>
+                <QuantAssetPickerDialog
+                  timeframe={timeframe}
+                  from={from}
+                  to={to}
+                  selectedSymbols={assets.map((asset) => asset.symbol)}
+                  disabled={assets.length >= 10}
+                  onAdd={onAssetAdd}
+                />
+              </>
+            ) : null}
             {assets.map((asset) => (
               <div
                 key={asset.symbol}
@@ -248,15 +270,17 @@ export function OptimizerConfigurationPanel({
                     · {formatCount(asset.rowCount)} {t("optimizer.bars")}
                   </span>
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("optimizer.removeAsset", { symbol: asset.symbol })}
-                  onClick={() => onAssetRemove(asset.symbol)}
-                >
-                  <Trash2 />
-                </Button>
+                {editingAssets ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("optimizer.removeAsset", { symbol: asset.symbol })}
+                    onClick={() => onAssetRemove(asset.symbol)}
+                  >
+                    <Trash2 />
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>

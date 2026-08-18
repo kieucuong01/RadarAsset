@@ -86,6 +86,10 @@ export const viQuant = {
     maxWeightAria: "Trọng số tối đa của bộ tối ưu",
     assets: "Tài sản ({count})",
     bars: "phiên",
+    editAssets: "Chỉnh sửa danh mục",
+    closeAssetEditor: "Đóng chỉnh sửa",
+    assetEditGuideTitle: "Cách chỉnh sửa danh mục",
+    assetEditGuide: "Thêm hoặc xóa mã rồi bấm Tính phân bổ tối ưu để tính lại trọng số.",
     removeAsset: "Xóa {symbol}",
     run: "Tính phân bổ tối ưu",
     loadInitialError: "Không thể nạp danh sách mã từ URL.",
@@ -112,7 +116,7 @@ export const viQuant = {
     allocationDetails: "Chi tiết phân bổ",
     allocationDetailsDescription:
       "Mã bộ dữ liệu được hiển thị để truy ngược về các phiên bản dữ liệu bất biến.",
-    empty: "Chọn tài sản rồi chạy optimizer để xem phân bổ. Không có kết quả mô phỏng mặc định.",
+    empty: "Đang nạp danh mục mặc định hoặc hãy chọn mã để tính phân bổ.",
     dataset: "Bộ dữ liệu",
     observations: "{count} lợi nhuận giao nhau",
     methods: {

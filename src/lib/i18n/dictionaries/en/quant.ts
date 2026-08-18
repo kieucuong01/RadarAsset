@@ -88,6 +88,11 @@ export const enQuant = {
     maxWeightAria: "Maximum optimizer weight",
     assets: "Assets ({count})",
     bars: "bars",
+    editAssets: "Edit portfolio",
+    closeAssetEditor: "Close editing",
+    assetEditGuideTitle: "How to edit the portfolio",
+    assetEditGuide:
+      "Add or remove assets, then click Calculate optimal allocation to recalculate the weights.",
     removeAsset: "Remove {symbol}",
     run: "Calculate optimal allocation",
     loadInitialError: "Could not load symbols from URL.",
@@ -114,8 +119,7 @@ export const enQuant = {
     allocationDetails: "Allocation details",
     allocationDetailsDescription:
       "Dataset IDs are shown so the result can be traced back to immutable data versions.",
-    empty:
-      "Choose assets and run the optimizer to see allocations. No default simulated result is shown.",
+    empty: "Loading the default portfolio, or choose assets to calculate an allocation.",
     dataset: "Dataset",
     observations: "{count} overlapping returns",
     methods: {

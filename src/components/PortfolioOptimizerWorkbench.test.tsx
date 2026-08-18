@@ -125,4 +125,18 @@ describe("PortfolioOptimizerWorkbench formatting", () => {
     expect(html).toContain("Mức chịu rủi ro: 1.2346");
     expect(html).not.toContain("Mức chịu rủi ro: 1.234567");
   });
+
+  it("starts with the default daily diversified portfolio window", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <PortfolioOptimizerWorkbench />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain('id="optimizer-from"');
+    expect(html).toContain('value="2021-01-01"');
+    expect(html).toContain('id="optimizer-to"');
+    expect(html).toContain('value="2026-01-01"');
+    expect(html).toContain("Chỉnh sửa danh mục");
+  });
 });
