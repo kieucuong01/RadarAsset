@@ -350,7 +350,7 @@ def test_scheduler_finish_persists_operational_counts() -> None:
     assert connection.value.params[:6] == ("failed", 8, 2, 6, 1, "provider_failure")
 
 
-def test_quant_lab_mounts_bilingual_ingestion_health_dashboard() -> None:
+def test_quant_lab_hides_ingestion_health_dashboard_from_users() -> None:
     quant_lab = (ROOT / "src" / "components" / "QuantLab.tsx").read_text(encoding="utf-8")
     panel = (ROOT / "src" / "components" / "MarketDataHealthPanel.tsx").read_text(
         encoding="utf-8"
@@ -362,6 +362,6 @@ def test_quant_lab_mounts_bilingual_ingestion_health_dashboard() -> None:
         for locale in ("vi", "en")
     ]
 
-    assert "<MarketDataHealthPanel />" in quant_lab
+    assert "MarketDataHealthPanel" not in quant_lab
     assert 't("quant.dataHealth.title")' in panel
     assert all(dictionary.count("dataHealth: {") == 1 for dictionary in dictionaries)
